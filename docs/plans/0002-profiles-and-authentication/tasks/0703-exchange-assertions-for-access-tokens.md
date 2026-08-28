@@ -1,0 +1,41 @@
+---
+id: exchange-assertions-for-access-tokens
+title: "Exchange Assertions For Access Tokens"
+workstream: "0007"
+kind: task
+depends_on:
+  - additional-certificate-authority-and-proxy-policy
+  - build-signed-token-assertions
+gated: false
+touches:
+  - crates/slingshot-agent-connection/src/authentication/identity_management_exchange.rs
+  - crates/slingshot-agent-connection/tests/identity_management_exchange.rs
+  - crates/slingshot-test-support/src/identity_management_server.rs
+status: planned
+merged_as: ""
+---
+# Exchange Assertions For Access Tokens
+
+Exchange a signed assertion with the internally constructed Adobe Identity Management Services endpoint under strict transport, size, redirect, and response rules.
+
+**Steps:**
+
+1. Record byte-exact request/response fixtures consuming the canonical manifest for exact `POST`, HTTP/1.1-or-HTTP/2-only negotiation, absent `Expect`/upgrade/protocol migration, authority, the reachable `36 + 768 + 12,288 + 12,776 = 25,868` request-body maximum, and decoded section exact/next bounds. Reject every other method before secret access. Head vectors independently charge `5 + sum(name + value + 3)` and trailer vectors `1 + sum(name + value + 3)` across zero/one/duplicate fields, lowercase names, status/terminal line feeds, protocol-1/protocol-2 equivalence, single-field/count/aggregate precedence, compression/header-list boundaries, and checked overflow. Include 100/101/103 followed by otherwise valid final heads, repeated informational heads, a `Trailer` declaration, absent versus explicitly empty versus nonempty trailers, each trailer bound/timeout, conflicting/repeated Content-Length, Transfer-Encoding plus Content-Length, invalid transfer-coding chains, HTTP/2 connection-specific/pseudo-header violations, over-bound compressed/decompressed headers, `Alt-Svc`, and trailing bytes. Cover every phase tie, redirect/media/coding/form/token/lifetime case, usable-lease boundary, and a selected additional author CA that signs an otherwise valid `ims-na1.adobelogin.com` interception certificate but is absent from platform trust.
+2. Consume, without redeclaring, the manifest's sole authority `ims-na1.adobelogin.com`, HTTPS/443, and fixed `/ims/exchange/jwt` path. Require byte-exact authority equality, then construct the endpoint internally before form construction or secret access; credential bytes never select scheme, port, path, user information, query, or fragment.
+3. Build the client only from the selected snapshot's route-typed immutable provider-policy-verified platform roots and `VerifiedIdentityManagementTrustPolicyIdentity`, never the author union or any additional certificate, with TLS 1.2/1.3, ambient proxies, redirects, automatic decompression, informational responses, and trailers disabled by explicit policy. Require the adapter to surface every decoded response head and trailer-section presence. Emit exactly one `POST` with only ordered `client_id`, `client_secret`, and `jwt_token`; enforce exact request/body and incremental decoded-section charges; reject the first 1xx after charging it, require exactly one final head, reject a final `Trailer` declaration or any actual trailer section including empty, and accept a token only after stream end proves trailer absence. A three-hundred response is never followed.
+4. Apply named connect (including name resolution/transport), TLS-handshake, complete-request-write, response-header, complete-response-body, response-body-idle, and overall timeouts through one injected monotonic clock. Race every pending asynchronous phase against cancellation and its phase/overall deadlines. At pre/post-I/O boundaries check cancellation, overall expiry, applicable phase/idle expiry, and the next checked response-byte charge in that order before interpreting status or bytes; equality expires and checked arithmetic cannot wrap. Record the token-lifetime anchor immediately before the first request byte can be written.
+5. After complete stream end proves trailer absence and all checks pass, sample the monotonic body-receipt time once, compute the token deadline by checked addition of `expires_in` to the pre-request anchor, and compute checked remaining duration from body receipt. Never add the advertised lifetime to body receipt. Require remaining duration to be strictly greater than manifest `ACCESS_TOKEN_REFRESH_SKEW_MILLISECONDS + MINIMUM_ACCESS_TOKEN_USABLE_LEASE_MILLISECONDS`, exactly 360,000 ms; classify elapsed/underflowed, equal, and shorter values as typed `AccessTokenLifetimeTooShort`/`access_token_lifetime_too_short`, return that one flight's error without installing a token or immediately exchanging again, and reject every invalid lifetime before caching.
+6. Add a platform-rooted fake identity-management listener plus separate hostile-additional-CA identity-management and redirect-location traps. They assert exact bytes/content types, prove the hostile CA completes no authenticated identity-management request, stall each phase deterministically, independently control request anchor/body receipt/failures, and expose an independently movable UTC wall clock only to prove it cannot affect the resulting deadline.
+
+**Tests:**
+
+- `identity_management_exchange` proves exact `POST`, HTTP/1.1-or-HTTP/2-only negotiation, absent `Expect`/upgrade/protocol migration, maximum/next form bytes, bounded compression/header decoding, unambiguous message framing, decoded informational/final/trailer charges across both versions, three-field/media/token success only after trailer-free stream end, exact platform-only identity-management root use, rejection of every other method, and stable mapping of every endpoint/lifetime/transport failure.
+- An additional author CA absent from platform trust signs a valid-hostname interception certificate for `ims-na1.adobelogin.com`; identity-management TLS rejects it, the listener receives zero HTTP request bytes, no token is produced, and an API/compile fixture proves the author trust type cannot be substituted.
+- No assertion or client-secret access closure runs for an unknown/noncanonical authority, credential URL syntax, or cleartext transport case. A redirect case records exactly one secret-bearing request to the original validated endpoint, zero requests to the `Location`, no second secret access, and no token.
+- Each connect/TLS/write/header/body-idle/body-total/trailer-end/overall stall is released at its exact injected boundary, cancellation wins a simultaneous deadline, overall expiry wins a simultaneous phase expiry, a byte/field limit wins before informational/status/trailer interpretation, no waiter remains stuck, and no later head/body/token is interpreted after termination.
+- Informational-head fixtures prove the first bounded 100/101/103 is rejected and closes the exchange before any repeated/final head; declared, empty, nonempty, and overbound trailers all yield the pinned trailer or prior limit/timeout code and install no token.
+- Expiry vectors pin request anchor plus body receipt, prove request/write/header/body transfer only reduces the advertised lease, cover exact maximum/elapsed/underflow/usable-lease boundaries and checked overflow, and remain invariant under forward/backward UTC wall-clock changes; remaining-threshold equality is rejected and one millisecond above is accepted.
+- A too-short response records exactly one exchange request, returns `AccessTokenLifetimeTooShort` to the caller, installs no token, and causes no automatic retry or refresh loop.
+- Secret scans cover client secret, assertion, and access token across transport errors and traces.
+
+- **Done when:** `cargo test -p slingshot-agent-connection --test identity_management_exchange` proves only the exact direct `POST` form exchange to the internally constructed HTTPS endpoint for an allowed Adobe authority, with the selected immutable platform-only identity-management trust roots, a `bearer` response, and a conservative pre-request-anchored deadline whose post-transfer remainder is strictly beyond refresh skew plus the minimum usable lease, can yield a typed access token without author-CA trust widening, lifetime overestimation, or a short-lifetime refresh loop.

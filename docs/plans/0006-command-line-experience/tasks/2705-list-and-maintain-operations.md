@@ -1,0 +1,39 @@
+---
+id: list-and-maintain-operations
+title: "List And Maintain Operations"
+workstream: "0027"
+kind: task
+depends_on:
+  - manage-daemon-processes
+  - render-human-and-machine-output
+gated: false
+touches:
+  - crates/slingshot-command-line/src/operation_maintenance.rs
+  - crates/slingshot-command-line/tests/operation_maintenance.rs
+  - "crates/slingshot-command-line/tests/fixtures/operation-maintenance/**"
+status: planned
+merged_as: ""
+---
+# List And Maintain Operations
+
+Expose Plan 0004's bounded operation listing and maintenance services without adding an unbounded local-state scan or implicit deletion.
+
+**Steps:**
+
+1. Commit local-protocol fixtures for exact/mismatched `DaemonRuntimeContractDigest`; state filters; current and historical author-target partitions; exact current and distinct historical `AuthorAgentTransportContractDigest` child provenance; reused identifiers across partitions; limits; opaque continuation tokens; multiple/empty pages; complete current/historical canonical maintenance manifests and applied/replayed receipts immediately below/at/above the inline machine limit; exact `MaintenanceResultIdentifier` descriptors and URI; target-and-identifier-only metadata; caller-digest match/mismatch; lookup/read unchanged and current-preview-to-application-receipt transfer; read offsets zero/one/length-minus-one/length; same-handle mutation; every child-row/receipt/association/blob/capacity effect; digest-bound apply; applied-receipt/result replay after restart; preview supersession and completed-receipt/result retirement before read start; missing/wrong/tampered/stale/content-mismatched metadata/reads/digests; receipt/association-ledger boundaries; protected nonterminal operations; and current handshake target/revision mismatch.
+2. Implement `operation list` with a named maximum page size and opaque continuation token through Plan 0004's `ListOperations` service, defaulting to the current author-target partition, accepting an explicit validated historical digest for terminal rows, and returning `author_target_identity_digest` in every row.
+3. Implement `maintenance preview` with required cutoff and bounded operation limit plus an optional validated historical author-target digest defaulting to current. Apply that cutoff to terminal settlement and completed prior-receipt commit time under Plan 0004's independent retirement bound. Preserve its complete canonical manifest—normalized criteria, selected operations/revisions, exact child/prior-receipt effects with transport-digest provenance, artifact retain/delete decisions, and before/projected/released capacity facts—plus reviewed digest without mutation.
+4. Implement `maintenance apply` with a required preview digest and the same optional partition selector. Accept no cutoff/limit criteria, supply only the reviewed digest for that exact partition, return a completed durable replay receipt and identical inline/associated result identity or resume only a database-applied receipt's listed unreferenced cleanup before returning exact actual effect/capacity summary, and reject missing, wrong-partition, unknown, tampered, superseded, or stale fresh digests without mutation. Historical selection admits terminal rows only and never spans partitions.
+5. Keep a complete preview or applied/replayed value inline only when its canonical bytes fit the shared machine budget. Otherwise require the daemon-owned canonical `application/json` operation-free target-qualified association, validate target/identifier/kind/reviewed source/content digest/length/media/revision/owner, and render `maintenance_result_access` with exact URI `slingshot://profiles/{profile}/environments/{environment}/targets/{author_target_identity_digest}/maintenance/results/{maintenance_result_identifier}` in human/JSON and Plan 0007 paths. Never truncate, summarize, independently reserialize, attach an operation/slot, invert an identifier hash, or claim a maximum complete manifest fits below 4096 bytes.
+6. Implement `maintenance result <maintenance-result-identifier> --expected-digest <digest> --destination <path>` by first sending Plan 0004 `MaintenanceResultMetadata` keyed only by the explicitly selected current or historical target and identifier. Require every metadata fact to validate and the returned content digest to equal the caller-supplied digest, then send `MaintenanceResultRead` with that digest. Require `MaintenanceResultStart` to keep target/identifier/kind/reviewed source/content digest/length/media byte-identical and to retain owner/revision exactly or perform only the checked current-preview-to-application-receipt transition. Reuse task 2702's locked no-follow staging, prefix-authenticated chunk, atomic non-overwriting publication, and retained success-receipt boundary under the disjoint maintenance identity. Superseded, retired, missing, target/identifier/digest or other metadata mismatch before read start, corrupt, or mutated sources publish nothing and reveal no daemon path; a same-handle stream that began first remains its authenticated snapshot, and restart at offsets zero/one/length-minus-one/length reconstructs only exact bytes.
+7. Carry exact expected `DaemonRuntimeContractDigest`, current `AuthorTargetIdentity`, and `SelectedEnvironmentRevision` in every readiness handshake and request while keeping the independently selected maintenance partition explicit. Render list pages as `operation_list_page`; render inline maintenance as `maintenance_preview`/`maintenance_applied` and over-inline maintenance through `maintenance_result_access`.
+
+**Tests:**
+
+- `operation_maintenance` proves pagination never exceeds the named limit, each continuation token resumes without duplicate or omitted target-qualified operations, historical listing exposes terminal rows only, and reused identifiers remain distinguished by author-target digest.
+- Preview selection performs no mutation and preserves the complete bounded canonical effect/capacity manifest inline or in an operation-free target-qualified association with the same reviewed digest; current and historical fresh apply remove only its exact terminal effects, while exact target/digest retry after deletion/restart either returns the same completed result identity or resumes only conservative database-applied blob cleanup without duplicate row deletion/credit.
+- Maintenance-result reads authenticate target/identifier through metadata, compare the caller expected digest, and revalidate every retained association fact at start before any chunk, resume byte-exactly after restart, and publish atomically; apply permits only the exact owner/revision transition, while preview supersession and completed-receipt retirement before read start make exactly their prior association unreadable without affecting an unrelated/content-shared result.
+- Missing, wrong-partition, unknown, tampered, superseded, retired, or stale digests, changed revisions, cross-partition identifiers, nonterminal operations, exhausted receipt/association capacity without previewed retirement, and stale current-target/revision handshakes refuse unchanged.
+- Every local service call is bounded and network recorders remain empty.
+
+- **Done when:** `cargo test -p slingshot-command-line --test operation_maintenance` proves operation listing is paginated and public current or explicitly selected historical maintenance preview/apply/result commands authenticate runtime/transport provenance, preserve complete reviewed bytes/digests inline or through the exact operation-free target-qualified URI/metadata/read contract, affect only that terminal target partition, durably replay exact applied identities through restart, retire associations atomically, and publish only fully verified result bytes.
