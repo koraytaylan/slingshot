@@ -98,13 +98,17 @@ const MACOS_FILESYSTEM_CAPABILITIES: &[&str] = &[
 ];
 
 /// Filesystem capabilities the Windows row must provide.
+///
+/// The identity requirement is volume-scoped rather than wider, because a safe
+/// public Rust interface reaches the volume serial number and the file index
+/// but not the wider record, and the workspace forbids unchecked code.
 const WINDOWS_FILESYSTEM_CAPABILITIES: &[&str] = &[
-    "handle-relative-no-follow-traversal",
+    "no-follow-reparse-open",
     "security-descriptor-and-discretionary-access-control-list",
     "reparse-point-evidence",
     "link-count",
     "volume-serial-number",
-    "one-hundred-twenty-eight-bit-file-identifier",
+    "volume-scoped-file-identifier",
 ];
 
 /// Deterministic build-policy requirements every row must declare.
