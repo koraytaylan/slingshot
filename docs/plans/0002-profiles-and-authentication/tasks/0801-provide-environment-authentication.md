@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-agent-connection/src/authentication/environment_provider.rs
   - crates/slingshot-agent-connection/tests/environment_provider.rs
 status: done
-merged_as: ""
+merged_as: "9b8588dbe507ee8234ef5ec8d501ffb438a15db0"
 ---
 # Provide Environment Authentication
 
