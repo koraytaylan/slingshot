@@ -139,8 +139,8 @@ name = "deterministic-zip-archives"
 purpose = "Write and read zip archives with normalized entry metadata."
 package = "zip"
 version = "8.6.0"
-default-features = true
-features = []
+default-features = false
+features = ["deflate"]
 targets = []
 kinds = ["normal"]
 owners = ["slingshot-development"]
@@ -412,8 +412,8 @@ owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-c
 [[capability]]
 name = "shell-syntax"
 purpose = "Parse repository-owned executable scripts into a syntax tree."
-package = "yash-syntax"
-version = "0.24.0"
+package = "brush-parser"
+version = "0.4.0"
 default-features = true
 features = []
 targets = []
@@ -422,11 +422,11 @@ owners = ["slingshot-development"]
 
 [[capability]]
 name = "signed-assertions"
-purpose = "Build and verify compact signed assertions with one explicitly selected pure-Rust provider."
+purpose = "Build and verify compact signed assertions with one explicitly selected constant-time provider."
 package = "jsonwebtoken"
 version = "11.0.0"
 default-features = false
-features = ["rust_crypto", "use_pem"]
+features = ["aws_lc_rs", "use_pem"]
 targets = []
 kinds = ["normal"]
 owners = ["slingshot-agent-connection"]

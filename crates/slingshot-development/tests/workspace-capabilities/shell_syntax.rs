@@ -4,17 +4,35 @@
 //! reachable as structure, and refusing an unterminated construct, so script
 //! policy is applied to syntax rather than to matched text.
 
-use yash_syntax::syntax::List;
+use brush_parser::ast::{Command, CompoundCommand};
+use brush_parser::{Parser, ParserOptions};
+
+/// Complete commands the probe script holds.
+const COMPLETE_COMMAND_COUNT: usize = 3;
+
+/// Parses one script into its syntax tree.
+fn parse(script: &str) -> Result<brush_parser::ast::Program, brush_parser::ParseError> {
+    let options = ParserOptions::default();
+    Parser::new(std::io::Cursor::new(script.as_bytes()), &options).parse_program()
+}
 
 #[test]
 fn a_script_parses_into_reachable_commands_and_refuses_malformed_input() {
     let script = "set -eu\nif [ -d target ]; then rm -rf target; fi\necho done\n";
-    let parsed: List = script.parse().expect("the script parses");
-    assert_eq!(parsed.0.len(), 3, "the script holds three complete commands");
-    let rendered = parsed.to_string();
-    assert!(rendered.contains("set -eu"), "{rendered}");
-    assert!(rendered.contains("echo done"), "{rendered}");
+    let parsed = parse(script).expect("the script parses");
+    let commands: Vec<&Command> = parsed
+        .complete_commands
+        .iter()
+        .flat_map(|complete| complete.0.iter())
+        .flat_map(|item| item.0.first.seq.iter())
+        .collect();
+    assert_eq!(commands.len(), COMPLETE_COMMAND_COUNT, "every command is reachable as structure");
+    let conditionals = commands
+        .iter()
+        .filter(|command| matches!(command, Command::Compound(CompoundCommand::IfClause(_), _)))
+        .count();
+    assert_eq!(conditionals, 1, "the conditional is reachable as a conditional");
 
-    let malformed = "if [ -d target ]; then\n".parse::<List>();
+    let malformed = parse("if [ -d target ]; then\n");
     assert!(malformed.is_err(), "an unterminated construct must be refused");
 }
