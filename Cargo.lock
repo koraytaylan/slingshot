@@ -2080,6 +2080,7 @@ dependencies = [
  "sha2",
  "slingshot-configuration",
  "slingshot-domain",
+ "slingshot-test-support",
  "tempfile",
  "thiserror",
  "tokio",

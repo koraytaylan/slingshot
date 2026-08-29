@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-agent-connection/src/authentication/identity_management_exchange.rs
   - crates/slingshot-agent-connection/tests/identity_management_exchange.rs
   - crates/slingshot-test-support/src/identity_management_server.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Exchange Assertions For Access Tokens
