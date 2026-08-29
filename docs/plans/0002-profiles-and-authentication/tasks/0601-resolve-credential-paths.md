@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-configuration/tests/credential_paths.rs
   - "crates/slingshot-configuration/tests/fixtures/configuration-root/**"
 status: done
-merged_as: ""
+merged_as: "a32dc0055e7946551f12712268e5ce9abd1b63bd"
 ---
 # Resolve Credential Paths
 
