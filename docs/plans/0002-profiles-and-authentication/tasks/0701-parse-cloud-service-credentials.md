@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-agent-connection/src/authentication/cloud_service_credentials.rs
   - crates/slingshot-agent-connection/tests/cloud_service_credentials.rs
   - crates/slingshot-test-support/fixtures/cloud-credentials/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Parse Cloud Service Credentials

@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "statusCode": 200,
+  "integration": {
+    "imsEndpoint": "ims-na1.adobelogin.com",
+    "metascopes": "ent_aem_cloud_api,ent_adobeio_sdk",
+    "technicalAccount": {
+      "clientId": "a1b2c3d4e5f6",
+      "clientSecret": "p8e-not-a-real-client-secret"
+    },
+    "email": "not-a-real-account@techacct.adobe.com",
+    "id": "6E1B0F2A5C3D4E5F@techacct.adobe.com",
+    "org": "1A2B3C4D5E6F7A8B9C0D1E2F@AdobeOrg",
+    "privateKey": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCzhGxUxZD98ACd\nxZ/gVPO3jyZLymhpYBM9GTXbvDT/iNzhv3Luf+xF4+TNGHR9Px0H9dzWtsfvo48g\nVfHMSOYLQ3Ltn28xzwcDgN27tJWjNAXVqDoboBwVMzXGr2XLevk4niS3bjfGcbOq\nfnoqyDSxT76DQuXA6c+sjb4NhDT82lgq/uruSWRHe5wOEqyAsTE56hrhFbENX5HA\nOl/ADvNOw+2FBKxiOeIFc1zHWC9fZHRc3YqwajghjXtrNILpnNxlR5AYmY1zjwtq\nlCbszEz6wvoqqGtpRVlzI7Q9wbDToNOVbs3tJfhbPJLqkdufTjm6PXeb5rLKrmTq\nNHvQAn0RAgMBAAECggEABJciT5eetlgt3G06XZnB8F8i47wtlYiByNx/kCzTnImX\nkcSlBsEFS46lqylaCFm16IK817u2kb8vZ368QYKQaVg/8CBeYWxtEIXDGAdWblvj\n8QSpDAKUavg38GqnRHa3Jl+WSkQM2NmGZCLfKcjTA0D8TS4sNOgH8vnL5STxacfo\nC8eikonpll7e3UquuUoHfpoJgK0jcSQT28qSY+ags6I7ecnxZ++nYXHmeCk4AUm1\nMlBAgwFu5DJBaNEKRPGeS0duupVlKlEGEMJSKzkrjYlOpaYM0iZZs4DBD8RCnyuL\nzNE+Hpm13qrRkeTJhjQHhF0OmdooGKzaF32vQDOkrQKBgQD1tuabTXzAJJnQXxjU\nGd+KDA5WwVv0QlTy534PRI5iLqmyC/31cvuecvoVLAI6kY4Fjg8JU+qT97FwMZZ+\nIAavMeJFw9NaDfM5rfP5QkKYn+taey0k/n6udu7/rMDf9/+UliX/jm0HSDtrw9MB\n8engmr9PLFKzzXNH9fX0W4FQHQKBgQC7CCWtqgLQVtD0vvWnJsdoTxWm6fszA8Gm\nY9+MEZ1FMMkKH07Xr/8b42p6/vpiKz7lel1x/yzxQr4aWSoluIWXy2FGEr2hRUVX\nh07DKy6GKYhlCZjDODEEiVCO15sfFQgK2EIktZfNdiDisWR0pjWhMYSn3PyKndQm\nUBfaxrj2hQKBgFeZ5qt1u8UxB1l/nfV4Z/bqh24sr6DsySZ0m7/LvEuKwVtF5TvN\ny6FY8on7z6ub2xtl4zx7G4W3aB5Mv4+l0VxCl54xy7cuhAmLWBEEq4OIeDsg8R5g\nUT/YDStAJt9ypj8OLOvoljxjZzPrc94cpjo6UXxjm/SYicIdEZwVx4uNAoGAC6nj\nZ6Qdjs6LM2ghO65QazHbYNBgqPrH/c9mpn6Gt0TmlKoFKbBBEYUqI8d459xYjMkH\nwM8wB0+pOU1sMnQCaMf3Jf6PMtp2C5JVmBg+S4GVju99Rldfvy+tBWtusg6GtN5t\nqYplkBuYy2pSoG+pEodbBXjjiuVy0HzYL/2KlV0CgYANPE87fOvdrkKEIhPGWl9f\nDLdw5LylKkW2JkS/mvzJH7PoTApNBOGYgMWOr2pK84aJOmODvbTngK5bvMRSDNYp\nHAp1TZlqX95PJCO5whsPoiah95d63rsMSKpdsu0zEdRlbdu5Pz9oKJd/2/ugPyuI\nTdIXrAiZbCG6tnblSgd9EQ==\n-----END PRIVATE KEY-----\n",
+    "publicKey": "-----BEGIN CERTIFICATE-----\nMIIDPTCCAiWgAwIBAgIUPXdHSVi8msCIqN+enY/EsuCgrcQwDQYJKoZIhvcNAQEL\nBQAwLjEsMCoGA1UEAwwjU2xpbmdzaG90IFRlY2huaWNhbCBBY2NvdW50IHJvdGF0\nZWQwHhcNMjYwODI5MTczNjEzWhcNMzYwODI2MTczNjEzWjAuMSwwKgYDVQQDDCNT\nbGluZ3Nob3QgVGVjaG5pY2FsIEFjY291bnQgcm90YXRlZDCCASIwDQYJKoZIhvcN\nAQEBBQADggEPADCCAQoCggEBALOEbFTFkP3wAJ3Fn+BU87ePJkvKaGlgEz0ZNdu8\nNP+I3OG/cu5/7EXj5M0YdH0/HQf13Na2x++jjyBV8cxI5gtDcu2fbzHPBwOA3bu0\nlaM0BdWoOhugHBUzNcavZct6+TieJLduN8Zxs6p+eirINLFPvoNC5cDpz6yNvg2E\nNPzaWCr+6u5JZEd7nA4SrICxMTnqGuEVsQ1fkcA6X8AO807D7YUErGI54gVzXMdY\nL19kdFzdirBqOCGNe2s0gumc3GVHkBiZjXOPC2qUJuzMTPrC+iqoa2lFWXMjtD3B\nsNOg05Vuze0l+Fs8kuqR259OObo9d5vmssquZOo0e9ACfRECAwEAAaNTMFEwHQYD\nVR0OBBYEFLngevxVGZGQZa0sWWE/sQaQasm+MB8GA1UdIwQYMBaAFLngevxVGZGQ\nZa0sWWE/sQaQasm+MA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEB\nAIT6+Nl+KOyNfAMn2PuBCKftkIrBlbTGbE25rUrtqIabSDqNEshDzmIBh5UmRPId\n84SIr/8uIa2nbCwcZu5pzMy/MitIotnKPknQWX8lmazGGl7QGLeo3HQmpvxKHbab\nzhCBZAHljhM3hcfokUnEei3sw46YNP4ZXS+q9KFkNPktSCwYe+EF6FDZL+jwL63L\nfNKBtvSZ06hFwcV7XwZQtYs/SiFfYMxZCJyJJFt1zh8i+m3UEYygt+LOSL9AFIes\nwWRy+Dr37kAqipkjKn8OtMshZiVCSPPIxChgoIt2qZFUALwzGlup9FL5NY6KaZYt\niEOkobSHwT0YBjO0F6dmFQ8=\n-----END CERTIFICATE-----\n"
+  }
+}

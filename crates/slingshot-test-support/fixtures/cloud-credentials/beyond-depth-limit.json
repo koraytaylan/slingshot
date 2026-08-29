@@ -1,0 +1,20 @@
+{
+  "client_id": "a1b2c3d4e5f6",
+  "client_secret": "p8e-not-a-real-client-secret",
+  "technical_account_id": "6E1B0F2A5C3D4E5F@techacct.adobe.com",
+  "nested": {
+    "member": {
+      "member": {
+        "member": {
+          "member": {
+            "member": {
+              "member": {
+                "member": "leaf"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
