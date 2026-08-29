@@ -13,8 +13,8 @@ touches:
   - crates/*/Cargo.toml
   - crates/slingshot-development/tests/workspace_capability_inventory.rs
   - "crates/slingshot-development/tests/fixtures/workspace-capability-inventory/**"
-status: planned
-merged_as: ""
+status: done
+merged_as: "b53dd61dd50b6d967f0dfdbdd73964242841bd2a"
 ---
 # Workspace Capability Inventory
 
