@@ -396,6 +396,23 @@ impl CanonicalMetascopeSet {
         Self { values: Vec::new() }
     }
 
+    /// Returns the values, unique and ascending.
+    ///
+    /// The assertion builder names one claim per value, so it needs them in the
+    /// same canonical order the revision frames them in rather than in the
+    /// order a credential happened to list them.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentityFailure::MalformedDigest`] when a value is not text,
+    /// which no accepted metascope can be.
+    pub fn values(&self) -> Result<Vec<&str>, IdentityFailure> {
+        self.values
+            .iter()
+            .map(|value| core::str::from_utf8(value).map_err(|_| IdentityFailure::MalformedDigest))
+            .collect()
+    }
+
     /// Returns the encoded form the revision frames.
     ///
     /// # Errors
