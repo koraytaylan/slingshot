@@ -3,12 +3,14 @@
 //! This crate is the outermost tooling layer of the workspace. It may depend
 //! inward on the product crates and on `slingshot-test-support`, and no other
 //! crate may depend on it. This commit implements the workspace-metadata
-//! command body and declares the crate's module families as
-//! documentation-only roots.
+//! command body, declares the crate's module families as documentation-only
+//! roots, and declares the profile-authentication harness leaf as
+//! documentation-only structure.
 
 pub mod daemon_chaos_subject;
 pub mod dependency_direction;
 pub mod platform_runtime_contract;
+pub mod profile_authentication_harness;
 pub mod rustsec_advisory_pin;
 pub mod source_policy;
 pub mod supported_platform_matrix;
