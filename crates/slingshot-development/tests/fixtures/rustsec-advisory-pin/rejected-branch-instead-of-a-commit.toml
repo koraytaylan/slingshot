@@ -1,0 +1,5 @@
+# A pin that names a branch instead of a commit.
+format = "slingshot.rustsec-advisory-database/1"
+origin = "https://github.com/rustsec/advisory-db"
+commit = "main"
+tree = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

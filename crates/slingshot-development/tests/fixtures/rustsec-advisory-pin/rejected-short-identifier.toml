@@ -1,0 +1,5 @@
+# A pin that shortens its commit identifier.
+format = "slingshot.rustsec-advisory-database/1"
+origin = "https://github.com/rustsec/advisory-db"
+commit = "b331df6"
+tree = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
