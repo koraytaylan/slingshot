@@ -14,8 +14,8 @@ touches:
   - support/repository-tools.toml
   - deny.toml
   - scripts/quality
-status: planned
-merged_as: ""
+status: done
+merged_as: "3b374c10adb78bacdec98ebe5f8fc37dbc32a643"
 ---
 # Quality Automation
 
