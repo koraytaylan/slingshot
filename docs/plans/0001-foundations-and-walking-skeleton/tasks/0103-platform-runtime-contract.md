@@ -16,8 +16,8 @@ touches:
   - crates/slingshot-development/tests/platform_runtime_contract.rs
   - "crates/slingshot-development/tests/fixtures/platform-runtime/**"
   - support/platform-runtime-evidence.schema.json
-status: planned
-merged_as: ""
+status: done
+merged_as: "a2a7634dbfe20926c4f9cd1795f89a804f30920c"
 ---
 # Platform Runtime Contract
 
