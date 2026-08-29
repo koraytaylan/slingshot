@@ -1,0 +1,155 @@
+# Base addresses and the one spelling each of them has.
+#
+# The accepted rows pin canonicalization: a scheme and host fold to lowercase, a
+# port equal to the scheme's default disappears, a root path has no
+# representation at all, and a percent escape becomes uppercase. The refused
+# rows pin the opposite decision, which is that an ambiguous address is an error
+# rather than something to normalize into one of its meanings.
+
+format = "slingshot.address-vectors/1"
+
+[[accepted]]
+input = "http://localhost:4502"
+canonical = "http://localhost:4502"
+loopback = true
+protected = false
+
+[[accepted]]
+input = "HTTP://LocalHost:4502"
+canonical = "http://localhost:4502"
+loopback = true
+protected = false
+
+[[accepted]]
+input = "http://127.0.0.1"
+canonical = "http://127.0.0.1"
+loopback = true
+protected = false
+
+[[accepted]]
+input = "http://[::1]:4502"
+canonical = "http://[::1]:4502"
+loopback = true
+protected = false
+
+[[accepted]]
+input = "https://author-p123-e456.adobeaemcloud.com"
+canonical = "https://author-p123-e456.adobeaemcloud.com"
+loopback = false
+protected = true
+
+[[accepted]]
+input = "https://author.example.com/"
+canonical = "https://author.example.com"
+loopback = false
+protected = true
+
+[[accepted]]
+input = "https://author.example.com/context/path"
+canonical = "https://author.example.com/context/path"
+loopback = false
+protected = true
+
+[[accepted]]
+input = "https://author.example.com/a%2bb"
+canonical = "https://author.example.com/a%2Bb"
+loopback = false
+protected = true
+
+[[accepted]]
+input = "https://author.example.com:8443/context"
+canonical = "https://author.example.com:8443/context"
+loopback = false
+protected = true
+
+[[refused]]
+input = "https://author.example.com:443"
+reason = "the port repeats the scheme default"
+
+[[refused]]
+input = "http://author.example.com:80"
+reason = "the port repeats the scheme default"
+
+[[refused]]
+input = "ftp://author.example.com"
+reason = "the scheme is not one the contract accepts"
+
+[[refused]]
+input = "author.example.com"
+reason = "no scheme"
+
+[[refused]]
+input = "https://operator@author.example.com"
+reason = "user information"
+
+[[refused]]
+input = "https://author.example.com/context?query=1"
+reason = "a query"
+
+[[refused]]
+input = "https://author.example.com/context#fragment"
+reason = "a fragment"
+
+[[refused]]
+input = "https://author.example.com/context/"
+reason = "a trailing separator"
+
+[[refused]]
+input = "https://author.example.com//context"
+reason = "an empty segment"
+
+[[refused]]
+input = "https://author.example.com/context/."
+reason = "a dot segment"
+
+[[refused]]
+input = "https://author.example.com/context/.."
+reason = "a dot-dot segment"
+
+[[refused]]
+input = "https://author.example.com/context/%2e%2e"
+reason = "an encoded dot-dot segment"
+
+[[refused]]
+input = "https://author.example.com/context/a%2Fb"
+reason = "an encoded separator"
+
+[[refused]]
+input = "https://author.example.com/context/a%5Cb"
+reason = "an encoded backslash"
+
+[[refused]]
+input = "https://author.example.com/context\\path"
+reason = "a backslash"
+
+[[refused]]
+input = "https://author.example.com/con%74ext"
+reason = "an escape spelling an unreserved byte"
+
+[[refused]]
+input = "https://author.example.com/café"
+reason = "an unescaped non-ASCII byte"
+
+[[refused]]
+input = "https://author.example.com:0"
+reason = "a zero port"
+
+[[refused]]
+input = "https://author.example.com:08443"
+reason = "a leading-zero port"
+
+[[refused]]
+input = "https://author.example.com:65536"
+reason = "a port above the range"
+
+[[refused]]
+input = "https://.example.com"
+reason = "an empty leading host label"
+
+[[refused]]
+input = "https://author.example.com."
+reason = "a trailing host dot"
+
+[[refused]]
+input = "https://"
+reason = "an empty host"

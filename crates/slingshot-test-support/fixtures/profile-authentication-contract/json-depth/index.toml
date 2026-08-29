@@ -1,0 +1,33 @@
+# Documents whose depth sits below, at, and above the contract ceiling.
+#
+# Depth is recorded as an offset from `maximum_service_credential_json_depth` so
+# no ceiling is copied here. The absolute rows are the two base cases of the
+# recurrence: a scalar and an empty container are both one level deep, whatever
+# the ceiling is.
+
+format = "slingshot.json-depth-vectors/1"
+
+
+[[document]]
+name = "alternating-above-limit.json"
+offset = 1
+
+[[document]]
+name = "alternating-at-limit.json"
+offset = 0
+
+[[document]]
+name = "empty-container.json"
+absolute = 1
+
+[[document]]
+name = "object-below-limit.json"
+offset = -1
+
+[[document]]
+name = "scalar.json"
+absolute = 1
+
+[[document]]
+name = "unknown-member-at-limit.json"
+offset = 0

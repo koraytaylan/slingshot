@@ -1,0 +1,6 @@
+format_version = 1
+published_at = "2026-08-29T00:00:00Z"
+
+[[sources]]
+reference = "profiles/cloud-site.toml"
+sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"

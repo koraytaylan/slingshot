@@ -1,0 +1,16 @@
+format_version = 1
+name = "crossed-site"
+
+[environments.production]
+deployment = "adobe_experience_manager_cloud_service"
+
+[environments.production.author]
+base_address = "https://author-p123-e456.adobeaemcloud.com"
+
+[environments.production.publisher]
+base_address = "https://publish-p123-e456.adobeaemcloud.com"
+
+[environments.production.authentication]
+method = "basic"
+user_name = "admin"
+password = "admin"

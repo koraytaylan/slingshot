@@ -1,0 +1,49 @@
+# Appending an endpoint to a base address.
+#
+# Every row proves the same property from a different direction: the context
+# path survives. A leading separator in a segment cannot start a new absolute
+# path, a dot-dot segment cannot climb out, and a separator inside a segment
+# becomes an escape rather than a boundary, because each segment is encoded on
+# its own instead of being resolved against the base as a reference would be.
+
+format = "slingshot.endpoint-vectors/1"
+
+[[vector]]
+base_address = "https://author.example.com"
+segments = ["bin", "querybuilder.json"]
+endpoint = "https://author.example.com/bin/querybuilder.json"
+
+[[vector]]
+base_address = "https://author.example.com/context"
+segments = ["bin", "querybuilder.json"]
+endpoint = "https://author.example.com/context/bin/querybuilder.json"
+
+[[vector]]
+base_address = "https://author.example.com/context"
+segments = []
+endpoint = "https://author.example.com/context"
+
+[[vector]]
+base_address = "https://author.example.com/context"
+segments = ["/absolute"]
+endpoint = "https://author.example.com/context/%2Fabsolute"
+
+[[vector]]
+base_address = "https://author.example.com/context"
+segments = [".."]
+endpoint = "https://author.example.com/context/%2E%2E"
+
+[[vector]]
+base_address = "https://author.example.com/context"
+segments = ["a/b"]
+endpoint = "https://author.example.com/context/a%2Fb"
+
+[[vector]]
+base_address = "https://author.example.com/context"
+segments = ["content", "dam", "my asset.png"]
+endpoint = "https://author.example.com/context/content/dam/my%20asset.png"
+
+[[vector]]
+base_address = "https://author.example.com/context"
+segments = ["café"]
+endpoint = "https://author.example.com/context/caf%C3%A9"

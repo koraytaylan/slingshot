@@ -1,0 +1,21 @@
+# What a candidate set of distinct public diagnostics turns into.
+#
+# The limit includes the marker, which is the only part of this rule that is
+# easy to get wrong: a set exactly at the limit is returned whole, and a set one
+# larger loses two of its items to make room for one marker that reports how
+# many were dropped.
+
+format = "slingshot.diagnostic-truncation-vectors/1"
+
+[[vector]]
+distinct = "retained"
+truncated = false
+
+[[vector]]
+distinct = "maximum"
+truncated = false
+
+[[vector]]
+distinct = "maximum_plus_one"
+truncated = true
+marker_occurrences = 2

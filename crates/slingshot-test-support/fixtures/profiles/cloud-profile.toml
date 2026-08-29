@@ -1,0 +1,16 @@
+format_version = 1
+name = "cloud-site"
+
+[environments.production]
+deployment = "adobe_experience_manager_cloud_service"
+additional_ca_certificate_file = "certificates/corporate-ca.pem"
+
+[environments.production.author]
+base_address = "https://author-p123-e456.adobeaemcloud.com"
+
+[environments.production.publisher]
+base_address = "https://publish-p123-e456.adobeaemcloud.com"
+
+[environments.production.authentication]
+method = "adobe_experience_manager_developer_console_service_credentials"
+credentials_file = "credentials/production.json"
