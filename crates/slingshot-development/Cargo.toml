@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64.workspace = true
 brush-parser.workspace = true
 clap.workspace = true
 flate2.workspace = true
@@ -15,8 +16,11 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml_ng.workspace = true
 sha2.workspace = true
+slingshot-agent-connection.workspace = true
 slingshot-command-line.workspace = true
+slingshot-configuration.workspace = true
 slingshot-daemon.workspace = true
+slingshot-domain.workspace = true
 slingshot-local-protocol.workspace = true
 slingshot-test-support.workspace = true
 sqlparser.workspace = true
