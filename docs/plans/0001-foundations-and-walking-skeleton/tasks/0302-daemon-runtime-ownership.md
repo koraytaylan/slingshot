@@ -10,8 +10,8 @@ touches:
   - crates/slingshot-daemon/src/runtime_namespace.rs
   - crates/slingshot-daemon/src/ownership.rs
   - crates/slingshot-daemon/tests/runtime_ownership.rs
-status: planned
-merged_as: ""
+status: done
+merged_as: "90bf78059f941c7b968a4da1b13b28dd233e9371"
 ---
 # Daemon Runtime Ownership
 
