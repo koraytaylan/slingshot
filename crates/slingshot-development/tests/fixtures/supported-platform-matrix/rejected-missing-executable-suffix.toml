@@ -11,6 +11,12 @@
 # Plan 0001 evaluates every row through deterministic policy observations and
 # may emit at most one explicitly untrusted observation, for the single row that
 # matches the current environment.
+#
+# Every capability identifier names behavior a safe public Rust interface
+# reaches, because the workspace forbids repository-owned unchecked code. The
+# Windows row therefore requires an open that refuses to traverse a reparse
+# point and a volume-scoped file identifier, which is the widest stable identity
+# such an interface exposes today; widening it is release-plan work.
 
 format = "slingshot.supported-platforms/1"
 
@@ -133,12 +139,12 @@ runtime-capabilities = [
     "stable-supervised-child-cleanup",
 ]
 filesystem-capabilities = [
-    "handle-relative-no-follow-traversal",
+    "no-follow-reparse-open",
     "security-descriptor-and-discretionary-access-control-list",
     "reparse-point-evidence",
     "link-count",
     "volume-serial-number",
-    "one-hundred-twenty-eight-bit-file-identifier",
+    "volume-scoped-file-identifier",
 ]
 build-policy-capabilities = [
     "exact-repository-rust-toolchain",
