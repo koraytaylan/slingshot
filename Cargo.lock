@@ -2211,7 +2211,9 @@ dependencies = [
  "proptest",
  "secrecy",
  "serde",
+ "serde_json",
  "thiserror",
+ "toml",
  "uuid",
 ]
 

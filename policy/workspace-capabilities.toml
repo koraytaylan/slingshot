@@ -264,7 +264,7 @@ default-features = true
 features = []
 targets = []
 kinds = ["normal"]
-owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-command-line", "slingshot-daemon", "slingshot-development", "slingshot-local-protocol", "slingshot-storage", "slingshot-test-support"]
+owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-command-line", "slingshot-daemon", "slingshot-development", "slingshot-domain", "slingshot-local-protocol", "slingshot-storage", "slingshot-test-support"]
 
 [[capability]]
 name = "platform-directories"
@@ -484,7 +484,7 @@ default-features = true
 features = []
 targets = []
 kinds = ["normal"]
-owners = ["slingshot-configuration", "slingshot-development", "slingshot-local-protocol"]
+owners = ["slingshot-configuration", "slingshot-development", "slingshot-domain", "slingshot-local-protocol"]
 
 [[capability]]
 name = "transport-layer-security"
