@@ -1,0 +1,7 @@
+# A member manifest that never joins the workspace lint table.
+[package]
+name = "slingshot-rejected-member"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true

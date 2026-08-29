@@ -1,0 +1,13 @@
+# A member manifest that expects rather than forbids unsafe code.
+[package]
+name = "slingshot-rejected-member"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lints.rust]
+unsafe_code = "expect"

@@ -1,0 +1,49 @@
+# Expected shape of the Slingshot workspace scaffold.
+#
+# This fixture is authored ahead of the manifests it describes. Every value is
+# compared with the committed manifests and with resolved Cargo metadata, so a
+# missing member, an additional member, a renamed binary target, a relaxed lint
+# level, or an inferred legal field fails the scaffold assertions.
+
+format = "slingshot.workspace-scaffold/1"
+resolver = "3"
+edition = "2024"
+rust-version = "1.98.0"
+version = "0.1.0"
+unsafe-code-lint-level = "forbid"
+member-directory = "crates"
+publish = false
+required-release-fields = ["license or license-file", "repository"]
+
+packages = [
+    "slingshot-agent-connection",
+    "slingshot-agent-protocol",
+    "slingshot-command-line",
+    "slingshot-configuration",
+    "slingshot-daemon",
+    "slingshot-development",
+    "slingshot-domain",
+    "slingshot-local-protocol",
+    "slingshot-storage",
+    "slingshot-test-support",
+]
+
+product-packages = [
+    "slingshot-agent-connection",
+    "slingshot-agent-protocol",
+    "slingshot-command-line",
+    "slingshot-configuration",
+    "slingshot-daemon",
+    "slingshot-domain",
+    "slingshot-local-protocol",
+    "slingshot-storage",
+]
+
+support-packages = [
+    "slingshot-development",
+    "slingshot-test-support",
+]
+
+[binaries]
+slingshot = "slingshot-command-line"
+slingshot-development = "slingshot-development"

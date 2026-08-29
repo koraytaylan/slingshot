@@ -1,0 +1,8 @@
+# The owner-supplied legal and repository metadata a release artifact requires.
+# No workspace manifest carries these values yet, so packaging stays refused.
+[package]
+name = "slingshot-release-candidate"
+version = "0.1.0"
+license = "Apache-2.0"
+repository = "https://example.invalid/owner/slingshot"
+publish = true
