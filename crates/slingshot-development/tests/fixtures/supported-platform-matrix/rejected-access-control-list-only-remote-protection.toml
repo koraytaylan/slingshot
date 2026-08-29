@@ -1,0 +1,154 @@
+# Rejected matrix fixture: a Windows row that substitutes access-control-list-only remote protection.
+#
+# Each row declares one exact target triple, the native operating system and
+# architecture a real invocation must run on, the closed capability identifiers
+# the target must provide, and the release artifact layout. A row never names a
+# continuous-integration provider, a runner image, a linker, a system root, a
+# software-development-kit digest, an environment value, or an aggregate
+# success claim: those belong to the owner-gated release plan, which maps every
+# row to an exact native environment and authenticates its evidence.
+#
+# Plan 0001 evaluates every row through deterministic policy observations and
+# may emit at most one explicitly untrusted observation, for the single row that
+# matches the current environment.
+
+format = "slingshot.supported-platforms/1"
+
+[[target]]
+triple = "x86_64-unknown-linux-gnu"
+operating-system = "linux"
+architecture = "x86_64"
+host-class = "native"
+executable-stem = "slingshot"
+executable-suffix = ""
+archive-profile = "tar.gz"
+archive-members = ["slingshot", "LICENSE", "SHA256SUMS"]
+native-smoke-mode = "direct"
+provider-trust-capabilities = [
+    "provider-record-distinguished-encoding-rules-bytes",
+    "effective-server-authentication-purpose",
+    "distrust-or-deny-decision",
+    "application-policy-or-name-constraint",
+    "unevaluable-decision",
+    "conflicting-same-record-decisions",
+]
+runtime-capabilities = [
+    "owner-only-runtime-directory",
+    "unix-domain-socket-endpoint",
+    "distinct-advisory-owner-lock",
+    "distinct-advisory-startup-election-lock",
+    "peer-current-user-policy",
+    "atomic-same-directory-readiness",
+    "session-independent-detachment",
+    "stable-supervised-child-cleanup",
+]
+filesystem-capabilities = [
+    "descriptor-relative-no-follow-traversal",
+    "descriptor-bound-file-identity",
+    "masked-posix-access-control-lists",
+]
+build-policy-capabilities = [
+    "exact-repository-rust-toolchain",
+    "exact-target-triple",
+    "incremental-compilation-disabled",
+    "closed-build-environment",
+    "source-path-remapping",
+    "build-root-remapping",
+    "source-date-from-source-object",
+    "native-linker-system-root-or-software-development-kit-observation",
+    "no-ambient-archive-program",
+]
+
+[[target]]
+triple = "aarch64-apple-darwin"
+operating-system = "macos"
+architecture = "aarch64"
+host-class = "native"
+executable-stem = "slingshot"
+executable-suffix = ""
+archive-profile = "tar.gz"
+archive-members = ["slingshot", "LICENSE", "SHA256SUMS"]
+native-smoke-mode = "direct"
+provider-trust-capabilities = [
+    "provider-record-distinguished-encoding-rules-bytes",
+    "effective-server-authentication-purpose",
+    "distrust-or-deny-decision",
+    "application-policy-or-name-constraint",
+    "unevaluable-decision",
+    "conflicting-same-record-decisions",
+]
+runtime-capabilities = [
+    "owner-only-runtime-directory",
+    "unix-domain-socket-endpoint",
+    "distinct-advisory-owner-lock",
+    "distinct-advisory-startup-election-lock",
+    "peer-current-user-policy",
+    "atomic-same-directory-readiness",
+    "session-independent-detachment",
+    "stable-supervised-child-cleanup",
+]
+filesystem-capabilities = [
+    "descriptor-relative-no-follow-traversal",
+    "descriptor-bound-file-identity",
+    "extended-access-control-lists",
+]
+build-policy-capabilities = [
+    "exact-repository-rust-toolchain",
+    "exact-target-triple",
+    "incremental-compilation-disabled",
+    "closed-build-environment",
+    "source-path-remapping",
+    "build-root-remapping",
+    "source-date-from-source-object",
+    "native-linker-system-root-or-software-development-kit-observation",
+    "no-ambient-archive-program",
+]
+
+[[target]]
+triple = "x86_64-pc-windows-msvc"
+operating-system = "windows"
+architecture = "x86_64"
+host-class = "native"
+executable-stem = "slingshot"
+executable-suffix = ".exe"
+archive-profile = "zip"
+archive-members = ["slingshot.exe", "LICENSE", "SHA256SUMS"]
+native-smoke-mode = "direct"
+provider-trust-capabilities = [
+    "provider-record-distinguished-encoding-rules-bytes",
+    "effective-server-authentication-purpose",
+    "distrust-or-deny-decision",
+    "application-policy-or-name-constraint",
+    "unevaluable-decision",
+    "conflicting-same-record-decisions",
+]
+runtime-capabilities = [
+    "current-user-security-identifier-enforcement",
+    "named-pipe-endpoint",
+    "access-control-list-only-remote-protection",
+    "distinct-exclusive-owner-lock",
+    "distinct-exclusive-startup-election-lock",
+    "atomic-same-directory-readiness",
+    "detached-process-creation",
+    "stable-supervised-child-cleanup",
+]
+filesystem-capabilities = [
+    "handle-relative-no-follow-traversal",
+    "security-descriptor-and-discretionary-access-control-list",
+    "reparse-point-evidence",
+    "link-count",
+    "volume-serial-number",
+    "one-hundred-twenty-eight-bit-file-identifier",
+]
+build-policy-capabilities = [
+    "exact-repository-rust-toolchain",
+    "exact-target-triple",
+    "incremental-compilation-disabled",
+    "closed-build-environment",
+    "source-path-remapping",
+    "build-root-remapping",
+    "source-date-from-source-object",
+    "native-linker-system-root-or-software-development-kit-observation",
+    "no-ambient-archive-program",
+]
+
