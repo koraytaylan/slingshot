@@ -1,0 +1,44 @@
+# Accepted and refused shapes of a current-environment probe report.
+#
+# A run may emit no observation at all, or exactly one for the single row that
+# matches the current environment. Every other shape is refused: a second
+# observation, an observation of a row this machine is not, a report that
+# relabels itself as authority, and a report that claims an aggregate result
+# across rows nobody here owns.
+
+format = "slingshot.capability-probe-reports/1"
+
+[[report]]
+name = "no-observation"
+observations = []
+accepted = true
+
+[[report]]
+name = "one-current-observation"
+observations = ["current"]
+accepted = true
+
+[[report]]
+name = "two-current-observations"
+observations = ["current", "current"]
+accepted = false
+
+[[report]]
+name = "observation-of-another-row"
+observations = ["another-row"]
+accepted = false
+
+[[report]]
+name = "current-observation-relabelled-as-authority"
+observations = ["authority-labelled"]
+accepted = false
+
+[[report]]
+name = "aggregate-claim-across-rows"
+observations = ["aggregate"]
+accepted = false
+
+[[report]]
+name = "current-observation-beside-another-row"
+observations = ["current", "another-row"]
+accepted = false
