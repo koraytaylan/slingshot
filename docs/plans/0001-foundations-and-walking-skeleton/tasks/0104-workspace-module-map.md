@@ -51,8 +51,8 @@ touches:
   - crates/slingshot-development/src/rustsec_advisory_pin.rs
   - crates/slingshot-development/tests/workspace_module_map.rs
   - "crates/slingshot-development/tests/fixtures/workspace-module-map/**"
-status: planned
-merged_as: ""
+status: done
+merged_as: "9e30c149f64762b0be1020b423eafe8ac2284fd0"
 ---
 # Workspace Module Map
 
