@@ -5,6 +5,8 @@ mod base64_encoding;
 mod descriptor_relative_filesystem;
 #[cfg(target_os = "macos")]
 mod extended_access_control_lists;
+#[cfg(unix)]
+mod operating_system_account_database;
 mod platform_directories;
 #[cfg(target_os = "linux")]
 mod posix_access_control_lists;

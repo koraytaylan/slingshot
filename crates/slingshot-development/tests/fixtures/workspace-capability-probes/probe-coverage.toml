@@ -197,6 +197,14 @@ interface = ["serde_json::to_string", "serde_json::from_str", "malformed.line()"
 targets = []
 
 [[probe]]
+capability = "operating-system-account-database"
+package = "slingshot-configuration"
+module = "operating_system_account_database"
+kind = "normal"
+interface = ["uzers::get_effective_uid", "uzers::get_user_by_uid", "uzers::os::unix::UserExt"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+
+[[probe]]
 capability = "platform-directories"
 package = "slingshot-configuration"
 module = "platform_directories"
