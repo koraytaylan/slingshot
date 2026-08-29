@@ -1,0 +1,40 @@
+# Plan 0002 source-leaf ownership.
+#
+# One row per source leaf this plan's scaffold task creates. Columns are
+# separated by a vertical bar:
+#
+#   source path | owning package | leaf family | structural parent | module path
+#
+# A leaf family names the boundary the leaf belongs to and is bound to exactly
+# one package, so a leaf placed in the wrong crate fails even when its path and
+# module path agree with each other. The structural parent is the crate root or
+# family root whose `pub mod` declaration reaches the leaf; exactly one parent
+# may declare a leaf. Rows are byte-lexicographically ordered by source path so
+# the fixture's order never depends on the order the source tree is walked.
+#
+# This file, the parent declarations, the source tree, and the scaffold task's
+# recorded footprint are compared in both directions, so an undeclared source
+# file, a declaration without a file, a duplicate, a misowned leaf, and a second
+# parent are each rejected.
+crates/slingshot-agent-connection/src/authentication/access_token_cache.rs|slingshot-agent-connection|authentication-transport|slingshot_agent_connection::authentication|slingshot_agent_connection::authentication::access_token_cache
+crates/slingshot-agent-connection/src/authentication/cloud_service_credentials.rs|slingshot-agent-connection|authentication-transport|slingshot_agent_connection::authentication|slingshot_agent_connection::authentication::cloud_service_credentials
+crates/slingshot-agent-connection/src/authentication/environment_provider.rs|slingshot-agent-connection|authentication-transport|slingshot_agent_connection::authentication|slingshot_agent_connection::authentication::environment_provider
+crates/slingshot-agent-connection/src/authentication/identity_management_exchange.rs|slingshot-agent-connection|authentication-transport|slingshot_agent_connection::authentication|slingshot_agent_connection::authentication::identity_management_exchange
+crates/slingshot-agent-connection/src/authentication/token_assertion.rs|slingshot-agent-connection|authentication-transport|slingshot_agent_connection::authentication|slingshot_agent_connection::authentication::token_assertion
+crates/slingshot-agent-connection/src/transport_policy.rs|slingshot-agent-connection|authentication-transport|slingshot_agent_connection|slingshot_agent_connection::transport_policy
+crates/slingshot-configuration/src/additional_certificate_authority.rs|slingshot-configuration|configuration-boundary|slingshot_configuration|slingshot_configuration::additional_certificate_authority
+crates/slingshot-configuration/src/configuration_generation.rs|slingshot-configuration|configuration-boundary|slingshot_configuration|slingshot_configuration::configuration_generation
+crates/slingshot-configuration/src/configuration_root.rs|slingshot-configuration|configuration-boundary|slingshot_configuration|slingshot_configuration::configuration_root
+crates/slingshot-configuration/src/credential_filesystem.rs|slingshot-configuration|configuration-boundary|slingshot_configuration|slingshot_configuration::credential_filesystem
+crates/slingshot-configuration/src/credential_path.rs|slingshot-configuration|configuration-boundary|slingshot_configuration|slingshot_configuration::credential_path
+crates/slingshot-configuration/src/platform_trust.rs|slingshot-configuration|configuration-boundary|slingshot_configuration|slingshot_configuration::platform_trust
+crates/slingshot-configuration/src/profile_loader.rs|slingshot-configuration|configuration-boundary|slingshot_configuration|slingshot_configuration::profile_loader
+crates/slingshot-configuration/src/profile_selection.rs|slingshot-configuration|configuration-boundary|slingshot_configuration|slingshot_configuration::profile_selection
+crates/slingshot-configuration/src/testing/credential_filesystem.rs|slingshot-configuration|configuration-boundary|slingshot_configuration::testing|slingshot_configuration::testing::credential_filesystem
+crates/slingshot-development/src/profile_authentication_harness.rs|slingshot-development|authentication-review|slingshot_development|slingshot_development::profile_authentication_harness
+crates/slingshot-domain/src/configuration_snapshot.rs|slingshot-domain|profile-contract|slingshot_domain|slingshot_domain::configuration_snapshot
+crates/slingshot-domain/src/profile.rs|slingshot-domain|profile-contract|slingshot_domain|slingshot_domain::profile
+crates/slingshot-domain/src/profile_authentication_contract.rs|slingshot-domain|profile-contract|slingshot_domain|slingshot_domain::profile_authentication_contract
+crates/slingshot-domain/src/secret_value.rs|slingshot-domain|profile-contract|slingshot_domain|slingshot_domain::secret_value
+crates/slingshot-domain/src/selected_environment_revision.rs|slingshot-domain|profile-contract|slingshot_domain|slingshot_domain::selected_environment_revision
+crates/slingshot-test-support/src/identity_management_server.rs|slingshot-test-support|authentication-fake|slingshot_test_support|slingshot_test_support::identity_management_server
