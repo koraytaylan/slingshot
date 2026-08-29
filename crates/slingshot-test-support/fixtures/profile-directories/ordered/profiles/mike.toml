@@ -1,0 +1,17 @@
+format_version = 1
+name = "remote-site"
+
+[environments.staging]
+deployment = "adobe_experience_manager_6_5"
+allow_insecure_author_transport = true
+
+[environments.staging.author]
+base_address = "http://author.example.com"
+
+[environments.staging.publisher]
+base_address = "http://publish.example.com"
+
+[environments.staging.authentication]
+method = "basic"
+user_name = "admin"
+password = "not-a-real-password"

@@ -1,0 +1,25 @@
+format_version = 1
+
+[[sources]]
+reference = "credentials/alpha.json"
+sha256 = "32f49f6074fe57c9b18ee4d366143f05179fd77055e8ddc510abfb9eb8a51d68"
+
+[[sources]]
+reference = "credentials/zulu.json"
+sha256 = "32f49f6074fe57c9b18ee4d366143f05179fd77055e8ddc510abfb9eb8a51d68"
+
+[[sources]]
+reference = "profiles/alpha.toml"
+sha256 = "9bd395b219d0cb32b09557a485a6c1a856c500afdbd18a98c543ae7adc3c75f3"
+
+[[sources]]
+reference = "profiles/mike.toml"
+sha256 = "15879bcb7413b4056da9a0e450e7ea253a51855f5cccc68b470edbe2756b5980"
+
+[[sources]]
+reference = "profiles/zulu.toml"
+sha256 = "44cd335ae9b58ebd7e2b46a45249ce7410a70f5f07ce70abbf5da4823e90d8e1"
+
+[[sources]]
+reference = "selection.toml"
+sha256 = "8ce35ac44ceba8a551e90b6748cffbe9454639d52d88870520b1b5914cd0d6b1"

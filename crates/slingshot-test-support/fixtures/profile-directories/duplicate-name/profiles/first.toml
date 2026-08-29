@@ -1,0 +1,15 @@
+format_version = 1
+name = "same-site"
+
+[environments.production]
+deployment = "adobe_experience_manager_cloud_service"
+
+[environments.production.author]
+base_address = "https://author.example.com"
+
+[environments.production.publisher]
+base_address = "https://publish.example.com"
+
+[environments.production.authentication]
+method = "adobe_experience_manager_developer_console_service_credentials"
+credentials_file = "credentials/first.json"
