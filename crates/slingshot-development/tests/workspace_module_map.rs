@@ -5,6 +5,12 @@
 //! plan document, and the compiled source tree. Every assertion compares them
 //! bidirectionally, so a wildcard claim, a later plan's feature leaf, a missing
 //! declaration, and a misowned reusable value all fail.
+//!
+//! The assertions describe the module tree as it stays: a crate root declares
+//! exactly the children the map assigns it, a family root carries only
+//! documentation and its children, and every module is documented and free of a
+//! placeholder body. A leaf gains behavior when its owning task lands, so no
+//! assertion here requires a leaf to stay empty.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -58,21 +64,13 @@ const LAYER_COLUMN_COUNT: usize = 3;
 /// Number of columns in a vocabulary fixture row.
 const VOCABULARY_COLUMN_COUNT: usize = 2;
 
-/// Tokens no present-state shell may contain.
-const FORBIDDEN_TOKENS: &[&str] = &[
-    "todo!",
-    "unimplemented!",
-    "unreachable!",
-    "panic!",
-    "unsafe",
-    "TODO",
-    "FIXME",
-    "XXX",
-    "HACK",
-    "TBD",
-    "**Steps:**",
-    "**Done when:**",
-];
+/// Placeholder bodies no declared module may contain.
+///
+/// The scan is deliberately narrow. Marker tokens, planning headings, and the
+/// word for an unchecked block need syntax classification rather than substring
+/// matching, so the source-policy checker owns them and this assertion does not
+/// pretend to.
+const PLACEHOLDER_BODIES: &[&str] = &["todo!(", "unimplemented!("];
 
 /// Vocabulary the architecture places in an exact crate.
 const VOCABULARY_PLACEMENT: &[(&str, &str)] = &[
@@ -351,8 +349,8 @@ fn declared_children(text: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// Reports every way a shell carries more than present-state documentation.
-fn evaluate_shell(path: &str, text: &str) -> Vec<String> {
+/// Reports every way a module fails the present-state documentation rule.
+fn evaluate_documentation(path: &str, text: &str) -> Vec<String> {
     let mut violations = Vec::new();
     if !text.starts_with("//!") {
         violations.push(format!("{path} does not open with module documentation"));
@@ -363,23 +361,23 @@ fn evaluate_shell(path: &str, text: &str) -> Vec<String> {
     if !documented {
         violations.push(format!("{path} has empty module documentation"));
     }
-    let body: Vec<&str> = text
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with("//!"))
-        .collect();
-    if !body.is_empty() {
-        violations.push(format!("{path} carries {} lines beyond its documentation", body.len()));
-    }
+    violations.extend(
+        PLACEHOLDER_BODIES
+            .iter()
+            .filter(|body| text.contains(**body))
+            .map(|body| format!("{path} carries the placeholder body {body}")),
+    );
     violations
 }
 
-/// Reports every forbidden token a source file contains.
-fn evaluate_tokens(path: &str, text: &str) -> Vec<String> {
-    FORBIDDEN_TOKENS
-        .iter()
-        .filter(|token| text.contains(**token))
-        .map(|token| format!("{path} contains the forbidden token {token}"))
+/// Reports every line a family root carries beyond documentation and children.
+fn evaluate_family_root(path: &str, text: &str) -> Vec<String> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| {
+            !line.is_empty() && !line.starts_with("//!") && declared_children(line).is_empty()
+        })
+        .map(|line| format!("{path} carries the non-structural line {line:?}"))
         .collect()
 }
 
@@ -431,14 +429,18 @@ fn every_crate_root_declares_exactly_the_modules_it_owns() {
 }
 
 #[test]
-fn every_family_root_and_leaf_is_a_present_state_documentation_shell() {
+fn every_declared_module_is_documented_without_a_placeholder_body() {
     for row in accepted_rows() {
         let text = read_repository_file(&row.path);
-        assert_eq!(evaluate_tokens(&row.path, &text), Vec::<String>::new());
-        if row.kind == CRATE_ROOT_KIND {
-            continue;
-        }
-        assert_eq!(evaluate_shell(&row.path, &text), Vec::<String>::new());
+        assert_eq!(evaluate_documentation(&row.path, &text), Vec::<String>::new());
+    }
+}
+
+#[test]
+fn every_family_root_carries_only_documentation_and_its_children() {
+    for row in accepted_rows().into_iter().filter(|row| row.kind == FAMILY_ROOT_KIND) {
+        let text = read_repository_file(&row.path);
+        assert_eq!(evaluate_family_root(&row.path, &text), Vec::<String>::new());
     }
 }
 
