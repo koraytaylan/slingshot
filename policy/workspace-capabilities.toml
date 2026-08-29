@@ -106,8 +106,8 @@ name = "descriptor-relative-filesystem"
 purpose = "Open a descendant relative to a directory descriptor without following links and read its identity."
 package = "rustix"
 version = "1.1.4"
-default-features = false
-features = ["fs", "process", "std"]
+default-features = true
+features = ["fs", "process"]
 targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
 kinds = ["normal"]
 owners = ["slingshot-command-line", "slingshot-configuration", "slingshot-daemon"]
@@ -180,10 +180,10 @@ owners = ["slingshot-storage"]
 
 [[capability]]
 name = "extended-access-control-lists"
-purpose = "Inspect extended access-control lists from an open file."
-package = "exacl"
-version = "0.13.0"
-default-features = true
+purpose = "Read extended access-control-list evidence from an open file descriptor."
+package = "xattr"
+version = "1.6.1"
+default-features = false
 features = []
 targets = ["aarch64-apple-darwin"]
 kinds = ["normal"]
@@ -312,10 +312,10 @@ owners = ["slingshot-agent-connection"]
 
 [[capability]]
 name = "posix-access-control-lists"
-purpose = "Inspect masked named and default POSIX access-control lists from an open file."
-package = "exacl"
-version = "0.13.0"
-default-features = true
+purpose = "Read masked named and default POSIX access-control-list evidence from an open file descriptor."
+package = "xattr"
+version = "1.6.1"
+default-features = false
 features = []
 targets = ["x86_64-unknown-linux-gnu"]
 kinds = ["normal"]
@@ -433,11 +433,11 @@ owners = ["slingshot-development"]
 
 [[capability]]
 name = "signed-assertions"
-purpose = "Build and verify compact signed assertions from private keys."
+purpose = "Build and verify compact signed assertions with one explicitly selected pure-Rust provider."
 package = "jsonwebtoken"
 version = "11.0.0"
-default-features = true
-features = []
+default-features = false
+features = ["rust_crypto", "use_pem"]
 targets = []
 kinds = ["normal"]
 owners = ["slingshot-agent-connection"]

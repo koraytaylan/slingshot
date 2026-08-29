@@ -1,0 +1,421 @@
+# Probe coverage for every candidate capability.
+#
+# One row per inventory capability, naming the crate that owns the probe, the
+# probe module, the dependency kind the probe exercises the capability at, the
+# public interface the probe must literally use, and the exact target rows the
+# probe applies to. An empty target list means the probe applies everywhere.
+#
+# This fixture is compared with policy/workspace-capabilities.toml, with the
+# probe modules on disk, and with the module declarations in each crate's probe
+# entry point, so an uncovered row, a probe without a row, a wrong crate, a
+# wrong dependency kind, and a wrong target predicate all fail.
+
+format = "slingshot.capability-probes/1"
+
+[[probe]]
+capability = "asynchronous-runtime"
+package = "slingshot-daemon"
+module = "asynchronous_runtime"
+kind = "normal"
+interface = ["tokio::runtime::Builder::new_multi_thread", "tokio::time::timeout", "tokio::process::Command"]
+targets = []
+
+[[probe]]
+capability = "asynchronous-transport-layer-security"
+package = "slingshot-agent-connection"
+module = "asynchronous_transport_layer_security"
+kind = "normal"
+interface = ["tokio_rustls::TlsConnector", "HANDSHAKE_DEADLINE", "CONNECT_DEADLINE"]
+targets = []
+
+[[probe]]
+capability = "base64-encoding"
+package = "slingshot-configuration"
+module = "base64_encoding"
+kind = "normal"
+interface = ["base64::Engine", "STANDARD", "URL_SAFE_NO_PAD"]
+targets = []
+
+[[probe]]
+capability = "byte-buffers"
+package = "slingshot-agent-protocol"
+module = "byte_buffers"
+kind = "normal"
+interface = ["bytes::{Buf, BufMut, Bytes, BytesMut}", "freeze()", ".slice("]
+targets = []
+
+[[probe]]
+capability = "cancellation-tokens"
+package = "slingshot-daemon"
+module = "cancellation_tokens"
+kind = "normal"
+interface = ["tokio_util::sync::CancellationToken", "child_token()", "cancelled()"]
+targets = []
+
+[[probe]]
+capability = "certificate-record-decoding"
+package = "slingshot-agent-connection"
+module = "certificate_record_decoding"
+kind = "normal"
+interface = ["x509_parser::prelude", "extended_key_usage()", "name_constraints()"]
+targets = []
+
+[[probe]]
+capability = "certificate-types"
+package = "slingshot-agent-connection"
+module = "certificate_types"
+kind = "normal"
+interface = ["rustls_pki_types::pem::PemObject", "pem_slice_iter", "ServerName::try_from"]
+targets = []
+
+[[probe]]
+capability = "command-line-arguments"
+package = "slingshot-command-line"
+module = "command_line_arguments"
+kind = "normal"
+interface = ["clap::{Parser, Subcommand}", "ErrorKind::UnknownArgument", "render_help()"]
+targets = []
+
+[[probe]]
+capability = "descriptor-relative-filesystem"
+package = "slingshot-configuration"
+module = "descriptor_relative_filesystem"
+kind = "normal"
+interface = ["rustix::fs::{Mode, OFlags, openat}", "OFlags::NOFOLLOW", "rustix::fs::fstat"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+
+[[probe]]
+capability = "deterministic-gzip-compression"
+package = "slingshot-development"
+module = "deterministic_gzip_compression"
+kind = "normal"
+interface = ["flate2::GzBuilder", "operating_system(", "GzDecoder"]
+targets = []
+
+[[probe]]
+capability = "deterministic-tar-archives"
+package = "slingshot-development"
+module = "deterministic_tar_archives"
+kind = "normal"
+interface = ["tar::{Archive, Builder, Header}", "set_mtime", "set_cksum()"]
+targets = []
+
+[[probe]]
+capability = "deterministic-zip-archives"
+package = "slingshot-development"
+module = "deterministic_zip_archives"
+kind = "normal"
+interface = ["zip::write::SimpleFileOptions", "last_modified_time", "ZipArchive"]
+targets = []
+
+[[probe]]
+capability = "diagnostics"
+package = "slingshot-agent-connection"
+module = "diagnostics"
+kind = "normal"
+interface = ["tracing::{Event, Level, Subscriber, span}", "info_span!", "record("]
+targets = []
+
+[[probe]]
+capability = "diagnostics-subscriber"
+package = "slingshot-daemon"
+module = "diagnostics_subscriber"
+kind = "normal"
+interface = ["tracing_subscriber::EnvFilter", "with_writer", "MakeWriter"]
+targets = []
+
+[[probe]]
+capability = "embedded-structured-query-language"
+package = "slingshot-storage"
+module = "embedded_structured_query_language"
+kind = "normal"
+interface = ["rusqlite::{Connection, params}", "sqlite_version()", "transaction()"]
+targets = []
+
+[[probe]]
+capability = "extended-access-control-lists"
+package = "slingshot-configuration"
+module = "extended_access_control_lists"
+kind = "normal"
+interface = ["xattr::FileExt", "com.apple.system.Security", "list_xattr()"]
+targets = ["aarch64-apple-darwin"]
+
+[[probe]]
+capability = "file-locks"
+package = "slingshot-daemon"
+module = "file_locks"
+kind = "normal"
+interface = ["fs4::FileExt", "FileExt::try_lock", "FileExt::unlock"]
+targets = []
+
+[[probe]]
+capability = "hexadecimal-encoding"
+package = "slingshot-storage"
+module = "hexadecimal_encoding"
+kind = "normal"
+interface = ["hex::encode", "hex::decode"]
+targets = []
+
+[[probe]]
+capability = "hypertext-transfer-protocol-body"
+package = "slingshot-agent-connection"
+module = "hypertext_transfer_protocol_body"
+kind = "normal"
+interface = ["http_body_util::{BodyExt, Full, Limited}", "Frame::trailers", "poll_frame"]
+targets = []
+
+[[probe]]
+capability = "hypertext-transfer-protocol-engine"
+package = "slingshot-agent-connection"
+module = "hypertext_transfer_protocol_engine"
+kind = "normal"
+interface = ["hyper::client::conn::http1::handshake", "hyper::ext::on_informational", "trailers()"]
+targets = []
+
+[[probe]]
+capability = "hypertext-transfer-protocol-types"
+package = "slingshot-agent-connection"
+module = "hypertext_transfer_protocol_types"
+kind = "normal"
+interface = ["http::{Method, Request, Response, StatusCode, Version}", "get_all(", "HeaderValue::from_str"]
+targets = []
+
+[[probe]]
+capability = "hypertext-transfer-protocol-utilities"
+package = "slingshot-agent-connection"
+module = "hypertext_transfer_protocol_utilities"
+kind = "normal"
+interface = ["hyper_util::rt::{TokioExecutor, TokioIo}", "http2::handshake", "Version::HTTP_2"]
+targets = []
+
+[[probe]]
+capability = "javascript-object-notation"
+package = "slingshot-agent-protocol"
+module = "javascript_object_notation"
+kind = "normal"
+interface = ["serde_json::to_string", "serde_json::from_str", "malformed.line()"]
+targets = []
+
+[[probe]]
+capability = "platform-directories"
+package = "slingshot-configuration"
+module = "platform_directories"
+kind = "normal"
+interface = ["directories::ProjectDirs", "config_dir()", "runtime_dir()"]
+targets = []
+
+[[probe]]
+capability = "platform-trust-decisions-macos"
+package = "slingshot-agent-connection"
+module = "platform_trust_decisions_macos"
+kind = "normal"
+interface = ["security_framework::trust_settings::", "TrustSettingsForCertificate::Deny", "to_der()"]
+targets = ["aarch64-apple-darwin"]
+
+[[probe]]
+capability = "platform-trust-decisions-windows"
+package = "slingshot-agent-connection"
+module = "platform_trust_decisions_windows"
+kind = "normal"
+interface = ["schannel::cert_store::CertStore", "ValidUses::Oids", "to_der()"]
+targets = ["x86_64-pc-windows-msvc"]
+
+[[probe]]
+capability = "platform-trust-store-locations"
+package = "slingshot-agent-connection"
+module = "platform_trust_store_locations"
+kind = "normal"
+interface = ["openssl_probe::probe()", "candidate_cert_dirs", "RootCertStore::empty()"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[[probe]]
+capability = "posix-access-control-lists"
+package = "slingshot-configuration"
+module = "posix_access_control_lists"
+kind = "normal"
+interface = ["xattr::FileExt", "system.posix_acl_access", "list_xattr()"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[[probe]]
+capability = "process-assertions"
+package = "slingshot-command-line"
+module = "process_assertions"
+kind = "development"
+interface = ["assert_cmd::Command", "CARGO_BIN_EXE_slingshot", ".assert()"]
+targets = []
+
+[[probe]]
+capability = "process-predicates"
+package = "slingshot-command-line"
+module = "process_predicates"
+kind = "development"
+interface = ["predicates::prelude", "predicate::str::starts_with", ".not()"]
+targets = []
+
+[[probe]]
+capability = "property-tests"
+package = "slingshot-domain"
+module = "property_tests"
+kind = "development"
+interface = ["proptest::prelude", "TestRunner", "TestError::Fail"]
+targets = []
+
+[[probe]]
+capability = "random-values"
+package = "slingshot-daemon"
+module = "random_values"
+kind = "normal"
+interface = ["rand::{CryptoRng, RngExt}", "rand::rng()", "generator.fill("]
+targets = []
+
+[[probe]]
+capability = "rust-source-syntax"
+package = "slingshot-development"
+module = "rust_source_syntax"
+kind = "normal"
+interface = ["syn::visit::Visit", "syn::parse_file", "syn::Safety::Unsafe"]
+targets = []
+
+[[probe]]
+capability = "schema-documents"
+package = "slingshot-agent-protocol"
+module = "schema_documents"
+kind = "normal"
+interface = ["schemars::{JsonSchema, schema_for}", "2020-12", "additionalProperties"]
+targets = []
+
+[[probe]]
+capability = "secret-buffers"
+package = "slingshot-configuration"
+module = "secret_buffers"
+kind = "normal"
+interface = ["secrecy::{ExposeSecret, SecretString}", "expose_secret()"]
+targets = []
+
+[[probe]]
+capability = "secure-hash-digests"
+package = "slingshot-agent-connection"
+module = "secure_hash_digests"
+kind = "normal"
+interface = ["sha2::{Digest, Sha256}", "Sha256::digest", "finalize()"]
+targets = []
+
+[[probe]]
+capability = "serialization"
+package = "slingshot-agent-protocol"
+module = "serialization"
+kind = "normal"
+interface = ["serde::{Deserialize, Serialize}", "deny_unknown_fields", "rename_all"]
+targets = []
+
+[[probe]]
+capability = "shell-syntax"
+package = "slingshot-development"
+module = "shell_syntax"
+kind = "normal"
+interface = ["yash_syntax::syntax::List", "script.parse()", "parse::<List>()"]
+targets = []
+
+[[probe]]
+capability = "signed-assertions"
+package = "slingshot-agent-connection"
+module = "signed_assertions"
+kind = "normal"
+interface = ["jsonwebtoken::{Algorithm", "DecodingKey::from_rsa_pem", "Validation::new"]
+targets = []
+
+[[probe]]
+capability = "source-span-locations"
+package = "slingshot-development"
+module = "source_span_locations"
+kind = "normal"
+interface = ["proc_macro2::TokenStream", "syn::spanned::Spanned", ".start()"]
+targets = []
+
+[[probe]]
+capability = "structured-query-language-syntax"
+package = "slingshot-development"
+module = "structured_query_language_syntax"
+kind = "normal"
+interface = ["sqlparser::dialect::SQLiteDialect", "Parser::parse_sql", "Statement::CreateTable"]
+targets = []
+
+[[probe]]
+capability = "temporary-files"
+package = "slingshot-configuration"
+module = "temporary_files"
+kind = "normal"
+interface = ["tempfile::{NamedTempFile, tempdir}", ".persist("]
+targets = []
+
+[[probe]]
+capability = "toml-documents"
+package = "slingshot-configuration"
+module = "toml_documents"
+kind = "normal"
+interface = ["toml::from_str", "deny_unknown_fields", "span()"]
+targets = []
+
+[[probe]]
+capability = "transport-layer-security"
+package = "slingshot-agent-connection"
+module = "transport_layer_security"
+kind = "normal"
+interface = ["rustls::client::WebPkiServerVerifier", "verify_server_cert", "RootCertStore::empty()"]
+targets = []
+
+[[probe]]
+capability = "typed-errors"
+package = "slingshot-domain"
+module = "typed_errors"
+kind = "normal"
+interface = ["thiserror::Error", "std::error::Error", "source()"]
+targets = []
+
+[[probe]]
+capability = "uniform-resource-locators"
+package = "slingshot-configuration"
+module = "uniform_resource_locators"
+kind = "normal"
+interface = ["url::{ParseError, Url}", "Url::parse", ".join("]
+targets = []
+
+[[probe]]
+capability = "unique-identifiers"
+package = "slingshot-agent-protocol"
+module = "unique_identifiers"
+kind = "normal"
+interface = ["uuid::Uuid", "Uuid::new_v4", "hyphenated()"]
+targets = []
+
+[[probe]]
+capability = "windows-file-identity"
+package = "slingshot-configuration"
+module = "windows_file_identity"
+kind = "normal"
+interface = ["winsafe::{HFILE, co}", "OPEN_REPARSE_POINT", "GetFileInformationByHandle()"]
+targets = ["x86_64-pc-windows-msvc"]
+
+[[probe]]
+capability = "windows-process-creation-flags"
+package = "slingshot-daemon"
+module = "windows_process_creation_flags"
+kind = "normal"
+interface = ["windows_sys::Win32::System::Threading", "DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP"]
+targets = ["x86_64-pc-windows-msvc"]
+
+[[probe]]
+capability = "windows-security-identifiers"
+package = "slingshot-configuration"
+module = "windows_security_identifiers"
+kind = "normal"
+interface = ["windows_permissions::wrappers::", "GetSecurityInfo", "dacl()"]
+targets = ["x86_64-pc-windows-msvc"]
+
+[[probe]]
+capability = "workflow-documents"
+package = "slingshot-development"
+module = "workflow_documents"
+kind = "normal"
+interface = ["serde_yaml_ng::Value", "serde_yaml_ng::from_str", "as_sequence()"]
+targets = []

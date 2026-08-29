@@ -19,12 +19,12 @@ url.workspace = true
 proptest.workspace = true
 
 [target.x86_64-unknown-linux-gnu.dependencies]
-exacl.workspace = true
 rustix.workspace = true
+xattr.workspace = true
 
 [target.aarch64-apple-darwin.dependencies]
-exacl.workspace = true
 rustix.workspace = true
+xattr.workspace = true
 
 [target.x86_64-pc-windows-msvc.dependencies]
 windows-permissions.workspace = true
