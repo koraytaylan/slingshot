@@ -1,0 +1,61 @@
+# Ownership decisions, taken from observed facts alone.
+#
+# Only the operating-system owner lock confers ownership. A readiness record or
+# an endpoint object left behind by a prior owner means recovery, and the
+# startup-election lock confers nothing at all.
+
+[[decision]]
+name = "live-owner"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+expected = "owned"
+
+[[decision]]
+name = "live-owner-being-elected-against"
+owner-lock-held = true
+election-lock-held = true
+readiness-present = true
+endpoint-present = true
+expected = "owned"
+
+[[decision]]
+name = "owner-gone-records-left"
+owner-lock-held = false
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+expected = "recover-stale-records"
+
+[[decision]]
+name = "owner-gone-endpoint-left"
+owner-lock-held = false
+election-lock-held = false
+readiness-present = false
+endpoint-present = true
+expected = "recover-stale-records"
+
+[[decision]]
+name = "owner-gone-readiness-left"
+owner-lock-held = false
+election-lock-held = false
+readiness-present = true
+endpoint-present = false
+expected = "recover-stale-records"
+
+[[decision]]
+name = "nothing-present"
+owner-lock-held = false
+election-lock-held = false
+readiness-present = false
+endpoint-present = false
+expected = "absent"
+
+[[decision]]
+name = "election-held-only"
+owner-lock-held = false
+election-lock-held = true
+readiness-present = false
+endpoint-present = false
+expected = "absent"
