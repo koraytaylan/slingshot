@@ -1,0 +1,4 @@
+//! The closed predicates a discovery command composes.
+//!
+//! This commit declares the module as structure alone; the task the
+//! command inventory names for it implements the contract.
