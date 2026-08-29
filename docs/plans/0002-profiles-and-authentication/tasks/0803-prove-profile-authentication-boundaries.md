@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-development/src/profile_authentication_harness.rs
   - crates/slingshot-development/tests/profile_authentication_boundaries.rs
   - docs/CONFIGURATION.md
-status: planned
+status: done
 merged_as: ""
 ---
 # Prove Profile Authentication Boundaries
