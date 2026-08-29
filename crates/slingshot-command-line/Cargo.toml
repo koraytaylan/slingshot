@@ -5,9 +5,39 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
-[lints]
-workspace = true
-
 [[bin]]
 name = "slingshot"
 path = "src/main.rs"
+
+[dependencies]
+bytes.workspace = true
+clap.workspace = true
+directories.workspace = true
+fs4.workspace = true
+hex.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+tempfile.workspace = true
+
+[target.x86_64-unknown-linux-gnu.dependencies]
+rustix.workspace = true
+
+[target.aarch64-apple-darwin.dependencies]
+rustix.workspace = true
+
+[target.x86_64-pc-windows-msvc.dependencies]
+windows-sys.workspace = true
+
+[lints]
+workspace = true

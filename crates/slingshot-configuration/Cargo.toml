@@ -5,5 +5,30 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[dependencies]
+base64.workspace = true
+directories.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[target.x86_64-unknown-linux-gnu.dependencies]
+exacl.workspace = true
+rustix.workspace = true
+
+[target.aarch64-apple-darwin.dependencies]
+exacl.workspace = true
+rustix.workspace = true
+
+[target.x86_64-pc-windows-msvc.dependencies]
+windows-permissions.workspace = true
+winsafe.workspace = true
+
 [lints]
 workspace = true
