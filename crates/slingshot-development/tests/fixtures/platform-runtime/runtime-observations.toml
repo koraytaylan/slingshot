@@ -1,0 +1,377 @@
+# Deterministic runtime observations for every abstract supported row.
+#
+# A conforming observation reports the endpoint its row requires, a runtime
+# directory only its owner can reach, readiness published in one replacement, a
+# child created detached from its starter, a supervisor that retains the exact
+# child, and no decision taken from a numeric process identifier. The Windows
+# row additionally records that a remote client is refused; a Unix row records
+# no such decision, because it has no pipe to refuse one on.
+
+[[observation]]
+name = "x86_64-unknown-linux-gnu-conforming"
+triple = "x86_64-unknown-linux-gnu"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = true
+
+[[observation]]
+name = "x86_64-unknown-linux-gnu-shared-runtime-directory"
+triple = "x86_64-unknown-linux-gnu"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = false
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "x86_64-unknown-linux-gnu-readiness-written-in-place"
+triple = "x86_64-unknown-linux-gnu"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = false
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "x86_64-unknown-linux-gnu-child-inherits-its-starter"
+triple = "x86_64-unknown-linux-gnu"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = false
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "x86_64-unknown-linux-gnu-supervisor-releases-its-child"
+triple = "x86_64-unknown-linux-gnu"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = false
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "x86_64-unknown-linux-gnu-decided-from-a-process-identifier"
+triple = "x86_64-unknown-linux-gnu"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = true
+accepted = false
+
+[[observation]]
+name = "x86_64-unknown-linux-gnu-wrong-endpoint"
+triple = "x86_64-unknown-linux-gnu"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "aarch64-apple-darwin-conforming"
+triple = "aarch64-apple-darwin"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = true
+
+[[observation]]
+name = "aarch64-apple-darwin-shared-runtime-directory"
+triple = "aarch64-apple-darwin"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = false
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "aarch64-apple-darwin-readiness-written-in-place"
+triple = "aarch64-apple-darwin"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = false
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "aarch64-apple-darwin-child-inherits-its-starter"
+triple = "aarch64-apple-darwin"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = false
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "aarch64-apple-darwin-supervisor-releases-its-child"
+triple = "aarch64-apple-darwin"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = false
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "aarch64-apple-darwin-decided-from-a-process-identifier"
+triple = "aarch64-apple-darwin"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = true
+accepted = false
+
+[[observation]]
+name = "aarch64-apple-darwin-wrong-endpoint"
+triple = "aarch64-apple-darwin"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "x86_64-pc-windows-msvc-conforming"
+triple = "x86_64-pc-windows-msvc"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+remote-clients-rejected = true
+accepted = true
+
+[[observation]]
+name = "x86_64-pc-windows-msvc-shared-runtime-directory"
+triple = "x86_64-pc-windows-msvc"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = false
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+remote-clients-rejected = true
+accepted = false
+
+[[observation]]
+name = "x86_64-pc-windows-msvc-readiness-written-in-place"
+triple = "x86_64-pc-windows-msvc"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = false
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+remote-clients-rejected = true
+accepted = false
+
+[[observation]]
+name = "x86_64-pc-windows-msvc-child-inherits-its-starter"
+triple = "x86_64-pc-windows-msvc"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = false
+supervision-retained = true
+decided-by-process-identifier = false
+remote-clients-rejected = true
+accepted = false
+
+[[observation]]
+name = "x86_64-pc-windows-msvc-supervisor-releases-its-child"
+triple = "x86_64-pc-windows-msvc"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = false
+decided-by-process-identifier = false
+remote-clients-rejected = true
+accepted = false
+
+[[observation]]
+name = "x86_64-pc-windows-msvc-decided-from-a-process-identifier"
+triple = "x86_64-pc-windows-msvc"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = true
+remote-clients-rejected = true
+accepted = false
+
+[[observation]]
+name = "x86_64-pc-windows-msvc-wrong-endpoint"
+triple = "x86_64-pc-windows-msvc"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+remote-clients-rejected = true
+accepted = false
+
+[[observation]]
+name = "windows-without-remote-client-decision"
+triple = "x86_64-pc-windows-msvc"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+accepted = false
+
+[[observation]]
+name = "windows-admitting-a-remote-client"
+triple = "x86_64-pc-windows-msvc"
+endpoint-kind = "windows-named-pipe"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+remote-clients-rejected = false
+accepted = false
+
+[[observation]]
+name = "linux-recording-a-remote-client-decision"
+triple = "x86_64-unknown-linux-gnu"
+endpoint-kind = "unix-domain-socket"
+owner-lock-held = true
+election-lock-held = false
+readiness-present = true
+endpoint-present = true
+current-user-only = true
+atomic-readiness = true
+detached-child-creation = true
+supervision-retained = true
+decided-by-process-identifier = false
+remote-clients-rejected = true
+accepted = false

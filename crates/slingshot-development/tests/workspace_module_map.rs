@@ -299,11 +299,27 @@ fn task_documents() -> BTreeMap<String, String> {
     documents
 }
 
-/// Returns the repository-relative source paths one task's footprint claims.
-fn footprint_paths(task_document: &str) -> BTreeSet<String> {
+/// The source files one task's recorded footprint claims.
+#[derive(Debug, Default)]
+struct Footprint {
+    /// Exact source paths the footprint names.
+    exact: BTreeSet<String>,
+    /// Directory prefixes the footprint claims with a wildcard.
+    prefixes: Vec<String>,
+}
+
+impl Footprint {
+    /// Reports whether one source path lies inside this footprint.
+    fn holds(&self, path: &str) -> bool {
+        self.exact.contains(path) || self.prefixes.iter().any(|prefix| path.starts_with(prefix))
+    }
+}
+
+/// Returns the source files one task's footprint claims.
+fn footprint_paths(task_document: &str) -> Footprint {
     let document = read_repository_file(task_document);
     let frontmatter = document.split("---").nth(1).expect("the task document has frontmatter");
-    let mut claimed = BTreeSet::new();
+    let mut claimed = Footprint::default();
     let mut inside = false;
     for line in frontmatter.lines() {
         if line.starts_with("touches:") {
@@ -317,8 +333,13 @@ fn footprint_paths(task_document: &str) -> BTreeSet<String> {
             break;
         };
         let entry = entry.trim().trim_matches('"');
-        if entry.starts_with(CRATE_DIRECTORY) && entry.contains("/src/") && entry.ends_with(".rs") {
-            claimed.insert(entry.to_owned());
+        if !entry.starts_with(CRATE_DIRECTORY) || !entry.contains("/src/") {
+            continue;
+        }
+        if let Some(prefix) = entry.strip_suffix("**") {
+            claimed.prefixes.push(prefix.to_owned());
+        } else if entry.ends_with(".rs") {
+            claimed.exact.insert(entry.to_owned());
         }
     }
     claimed
@@ -438,9 +459,9 @@ fn the_ownership_map_the_footprints_and_the_source_tree_describe_one_set() {
         let footprint = footprint_paths(document);
         let claimed: BTreeSet<String> =
             rows.iter().filter(|row| row.owner == owner).map(|row| row.path.clone()).collect();
-        let outside: Vec<&String> = claimed.difference(&footprint).collect();
+        let outside: Vec<&String> = claimed.iter().filter(|path| !footprint.holds(path)).collect();
         assert_eq!(outside, Vec::<&String>::new(), "{owner} claims a path outside its footprint");
-        let omitted: Vec<&String> = footprint.difference(&declared).collect();
+        let omitted: Vec<&String> = footprint.exact.difference(&declared).collect();
         assert_eq!(omitted, Vec::<&String>::new(), "{owner} touches a source file the map omits");
     }
 }
@@ -515,7 +536,7 @@ fn named_vocabulary_stays_in_the_crate_the_architecture_assigns_it() {
 #[test]
 fn the_ownership_map_rejects_every_recorded_mutation() {
     let disk = source_paths_on_disk();
-    let footprint = footprint_paths(&task_documents()["workspace-module-map"]);
+    let footprint = footprint_paths(&task_documents()["workspace-module-map"]).exact;
     let layers = parse_layers(&read_fixture(LAYER_FIXTURE));
     for name in ["rejected-wildcard-path.txt", "rejected-duplicate-path.txt"] {
         let (_, violations) = parse_ownership(&read_fixture(name));

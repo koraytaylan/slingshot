@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://slingshot.invalid/schema/platform-runtime-evidence.json",
+  "title": "Untrusted current-environment platform runtime observation",
+  "description": "One machine's own report of its platform runtime behavior. It describes the single supported row that matches the environment it ran in, and it is never authority: a release claim requires an owner-mapped environment whose evidence a provider has attested.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "label",
+    "source_revision",
+    "matrix_digest",
+    "contract_digest",
+    "triple",
+    "operating_system",
+    "architecture",
+    "outcomes"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "const": "untrusted_current_native_observation",
+      "description": "Fixed label that keeps the report from being read as authority."
+    },
+    "source_revision": {
+      "type": "string",
+      "description": "Revision of the source the observation was taken from."
+    },
+    "matrix_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Digest of the abstract supported-target manifest the row came from."
+    },
+    "contract_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Digest of the foundation contract the deadlines came from."
+    },
+    "triple": {
+      "type": "string",
+      "description": "Exact target triple of the single row this report describes."
+    },
+    "operating_system": {
+      "type": "string",
+      "description": "Operating system the observation actually ran on."
+    },
+    "architecture": {
+      "type": "string",
+      "description": "Architecture the observation actually ran on."
+    },
+    "outcomes": {
+      "type": "array",
+      "description": "One entry per behavior the row requires.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["behavior", "policy", "real"],
+        "properties": {
+          "behavior": {
+            "type": "string",
+            "description": "Behavior the row requires."
+          },
+          "policy": {
+            "type": "string",
+            "enum": ["passed", "failed"],
+            "description": "Outcome of the deterministic policy evaluation, which runs for every row."
+          },
+          "real": {
+            "type": "string",
+            "enum": ["passed", "failed", "not_run_untrusted"],
+            "description": "Outcome of the real behavior, which runs only on the row matching this environment."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why a real behavior was not run."
+          }
+        }
+      }
+    }
+  }
+}
