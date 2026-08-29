@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/command_module_inventory.rs
   - crates/slingshot-domain/tests/command_contract_limits.rs
 status: done
-merged_as: ""
+merged_as: "a7d47841015e6d84c1e9be4448fc8c6c9486930f"
 ---
 # Command Module Scaffold
 
