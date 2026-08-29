@@ -1,9 +1,6 @@
 //! Test-support platform-runtime family root.
 //!
-//! The module map assigns this family the deterministic platform fakes and
-//! the supervision channel that test daemons are cleaned up through. This
-//! commit owns the supervision channel; the deterministic policy evaluation
-//! belongs to the outermost tooling crate, which can reach every product
-//! contract.
-
-pub mod supervision;
+//! The module map assigns this family the deterministic platform fakes a test
+//! evaluates a supported row against. The supervision channel a detached test
+//! daemon is cleaned up through is a top-level module of this crate, because a
+//! test reaches for it directly rather than through a platform family.

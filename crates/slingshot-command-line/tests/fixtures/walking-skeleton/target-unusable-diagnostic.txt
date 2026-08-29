@@ -1,0 +1,1 @@
+slingshot: both --profile and --environment name the target this command addresses

@@ -30,6 +30,7 @@ tracing-subscriber.workspace = true
 [dev-dependencies]
 assert_cmd.workspace = true
 predicates.workspace = true
+slingshot-test-support.workspace = true
 tempfile.workspace = true
 
 [target.x86_64-unknown-linux-gnu.dependencies]

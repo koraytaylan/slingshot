@@ -4,8 +4,8 @@
 //! The workspace dependency contract lets this crate depend normally only on
 //! `slingshot-domain`, `slingshot-agent-protocol`, `slingshot-local-protocol`,
 //! and `slingshot-storage`, and forbids a product crate from reaching it
-//! through a normal or build dependency. This commit declares the crate's
-//! module families as documentation-only roots.
+//! through a normal or build dependency. This commit implements the reusable process,
+//! temporary-runtime, and supervision harnesses.
 
 pub mod daemon_process;
 pub mod finite_state_machine_executable;
