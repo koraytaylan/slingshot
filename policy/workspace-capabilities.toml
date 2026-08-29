@@ -77,7 +77,7 @@ default-features = true
 features = []
 targets = []
 kinds = ["normal"]
-owners = ["slingshot-agent-connection"]
+owners = ["slingshot-agent-connection", "slingshot-configuration"]
 
 [[capability]]
 name = "certificate-types"
@@ -297,7 +297,7 @@ default-features = true
 features = []
 targets = ["aarch64-apple-darwin"]
 kinds = ["normal"]
-owners = ["slingshot-agent-connection"]
+owners = ["slingshot-agent-connection", "slingshot-configuration"]
 
 [[capability]]
 name = "platform-trust-decisions-windows"
@@ -308,7 +308,7 @@ default-features = true
 features = []
 targets = ["x86_64-pc-windows-msvc"]
 kinds = ["normal"]
-owners = ["slingshot-agent-connection"]
+owners = ["slingshot-agent-connection", "slingshot-configuration"]
 
 [[capability]]
 name = "platform-trust-store-locations"
@@ -319,7 +319,7 @@ default-features = true
 features = []
 targets = ["x86_64-unknown-linux-gnu"]
 kinds = ["normal"]
-owners = ["slingshot-agent-connection"]
+owners = ["slingshot-agent-connection", "slingshot-configuration"]
 
 [[capability]]
 name = "posix-access-control-lists"

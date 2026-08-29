@@ -2078,6 +2078,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "slingshot-configuration",
+ "slingshot-domain",
  "tempfile",
  "thiserror",
  "tokio",
@@ -2136,9 +2138,12 @@ version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
  "directories",
+ "openssl-probe",
  "proptest",
  "rustix",
+ "schannel",
  "secrecy",
+ "security-framework",
  "serde",
  "sha2",
  "slingshot-domain",
@@ -2151,6 +2156,7 @@ dependencies = [
  "uzers",
  "windows-permissions",
  "winsafe",
+ "x509-parser",
  "xattr",
 ]
 
