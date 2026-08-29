@@ -14,7 +14,7 @@ format = "slingshot.consumer-capabilities/1"
 [[consumer]]
 name = "slingshot_domain"
 package = "slingshot-domain"
-normal = ["typed-errors", "serialization", "unique-identifiers"]
+normal = ["typed-errors", "serialization", "unique-identifiers", "secret-buffers"]
 build = []
 development = ["property-tests"]
 
@@ -30,7 +30,7 @@ name = "slingshot_configuration"
 package = "slingshot-configuration"
 normal = ["typed-errors", "serialization", "toml-documents", "uniform-resource-locators", "secret-buffers", "platform-directories", "base64-encoding", "descriptor-relative-filesystem", "posix-access-control-lists", "extended-access-control-lists", "windows-security-identifiers", "windows-file-identity"]
 build = []
-development = ["property-tests"]
+development = ["property-tests", "diagnostics", "diagnostics-subscriber"]
 
 [[consumer]]
 name = "slingshot_configuration::testing"
