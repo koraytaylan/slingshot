@@ -4,7 +4,16 @@
 //! `slingshot-local-protocol`, `slingshot-configuration`, and
 //! `slingshot-daemon`. The process entry point stays thin and delegates here,
 //! so command behavior stays testable without spawning a process. This commit
-//! implements the product version proof and nothing else.
+//! implements the product version proof and declares the crate's module
+//! families as documentation-only roots.
+
+pub mod command_line;
+pub mod commands;
+pub mod daemon_connection;
+pub mod daemon_entry;
+pub mod explicit_daemon_start;
+pub mod model_context_protocol;
+pub mod platform_runtime;
 
 use std::fmt;
 use std::io::Write;

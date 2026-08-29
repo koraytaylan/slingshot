@@ -1,0 +1,16 @@
+# Architectural layer of every workspace crate.
+#
+#   package | layer | graph
+#
+# The product graph holds the eight inward crates; the support graph holds the
+# two crates that exist for tests and repository policy.
+slingshot-agent-connection|adapter|product
+slingshot-agent-protocol|contract|product
+slingshot-command-line|entry|product
+slingshot-configuration|contract|product
+slingshot-daemon|service|product
+slingshot-development|tooling|support
+slingshot-domain|domain|product
+slingshot-local-protocol|contract|product
+slingshot-storage|adapter|product
+slingshot-test-support|support|support
