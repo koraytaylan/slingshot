@@ -31,6 +31,12 @@ const VERSION_ARGUMENT: &str = "--version";
 /// Number of library targets every workspace member declares.
 const LIBRARY_TARGETS_PER_PACKAGE: usize = 1;
 
+/// Outermost tooling package, which no other local package may depend on.
+const DEVELOPMENT_PACKAGE_NAME: &str = "slingshot-development";
+
+/// Manifest sections that may declare a dependency.
+const DEPENDENCY_SECTIONS: &[&str] = &["dependencies", "build-dependencies", "dev-dependencies"];
+
 mod manifest_reader {
     //! A reader for the exact Cargo manifest subset this workspace uses:
     //! table headers, array-of-table headers, quoted strings, booleans, and
@@ -265,15 +271,10 @@ mod manifest_reader {
 
 mod metadata_reader {
     //! A reader for the JavaScript Object Notation Cargo emits: objects,
-    //! arrays, strings with the standard escapes, numbers, booleans, and nulls.
+    //! arrays, numbers, booleans, nulls, and strings whose escapes are the
+    //! single-character forms. A `\u` escape is refused, not resolved.
 
     use std::collections::BTreeMap;
-
-    /// Radix used by the `\u` string escape.
-    const UNICODE_ESCAPE_RADIX: u32 = 16;
-
-    /// Number of hexadecimal digits in a `\u` string escape.
-    const UNICODE_ESCAPE_DIGITS: usize = 4;
 
     /// One parsed JavaScript Object Notation value.
     #[derive(Debug, Clone, PartialEq)]
@@ -387,25 +388,8 @@ mod metadata_reader {
                 b'n' => Ok('\n'),
                 b'r' => Ok('\r'),
                 b't' => Ok('\t'),
-                b'u' => self.unicode_escape(),
                 other => Err(format!("unsupported escape {:?}", char::from(other))),
             }
-        }
-
-        /// Resolves the four hexadecimal digits of a `\u` escape.
-        fn unicode_escape(&mut self) -> Result<char, String> {
-            let end = self.position + UNICODE_ESCAPE_DIGITS;
-            let digits = self
-                .bytes
-                .get(self.position..end)
-                .ok_or_else(|| "a unicode escape ended early".to_owned())?;
-            let text = std::str::from_utf8(digits)
-                .map_err(|failure| format!("a unicode escape is not text: {failure}"))?;
-            let scalar = u32::from_str_radix(text, UNICODE_ESCAPE_RADIX)
-                .map_err(|failure| format!("a unicode escape is not hexadecimal: {failure}"))?;
-            self.position = end;
-            char::from_u32(scalar)
-                .ok_or_else(|| format!("the unicode escape {text} is not a character"))
         }
 
         /// Reads a string literal, resolving its escapes.
@@ -762,6 +746,21 @@ fn evaluate_release_prerequisites(
     missing
 }
 
+/// Reports every member dependency that is not inherited from the workspace.
+fn evaluate_dependency_centralization(document: &ManifestDocument) -> Vec<String> {
+    let mut violations = Vec::new();
+    for path in document.paths() {
+        let segments: Vec<&str> = path.split('.').collect();
+        let found = segments.iter().position(|part| DEPENDENCY_SECTIONS.contains(part));
+        let Some(section) = found else { continue };
+        let remainder = &segments[section + 1..];
+        if remainder.last() != Some(&"workspace") || document.boolean(path) != Some(true) {
+            violations.push(format!("{path} does not inherit its dependency from the workspace"));
+        }
+    }
+    violations
+}
+
 /// Reports every forbidden product edge that reaches a support crate.
 fn evaluate_support_edges(package: &PackageFacts, support: &[String]) -> Vec<String> {
     package
@@ -944,17 +943,22 @@ fn release_packaging_stays_refused_until_the_owner_supplies_metadata() {
 }
 
 #[test]
-fn no_member_declares_an_external_or_support_crate_dependency() {
+fn no_member_reaches_a_support_crate_or_the_outermost_tooling_crate() {
     let expectation = fixture_document(EXPECTED_WORKSPACE_FIXTURE);
     let support = fixture_list(&expectation, "support-packages");
     let products = fixture_list(&expectation, "product-packages");
+    let directory = fixture_text(&expectation, "member-directory");
     for package in workspace_packages() {
-        assert_eq!(package.dependencies, Vec::new(), "{} has a dependency", package.name);
         if products.contains(&package.name) {
             assert_eq!(evaluate_support_edges(&package, &support), Vec::<String>::new());
         }
+        for edge in &package.dependencies {
+            assert_ne!(edge.name, DEVELOPMENT_PACKAGE_NAME, "{} reaches tooling", package.name);
+        }
+        let member = repository_document(&format!("{directory}/{}/Cargo.toml", package.name));
+        let centralized = evaluate_dependency_centralization(&member);
+        assert_eq!(centralized, Vec::<String>::new(), "{}", package.name);
     }
-    assert!(!read_repository_file("Cargo.lock").contains("source = "), "no registry package");
 }
 
 #[test]
