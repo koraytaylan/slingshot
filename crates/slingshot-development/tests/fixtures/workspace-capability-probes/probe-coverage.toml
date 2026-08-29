@@ -313,7 +313,7 @@ capability = "shell-syntax"
 package = "slingshot-development"
 module = "shell_syntax"
 kind = "normal"
-interface = ["yash_syntax::syntax::List", "script.parse()", "parse::<List>()"]
+interface = ["brush_parser::ast::{Command, CompoundCommand}", "parse_program()", "CompoundCommand::IfClause"]
 targets = []
 
 [[probe]]

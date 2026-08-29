@@ -221,11 +221,6 @@ fn line_of(spanned: &impl syn::spanned::Spanned) -> usize {
     spanned.span().start().line
 }
 
-/// Reports whether an attribute list carries documentation that is not empty.
-fn is_documented(attributes: &[syn::Attribute]) -> bool {
-    !documentation_text(attributes).trim().is_empty()
-}
-
 /// Returns the whole documentation text of one attribute list.
 fn documentation_text(attributes: &[syn::Attribute]) -> String {
     let mut collected = String::new();
@@ -332,7 +327,7 @@ impl<'policy> RustScan<'policy> {
         if !is_exported(visibility) || !self.policy.documentation.exported_items_are_documented {
             return;
         }
-        if !is_documented(attributes) {
+        if documentation_text(attributes).trim().is_empty() {
             self.report(line, "exported-item-is-not-documented", symbol);
             return;
         }
@@ -345,15 +340,9 @@ impl<'policy> RustScan<'policy> {
     }
 
     /// Records one declared item's name and documentation.
-    fn declare(
-        &mut self,
-        identifier: &syn::Ident,
-        visibility: &syn::Visibility,
-        attributes: &[syn::Attribute],
-    ) {
-        self.check_name(identifier);
-        let symbol = identifier.to_string();
-        self.check_documentation(visibility, attributes, None, line_of(identifier), &symbol);
+    fn declare(&mut self, name: &syn::Ident, seen: &syn::Visibility, notes: &[syn::Attribute]) {
+        self.check_name(name);
+        self.check_documentation(seen, notes, None, line_of(name), &name.to_string());
     }
 
     /// Records one function's name, documentation, and branching.
@@ -657,14 +646,14 @@ fn documentation_lines(text: &str) -> String {
 }
 
 /// Counts the decisions one shell list reaches.
-fn shell_complexity(list: &yash_syntax::syntax::List) -> u32 {
+fn shell_complexity(list: &brush_parser::ast::CompoundList) -> u32 {
     let mut decisions = 0_u32;
     for item in &list.0 {
-        decisions += u32::try_from(item.and_or.rest.len()).unwrap_or_default();
-        for pipeline in
-            std::iter::once(&item.and_or.first).chain(item.and_or.rest.iter().map(|(_, next)| next))
-        {
-            for command in &pipeline.commands {
+        decisions += u32::try_from(item.0.additional.len()).unwrap_or_default();
+        let following = item.0.additional.iter().map(following_pipeline);
+        let pipelines = std::iter::once(&item.0.first).chain(following);
+        for pipeline in pipelines {
+            for command in &pipeline.seq {
                 decisions += shell_command_complexity(command);
             }
         }
@@ -672,64 +661,75 @@ fn shell_complexity(list: &yash_syntax::syntax::List) -> u32 {
     decisions
 }
 
+/// Returns the pipeline one and-or operator guards.
+fn following_pipeline(operator: &brush_parser::ast::AndOr) -> &brush_parser::ast::Pipeline {
+    match operator {
+        brush_parser::ast::AndOr::And(pipeline) | brush_parser::ast::AndOr::Or(pipeline) => {
+            pipeline
+        }
+    }
+}
+
 /// Counts the decisions one shell command reaches.
-fn shell_command_complexity(command: &yash_syntax::syntax::Command) -> u32 {
-    use yash_syntax::syntax::Command;
+fn shell_command_complexity(command: &brush_parser::ast::Command) -> u32 {
+    use brush_parser::ast::Command;
 
     match command {
-        Command::Simple(_) => 0,
-        Command::Function(defined) => compound_complexity(&defined.body.command),
-        Command::Compound(compound) => compound_complexity(&compound.command),
+        Command::Simple(_) | Command::ExtendedTest(_, _) => 0,
+        Command::Function(defined) => compound_complexity(&defined.body.0),
+        Command::Compound(compound, _) => compound_complexity(compound),
     }
 }
 
 /// Counts the decisions one compound shell command reaches.
-fn compound_complexity(compound: &yash_syntax::syntax::CompoundCommand) -> u32 {
-    use yash_syntax::syntax::CompoundCommand;
+fn compound_complexity(compound: &brush_parser::ast::CompoundCommand) -> u32 {
+    use brush_parser::ast::CompoundCommand;
 
     match compound {
-        CompoundCommand::Grouping(body) => shell_complexity(body),
-        CompoundCommand::Subshell { body, .. } => shell_complexity(body),
-        CompoundCommand::For { body, .. } => 1 + shell_complexity(body),
-        CompoundCommand::While { condition, body } | CompoundCommand::Until { condition, body } => {
-            1 + shell_complexity(condition) + shell_complexity(body)
+        CompoundCommand::Arithmetic(_) => 0,
+        CompoundCommand::BraceGroup(group) => shell_complexity(&group.list),
+        CompoundCommand::Subshell(subshell) => shell_complexity(&subshell.list),
+        CompoundCommand::ArithmeticForClause(clause) => 1 + shell_complexity(&clause.body.list),
+        CompoundCommand::ForClause(clause) => 1 + shell_complexity(&clause.body.list),
+        CompoundCommand::WhileClause(clause) | CompoundCommand::UntilClause(clause) => {
+            1 + shell_complexity(&clause.0) + shell_complexity(&clause.1.list)
         }
-        CompoundCommand::If { condition, body, elifs, r#else } => {
-            let branches = 1 + u32::try_from(elifs.len()).unwrap_or_default();
-            let otherwise = r#else.as_ref().map(shell_complexity).unwrap_or_default();
-            branches + shell_complexity(condition) + shell_complexity(body) + otherwise
+        CompoundCommand::IfClause(clause) => {
+            let branches = clause.elses.as_ref().map_or(0, Vec::len);
+            let otherwise = u32::try_from(branches).unwrap_or_default();
+            1 + otherwise + shell_complexity(&clause.condition) + shell_complexity(&clause.then)
         }
-        CompoundCommand::Case { items, .. } => {
-            u32::try_from(items.len()).unwrap_or_default().saturating_sub(1)
+        CompoundCommand::CaseClause(clause) => {
+            u32::try_from(clause.cases.len()).unwrap_or_default().saturating_sub(1)
         }
+        CompoundCommand::Coprocess(coprocess) => shell_command_complexity(&coprocess.body),
     }
 }
 
 /// Refuses every rule one executable script breaks.
 fn check_script(policy: &LoadedPolicy, path: &str, text: &str) -> Vec<Violation> {
     let mut violations = check_line_count(policy, path, text);
-    let parsed: yash_syntax::syntax::List = match text.parse() {
-        Ok(parsed) => parsed,
+    let options = brush_parser::ParserOptions::default();
+    let mut parser = brush_parser::Parser::new(std::io::Cursor::new(text.as_bytes()), &options);
+    let program = match parser.parse_program() {
+        Ok(program) => program,
         Err(failure) => {
-            violations.push(Violation::at(
-                path,
-                FIRST_LINE,
-                "source-is-not-parseable",
-                failure.to_string(),
-            ));
+            let rule = "source-is-not-parseable";
+            violations.push(Violation::at(path, FIRST_LINE, rule, failure.to_string()));
             return violations;
         }
     };
-    for item in &parsed.0 {
-        for command in &item.and_or.first.commands {
-            if let yash_syntax::syntax::Command::Function(defined) = command.as_ref() {
-                let name = defined.name.to_string();
-                let line = defined.name.location.range.start;
+    for complete in &program.complete_commands {
+        for item in &complete.0 {
+            for command in &item.0.first.seq {
+                let brush_parser::ast::Command::Function(defined) = command else { continue };
+                let name = defined.fname.value.clone();
+                let line = defined.fname.loc.as_ref().map_or(FIRST_LINE, |span| span.start.line);
                 if !policy.name_is_spelled_in_full(&name) {
                     let rule = "declared-name-is-not-spelled-in-full";
                     violations.push(Violation::at(path, line, rule, name.clone()));
                 }
-                let reached = 1 + compound_complexity(&defined.body.command);
+                let reached = 1 + compound_complexity(&defined.body.0);
                 if reached > policy.source.maximum_cyclomatic_complexity {
                     let detail = format!("{name} reaches {reached}");
                     violations.push(Violation::at(

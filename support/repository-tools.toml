@@ -1,0 +1,40 @@
+# External executables the repository-local quality gate runs.
+#
+# Each tool is pinned to an exact version and to the source it must come from.
+# `scripts/quality` verifies every version before it runs a single check, so a
+# missing or differently versioned tool is reported before any result is
+# produced rather than after.
+#
+# No content digest is pinned here. A Rust tool is compiled on the machine that
+# installs it and a platform package is built by its distribution, so the bytes
+# differ by machine while the behavior the gate depends on is the version. The
+# release plan owns attested provenance for the artifacts a release publishes.
+
+format = "slingshot.repository-tools/1"
+
+[[tool]]
+name = "cargo-deny"
+version = "0.18.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+install = "cargo install --locked cargo-deny --version 0.18.6"
+version-check = "cargo deny --version|cargo-deny 0.18.6"
+
+[[tool]]
+name = "shellcheck"
+version = "0.11.0"
+source = "platform-package"
+install = "the platform package manager"
+version-check = "shellcheck --version|version: 0.11.0"
+
+[advisory-database]
+# The pinned dependency-policy tool looks for the advisory database under this
+# exact directory name, derived from the pinned database location. The name
+# belongs to the tool version above: replacing that version means checking this
+# name again.
+directory-name = "advisory-db-3157b0e258782691"
+
+# The pinned tool creates this lock inside the database directory while it
+# reads. The gate removes exactly that file when it finishes, so the checkout it
+# authenticated at the start is the checkout it leaves behind. It never removes
+# anything else and never repairs or advances the database.
+lock-file-name = "db.lock"

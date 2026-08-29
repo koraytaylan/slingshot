@@ -1,0 +1,50 @@
+# Dependency policy for the Slingshot workspace.
+#
+# The advisory database is never fetched and never discovered: `scripts/quality`
+# authenticates one exact snapshot first and substitutes its verified location
+# for the placeholder below, so the analysis reads the snapshot the repository
+# pinned and nothing else.
+#
+# This policy governs the licenses, registries, and sources of dependencies. It
+# says nothing about the license of the Slingshot packages themselves, which
+# have none until an owner supplies one.
+
+[graph]
+all-features = true
+
+[advisories]
+db-path = "@ADVISORY_DATABASE_PATH@"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+ignore = []
+
+[licenses]
+# The Slingshot packages are unpublished and carry no license of their own until
+# an owner supplies one, so this policy governs dependencies alone.
+private = { ignore = true }
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "MIT-0",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+# A dependency without a version is refused, except a path dependency inside
+# this workspace, whose version is the workspace's own.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

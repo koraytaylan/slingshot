@@ -1,0 +1,124 @@
+#!/bin/sh
+# The repository-local quality gate.
+#
+# One argument-free sequence, run in a fixed order, failing at the first check
+# that does not hold. Every external tool is verified against its pinned version
+# before any check runs, and the advisory database is authenticated as one exact
+# snapshot before any advisory analysis reads it. Nothing here fetches, and
+# nothing here writes into the repository.
+
+set -eu
+
+TOOL_MANIFEST=support/repository-tools.toml
+CARGO_GATE_SCOPE='--locked --workspace --all-targets --all-features'
+SCRATCH=''
+
+report_stage() {
+    printf '\n== %s ==\n' "$1"
+}
+
+report_refusal() {
+    printf 'quality: %s\n' "$1" >&2
+    exit 1
+}
+
+remove_scratch() {
+    if [ -n "$SCRATCH" ]; then
+        rm -rf "$SCRATCH"
+    fi
+    remove_advisory_lock
+}
+
+remove_advisory_lock() {
+    lock_name=$(sed -n 's/^lock-file-name = "\(.*\)"$/\1/p' "$TOOL_MANIFEST")
+    checkout=${SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY:-}
+    if [ -n "$lock_name" ] && [ -n "$checkout" ]; then
+        rm -f "$checkout/$lock_name"
+    fi
+}
+
+refuse_arguments() {
+    if [ "$1" -ne 0 ]; then
+        report_refusal 'this gate takes no argument; name the advisory checkout in the environment'
+    fi
+}
+
+verify_repository_tools() {
+    report_stage 'repository tools'
+    checks="$SCRATCH/tool-checks"
+    sed -n 's/^version-check = "\(.*\)"$/\1/p' "$TOOL_MANIFEST" > "$checks"
+    if [ ! -s "$checks" ]; then
+        report_refusal "$TOOL_MANIFEST names no tool to verify"
+    fi
+    while IFS= read -r specification; do
+        probe=${specification%%|*}
+        required=${specification#*|}
+        if ! $probe 2>&1 | grep -qF "$required"; then
+            report_refusal "no tool on this machine reports $required"
+        fi
+        printf 'verified %s\n' "$required"
+    done < "$checks"
+}
+
+verify_advisory_snapshot() {
+    report_stage 'advisory snapshot'
+    if [ -z "${SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY:-}" ]; then
+        report_refusal 'set SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY to the checkout to read'
+    fi
+    cargo run --locked --quiet --package slingshot-development -- rustsec-advisory-pin
+}
+
+prepare_advisory_configuration() {
+    directory_name=$(sed -n 's/^directory-name = "\(.*\)"$/\1/p' "$TOOL_MANIFEST")
+    if [ -z "$directory_name" ]; then
+        report_refusal "$TOOL_MANIFEST names no advisory database directory"
+    fi
+    mkdir -p "$SCRATCH/advisory-parent"
+    ln -sfn "$SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY" "$SCRATCH/advisory-parent/$directory_name"
+    sed "s|@ADVISORY_DATABASE_PATH@|$SCRATCH/advisory-parent|" deny.toml > "$SCRATCH/deny.toml"
+}
+
+run_rust_gates() {
+    report_stage 'formatting'
+    cargo fmt --all --check
+    report_stage 'compilation'
+    # shellcheck disable=SC2086
+    cargo check $CARGO_GATE_SCOPE
+    report_stage 'lints'
+    # shellcheck disable=SC2086
+    cargo clippy $CARGO_GATE_SCOPE -- -D warnings
+    report_stage 'tests'
+    # shellcheck disable=SC2086
+    cargo test $CARGO_GATE_SCOPE
+    report_stage 'documentation'
+    RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --all-features --no-deps
+}
+
+run_repository_gates() {
+    report_stage 'scripts'
+    shellcheck --shell=sh scripts/quality
+    report_stage 'dependency direction'
+    cargo run --locked --quiet --package slingshot-development -- dependency-direction
+    report_stage 'source policy'
+    cargo run --locked --quiet --package slingshot-development -- source-policy
+}
+
+run_dependency_policy() {
+    report_stage 'dependency policy'
+    cargo deny --offline --all-features check --disable-fetch --config "$SCRATCH/deny.toml" all
+}
+
+main() {
+    refuse_arguments "$1"
+    SCRATCH=$(mktemp -d)
+    trap remove_scratch EXIT
+    verify_repository_tools
+    verify_advisory_snapshot
+    prepare_advisory_configuration
+    run_rust_gates
+    run_repository_gates
+    run_dependency_policy
+    report_stage 'the repository-local gate holds'
+}
+
+main "$#"
