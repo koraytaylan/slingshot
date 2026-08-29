@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-configuration/src/profile_selection.rs
   - crates/slingshot-configuration/tests/selected_environment_revision.rs
   - "crates/slingshot-configuration/tests/fixtures/selected-environment-revision/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Selected Environment Revision

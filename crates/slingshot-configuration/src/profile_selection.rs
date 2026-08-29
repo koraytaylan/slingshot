@@ -14,9 +14,15 @@
 
 use slingshot_domain::configuration_snapshot::ConfigurationReference;
 use slingshot_domain::profile::{
-    Environment, EnvironmentName, InsecureAuthorTransportWarning, ProfileName,
+    Environment, EnvironmentAuthentication, EnvironmentName, InsecureAuthorTransportWarning,
+    ProfileName,
 };
 use slingshot_domain::profile_authentication_contract::ConfigurationFailureCode;
+use slingshot_domain::profile_authentication_contract::ProfileAuthenticationContract;
+use slingshot_domain::selected_environment_revision::{
+    AuthenticationPrincipalIdentity, AuthorTargetIdentityDigest, CanonicalMetascopeSet,
+    IdentityFailure, RevisionFields, SelectedEnvironmentRevision, TrustPolicyIdentity,
+};
 
 use crate::profile_loader::{
     ConfigurationDiagnostic, DiagnosticSourceClass, DiagnosticStage, LoadedProfiles,
@@ -112,6 +118,62 @@ impl ProfileSelection {
             .get(&self.profile_name)
             .and_then(|profile| profile.environments().get(&self.environment_name))
             .expect("the selection was resolved against this collection")
+    }
+}
+
+impl ProfileSelection {
+    /// Returns the target identity and revision of this selection.
+    ///
+    /// Everything that goes in is nonsecret and normalized, and everything that
+    /// would move on its own - a source digest, a timestamp, a file identity, a
+    /// permission, a credential byte - stays out. That is what makes a password
+    /// or key rotation at the same principal and address leave both values
+    /// exactly as they were.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`IdentityFailure`] when a required field is empty or a
+    /// length cannot be framed.
+    pub fn revision(
+        &self,
+        loaded: &LoadedProfiles,
+        principal: AuthenticationPrincipalIdentity,
+        canonical_metascope_set: CanonicalMetascopeSet,
+        identity_management_trust_policy_identity: TrustPolicyIdentity,
+        author_trust_policy_identity: TrustPolicyIdentity,
+    ) -> Result<(AuthorTargetIdentityDigest, SelectedEnvironmentRevision), IdentityFailure> {
+        let environment = self.environment_of(loaded);
+        let deployment = environment.deployment().as_text();
+        let author = environment.author_connection_target();
+        let target = AuthorTargetIdentityDigest::build(deployment, author.as_text(), principal)?;
+        let credential = match environment.authentication() {
+            EnvironmentAuthentication::DeveloperConsoleServiceCredentialsFile {
+                credentials_file,
+            } => Some(credentials_file.as_text().to_owned()),
+            EnvironmentAuthentication::BasicCredentials { .. } => None,
+        };
+        let fields = RevisionFields {
+            profile_name: self.profile_name.as_text().to_owned(),
+            environment_name: self.environment_name.as_text().to_owned(),
+            profile_source_reference: self.profile_source.as_text().to_owned(),
+            selection_source_reference: self
+                .selection_source
+                .as_ref()
+                .map(|source| source.as_text().to_owned()),
+            author_target_identity: target,
+            publisher_base_address: environment.publisher_metadata().as_text().to_owned(),
+            authentication_method: environment.authentication().method().to_owned(),
+            credential_source_reference: credential,
+            certificate_source_reference: environment
+                .additional_certificate_authority_file()
+                .map(|source| source.as_text().to_owned()),
+            proxy_policy: ProfileAuthenticationContract::embedded().literals.proxy_policy.clone(),
+            allow_insecure_author_transport: self.warning.is_some(),
+            canonical_metascope_set,
+            identity_management_trust_policy_identity,
+            author_trust_policy_identity,
+        };
+        Ok((target, SelectedEnvironmentRevision::build(&fields)?))
     }
 }
 
