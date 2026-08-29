@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-configuration/tests/secret_diagnostics.rs
   - crates/slingshot-domain/src/secret_value.rs
   - crates/slingshot-domain/tests/secret_values.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Redact Secret Values

@@ -10,8 +10,11 @@
 //!
 //! A leaf gains behavior when its owning descendant task lands. The
 //! documentation-only assertion therefore reads the status each descendant task
-//! records and applies only while every task that touches the leaf is still
-//! unlanded, so this test never has to be relaxed to let the plan proceed.
+//! records and runs in both directions: a leaf every owning task has left
+//! unlanded must hold documentation alone, and a leaf whose owning task records
+//! itself as done must hold an implementation. Neither direction has to be
+//! relaxed to let the plan proceed, and a status stamped without an
+//! implementation fails as loudly as an implementation without a status.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -412,6 +415,14 @@ fn compare(
     differences
 }
 
+/// Returns the lines of one leaf that are neither blank nor documentation.
+fn implementation_lines(text: &str) -> Vec<&str> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with("//!"))
+        .collect()
+}
+
 /// Reports every way one unlanded leaf carries more than module documentation.
 fn evaluate_unlanded_leaf(path: &str, text: &str) -> Vec<String> {
     let mut violations = Vec::new();
@@ -424,10 +435,7 @@ fn evaluate_unlanded_leaf(path: &str, text: &str) -> Vec<String> {
     if !documented {
         violations.push(format!("{path} has empty module documentation"));
     }
-    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
-        if line.starts_with("//!") {
-            continue;
-        }
+    for line in implementation_lines(text) {
         let opening = UNLANDED_LINE_OPENINGS.iter().find(|opening| line.starts_with(**opening));
         violations.push(opening.map_or_else(
             || format!("{path} carries the non-documentation line {line:?}"),
@@ -527,18 +535,27 @@ fn no_structural_parent_carries_plan_0002_leaf_vocabulary() {
 }
 
 #[test]
-fn an_unlanded_leaf_carries_only_present_state_module_documentation() {
+fn a_leaf_holds_documentation_alone_exactly_while_its_owning_task_is_unlanded() {
     let footprints = plan_footprints();
     let landed = landed_tasks();
     let mut violations = Vec::new();
     for row in accepted_rows() {
-        let implemented = footprints.iter().any(|(task, footprint)| {
-            task != SCAFFOLD_TASK && footprint.leaves.contains(&row.path) && landed.contains(task)
-        });
-        if implemented {
+        let owners: Vec<&String> = footprints
+            .iter()
+            .filter(|(task, footprint)| {
+                task.as_str() != SCAFFOLD_TASK && footprint.leaves.contains(&row.path)
+            })
+            .map(|(task, _)| task)
+            .collect();
+        assert!(!owners.is_empty(), "{} has no owning behavioral task", row.path);
+        let text = read_repository_file(&row.path);
+        if owners.iter().any(|task| landed.contains(task.as_str())) {
+            if implementation_lines(&text).is_empty() {
+                violations.push(format!("{} records a landed owner but holds no code", row.path));
+            }
             continue;
         }
-        violations.extend(evaluate_unlanded_leaf(&row.path, &read_repository_file(&row.path)));
+        violations.extend(evaluate_unlanded_leaf(&row.path, &text));
     }
     assert_eq!(violations, Vec::<String>::new());
 }
