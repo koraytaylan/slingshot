@@ -131,13 +131,19 @@ impl ConfigurationRoot {
         Ok(Self { identity: profile.identity, path, home })
     }
 
-    /// Returns a root at an explicit path, for a test that supplies its tree.
+    /// Returns a root below an explicit home, for a test supplying its tree.
     ///
-    /// Production resolves a root only through [`ConfigurationRoot::resolve`];
-    /// a scan in this crate's tests proves no module here calls this.
+    /// The home is appended to exactly as resolution appends to an account's
+    /// home, so a test tree has the same shape as a real one. Production
+    /// resolves a root only through [`ConfigurationRoot::resolve`]; a scan in
+    /// this crate's tests proves no module here calls this.
     #[must_use]
-    pub fn at_explicit_path(identity: AccountIdentity, path: PathBuf) -> Self {
-        Self { identity, home: path.clone(), path }
+    pub fn at_explicit_home(identity: AccountIdentity, home: PathBuf) -> Self {
+        let mut path = home.clone();
+        for component in Self::root_components() {
+            path.push(component);
+        }
+        Self { identity, path, home }
     }
 
     /// Returns the components appended to the home directory.

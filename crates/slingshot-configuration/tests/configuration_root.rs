@@ -294,7 +294,7 @@ fn the_explicit_test_root_is_never_used_by_a_production_module() {
         .iter()
         .map(|path| {
             let text = std::fs::read_to_string(path).expect("the module reads");
-            executable_lines(&text).matches("at_explicit_path").count()
+            executable_lines(&text).matches("at_explicit_home").count()
         })
         .sum();
     assert_eq!(declarations, 1, "the explicit test root is reachable from a production module");
