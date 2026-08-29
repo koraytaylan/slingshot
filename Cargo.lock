@@ -2189,6 +2189,7 @@ name = "slingshot-development"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "base64 0.23.1",
  "brush-parser",
  "clap",
  "flate2",
@@ -2199,8 +2200,11 @@ dependencies = [
  "serde_json",
  "serde_yaml_ng",
  "sha2",
+ "slingshot-agent-connection",
  "slingshot-command-line",
+ "slingshot-configuration",
  "slingshot-daemon",
+ "slingshot-domain",
  "slingshot-local-protocol",
  "slingshot-test-support",
  "sqlparser",

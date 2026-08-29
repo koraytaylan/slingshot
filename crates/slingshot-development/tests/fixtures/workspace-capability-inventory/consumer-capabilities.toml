@@ -154,7 +154,7 @@ development = []
 [[consumer]]
 name = "slingshot_development"
 package = "slingshot-development"
-normal = ["typed-errors", "serialization", "javascript-object-notation", "toml-documents", "command-line-arguments", "secure-hash-digests", "hexadecimal-encoding", "temporary-files", "diagnostics"]
+normal = ["typed-errors", "serialization", "javascript-object-notation", "toml-documents", "command-line-arguments", "secure-hash-digests", "hexadecimal-encoding", "temporary-files", "diagnostics", "base64-encoding"]
 build = []
 development = ["process-assertions", "process-predicates"]
 
