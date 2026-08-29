@@ -31,6 +31,7 @@ x509-parser.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+slingshot-test-support.workspace = true
 tempfile.workspace = true
 
 [target.x86_64-unknown-linux-gnu.dependencies]
