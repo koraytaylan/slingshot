@@ -1,0 +1,10 @@
+# A member manifest that inherits every workspace-wide package and lint value.
+[package]
+name = "slingshot-accepted-member"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
