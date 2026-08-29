@@ -66,6 +66,19 @@ const LAYER_COLUMN_COUNT: usize = 3;
 /// Number of columns in a vocabulary fixture row.
 const VOCABULARY_COLUMN_COUNT: usize = 2;
 
+/// Families whose leaf list one plan owns, and the inventory that owns it.
+///
+/// The command family grows one leaf per command across a whole plan. Listing
+/// those leaves here as well as in that plan's own inventory would be two
+/// authorities for one list, and the one that is wrong would be whichever was
+/// edited second. The map keeps the family root and delegates below it, and the
+/// assertion below requires the delegated inventory to describe the tree
+/// exactly, so the delegation is not a hole.
+const DELEGATED_FAMILIES: &[(&str, &str)] = &[(
+    "crates/slingshot-domain/src/command",
+    "crates/slingshot-domain/tests/fixtures/command-module-inventory.txt",
+)];
+
 /// Placeholder bodies no declared module may contain.
 ///
 /// The scan is deliberately narrow. Marker tokens, planning headings, and the
@@ -370,7 +383,14 @@ fn source_paths_on_disk() -> BTreeSet<String> {
             }
             let relative = path.strip_prefix(&root).expect("the path is inside the workspace");
             let relative = relative.to_str().expect("the path is text").to_owned();
-            if relative.contains("/src/") && !relative.ends_with(PROCESS_ENTRY_FILE_NAME) {
+            let delegated = DELEGATED_FAMILIES.iter().any(|(family, _)| {
+                relative.starts_with(&format!("{family}/"))
+                    && !relative.ends_with(FAMILY_ROOT_FILE_NAME)
+            });
+            if relative.contains("/src/")
+                && !relative.ends_with(PROCESS_ENTRY_FILE_NAME)
+                && !delegated
+            {
                 found.insert(relative);
             }
         }
@@ -495,6 +515,9 @@ fn every_crate_root_declares_exactly_the_modules_it_owns() {
         }
     }
     for row in &rows {
+        if DELEGATED_FAMILIES.iter().any(|(family, _)| row.path == format!("{family}/mod.rs")) {
+            continue;
+        }
         let text = read_repository_file(&row.path);
         let owned = expected.get(&row.module).expect("every module is in the map");
         assert_eq!(&declared_children(&text), owned, "{} declares the wrong children", row.path);
@@ -568,5 +591,30 @@ fn the_ownership_map_rejects_every_recorded_mutation() {
         let declared: BTreeSet<String> = rows.iter().map(|row| row.path.clone()).collect();
         rejected.extend(compare_paths("map", &declared, "source tree", &disk));
         assert!(!rejected.is_empty(), "{name} must be rejected");
+    }
+}
+
+#[test]
+fn every_delegated_family_is_described_exactly_by_the_inventory_that_owns_it() {
+    for (family, inventory) in DELEGATED_FAMILIES {
+        let declared: BTreeSet<String> = data_lines(&read_repository_file(inventory))
+            .iter()
+            .map(|line| (*line).to_owned())
+            .collect();
+        assert!(!declared.is_empty(), "{inventory} names no leaf");
+        let directory = workspace_root().join(family);
+        let mut present = BTreeSet::new();
+        for entry in std::fs::read_dir(&directory).expect("the family directory reads") {
+            let path = entry.expect("the entry reads").path();
+            let name =
+                path.file_name().expect("the file has a name").to_string_lossy().into_owned();
+            if name == FAMILY_ROOT_FILE_NAME {
+                continue;
+            }
+            present.insert(name.trim_end_matches(".rs").to_owned());
+        }
+        assert_eq!(declared, present, "{inventory} and {family} describe different leaves");
+        let root = read_repository_file(&format!("{family}/mod.rs"));
+        assert_eq!(declared_children(&root), declared, "{family} declares other children");
     }
 }
