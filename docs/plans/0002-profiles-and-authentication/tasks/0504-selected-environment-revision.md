@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-configuration/tests/selected_environment_revision.rs
   - "crates/slingshot-configuration/tests/fixtures/selected-environment-revision/**"
 status: done
-merged_as: ""
+merged_as: "09ca47aca4ef9a95cac0c14790adc59101650dd6"
 ---
 # Selected Environment Revision
 
