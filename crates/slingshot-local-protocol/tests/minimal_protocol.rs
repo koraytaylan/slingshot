@@ -47,7 +47,12 @@ const CONTRACT_OWNING_FILES: &[&str] = &[
 ];
 
 /// Smallest contract value a repeated literal is reported for.
-const REPEATED_VALUE_FLOOR: u64 = 2;
+///
+/// A literal below this is too common to attribute to a limit: an exit status,
+/// a slice bound, and a version all read as small integers. Two contract values
+/// are smaller than the floor, and reporting them would produce noise rather
+/// than evidence, so the assertion says what it can prove and no more.
+const REPEATED_VALUE_FLOOR: u64 = 20;
 
 /// The byte-level framing cases.
 #[derive(Debug, Deserialize)]

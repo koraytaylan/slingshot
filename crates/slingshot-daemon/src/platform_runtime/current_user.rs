@@ -16,6 +16,9 @@ pub const OWNER_ONLY_DIRECTORY_MODE: u32 = 0o700;
 
 /// Creates the runtime directory of this user, reachable only by this user.
 ///
+/// Two clients may prepare the same root at once, so a directory that already
+/// exists is the outcome the caller asked for rather than a failure.
+///
 /// # Errors
 ///
 /// Returns [`PlatformFailure::RuntimeState`] when the directory cannot be
@@ -35,13 +38,16 @@ pub fn create_owner_only_directory(runtime_root: &Path) -> Result<PathBuf, Platf
             }
         })?;
     }
-    std::fs::DirBuilder::new().mode(OWNER_ONLY_DIRECTORY_MODE).create(runtime_root).map_err(
-        |failure| PlatformFailure::RuntimeState {
+    match std::fs::DirBuilder::new().mode(OWNER_ONLY_DIRECTORY_MODE).create(runtime_root) {
+        Ok(()) => Ok(runtime_root.to_path_buf()),
+        Err(failure) if failure.kind() == std::io::ErrorKind::AlreadyExists => {
+            Ok(runtime_root.to_path_buf())
+        }
+        Err(failure) => Err(PlatformFailure::RuntimeState {
             path: runtime_root.to_path_buf(),
             reason: failure.to_string(),
-        },
-    )?;
-    Ok(runtime_root.to_path_buf())
+        }),
+    }
 }
 
 /// Creates the runtime directory of this user, reachable only by this user.
