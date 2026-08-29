@@ -129,7 +129,8 @@ fn only_the_exact_live_nonce_authorizes_a_stop() {
     let live = owner.readiness_nonce().to_owned();
     assert_eq!(live.len(), contract.namespace.readiness_nonce_rendered_bytes as usize);
     assert!(owner.stop_is_authorized(&live));
-    assert!(!owner.stop_is_authorized(&format!("b{}", &live[1..])));
+    let first = if live.starts_with('a') { 'b' } else { 'a' };
+    assert!(!owner.stop_is_authorized(&format!("{first}{}", &live[1..])));
     assert!(!owner.stop_is_authorized(""));
     assert!(!owner.stop_is_authorized(&live[..live.len() - 1]));
 

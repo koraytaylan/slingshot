@@ -21,8 +21,10 @@ pub const WINDOWS_PIPE_PREFIX: &str = r"\\.\pipe\slingshot-";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EndpointAddress {
     /// Path of a Unix domain socket.
+    #[cfg(unix)]
     UnixDomainSocket(PathBuf),
     /// Name of a Windows named pipe.
+    #[cfg(windows)]
     WindowsNamedPipe(String),
 }
 
@@ -30,10 +32,14 @@ impl EndpointAddress {
     /// Returns the display form a diagnostic or readiness record carries.
     #[must_use]
     pub fn display(&self) -> String {
-        match self {
-            Self::UnixDomainSocket(path) => path.display().to_string(),
-            Self::WindowsNamedPipe(name) => name.clone(),
-        }
+        #[cfg(unix)]
+        let Self::UnixDomainSocket(path) = self;
+        #[cfg(unix)]
+        return path.display().to_string();
+        #[cfg(windows)]
+        let Self::WindowsNamedPipe(name) = self;
+        #[cfg(windows)]
+        return name.clone();
     }
 }
 
@@ -70,7 +76,7 @@ pub fn endpoint_address(
     runtime_root: &Path,
     namespace_digest: &str,
 ) -> Result<EndpointAddress, PlatformFailure> {
-    let _unused = runtime_root;
+    let _unused_on_this_row = runtime_root;
     let name = format!("{WINDOWS_PIPE_PREFIX}{namespace_digest}");
     let limit = contract.namespace.windows_named_pipe_name_code_units as usize;
     let length = name.encode_utf16().count();
