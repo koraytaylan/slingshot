@@ -11,7 +11,7 @@ touches:
   - schemas/command-contract-limits-1.json
   - crates/slingshot-domain/tests/command_module_inventory.rs
   - crates/slingshot-domain/tests/command_contract_limits.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Command Module Scaffold

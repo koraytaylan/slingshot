@@ -1,0 +1,4 @@
+//! Discovering pages by the template they use.
+//!
+//! This commit declares the module as structure alone; the task the
+//! command inventory names for it implements the contract.

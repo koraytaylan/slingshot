@@ -1,5 +1,35 @@
-//! Command vocabulary family root.
+//! Command family root.
 //!
-//! The module map assigns this family the typed command model that every
-//! Slingshot operation shares. This commit declares the family root and no
-//! command leaf; the command scaffold task owns that exact inventory.
+//! The module map assigns this family the typed, transport-independent command
+//! vocabulary: what a command is called, which arguments it accepts, and what
+//! result it returns. Every boundary above it - the command line, the local
+//! protocol, the author transport, the workflow server - reads those answers
+//! from here rather than defining its own, which is the only way they cannot
+//! drift apart.
+//!
+//! This commit declares the family root and every leaf the command inventory
+//! names.
+
+pub mod add_component;
+pub mod artifact;
+pub mod canonical_json;
+pub mod catalog;
+pub mod command_identity;
+pub mod component_resource_type;
+pub mod create_page;
+pub mod discovery_budget;
+pub mod download_content_package;
+pub mod find_assets_by_metadata;
+pub mod find_assets_referenced_by_page;
+pub mod find_pages_by_template;
+pub mod find_pages_containing_phrase;
+pub mod find_pages_using_components;
+pub mod inspect_open_service_gateway_initiative_configuration;
+pub mod load_content_as_javascript_object_notation;
+pub mod property_value;
+pub mod query_paths;
+pub mod replicate_content;
+pub mod repository_path;
+pub mod result_window;
+pub mod schema;
+pub mod search_predicate;
