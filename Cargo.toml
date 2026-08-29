@@ -20,6 +20,16 @@ rust-version = "1.98.0"
 publish = false
 
 [workspace.dependencies]
+slingshot-agent-connection = { path = "crates/slingshot-agent-connection" }
+slingshot-agent-protocol = { path = "crates/slingshot-agent-protocol" }
+slingshot-command-line = { path = "crates/slingshot-command-line" }
+slingshot-configuration = { path = "crates/slingshot-configuration" }
+slingshot-daemon = { path = "crates/slingshot-daemon" }
+slingshot-development = { path = "crates/slingshot-development" }
+slingshot-domain = { path = "crates/slingshot-domain" }
+slingshot-local-protocol = { path = "crates/slingshot-local-protocol" }
+slingshot-storage = { path = "crates/slingshot-storage" }
+slingshot-test-support = { path = "crates/slingshot-test-support" }
 assert_cmd = { version = "2.2.2" }
 base64 = { version = "0.23.1" }
 bytes = { version = "1.12.1" }

@@ -208,7 +208,10 @@ fn recorded_kind(value: &serde_json::Value) -> String {
     }
 }
 
-/// Collects every dependency edge the workspace members declare.
+/// Collects every registry dependency edge the workspace members declare.
+///
+/// A local path dependency is outside this inventory: the workspace dependency
+/// contract governs it, and the dependency-direction check enforces that.
 fn manifest_edges(metadata: &serde_json::Value) -> BTreeMap<ManifestEdge, EdgeSelection> {
     let members = workspace_member_names(metadata);
     let mut edges = BTreeMap::new();
@@ -218,6 +221,9 @@ fn manifest_edges(metadata: &serde_json::Value) -> BTreeMap<ManifestEdge, EdgeSe
             continue;
         }
         for dependency in package["dependencies"].as_array().expect("dependencies") {
+            if members.contains(dependency["name"].as_str().unwrap_or_default()) {
+                continue;
+            }
             let edge = ManifestEdge {
                 package: name.to_owned(),
                 dependency: dependency["name"].as_str().unwrap_or_default().to_owned(),
@@ -427,6 +433,9 @@ fn evaluate_manifest_edges(
 }
 
 /// Reports every selection the workspace dependency table does not centralize.
+///
+/// A local package entry carries a path rather than a version and belongs to
+/// the dependency contract, so it is skipped here.
 fn evaluate_workspace_dependencies(policy: &CapabilityPolicy, root: &str) -> Vec<String> {
     let document: toml::Value =
         toml::from_str(root).expect("the root manifest is a valid document");
@@ -457,7 +466,10 @@ fn evaluate_workspace_dependencies(policy: &CapabilityPolicy, root: &str) -> Vec
             violations.push(format!("{} is centralized with a different selection", row.package));
         }
     }
-    for package in table.keys() {
+    for (package, entry) in table {
+        if entry.get("path").is_some() {
+            continue;
+        }
         if !required.contains(package.as_str()) {
             violations.push(format!("{package} is centralized but no capability selects it"));
         }
