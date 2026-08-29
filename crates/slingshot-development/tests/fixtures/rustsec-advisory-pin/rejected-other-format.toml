@@ -1,0 +1,5 @@
+# A pin that declares another format.
+format = "slingshot.rustsec-advisory-database/2"
+origin = "https://github.com/rustsec/advisory-db"
+commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+tree = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

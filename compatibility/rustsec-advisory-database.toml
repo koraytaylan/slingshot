@@ -1,0 +1,19 @@
+# Exact advisory-database snapshot.
+#
+# The advisory input is one snapshot, named by its canonical origin, one full
+# commit identifier, and the canonical digest of the tree that commit names.
+#
+# There is deliberately no timestamp, no age, no freshness flag, and no review
+# assertion here. A Git author chooses commit and author times freely, so none
+# of those values authenticates anything, and a verifier that read them would be
+# reporting the author's claim rather than a fact. This pin says which snapshot
+# the advisory gate reads, and nothing about whether that snapshot is current.
+#
+# Binding a reviewed pin to authenticated release-time evidence is the release
+# plan's work. Replaying this file later proves the same snapshot it always
+# proved, never that the snapshot is still the latest one.
+
+format = "slingshot.rustsec-advisory-database/1"
+origin = "https://github.com/rustsec/advisory-db"
+commit = "b331df68b3ed0e99594d259040bdcb9de3c7c8a4"
+tree = "9d8b8f98f2a77b15c764b9f811f947f84f59767d"
