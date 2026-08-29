@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+verify_cfg() {
+    printf 'checked\n'
+}
+
+verify_cfg

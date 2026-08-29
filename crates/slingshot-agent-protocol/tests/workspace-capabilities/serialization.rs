@@ -12,9 +12,13 @@ struct OperationRecord {
     attempt_count: u32,
 }
 
+/// Attempts the probe records on its shape.
+const ATTEMPT_COUNT: u32 = 2;
+
 #[test]
 fn a_derived_shape_renames_its_fields_and_refuses_an_unknown_one() {
-    let record = OperationRecord { operation_name: "ping".to_owned(), attempt_count: 2 };
+    let record =
+        OperationRecord { operation_name: "ping".to_owned(), attempt_count: ATTEMPT_COUNT };
     let rendered = serde_json::to_string(&record).expect("the record renders");
     assert_eq!(rendered, r#"{"operationName":"ping","attemptCount":2}"#);
     let restored: OperationRecord = serde_json::from_str(&rendered).expect("the record reads back");

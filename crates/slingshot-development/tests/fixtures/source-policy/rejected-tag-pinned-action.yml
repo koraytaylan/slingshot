@@ -1,0 +1,11 @@
+name: quality
+on:
+  push:
+jobs:
+  gate:
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false

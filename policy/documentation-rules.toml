@@ -1,0 +1,24 @@
+# Documentation rules, split by what can be decided and what must be reviewed.
+#
+# The machine-checkable forms below are enforced by the source-policy command.
+# Everything under the review checklist is a judgement a reader makes; the
+# command never infers it and never claims to have.
+
+format = "slingshot.documentation-rules/1"
+
+# Every exported item carries documentation that is not empty.
+exported-items-are-documented = true
+
+# A public function that can fail explains what makes it fail.
+required-failure-section = "# Errors"
+
+# A public function that can end the process explains when it does.
+required-panic-section = "# Panics"
+
+review-checklist = [
+    "The documentation describes the code in this commit, not a plan for it.",
+    "Every contract, invariant, side effect, and bound that applies is stated.",
+    "No comment narrates syntax the types and control flow already show.",
+    "A comment exists wherever a constraint is not visible from the code.",
+    "A rendered failure message names what the caller can do about it.",
+]

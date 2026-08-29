@@ -1,0 +1,15 @@
+name: quality
+on:
+  push:
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: linux
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@0000000000000000000000000000000000000000
+        with:
+          persist-credentials: false
+      - run: scripts/quality

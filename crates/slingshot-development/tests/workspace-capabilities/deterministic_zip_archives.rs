@@ -26,9 +26,16 @@ fn build_archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
     writer.finish().expect("the archive finishes").into_inner()
 }
 
+/// Members the probe archive holds.
+const ARCHIVE_MEMBER_COUNT: usize = 2;
+
+/// Fraction of an archive a truncated reader receives.
+const TRUNCATION_DIVISOR: usize = 2;
+
 #[test]
 fn two_runs_over_the_same_input_produce_the_same_archive_bytes() {
-    let entries: [(&str, &[u8]); 2] = [("slingshot.exe", b"executable"), ("SHA256SUMS", b"digest")];
+    let entries: [(&str, &[u8]); ARCHIVE_MEMBER_COUNT] =
+        [("slingshot.exe", b"executable"), ("SHA256SUMS", b"digest")];
     let first = build_archive(&entries);
     let second = build_archive(&entries);
     assert_eq!(first, second, "the archive is byte-identical across runs");
@@ -43,6 +50,7 @@ fn two_runs_over_the_same_input_produce_the_same_archive_bytes() {
     assert_eq!(contents, b"digest");
     drop(member);
 
-    let truncated = ZipArchive::new(Cursor::new(first[..first.len() / 2].to_vec()));
+    let truncated =
+        ZipArchive::new(Cursor::new(first[..first.len() / TRUNCATION_DIVISOR].to_vec()));
     assert!(truncated.is_err(), "a truncated archive must be refused");
 }

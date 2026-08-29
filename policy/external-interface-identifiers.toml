@@ -1,0 +1,116 @@
+# Closed table of external interfaces whose spelling the workspace cannot change.
+#
+# An implementation is exempt from the full-word rule for one signature only
+# when its header literally names the leading-colon fully qualified path below
+# and the locked dependency identity matches. An alias, a renamed import, a
+# re-export, a glob import, an inferred short path, a lookalike declared here, an
+# inherent method, and a project-owned trait are all refused rather than
+# resolved: this is interface data, not an abbreviation allowlist, and it makes
+# no claim about what a compiler would resolve.
+#
+# Only the required signature declaration is exempt. Every identifier the
+# implementation declares inside that signature's body stays checked.
+
+format = "slingshot.external-interface-identifiers/1"
+
+[[interface]]
+path = "::core::fmt::Display::fmt"
+package = "core"
+item = "fmt"
+target = ""
+
+[[interface]]
+path = "::core::fmt::Debug::fmt"
+package = "core"
+item = "fmt"
+target = ""
+
+[[interface]]
+path = "::serde::de::Visitor::expecting"
+package = "serde"
+item = "expecting"
+target = ""
+
+[[interface]]
+path = "::serde::de::Visitor::visit_str"
+package = "serde"
+item = "visit_str"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_expr_if"
+package = "syn"
+item = "visit_expr_if"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_expr_while"
+package = "syn"
+item = "visit_expr_while"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_expr_for_loop"
+package = "syn"
+item = "visit_expr_for_loop"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_expr_match"
+package = "syn"
+item = "visit_expr_match"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_expr_binary"
+package = "syn"
+item = "visit_expr_binary"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_expr_unsafe"
+package = "syn"
+item = "visit_expr_unsafe"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_item_fn"
+package = "syn"
+item = "visit_item_fn"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_impl_item_fn"
+package = "syn"
+item = "visit_impl_item_fn"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_item_impl"
+package = "syn"
+item = "visit_item_impl"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_impl_item_const"
+package = "syn"
+item = "visit_impl_item_const"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_type_param"
+package = "syn"
+item = "visit_type_param"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_expr_array"
+package = "syn"
+item = "visit_expr_array"
+target = ""
+
+[[interface]]
+path = "::syn::visit::Visit::visit_expr_index"
+package = "syn"
+item = "visit_expr_index"
+target = ""

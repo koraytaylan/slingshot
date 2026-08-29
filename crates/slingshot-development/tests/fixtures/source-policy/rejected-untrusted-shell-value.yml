@@ -1,0 +1,11 @@
+name: quality
+on:
+  issues:
+jobs:
+  gate:
+    permissions:
+      contents: read
+    steps:
+      - run: scripts/quality
+        env:
+          SUBJECT: ${{ github.event.issue.title }}

@@ -87,6 +87,12 @@ const VOCABULARY_PLACEMENT: &[(&str, &str)] = &[
     ("SupervisedChild", "slingshot-test-support"),
 ];
 
+/// Position of the package name inside a crate source path.
+const PACKAGE_SEGMENT: usize = 1;
+
+/// Position of the source directory inside a crate source path.
+const SOURCE_SEGMENT: usize = 2;
+
 /// One declared source file and the ownership the fixture assigns it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct OwnershipRow {
@@ -143,7 +149,7 @@ fn data_lines(text: &str) -> Vec<&str> {
 fn derive_shape(path: &str) -> Result<(String, String, String), String> {
     let segments: Vec<&str> = path.split('/').collect();
     let (Some(&CRATE_DIRECTORY), Some(package), Some(&"src")) =
-        (segments.first(), segments.get(1), segments.get(2))
+        (segments.first(), segments.get(PACKAGE_SEGMENT), segments.get(SOURCE_SEGMENT))
     else {
         return Err(format!("{path} is not a crate source path"));
     };

@@ -16,6 +16,12 @@ const NORMALIZED_MODIFICATION_TIME: u32 = 0;
 /// Operating-system label that identifies no ambient host.
 const UNKNOWN_OPERATING_SYSTEM: u8 = 255;
 
+/// Times the probe repeats its input so compression has something to do.
+const INPUT_REPETITIONS: usize = 16;
+
+/// Mask that inverts every bit of one byte.
+const EVERY_BIT: u8 = 0xff;
+
 /// Compresses the same input under the deterministic policy.
 fn compress(input: &[u8]) -> Vec<u8> {
     let header = flate2::GzBuilder::new()
@@ -28,7 +34,7 @@ fn compress(input: &[u8]) -> Vec<u8> {
 
 #[test]
 fn two_runs_over_the_same_bytes_produce_the_same_compressed_member() {
-    let input = b"slingshot release artifact bytes".repeat(16);
+    let input = b"slingshot release artifact bytes".repeat(INPUT_REPETITIONS);
     let first = compress(&input);
     let second = compress(&input);
     assert_eq!(first, second, "the member is byte-identical across runs");
@@ -40,7 +46,7 @@ fn two_runs_over_the_same_bytes_produce_the_same_compressed_member() {
 
     let mut corrupted = first.clone();
     let last = corrupted.len() - 1;
-    corrupted[last] ^= 0xff;
+    corrupted[last] ^= EVERY_BIT;
     let mut refused = Vec::new();
     assert!(
         GzDecoder::new(corrupted.as_slice()).read_to_end(&mut refused).is_err(),

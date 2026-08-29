@@ -13,7 +13,7 @@ struct UncheckedCounter {
     functions: usize,
 }
 
-impl<'ast> Visit<'ast> for UncheckedCounter {
+impl<'ast> ::syn::visit::Visit<'ast> for UncheckedCounter {
     fn visit_expr_unsafe(&mut self, node: &'ast syn::ExprUnsafe) {
         self.blocks += 1;
         syn::visit::visit_expr_unsafe(self, node);

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+verify_repository_tools() {
+    if [ -d target ]; then
+        printf 'target exists\n'
+    fi
+}
+
+verify_repository_tools
