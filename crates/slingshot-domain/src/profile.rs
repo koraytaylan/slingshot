@@ -6,10 +6,9 @@
 //! Experience Manager 6.5 and Developer Console service credentials with Cloud
 //! Service. Every other pairing is refused here, not at the first request.
 //!
-//! Two properties exist for safety. A base address has exactly one spelling,
-//! so it cannot be written two ways and produce two target identities, and
-//! appending an endpoint only extends the context path. And the publisher
-//! address is data: nothing turns it into a connection target.
+//! Two properties exist for safety. A base address has one spelling, so it
+//! cannot be written two ways and produce two target identities; and the
+//! publisher address is data that nothing turns into a connection target.
 
 use std::collections::BTreeMap;
 
@@ -156,8 +155,8 @@ impl ::core::fmt::Display for EnvironmentName {
 
 /// The product an environment runs.
 ///
-/// It decides which authentication method is legal and whether a cleartext
-/// address can be accepted, so it is closed rather than a string.
+/// It decides which authentication method is legal and whether cleartext is
+/// acceptable, so it is closed rather than a string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AdobeExperienceManagerDeployment {
     /// An Adobe Experience Manager 6.5 installation.
@@ -199,9 +198,8 @@ impl AdobeExperienceManagerDeployment {
 /// The address is an origin plus the root or one absolute context-path prefix,
 /// with exactly one spelling: lowercase scheme and host, a port only when it
 /// differs from the scheme's default, uppercase escapes that never spell an
-/// unreserved byte, and a prefix with one leading and no trailing separator -
-/// empty for the root. Anything ambiguous is refused rather than normalized
-/// away: normalizing is how one address becomes two.
+/// unreserved byte, and a prefix with one leading and no trailing separator.
+/// Anything ambiguous is refused: normalizing is how one address becomes two.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TierBaseAddress {
     scheme: String,
@@ -313,9 +311,11 @@ impl ::core::fmt::Display for TierBaseAddress {
 /// The user name of a Basic credential.
 ///
 /// Canonical Basic input is the user name bytes, one colon, then the password
-/// bytes. A colon in the user name would make that ambiguous and is refused; a
-/// colon in the password is fine, because the first colon ends the user name.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// bytes. A colon in the user name would make that ambiguous and is refused.
+///
+/// The name renders redacted: it is not a secret, but it is a raw principal
+/// value, and only the opaque principal digest may travel into a rendering.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BasicUserName {
     user_name: String,
 }
@@ -349,6 +349,12 @@ impl BasicUserName {
     }
 }
 
+impl ::core::fmt::Debug for BasicUserName {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        formatter.write_str(crate::secret_value::REDACTED_RENDERING)
+    }
+}
+
 /// The typed opt-in that permits a cleartext author address off loopback.
 ///
 /// A caller holding one already knows the environment is Adobe Experience
@@ -359,14 +365,13 @@ pub struct AllowInsecureAuthorTransport;
 
 /// The stable status a cleartext author address carries.
 ///
-/// Configuration checking and connection setup both report it, so an operator
-/// sees the same nonsecret warning wherever the environment is used.
+/// Configuration checking and connection setup both report it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct InsecureAuthorTransportWarning;
 
 /// How one environment authenticates to its author.
 ///
-/// A Basic password is a [`SecretValue`] from the moment it is read.
+/// A password is a [`SecretValue`] from the moment it is read.
 #[derive(Debug)]
 pub enum EnvironmentAuthentication {
     /// Adobe Experience Manager 6.5 Basic credentials.
@@ -448,17 +453,14 @@ impl Environment {
         self.deployment
     }
 
-    /// Returns the address every Adobe Experience Manager request is sent to.
-    ///
-    /// This is the only method here that yields a connection target.
+    /// Returns the address every request is sent to, and the only method here
+    /// that yields a connection target.
     #[must_use]
     pub fn author_connection_target(&self) -> &TierBaseAddress {
         &self.author
     }
 
-    /// Returns the publisher address as metadata.
-    ///
-    /// Commands report and reason about it; Slingshot has no publisher client.
+    /// Returns the publisher address as metadata; there is no publisher client.
     #[must_use]
     pub fn publisher_metadata(&self) -> &TierBaseAddress {
         &self.publisher
@@ -483,10 +485,8 @@ impl Environment {
         self.insecure_author_transport
     }
 
-    /// Returns the warning a cleartext non-loopback author address carries.
-    ///
-    /// A protected or loopback address carries none, because neither exposes
-    /// credentials to a network an operator did not choose.
+    /// Returns the warning a cleartext non-loopback author address carries; a
+    /// protected or loopback address exposes nothing and carries none.
     #[must_use]
     pub fn insecure_author_transport_warning(&self) -> Option<InsecureAuthorTransportWarning> {
         self.insecure_author_transport.map(|_| InsecureAuthorTransportWarning)
