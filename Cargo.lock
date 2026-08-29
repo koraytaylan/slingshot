@@ -2140,9 +2140,12 @@ dependencies = [
  "rustix",
  "secrecy",
  "serde",
+ "slingshot-domain",
  "tempfile",
  "thiserror",
  "toml",
+ "tracing",
+ "tracing-subscriber",
  "url",
  "windows-permissions",
  "winsafe",
@@ -2206,6 +2209,7 @@ name = "slingshot-domain"
 version = "0.1.0"
 dependencies = [
  "proptest",
+ "secrecy",
  "serde",
  "thiserror",
  "uuid",

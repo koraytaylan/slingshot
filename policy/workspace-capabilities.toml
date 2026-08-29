@@ -153,8 +153,8 @@ version = "0.1.44"
 default-features = true
 features = []
 targets = []
-kinds = ["normal"]
-owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-daemon", "slingshot-development", "slingshot-storage"]
+kinds = ["development", "normal"]
+owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-configuration", "slingshot-daemon", "slingshot-development", "slingshot-storage"]
 
 [[capability]]
 name = "diagnostics-subscriber"
@@ -164,8 +164,8 @@ version = "0.3.23"
 default-features = true
 features = ["env-filter", "fmt", "json"]
 targets = []
-kinds = ["normal"]
-owners = ["slingshot-command-line", "slingshot-daemon"]
+kinds = ["development", "normal"]
+owners = ["slingshot-command-line", "slingshot-configuration", "slingshot-daemon"]
 
 [[capability]]
 name = "embedded-structured-query-language"
@@ -396,7 +396,7 @@ default-features = true
 features = ["serde"]
 targets = []
 kinds = ["normal"]
-owners = ["slingshot-agent-connection", "slingshot-configuration"]
+owners = ["slingshot-agent-connection", "slingshot-configuration", "slingshot-domain"]
 
 [[capability]]
 name = "secure-hash-digests"

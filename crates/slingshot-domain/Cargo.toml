@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+secrecy.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
