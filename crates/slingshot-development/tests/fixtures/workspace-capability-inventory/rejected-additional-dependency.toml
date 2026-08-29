@@ -15,11 +15,11 @@ supported-targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64
 
 [[capability]]
 name = "asynchronous-runtime"
-purpose = "Run the asynchronous runtime, endpoints, timers, and child processes."
+purpose = "Run the asynchronous runtime, endpoints, timers, child processes, and a paused clock a deadline can be proved against."
 package = "tokio"
 version = "1.53.1"
 default-features = true
-features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"]
+features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "test-util", "time"]
 targets = []
 kinds = ["normal"]
 owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-daemon", "slingshot-test-support"]

@@ -65,7 +65,7 @@ syn = { version = "3.0.4", features = ["extra-traits", "full", "visit"] }
 tar = { version = "0.4.46" }
 tempfile = { version = "3.27.0" }
 thiserror = { version = "2.0.20" }
-tokio = { version = "1.53.1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1.53.1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
 tokio-rustls = { version = "0.26.4", default-features = false, features = ["logging", "ring", "tls12"] }
 tokio-util = { version = "0.7.19" }
 toml = { version = "1.1.4" }
