@@ -1,0 +1,17 @@
+format_version = 1
+
+[[sources]]
+reference = "credentials/first.json"
+sha256 = "32f49f6074fe57c9b18ee4d366143f05179fd77055e8ddc510abfb9eb8a51d68"
+
+[[sources]]
+reference = "credentials/second.json"
+sha256 = "32f49f6074fe57c9b18ee4d366143f05179fd77055e8ddc510abfb9eb8a51d68"
+
+[[sources]]
+reference = "profiles/first.toml"
+sha256 = "cc74555150ab81d44f9354ec4daab7ac9f29d736c9b3c59326dd9fd5093bc4f9"
+
+[[sources]]
+reference = "profiles/second.toml"
+sha256 = "2eb70dc4458c47eff8cb0b470268a9649f9bb42aaf8c57909307aa8ffbc55716"

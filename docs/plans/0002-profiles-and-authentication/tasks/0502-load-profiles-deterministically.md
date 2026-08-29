@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-configuration/tests/profile_loading.rs
   - crates/slingshot-test-support/fixtures/profile-directories/duplicate-name/**
   - crates/slingshot-test-support/fixtures/profile-directories/ordered/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Load Profiles Deterministically
