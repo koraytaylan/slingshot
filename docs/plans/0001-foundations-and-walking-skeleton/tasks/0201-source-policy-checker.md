@@ -15,8 +15,8 @@ touches:
   - crates/slingshot-development/src/main.rs
   - crates/slingshot-development/tests/source_policy.rs
   - "crates/slingshot-development/tests/fixtures/source-policy/**"
-status: planned
-merged_as: ""
+status: done
+merged_as: "02727756a9ea4efb2c4e6744d27f0b85df85b2d1"
 ---
 # Source Policy Checker
 
