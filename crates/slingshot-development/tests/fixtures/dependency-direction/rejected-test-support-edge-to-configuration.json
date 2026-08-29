@@ -1,0 +1,137 @@
+{
+  "packages": [
+    {
+      "name": "slingshot-agent-connection",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        }
+      ]
+    },
+    {
+      "name": "slingshot-agent-protocol",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        }
+      ]
+    },
+    {
+      "name": "slingshot-command-line",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        }
+      ]
+    },
+    {
+      "name": "slingshot-configuration",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        }
+      ]
+    },
+    {
+      "name": "slingshot-daemon",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        }
+      ]
+    },
+    {
+      "name": "slingshot-development",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        }
+      ]
+    },
+    {
+      "name": "slingshot-domain",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        }
+      ]
+    },
+    {
+      "name": "slingshot-local-protocol",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        }
+      ]
+    },
+    {
+      "name": "slingshot-storage",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        }
+      ]
+    },
+    {
+      "name": "slingshot-test-support",
+      "version": "0.1.0",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "kind": null,
+          "req": "^1"
+        },
+        {
+          "name": "slingshot-configuration",
+          "kind": "dev",
+          "req": "^0.1.0"
+        }
+      ]
+    },
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "dependencies": []
+    }
+  ],
+  "workspace_members": [],
+  "version": 1
+}
