@@ -22,8 +22,8 @@ use slingshot_domain::profile_authentication_contract::ConfigurationFailureCode;
 /// Fixture that records every accepted and refused reference.
 const REFERENCE_FIXTURE: &str = "tests/fixtures/configuration-root/reference-paths.toml";
 
-/// Root every resolution in this file is made against.
-const TEST_ROOT: &str = "/slingshot-test-root/.config/slingshot";
+/// Home the root every resolution here is made against sits below.
+const TEST_HOME: &str = "/slingshot-test-home";
 
 /// Account identity the test root is owned by.
 const TEST_IDENTIFIER: u32 = 1_000;
@@ -66,9 +66,9 @@ struct RefusedReference {
 
 /// Returns the root every resolution here is made against.
 fn test_root() -> ConfigurationRoot {
-    ConfigurationRoot::at_explicit_path(
+    ConfigurationRoot::at_explicit_home(
         AccountIdentity::UnixUser(TEST_IDENTIFIER),
-        PathBuf::from(TEST_ROOT),
+        PathBuf::from(TEST_HOME),
     )
 }
 

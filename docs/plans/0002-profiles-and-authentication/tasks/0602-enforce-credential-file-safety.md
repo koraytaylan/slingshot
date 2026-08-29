@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-configuration/tests/configuration_generation.rs
   - crates/slingshot-configuration/src/testing/credential_filesystem.rs
   - "crates/slingshot-test-support/fixtures/configuration-generations/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Enforce Configuration File Safety

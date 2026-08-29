@@ -1,0 +1,13 @@
+format_version = 1
+
+[[sources]]
+reference = "credentials/production.json"
+sha256 = "32f49f6074fe57c9b18ee4d366143f05179fd77055e8ddc510abfb9eb8a51d68"
+
+[[sources]]
+reference = "profiles/cloud-site.toml"
+sha256 = "197af111b1692fb3b481b25605e04e2efbcf35eb7a7895d0561d6bef38aadf3a"
+
+[[sources]]
+reference = "selection.toml"
+sha256 = "6df5451d3a2a10242cfca49f10fd3e51c3f3688cef661b72658934daad73cf53"

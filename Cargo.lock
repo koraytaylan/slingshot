@@ -2140,6 +2140,7 @@ dependencies = [
  "rustix",
  "secrecy",
  "serde",
+ "sha2",
  "slingshot-domain",
  "tempfile",
  "thiserror",
