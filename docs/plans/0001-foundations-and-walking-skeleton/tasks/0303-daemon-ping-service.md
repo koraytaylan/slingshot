@@ -12,8 +12,8 @@ touches:
   - crates/slingshot-daemon/src/service.rs
   - crates/slingshot-command-line/src/daemon_entry.rs
   - crates/slingshot-daemon/tests/ping_service.rs
-status: planned
-merged_as: ""
+status: done
+merged_as: "8944f7553811656ad5cbf6c1ee0b519324aa5c4b"
 ---
 # Daemon Ping Service
 
