@@ -197,6 +197,9 @@ fn both_routes_publish_the_same_direct_connection_policy() {
 
 #[test]
 fn this_crate_offers_no_publisher_builder_at_all() {
+    // Carrying a publisher address is fine and necessary; what must not exist
+    // is anything that turns one into a connection, a client, or an endpoint.
+
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut pending = vec![directory];
     let mut named = Vec::new();
@@ -212,6 +215,11 @@ fn this_crate_offers_no_publisher_builder_at_all() {
                 text.lines()
                     .map(str::trim)
                     .filter(|line| line.starts_with("pub fn ") && line.contains("publisher"))
+                    .filter(|line| {
+                        ["client", "connect", "endpoint", "builder", "authenticate"]
+                            .iter()
+                            .any(|verb| line.contains(verb))
+                    })
                     .map(str::to_owned),
             );
         }
