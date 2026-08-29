@@ -28,7 +28,7 @@ development = ["property-tests"]
 [[consumer]]
 name = "slingshot_configuration"
 package = "slingshot-configuration"
-normal = ["typed-errors", "serialization", "toml-documents", "uniform-resource-locators", "secret-buffers", "platform-directories", "base64-encoding", "descriptor-relative-filesystem", "posix-access-control-lists", "extended-access-control-lists", "windows-security-identifiers", "windows-file-identity", "operating-system-account-database"]
+normal = ["typed-errors", "serialization", "toml-documents", "uniform-resource-locators", "secret-buffers", "platform-directories", "base64-encoding", "descriptor-relative-filesystem", "posix-access-control-lists", "extended-access-control-lists", "windows-security-identifiers", "windows-file-identity", "operating-system-account-database", "secure-hash-digests"]
 build = []
 development = ["property-tests", "diagnostics", "diagnostics-subscriber"]
 

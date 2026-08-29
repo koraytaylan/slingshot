@@ -418,7 +418,7 @@ default-features = true
 features = []
 targets = []
 kinds = ["normal"]
-owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-daemon", "slingshot-development", "slingshot-storage"]
+owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-configuration", "slingshot-daemon", "slingshot-development", "slingshot-storage"]
 
 [[capability]]
 name = "serialization"
