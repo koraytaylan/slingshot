@@ -1,0 +1,60 @@
+# What the configuration root is resolved from, and what each answer becomes.
+#
+# The rows record, for each supported target, which operating-system interface
+# answers "who is this process" and which answers "where is that account's
+# home". Those two questions are the whole of root resolution, and recording the
+# interfaces separately from the code is what makes a silent switch to an
+# environment-derived answer visible.
+#
+# The answers are the categories a resolver can return. They are deliberately
+# platform-independent: an empty, relative, or non-text home is refused the same
+# way whichever database produced it, so every one of them is provable on any
+# host rather than only on the one that can produce it.
+
+format = "slingshot.account-policy/1"
+
+[[row]]
+target = "x86_64-unknown-linux-gnu"
+identity_kind = "unix-effective-user"
+account_source = "uzers::get_effective_uid"
+home_source = "uzers::get_user_by_uid"
+
+[[row]]
+target = "aarch64-apple-darwin"
+identity_kind = "unix-effective-user"
+account_source = "uzers::get_effective_uid"
+home_source = "uzers::get_user_by_uid"
+
+[[row]]
+target = "x86_64-pc-windows-msvc"
+identity_kind = "windows-process-token-user"
+account_source = "co::TOKEN_INFORMATION_CLASS::User"
+home_source = "co::KNOWNFOLDERID::Profile"
+
+[[answer]]
+name = "absolute-home"
+outcome = "accepted"
+
+[[answer]]
+name = "empty-home"
+outcome = "configuration_home_unavailable"
+
+[[answer]]
+name = "relative-home"
+outcome = "configuration_home_not_absolute"
+
+[[answer]]
+name = "home-not-unicode"
+outcome = "configuration_home_not_unicode"
+
+[[answer]]
+name = "account-unavailable"
+outcome = "configuration_account_unavailable"
+
+[[answer]]
+name = "ambiguous-account"
+outcome = "configuration_home_ambiguous"
+
+[[answer]]
+name = "unsupported-platform"
+outcome = "unsupported_platform"

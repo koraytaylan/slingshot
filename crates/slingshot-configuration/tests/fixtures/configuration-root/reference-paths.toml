@@ -1,0 +1,79 @@
+# References a profile may name, and the ones it may not.
+#
+# Every refused row is a spelling that would land outside the configuration
+# root, or that a platform would read as something other than a plain name.
+# They are refused rather than rewritten: a reference that has to be repaired
+# before it is safe is a reference whose meaning was never agreed on.
+
+format = "slingshot.reference-paths/1"
+
+[[accepted]]
+reference = "credentials/production.json"
+
+[[accepted]]
+reference = "certificates/corporate-ca.pem"
+
+[[accepted]]
+reference = "credentials.json"
+
+[[accepted]]
+reference = "a/b/c/d/e.json"
+
+[[accepted]]
+reference = "credentials/production.json.backup"
+
+[[refused]]
+reference = "/etc/passwd"
+reason = "an absolute path"
+
+[[refused]]
+reference = "../outside/credentials.json"
+reason = "a parent component"
+
+[[refused]]
+reference = "credentials/../../outside.json"
+reason = "a parent component in the middle"
+
+[[refused]]
+reference = "credentials//production.json"
+reason = "an empty component"
+
+[[refused]]
+reference = "credentials/"
+reason = "a trailing separator"
+
+[[refused]]
+reference = "/credentials/production.json"
+reason = "a leading separator"
+
+[[refused]]
+reference = "credentials\\production.json"
+reason = "a backslash separator"
+
+[[refused]]
+reference = "C:/credentials/production.json"
+reason = "a drive prefix"
+
+[[refused]]
+reference = "\\\\server\\share\\credentials.json"
+reason = "a uniform-naming-convention prefix"
+
+[[refused]]
+reference = "credentials/./production.json"
+reason = "a dot component"
+
+[[refused]]
+reference = ".hidden/production.json"
+reason = "a component opening with punctuation"
+
+[[refused]]
+reference = ""
+reason = "an empty reference"
+
+[[refused]]
+reference = "credentials/produc tion.json"
+reason = "a space"
+
+[[refused]]
+reference = "credentials/production.json\u0000"
+reason = "a control byte"
