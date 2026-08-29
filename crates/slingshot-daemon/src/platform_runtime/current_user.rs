@@ -14,6 +14,10 @@ use crate::platform_runtime::failure::PlatformFailure;
 #[cfg(unix)]
 pub const OWNER_ONLY_DIRECTORY_MODE: u32 = 0o700;
 
+/// Bits of a directory mode that describe permission rather than kind.
+#[cfg(unix)]
+pub const PERMISSION_BITS: u32 = 0o777;
+
 /// Creates the runtime directory of this user, reachable only by this user.
 ///
 /// Two clients may prepare the same root at once, so a directory that already
@@ -80,7 +84,7 @@ pub fn is_owner_only(runtime_root: &Path) -> Result<bool, PlatformFailure> {
             path: runtime_root.to_path_buf(),
             reason: failure.to_string(),
         })?;
-    Ok(metadata.permissions().mode() & 0o777 == OWNER_ONLY_DIRECTORY_MODE)
+    Ok(metadata.permissions().mode() & PERMISSION_BITS == OWNER_ONLY_DIRECTORY_MODE)
 }
 
 /// Reports whether the runtime directory is reachable only by its owner.

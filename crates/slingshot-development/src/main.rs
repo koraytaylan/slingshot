@@ -9,7 +9,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
 
-use slingshot_development::{RepositoryCommandFailure, dependency_direction};
+use slingshot_development::{RepositoryCommandFailure, dependency_direction, source_policy};
 
 /// Number of leading process arguments that carry the executable path.
 const EXECUTABLE_PATH_ARGUMENT_COUNT: usize = 1;
@@ -19,6 +19,9 @@ const WORKSPACE_METADATA_COMMAND: &str = "workspace-metadata";
 
 /// Name of the command that checks the workspace dependency direction.
 const DEPENDENCY_DIRECTION_COMMAND: &str = "dependency-direction";
+
+/// Name of the command that checks every repository source policy rule.
+const SOURCE_POLICY_COMMAND: &str = "source-policy";
 
 /// Runs the repository command named by the first argument.
 fn dispatch(
@@ -33,6 +36,7 @@ fn dispatch(
             slingshot_development::emit_workspace_metadata(&workspace_root, output)
         }
         DEPENDENCY_DIRECTION_COMMAND => check_dependency_direction(working_directory, output),
+        SOURCE_POLICY_COMMAND => check_source_policy(working_directory, output),
         _ => Err(RepositoryCommandFailure::UnknownCommand(requested.clone())),
     }
 }
@@ -72,6 +76,32 @@ fn check_dependency_direction(
     Err(RepositoryCommandFailure::ToolFailed {
         program: DEPENDENCY_DIRECTION_COMMAND.to_owned(),
         reason: format!("{} forbidden local dependency edges", violations.len()),
+    })
+}
+
+/// Reads the repository and reports every source policy rule it breaks.
+fn check_source_policy(
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let violations = source_policy::check_repository(&workspace_root).map_err(|failure| {
+        RepositoryCommandFailure::ToolFailed {
+            program: SOURCE_POLICY_COMMAND.to_owned(),
+            reason: failure.to_string(),
+        }
+    })?;
+    for violation in &violations {
+        writeln!(output, "{violation}")
+            .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))?;
+    }
+    if violations.is_empty() {
+        return writeln!(output, "the repository follows every source policy rule")
+            .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()));
+    }
+    Err(RepositoryCommandFailure::ToolFailed {
+        program: SOURCE_POLICY_COMMAND.to_owned(),
+        reason: format!("{} source policy violations", violations.len()),
     })
 }
 

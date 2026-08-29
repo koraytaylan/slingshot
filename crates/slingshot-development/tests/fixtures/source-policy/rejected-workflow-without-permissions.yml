@@ -1,0 +1,7 @@
+name: quality
+on:
+  push:
+jobs:
+  gate:
+    steps:
+      - run: scripts/quality

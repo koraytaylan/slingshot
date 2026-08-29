@@ -33,9 +33,16 @@ fn build_archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
     builder.into_inner().expect("the archive finishes")
 }
 
+/// Members the probe archive holds.
+const ARCHIVE_MEMBER_COUNT: usize = 2;
+
+/// Fraction of an archive a truncated reader receives.
+const TRUNCATION_DIVISOR: usize = 2;
+
 #[test]
 fn two_runs_over_the_same_input_produce_the_same_archive_bytes() {
-    let entries: [(&str, &[u8]); 2] = [("slingshot", b"executable"), ("SHA256SUMS", b"digest")];
+    let entries: [(&str, &[u8]); ARCHIVE_MEMBER_COUNT] =
+        [("slingshot", b"executable"), ("SHA256SUMS", b"digest")];
     let first = build_archive(&entries);
     let second = build_archive(&entries);
     assert_eq!(first, second, "the archive is byte-identical across runs");
@@ -56,7 +63,7 @@ fn two_runs_over_the_same_input_produce_the_same_archive_bytes() {
     assert_eq!(read_back[0].0, "slingshot");
     assert_eq!(read_back[0].1, b"executable");
 
-    let truncated = Archive::new(&first[..first.len() / 2])
+    let truncated = Archive::new(&first[..first.len() / TRUNCATION_DIVISOR])
         .entries()
         .expect("the reader starts")
         .map(|entry| {

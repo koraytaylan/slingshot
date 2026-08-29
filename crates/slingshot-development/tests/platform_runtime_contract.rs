@@ -60,6 +60,9 @@ const PROBE_NAMESPACE_DIGEST: &str =
 /// Interval between two polls while waiting for a real condition.
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
+/// Characters a rendered digest occupies in a report.
+const RENDERED_DIGEST_LENGTH: usize = 64;
+
 /// The deterministic runtime observations.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -286,8 +289,8 @@ fn the_report_schema_and_the_report_shape_declare_the_same_members() {
     let report = UntrustedRuntimeReport {
         label: UNTRUSTED_OBSERVATION_LABEL.to_owned(),
         source_revision: "unknown".to_owned(),
-        matrix_digest: "0".repeat(64),
-        contract_digest: "0".repeat(64),
+        matrix_digest: "0".repeat(RENDERED_DIGEST_LENGTH),
+        contract_digest: "0".repeat(RENDERED_DIGEST_LENGTH),
         triple: SUPPORTED_TARGET_TRIPLES[0].to_owned(),
         operating_system: "linux".to_owned(),
         architecture: "x86_64".to_owned(),
@@ -312,8 +315,8 @@ fn a_report_describes_one_row_and_records_every_behavior_once() {
     let mut report = UntrustedRuntimeReport {
         label: UNTRUSTED_OBSERVATION_LABEL.to_owned(),
         source_revision: "unknown".to_owned(),
-        matrix_digest: "0".repeat(64),
-        contract_digest: "0".repeat(64),
+        matrix_digest: "0".repeat(RENDERED_DIGEST_LENGTH),
+        contract_digest: "0".repeat(RENDERED_DIGEST_LENGTH),
         triple: current.unwrap_or(SUPPORTED_TARGET_TRIPLES[0]).to_owned(),
         operating_system: std::env::consts::OS.to_owned(),
         architecture: std::env::consts::ARCH.to_owned(),

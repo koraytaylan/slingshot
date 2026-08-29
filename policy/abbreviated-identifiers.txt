@@ -1,0 +1,77 @@
+# Declared identifiers spell words in full.
+#
+# One shortened form per line. The checker compares a declared name's
+# underscore-separated words with this list, so `req` is refused wherever it is
+# declared while `request` is accepted, and a standardized external spelling in
+# a wire string, a serialized field name, or a dependency interface is never
+# examined at all.
+
+arg
+args
+auth
+buf
+cfg
+char
+cmd
+conf
+config
+conn
+cred
+creds
+ctx
+db
+dest
+dir
+doc
+elem
+env
+err
+exec
+expr
+fmt
+fn
+gen
+id
+idx
+impl
+info
+init
+len
+lib
+max
+med
+mgr
+min
+msg
+num
+obj
+op
+opt
+opts
+param
+params
+pos
+prev
+proc
+prop
+ptr
+pwd
+recv
+ref
+req
+res
+resp
+ret
+src
+stat
+std
+str
+sys
+tmp
+tx
+util
+utils
+val
+var
+vec
+ver

@@ -1,0 +1,11 @@
+name: quality
+on:
+  push:
+jobs:
+  gate:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - run: scripts/quality

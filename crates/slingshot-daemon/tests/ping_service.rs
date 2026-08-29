@@ -33,6 +33,15 @@ const PROFILE: &str = "local";
 /// Environment the assertions name their target with.
 const ENVIRONMENT: &str = "author";
 
+/// Clients one correlation assertion releases at once.
+const CONCURRENT_CLIENT_COUNT: usize = 16;
+
+/// Ways a stalled peer can withhold its frame.
+const STALLED_PEER_KINDS: usize = 3;
+
+/// The stalled peer that sends a declared length and part of its payload.
+const PARTIAL_PAYLOAD_PEER: usize = 2;
+
 /// One running daemon and everything a test needs to reach it.
 struct RunningDaemon {
     address: EndpointAddress,
@@ -176,7 +185,8 @@ async fn readiness_is_present_only_once_the_endpoint_answers_a_ping() {
 async fn concurrent_connections_receive_correctly_correlated_responses() {
     let root = temporary_runtime_root("c");
     let daemon = start_daemon(&root, ENVIRONMENT).await;
-    let identifiers: Vec<String> = (0..16).map(|index| format!("client-{index}")).collect();
+    let identifiers: Vec<String> =
+        (0..CONCURRENT_CLIENT_COUNT).map(|index| format!("client-{index}")).collect();
     let mut pending = Vec::new();
     for identifier in &identifiers {
         let address = daemon.address.clone();
@@ -284,9 +294,9 @@ async fn every_incomplete_peer_closes_at_its_declared_deadline_and_releases_capa
     let mut stalled = Vec::new();
     for index in 0..capacity {
         let mut stream = connect(&daemon.address).await;
-        match index % 3 {
+        match index % STALLED_PEER_KINDS {
             1 => stream.write_all(&[0_u8, 0]).await.expect("a partial prefix is written"),
-            2 => stream
+            PARTIAL_PAYLOAD_PEER => stream
                 .write_all(&[0_u8, 0, 0, 8, b'{'])
                 .await
                 .expect("a partial payload is written"),

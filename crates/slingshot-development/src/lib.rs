@@ -13,7 +13,6 @@ pub mod rustsec_advisory_pin;
 pub mod source_policy;
 pub mod supported_platform_matrix;
 
-use std::fmt;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -75,8 +74,8 @@ pub enum RepositoryCommandFailure {
     OutputUnavailable(String),
 }
 
-impl fmt::Display for RepositoryCommandFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl ::core::fmt::Display for RepositoryCommandFailure {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::MissingCommand => {
                 write!(formatter, "expected a repository command name, but none was supplied")

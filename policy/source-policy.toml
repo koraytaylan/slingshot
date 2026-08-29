@@ -1,0 +1,62 @@
+# Repository source policy.
+#
+# Every falsifiable rule the source-policy command enforces reads its values
+# from here, so a limit exists once. Whether documentation prose is accurate,
+# complete, historically framed, or merely narrating adjacent code is a review
+# question and is recorded in policy/documentation-rules.toml instead.
+
+format = "slingshot.source-policy/1"
+
+# Largest physical line count of any repository-owned code file, whether Rust,
+# a build manifest, a workflow, an executable script, or a migration.
+maximum-code-file-lines = 1_000
+
+# Largest cyclomatic complexity of any function, script function, or migration
+# conditional expression.
+maximum-cyclomatic-complexity = 10
+
+# Smallest numeric literal the checker attributes meaning to. Zero and one are
+# intrinsic identity and index values and carry no operational meaning.
+#
+# A literal inside a named constant, a named static, an enumeration
+# discriminant, an array literal, or an index position is already data with a
+# name, data laid out as data, or a position rather than a quantity, so the
+# checker looks only at the values a reader would have to guess the meaning of.
+smallest-meaningful-literal = 2
+
+# Tokens that mark work the author has not finished. Planning documents are
+# intentionally prospective and are excluded from the scan.
+forbidden-markers = ["TODO", "FIXME", "XXX", "HACK", "TBD", "WIP"]
+
+# Headings that belong to a plan bundle rather than to product documentation.
+planning-headings = ["**Steps:**", "**Tests:**", "**Done when:**", "## Why this plan", "## In scope"]
+
+# Macros whose expansion is a placeholder rather than behavior.
+placeholder-macros = ["todo", "unimplemented"]
+
+# Directories the scan does not enter. Planning documents are intentionally
+# prospective, and the source-policy fixtures are deliberately broken samples
+# the checker is proved against rather than repository source it governs.
+excluded-directories = [
+    "docs/plans",
+    "target",
+    ".git",
+    "crates/slingshot-development/tests/fixtures/source-policy",
+]
+
+# The one workflow job that may hold provenance-attestation permissions.
+release-attestation-job = "release-binary-provenance"
+
+# Permissions that job alone may add to read-only content access.
+release-attestation-permissions = ["attestations", "id-token"]
+
+# Workflow expression prefixes that carry values a caller controls.
+untrusted-expression-prefixes = [
+    "github.event.issue.title",
+    "github.event.issue.body",
+    "github.event.pull_request.title",
+    "github.event.pull_request.body",
+    "github.event.comment.body",
+    "github.event.head_commit.message",
+    "github.head_ref",
+]

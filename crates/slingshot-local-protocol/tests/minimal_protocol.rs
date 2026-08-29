@@ -54,6 +54,12 @@ const CONTRACT_OWNING_FILES: &[&str] = &[
 /// than evidence, so the assertion says what it can prove and no more.
 const REPEATED_VALUE_FLOOR: u64 = 20;
 
+/// Characters one byte occupies when a buffer is written in hexadecimal.
+const RENDERED_BYTE_LENGTH: usize = 2;
+
+/// Radix a hexadecimal buffer is read in.
+const HEXADECIMAL_RADIX: u32 = 16;
+
 /// The byte-level framing cases.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -111,13 +117,13 @@ fn framing_cases() -> FramingCases {
 
 /// Reads a lowercase hexadecimal buffer out of a framing case.
 fn case_bytes(rendered: &str) -> Vec<u8> {
-    assert_eq!(rendered.len() % 2, 0, "a buffer is written as whole bytes");
+    assert_eq!(rendered.len() % RENDERED_BYTE_LENGTH, 0, "a buffer is written as whole bytes");
     rendered
         .as_bytes()
-        .chunks(2)
+        .chunks(RENDERED_BYTE_LENGTH)
         .map(|pair| {
             let text = std::str::from_utf8(pair).expect("the buffer is text");
-            u8::from_str_radix(text, 16).expect("the buffer is hexadecimal")
+            u8::from_str_radix(text, HEXADECIMAL_RADIX).expect("the buffer is hexadecimal")
         })
         .collect()
 }
@@ -444,27 +450,41 @@ fn numeric_literals(line: &str) -> Vec<u64> {
     let mut found = Vec::new();
     let mut start = 0_usize;
     while start < characters.len() {
-        if !characters[start].is_ascii_digit() {
-            start += 1;
-            continue;
-        }
-        let mut end = start;
-        while end < characters.len() && (characters[end].is_ascii_digit() || characters[end] == '_')
-        {
-            end += 1;
-        }
-        let before_is_identifier = start > 0 && is_identifier_byte(characters[start - 1]);
-        let after_is_identifier = end < characters.len() && is_identifier_byte(characters[end]);
-        if !before_is_identifier && !after_is_identifier {
-            let literal: String =
-                characters[start..end].iter().filter(|value| **value != '_').collect();
-            if let Ok(number) = literal.parse::<u64>() {
+        let end = end_of_digit_run(&characters, start);
+        if end > start {
+            if let Some(number) = standalone_literal(&characters, start, end) {
                 found.push(number);
             }
+            start = end;
+            continue;
         }
-        start = end;
+        start += 1;
     }
     found
+}
+
+/// Returns the end of the digit run beginning at `start`, or `start` itself.
+fn end_of_digit_run(characters: &[char], start: usize) -> usize {
+    if !characters[start].is_ascii_digit() {
+        return start;
+    }
+    let mut end = start;
+    while end < characters.len() && (characters[end].is_ascii_digit() || characters[end] == '_') {
+        end += 1;
+    }
+    end
+}
+
+/// Returns the value of one digit run when it stands alone rather than inside a
+/// type name or an identifier.
+fn standalone_literal(characters: &[char], start: usize, end: usize) -> Option<u64> {
+    let before_is_identifier = start > 0 && is_identifier_byte(characters[start - 1]);
+    let after_is_identifier = end < characters.len() && is_identifier_byte(characters[end]);
+    if before_is_identifier || after_is_identifier {
+        return None;
+    }
+    let literal: String = characters[start..end].iter().filter(|value| **value != '_').collect();
+    literal.parse::<u64>().ok()
 }
 
 /// Reports every contract value one source file repeats as a literal.

@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+verify_repository_tools() {
+    if [ -d dir1 ]; then printf 'a'; fi
+    if [ -d dir2 ]; then printf 'a'; fi
+    if [ -d dir3 ]; then printf 'a'; fi
+    if [ -d dir4 ]; then printf 'a'; fi
+    if [ -d dir5 ]; then printf 'a'; fi
+    if [ -d dir6 ]; then printf 'a'; fi
+    if [ -d dir7 ]; then printf 'a'; fi
+    if [ -d dir8 ]; then printf 'a'; fi
+    if [ -d dir9 ]; then printf 'a'; fi
+    if [ -d dir10 ]; then printf 'a'; fi
+    if [ -d dir11 ]; then printf 'a'; fi
+}
+
+verify_repository_tools

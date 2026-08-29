@@ -1,0 +1,4 @@
+CREATE TABLE operation (
+    id TEXT PRIMARY KEY,
+    cfg TEXT NOT NULL
+) STRICT;

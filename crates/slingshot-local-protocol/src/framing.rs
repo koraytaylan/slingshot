@@ -11,6 +11,9 @@ use crate::foundation_contract::FramingLimits;
 /// Byte values that may follow a payload value without changing its meaning.
 const INSIGNIFICANT_BYTES: &[u8] = b" \t\r\n";
 
+/// Bytes one backslash escape sequence occupies.
+const ESCAPE_SEQUENCE_LENGTH: usize = 2;
+
 /// Reason a frame could not be read or rendered.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum FramingFailure {
@@ -198,7 +201,7 @@ fn skip_string(payload: &[u8], start: usize) -> Result<usize, FramingFailure> {
     let mut position = start + 1;
     while position < payload.len() {
         match payload[position] {
-            b'\\' => position += 2,
+            b'\\' => position += ESCAPE_SEQUENCE_LENGTH,
             b'"' => return Ok(position + 1),
             _ => position += 1,
         }
