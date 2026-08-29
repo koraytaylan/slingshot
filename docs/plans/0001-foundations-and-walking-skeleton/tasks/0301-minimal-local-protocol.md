@@ -16,8 +16,8 @@ touches:
   - crates/slingshot-local-protocol/src/ping.rs
   - crates/slingshot-local-protocol/tests/minimal_protocol.rs
   - "crates/slingshot-local-protocol/tests/fixtures/minimal-protocol/**"
-status: planned
-merged_as: ""
+status: done
+merged_as: "081930c4e7a7bba075d6ac291a1547f685076ded"
 ---
 # Minimal Local Protocol
 
