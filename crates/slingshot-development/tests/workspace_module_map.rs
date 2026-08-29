@@ -27,11 +27,11 @@ const LAYER_FIXTURE: &str = "crate-layers.txt";
 /// Fixture that maps named architectural vocabulary to its owning module.
 const VOCABULARY_FIXTURE: &str = "vocabulary-ownership.txt";
 
-/// Plan documents whose frontmatter records the footprint of one owning task.
-const TASK_DOCUMENTS: &[(&str, &str)] = &[(
-    "workspace-module-map",
-    "docs/plans/0001-foundations-and-walking-skeleton/tasks/0104-workspace-module-map.md",
-)];
+/// Directory holding every plan bundle.
+const PLAN_DIRECTORY: &str = "docs/plans";
+
+/// Directory inside a plan bundle that holds its task documents.
+const TASK_DIRECTORY: &str = "tasks";
 
 /// Directory every workspace member lives in.
 const CRATE_DIRECTORY: &str = "crates";
@@ -272,6 +272,33 @@ fn evaluate_layers(rows: &[OwnershipRow], layers: &BTreeMap<String, CrateLayer>)
     violations
 }
 
+/// Returns the task document of every plan task, keyed by its declared identity.
+fn task_documents() -> BTreeMap<String, String> {
+    let root = workspace_root().join(PLAN_DIRECTORY);
+    let mut documents = BTreeMap::new();
+    for plan in std::fs::read_dir(&root).expect("the plan directory is readable") {
+        let tasks = plan.expect("the plan entry is readable").path().join(TASK_DIRECTORY);
+        if !tasks.is_dir() {
+            continue;
+        }
+        for task in std::fs::read_dir(&tasks).expect("the task directory is readable") {
+            let path = task.expect("the task entry is readable").path();
+            let relative = path
+                .strip_prefix(workspace_root())
+                .expect("the task is inside the workspace")
+                .to_str()
+                .expect("the path is text")
+                .to_owned();
+            let identity = read_repository_file(&relative)
+                .lines()
+                .find_map(|line| line.strip_prefix("id: ").map(str::to_owned))
+                .unwrap_or_else(|| panic!("{relative} declares no identity"));
+            assert!(documents.insert(identity, relative).is_none(), "two tasks share an identity");
+        }
+    }
+    documents
+}
+
 /// Returns the repository-relative source paths one task's footprint claims.
 fn footprint_paths(task_document: &str) -> BTreeSet<String> {
     let document = read_repository_file(task_document);
@@ -402,17 +429,19 @@ fn the_ownership_map_the_footprints_and_the_source_tree_describe_one_set() {
         compare_paths("map", &declared, "source tree", &source_paths_on_disk()),
         Vec::<String>::new()
     );
+    let documents = task_documents();
     let owners: BTreeSet<&str> = rows.iter().map(|row| row.owner.as_str()).collect();
-    let recorded: BTreeSet<&str> = TASK_DOCUMENTS.iter().map(|(owner, _)| *owner).collect();
-    assert_eq!(owners, recorded, "every row names a task whose footprint is recorded here");
-    for (owner, document) in TASK_DOCUMENTS {
+    for owner in owners {
+        let document = documents
+            .get(owner)
+            .unwrap_or_else(|| panic!("{owner} names no task in any plan bundle"));
+        let footprint = footprint_paths(document);
         let claimed: BTreeSet<String> =
-            rows.iter().filter(|row| row.owner == *owner).map(|row| row.path.clone()).collect();
-        assert_eq!(
-            compare_paths("map", &claimed, "footprint", &footprint_paths(document)),
-            Vec::<String>::new(),
-            "{owner}"
-        );
+            rows.iter().filter(|row| row.owner == owner).map(|row| row.path.clone()).collect();
+        let outside: Vec<&String> = claimed.difference(&footprint).collect();
+        assert_eq!(outside, Vec::<&String>::new(), "{owner} claims a path outside its footprint");
+        let omitted: Vec<&String> = footprint.difference(&declared).collect();
+        assert_eq!(omitted, Vec::<&String>::new(), "{owner} touches a source file the map omits");
     }
 }
 
@@ -486,7 +515,7 @@ fn named_vocabulary_stays_in_the_crate_the_architecture_assigns_it() {
 #[test]
 fn the_ownership_map_rejects_every_recorded_mutation() {
     let disk = source_paths_on_disk();
-    let footprint = footprint_paths(TASK_DOCUMENTS[0].1);
+    let footprint = footprint_paths(&task_documents()["workspace-module-map"]);
     let layers = parse_layers(&read_fixture(LAYER_FIXTURE));
     for name in ["rejected-wildcard-path.txt", "rejected-duplicate-path.txt"] {
         let (_, violations) = parse_ownership(&read_fixture(name));
