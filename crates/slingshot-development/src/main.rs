@@ -9,13 +9,16 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
 
-use slingshot_development::RepositoryCommandFailure;
+use slingshot_development::{RepositoryCommandFailure, dependency_direction};
 
 /// Number of leading process arguments that carry the executable path.
 const EXECUTABLE_PATH_ARGUMENT_COUNT: usize = 1;
 
 /// Name of the command that emits resolved Cargo workspace metadata.
 const WORKSPACE_METADATA_COMMAND: &str = "workspace-metadata";
+
+/// Name of the command that checks the workspace dependency direction.
+const DEPENDENCY_DIRECTION_COMMAND: &str = "dependency-direction";
 
 /// Runs the repository command named by the first argument.
 fn dispatch(
@@ -29,8 +32,47 @@ fn dispatch(
             let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
             slingshot_development::emit_workspace_metadata(&workspace_root, output)
         }
+        DEPENDENCY_DIRECTION_COMMAND => check_dependency_direction(working_directory, output),
         _ => Err(RepositoryCommandFailure::UnknownCommand(requested.clone())),
     }
+}
+
+/// Reads the workspace metadata and reports every forbidden dependency edge.
+fn check_dependency_direction(
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let mut metadata = Vec::new();
+    slingshot_development::emit_workspace_metadata(&workspace_root, &mut metadata)?;
+    let text =
+        String::from_utf8(metadata).map_err(|failure| RepositoryCommandFailure::ToolFailed {
+            program: WORKSPACE_METADATA_COMMAND.to_owned(),
+            reason: failure.to_string(),
+        })?;
+    let graph = dependency_direction::read_graph(&text).map_err(|failure| {
+        RepositoryCommandFailure::ToolFailed {
+            program: DEPENDENCY_DIRECTION_COMMAND.to_owned(),
+            reason: failure.to_string(),
+        }
+    })?;
+    let violations = dependency_direction::evaluate(&graph);
+    if violations.is_empty() {
+        return writeln!(
+            output,
+            "{} local edges follow the dependency contract",
+            graph.edges.len()
+        )
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()));
+    }
+    for violation in &violations {
+        writeln!(output, "{violation}")
+            .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))?;
+    }
+    Err(RepositoryCommandFailure::ToolFailed {
+        program: DEPENDENCY_DIRECTION_COMMAND.to_owned(),
+        reason: format!("{} forbidden local dependency edges", violations.len()),
+    })
 }
 
 fn main() -> ExitCode {
