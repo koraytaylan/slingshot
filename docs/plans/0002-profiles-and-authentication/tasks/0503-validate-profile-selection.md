@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-configuration/src/profile_selection.rs
   - crates/slingshot-configuration/tests/profile_selection.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Validate Profile Selection
