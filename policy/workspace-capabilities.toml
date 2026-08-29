@@ -267,6 +267,17 @@ kinds = ["normal"]
 owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-command-line", "slingshot-daemon", "slingshot-development", "slingshot-domain", "slingshot-local-protocol", "slingshot-storage", "slingshot-test-support"]
 
 [[capability]]
+name = "operating-system-account-database"
+purpose = "Read the account-database home directory of an effective user identifier."
+package = "uzers"
+version = "0.12.2"
+default-features = true
+features = []
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+kinds = ["normal"]
+owners = ["slingshot-configuration"]
+
+[[capability]]
 name = "platform-directories"
 purpose = "Resolve the current user's runtime, configuration, and state directories."
 package = "directories"
@@ -536,7 +547,7 @@ purpose = "Read reparse evidence, link count, volume serial number, and the file
 package = "winsafe"
 version = "0.0.28"
 default-features = false
-features = ["kernel"]
+features = ["advapi", "kernel", "shell"]
 targets = ["x86_64-pc-windows-msvc"]
 kinds = ["normal"]
 owners = ["slingshot-configuration"]

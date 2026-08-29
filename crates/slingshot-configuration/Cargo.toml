@@ -23,10 +23,12 @@ tracing-subscriber.workspace = true
 
 [target.x86_64-unknown-linux-gnu.dependencies]
 rustix.workspace = true
+uzers.workspace = true
 xattr.workspace = true
 
 [target.aarch64-apple-darwin.dependencies]
 rustix.workspace = true
+uzers.workspace = true
 xattr.workspace = true
 
 [target.x86_64-pc-windows-msvc.dependencies]
