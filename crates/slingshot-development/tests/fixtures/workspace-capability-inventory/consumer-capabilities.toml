@@ -1,0 +1,180 @@
+# Structural family and planned-consumer capability requirements.
+#
+# One row per structural module family and per explicitly named planned
+# capability consumer. Each dependency kind is recorded explicitly: an empty
+# list means the kind is unused, and the reserved name `standard-library`
+# means the consumer needs no external capability for that kind.
+#
+# This fixture is authored independently of policy/workspace-capabilities.toml.
+# The inventory assertions derive the owning packages and dependency kinds from
+# these rows and compare them with the policy file and with Cargo metadata.
+
+format = "slingshot.consumer-capabilities/1"
+
+[[consumer]]
+name = "slingshot_domain"
+package = "slingshot-domain"
+normal = ["typed-errors", "serialization", "unique-identifiers"]
+build = []
+development = ["property-tests"]
+
+[[consumer]]
+name = "slingshot_domain::command"
+package = "slingshot-domain"
+normal = ["typed-errors", "serialization"]
+build = []
+development = ["property-tests"]
+
+[[consumer]]
+name = "slingshot_configuration"
+package = "slingshot-configuration"
+normal = ["typed-errors", "serialization", "toml-documents", "uniform-resource-locators", "secret-buffers", "platform-directories", "base64-encoding", "descriptor-relative-filesystem", "posix-access-control-lists", "extended-access-control-lists", "windows-security-identifiers", "windows-file-identity"]
+build = []
+development = ["property-tests"]
+
+[[consumer]]
+name = "slingshot_configuration::testing"
+package = "slingshot-configuration"
+normal = ["temporary-files", "serialization", "toml-documents"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_agent_protocol"
+package = "slingshot-agent-protocol"
+normal = ["typed-errors", "serialization", "javascript-object-notation", "schema-documents", "unique-identifiers", "base64-encoding", "byte-buffers"]
+build = []
+development = ["property-tests"]
+
+[[consumer]]
+name = "slingshot_local_protocol"
+package = "slingshot-local-protocol"
+normal = ["typed-errors", "serialization", "javascript-object-notation", "toml-documents", "byte-buffers"]
+build = []
+development = ["property-tests"]
+
+[[consumer]]
+name = "slingshot_agent_connection"
+package = "slingshot-agent-connection"
+normal = ["typed-errors", "serialization", "javascript-object-notation", "uniform-resource-locators", "byte-buffers", "asynchronous-runtime", "cancellation-tokens", "hypertext-transfer-protocol-types", "hypertext-transfer-protocol-engine", "hypertext-transfer-protocol-utilities", "hypertext-transfer-protocol-body", "transport-layer-security", "certificate-types", "asynchronous-transport-layer-security", "certificate-record-decoding", "diagnostics", "secure-hash-digests", "base64-encoding", "secret-buffers", "platform-trust-store-locations", "platform-trust-decisions-macos", "platform-trust-decisions-windows"]
+build = []
+development = ["temporary-files", "property-tests"]
+
+[[consumer]]
+name = "slingshot_agent_connection::authentication"
+package = "slingshot-agent-connection"
+normal = ["signed-assertions", "secret-buffers", "base64-encoding", "secure-hash-digests", "serialization", "javascript-object-notation", "typed-errors"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_storage"
+package = "slingshot-storage"
+normal = ["typed-errors", "embedded-structured-query-language", "serialization", "javascript-object-notation", "secure-hash-digests", "hexadecimal-encoding", "unique-identifiers", "diagnostics"]
+build = []
+development = ["temporary-files", "property-tests"]
+
+[[consumer]]
+name = "slingshot_storage::operation"
+package = "slingshot-storage"
+normal = ["embedded-structured-query-language", "typed-errors", "serialization"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_daemon"
+package = "slingshot-daemon"
+normal = ["typed-errors", "asynchronous-runtime", "cancellation-tokens", "byte-buffers", "serialization", "javascript-object-notation", "diagnostics", "diagnostics-subscriber", "platform-directories", "file-locks", "random-values", "secure-hash-digests", "hexadecimal-encoding"]
+build = []
+development = ["temporary-files"]
+
+[[consumer]]
+name = "slingshot_daemon::operation"
+package = "slingshot-daemon"
+normal = ["typed-errors", "asynchronous-runtime", "cancellation-tokens", "serialization"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_daemon::platform_runtime"
+package = "slingshot-daemon"
+normal = ["typed-errors", "asynchronous-runtime", "file-locks", "platform-directories", "secure-hash-digests", "hexadecimal-encoding", "random-values", "descriptor-relative-filesystem", "windows-process-creation-flags"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_command_line"
+package = "slingshot-command-line"
+normal = ["typed-errors", "command-line-arguments", "asynchronous-runtime", "cancellation-tokens", "serialization", "javascript-object-notation", "diagnostics", "diagnostics-subscriber", "platform-directories", "file-locks", "byte-buffers", "secure-hash-digests", "hexadecimal-encoding", "schema-documents"]
+build = []
+development = ["temporary-files", "process-assertions", "process-predicates"]
+
+[[consumer]]
+name = "slingshot_command_line::commands"
+package = "slingshot-command-line"
+normal = ["command-line-arguments", "typed-errors", "serialization"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_command_line::model_context_protocol"
+package = "slingshot-command-line"
+normal = ["javascript-object-notation", "schema-documents", "asynchronous-runtime", "typed-errors", "serialization"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_command_line::platform_runtime"
+package = "slingshot-command-line"
+normal = ["typed-errors", "file-locks", "platform-directories", "descriptor-relative-filesystem", "windows-process-creation-flags"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_test_support"
+package = "slingshot-test-support"
+normal = ["typed-errors", "temporary-files", "asynchronous-runtime", "serialization", "javascript-object-notation", "byte-buffers", "random-values"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_test_support::platform_runtime"
+package = "slingshot-test-support"
+normal = ["typed-errors", "file-locks", "platform-directories"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_test_support::fake-author-service"
+package = "slingshot-test-support"
+normal = ["hypertext-transfer-protocol-types", "hypertext-transfer-protocol-engine", "hypertext-transfer-protocol-utilities", "hypertext-transfer-protocol-body", "asynchronous-runtime", "byte-buffers"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_development"
+package = "slingshot-development"
+normal = ["typed-errors", "serialization", "javascript-object-notation", "toml-documents", "command-line-arguments", "secure-hash-digests", "hexadecimal-encoding", "temporary-files", "diagnostics"]
+build = []
+development = ["process-assertions", "process-predicates"]
+
+[[consumer]]
+name = "slingshot_development::source-policy"
+package = "slingshot-development"
+normal = ["rust-source-syntax", "source-span-locations", "structured-query-language-syntax", "shell-syntax", "workflow-documents"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_development::release-packager"
+package = "slingshot-development"
+normal = ["deterministic-tar-archives", "deterministic-gzip-compression", "deterministic-zip-archives", "secure-hash-digests"]
+build = []
+development = []
+
+[[consumer]]
+name = "slingshot_agent_protocol::remote-job-conversions"
+package = "slingshot-agent-protocol"
+normal = ["serialization", "javascript-object-notation", "typed-errors"]
+build = []
+development = []

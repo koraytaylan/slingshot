@@ -1,0 +1,576 @@
+# Rejected inventory variant: a capability that selects a workspace member instead of a registry package.
+#
+# Every non-standard capability names exactly one registry package, one exact
+# version, one default-feature choice, one feature set, and the exact target
+# triples it is conditioned on. The owning packages and the dependency kinds
+# are recorded here and are derived independently from the consumer fixture in
+# crates/slingshot-development/tests/fixtures/workspace-capability-inventory,
+# so a drift between the two sources fails the inventory assertions.
+#
+# An empty targets list means the capability applies to every supported target.
+
+format = "slingshot.workspace-capabilities/1"
+minimum-rust-version = "1.98.0"
+supported-targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+
+[[capability]]
+name = "asynchronous-runtime"
+purpose = "Run the asynchronous runtime, endpoints, timers, and child processes."
+package = "tokio"
+version = "1.53.1"
+default-features = true
+features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-daemon", "slingshot-test-support"]
+
+[[capability]]
+name = "asynchronous-transport-layer-security"
+purpose = "Run the security layer over an asynchronous connection with a separate deadline."
+package = "tokio-rustls"
+version = "0.26.4"
+default-features = false
+features = ["logging", "ring", "tls12"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection"]
+
+[[capability]]
+name = "base64-encoding"
+purpose = "Encode and decode standard and URL-safe Base64."
+package = "base64"
+version = "0.23.1"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-configuration"]
+
+[[capability]]
+name = "byte-buffers"
+purpose = "Share reference-counted byte buffers without copying."
+package = "bytes"
+version = "1.12.1"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-command-line", "slingshot-daemon", "slingshot-local-protocol", "slingshot-test-support"]
+
+[[capability]]
+name = "cancellation-tokens"
+purpose = "Propagate cooperative cancellation across tasks."
+package = "tokio-util"
+version = "0.7.19"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-daemon"]
+
+[[capability]]
+name = "certificate-record-decoding"
+purpose = "Decode provider records and their purpose, policy, and name constraints."
+package = "x509-parser"
+version = "0.18.1"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection"]
+
+[[capability]]
+name = "certificate-types"
+purpose = "Carry provider record bytes and read Privacy Enhanced Mail input."
+package = "rustls-pki-types"
+version = "1.15.1"
+default-features = true
+features = ["std"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection"]
+
+[[capability]]
+name = "command-line-arguments"
+purpose = "Derive the command-line surface and its rendered diagnostics."
+package = "clap"
+version = "4.6.6"
+default-features = false
+features = ["derive", "error-context", "help", "std", "usage"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-command-line", "slingshot-development"]
+
+[[capability]]
+name = "descriptor-relative-filesystem"
+purpose = "Open a descendant relative to a directory descriptor without following links and read its identity."
+package = "rustix"
+version = "1.1.4"
+default-features = false
+features = ["fs", "process", "std"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+kinds = ["normal"]
+owners = ["slingshot-command-line", "slingshot-configuration", "slingshot-daemon"]
+
+[[capability]]
+name = "deterministic-gzip-compression"
+purpose = "Compress and decompress archive bytes without an ambient timestamp."
+package = "flate2"
+version = "1.1.10"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-development"]
+
+[[capability]]
+name = "deterministic-tar-archives"
+purpose = "Write and read tape archives with normalized entry metadata."
+package = "tar"
+version = "0.4.46"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-development"]
+
+[[capability]]
+name = "deterministic-zip-archives"
+purpose = "Write and read zip archives with normalized entry metadata."
+package = "zip"
+version = "8.6.0"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-development"]
+
+[[capability]]
+name = "diagnostics"
+purpose = "Record structured diagnostic events and spans."
+package = "tracing"
+version = "0.1.44"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-daemon", "slingshot-development", "slingshot-storage"]
+
+[[capability]]
+name = "diagnostics-subscriber"
+purpose = "Render diagnostic events to a log sink separate from standard output."
+package = "tracing-subscriber"
+version = "0.3.23"
+default-features = true
+features = ["env-filter", "fmt", "json"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-command-line", "slingshot-daemon"]
+
+[[capability]]
+name = "embedded-structured-query-language"
+purpose = "Store durable records in the pinned bundled SQLite engine."
+package = "rusqlite"
+version = "0.40.2"
+default-features = true
+features = ["bundled"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-storage"]
+
+[[capability]]
+name = "extended-access-control-lists"
+purpose = "Inspect extended access-control lists from an open file."
+package = "exacl"
+version = "0.13.0"
+default-features = true
+features = []
+targets = ["aarch64-apple-darwin"]
+kinds = ["normal"]
+owners = ["slingshot-configuration"]
+
+[[capability]]
+name = "file-locks"
+purpose = "Hold exclusive and shared operating-system file locks."
+package = "fs4"
+version = "1.1.0"
+default-features = false
+features = ["sync"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-command-line", "slingshot-daemon", "slingshot-test-support"]
+
+[[capability]]
+name = "hexadecimal-encoding"
+purpose = "Render and read lowercase hexadecimal bytes."
+package = "hex"
+version = "0.4.3"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-command-line", "slingshot-daemon", "slingshot-development", "slingshot-storage"]
+
+[[capability]]
+name = "hypertext-transfer-protocol-body"
+purpose = "Collect, limit, and stream request and response bodies with their trailer sections."
+package = "http-body-util"
+version = "0.1.5"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-test-support"]
+
+[[capability]]
+name = "hypertext-transfer-protocol-engine"
+purpose = "Drive HTTP/1.1 and HTTP/2 connections, informational heads, and trailer sections."
+package = "hyper"
+version = "1.11.1"
+default-features = true
+features = ["client", "http1", "http2", "server"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-test-support"]
+
+[[capability]]
+name = "hypertext-transfer-protocol-types"
+purpose = "Model requests, responses, heads, and header maps."
+package = "http"
+version = "1.5.0"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-test-support"]
+
+[[capability]]
+name = "hypertext-transfer-protocol-utilities"
+purpose = "Compose connectors, executors, and server accept loops for the protocol engine."
+package = "hyper-util"
+version = "0.1.20"
+default-features = true
+features = ["client", "client-legacy", "server", "http1", "tokio"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-test-support"]
+
+[[capability]]
+name = "javascript-object-notation"
+purpose = "Read and render JavaScript Object Notation documents."
+package = "serde_json"
+version = "1.0.151"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-command-line", "slingshot-daemon", "slingshot-development", "slingshot-local-protocol", "slingshot-storage", "slingshot-test-support"]
+
+[[capability]]
+name = "platform-directories"
+purpose = "Resolve the current user's runtime, configuration, and state directories."
+package = "directories"
+version = "6.0.0"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-command-line", "slingshot-configuration", "slingshot-daemon", "slingshot-test-support"]
+
+[[capability]]
+name = "platform-trust-decisions-macos"
+purpose = "Enumerate provider records with their trust settings, purposes, and deny decisions."
+package = "security-framework"
+version = "3.7.0"
+default-features = true
+features = []
+targets = ["aarch64-apple-darwin"]
+kinds = ["normal"]
+owners = ["slingshot-agent-connection"]
+
+[[capability]]
+name = "platform-trust-decisions-windows"
+purpose = "Enumerate provider records with their valid uses and the distrusted store."
+package = "schannel"
+version = "0.1.29"
+default-features = true
+features = []
+targets = ["x86_64-pc-windows-msvc"]
+kinds = ["normal"]
+owners = ["slingshot-agent-connection"]
+
+[[capability]]
+name = "platform-trust-store-locations"
+purpose = "Locate the platform server-authentication root bundle without merging it into a client."
+package = "openssl-probe"
+version = "0.2.1"
+default-features = true
+features = []
+targets = ["x86_64-unknown-linux-gnu"]
+kinds = ["normal"]
+owners = ["slingshot-agent-connection"]
+
+[[capability]]
+name = "posix-access-control-lists"
+purpose = "Inspect masked named and default POSIX access-control lists from an open file."
+package = "exacl"
+version = "0.13.0"
+default-features = true
+features = []
+targets = ["x86_64-unknown-linux-gnu"]
+kinds = ["normal"]
+owners = ["slingshot-configuration"]
+
+[[capability]]
+name = "process-assertions"
+purpose = "Run a repository executable and assert its exit status and streams."
+package = "assert_cmd"
+version = "2.2.2"
+default-features = true
+features = []
+targets = []
+kinds = ["development"]
+owners = ["slingshot-command-line", "slingshot-development"]
+
+[[capability]]
+name = "process-predicates"
+purpose = "Express reusable assertions over captured process output."
+package = "predicates"
+version = "3.1.4"
+default-features = true
+features = []
+targets = []
+kinds = ["development"]
+owners = ["slingshot-command-line", "slingshot-development"]
+
+[[capability]]
+name = "property-tests"
+purpose = "Generate randomized inputs for property assertions."
+package = "proptest"
+version = "1.11.0"
+default-features = true
+features = []
+targets = []
+kinds = ["development"]
+owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-configuration", "slingshot-domain", "slingshot-local-protocol", "slingshot-storage"]
+
+[[capability]]
+name = "random-values"
+purpose = "Draw cryptographically strong random bytes."
+package = "rand"
+version = "0.10.2"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-daemon", "slingshot-test-support"]
+
+[[capability]]
+name = "rust-source-syntax"
+purpose = "Parse repository Rust into a syntax tree the policy checker walks."
+package = "syn"
+version = "3.0.4"
+default-features = true
+features = ["extra-traits", "full", "visit"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-development"]
+
+[[capability]]
+name = "schema-documents"
+purpose = "Derive Draft 2020-12 schema documents for wire shapes."
+package = "schemars"
+version = "1.2.2"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-protocol", "slingshot-command-line"]
+
+[[capability]]
+name = "secret-buffers"
+purpose = "Hold secret bytes that redact on rendering and zero on drop."
+package = "secrecy"
+version = "0.10.3"
+default-features = true
+features = ["serde"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-configuration"]
+
+[[capability]]
+name = "secure-hash-digests"
+purpose = "Compute SHA-256 digests over bytes."
+package = "sha2"
+version = "0.11.0"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-daemon", "slingshot-development", "slingshot-storage"]
+
+[[capability]]
+name = "serialization"
+purpose = "Derive stable serialized shapes for owned values."
+package = "serde"
+version = "1.0.229"
+default-features = true
+features = ["derive"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-command-line", "slingshot-configuration", "slingshot-daemon", "slingshot-development", "slingshot-domain", "slingshot-local-protocol", "slingshot-storage", "slingshot-test-support"]
+
+[[capability]]
+name = "shell-syntax"
+purpose = "Parse repository-owned executable scripts into a syntax tree."
+package = "yash-syntax"
+version = "0.24.0"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-development"]
+
+[[capability]]
+name = "signed-assertions"
+purpose = "Build and verify compact signed assertions from private keys."
+package = "jsonwebtoken"
+version = "11.0.0"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection"]
+
+[[capability]]
+name = "source-span-locations"
+purpose = "Report the line and column of a parsed syntax element."
+package = "proc-macro2"
+version = "1.0.107"
+default-features = true
+features = ["span-locations"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-development"]
+
+[[capability]]
+name = "structured-query-language-syntax"
+purpose = "Parse repository migrations with the SQLite dialect."
+package = "sqlparser"
+version = "0.62.0"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-development"]
+
+[[capability]]
+name = "temporary-files"
+purpose = "Create isolated temporary directories and files that clean themselves up."
+package = "tempfile"
+version = "3.27.0"
+default-features = true
+features = []
+targets = []
+kinds = ["development", "normal"]
+owners = ["slingshot-agent-connection", "slingshot-command-line", "slingshot-configuration", "slingshot-daemon", "slingshot-development", "slingshot-storage", "slingshot-test-support"]
+
+[[capability]]
+name = "toml-documents"
+purpose = "Read and render TOML documents."
+package = "toml"
+version = "1.1.4"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-configuration", "slingshot-development", "slingshot-local-protocol"]
+
+[[capability]]
+name = "transport-layer-security"
+purpose = "Build client configurations from explicitly supplied immutable root stores."
+package = "rustls"
+version = "0.23.43"
+default-features = false
+features = ["logging", "ring", "std", "tls12"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection"]
+
+[[capability]]
+name = "typed-errors"
+purpose = "Derive typed error enumerations with rendered messages."
+package = "slingshot-domain"
+version = "2.0.20"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-command-line", "slingshot-configuration", "slingshot-daemon", "slingshot-development", "slingshot-domain", "slingshot-local-protocol", "slingshot-storage", "slingshot-test-support"]
+
+[[capability]]
+name = "uniform-resource-locators"
+purpose = "Parse, normalize, and join absolute locators."
+package = "url"
+version = "2.5.8"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-connection", "slingshot-configuration"]
+
+[[capability]]
+name = "unique-identifiers"
+purpose = "Generate and serialize random unique identifiers."
+package = "uuid"
+version = "1.26.0"
+default-features = true
+features = ["v4", "serde"]
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-agent-protocol", "slingshot-domain", "slingshot-storage"]
+
+[[capability]]
+name = "windows-file-identity"
+purpose = "Read reparse evidence, link count, volume serial number, and the file identifier from a handle."
+package = "winsafe"
+version = "0.0.28"
+default-features = false
+features = ["kernel"]
+targets = ["x86_64-pc-windows-msvc"]
+kinds = ["normal"]
+owners = ["slingshot-configuration"]
+
+[[capability]]
+name = "windows-process-creation-flags"
+purpose = "Name the detached creation flags a child process is started with."
+package = "windows-sys"
+version = "0.61.2"
+default-features = true
+features = ["Win32_System_Threading"]
+targets = ["x86_64-pc-windows-msvc"]
+kinds = ["normal"]
+owners = ["slingshot-command-line", "slingshot-daemon"]
+
+[[capability]]
+name = "windows-security-identifiers"
+purpose = "Read security identifiers, security descriptors, and discretionary access-control entries."
+package = "windows-permissions"
+version = "0.2.4"
+default-features = true
+features = []
+targets = ["x86_64-pc-windows-msvc"]
+kinds = ["normal"]
+owners = ["slingshot-configuration"]
+
+[[capability]]
+name = "workflow-documents"
+purpose = "Read repository workflow documents for the policy checker."
+package = "serde_yaml_ng"
+version = "0.10.0"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-development"]
+

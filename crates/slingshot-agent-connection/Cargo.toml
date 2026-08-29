@@ -5,5 +5,40 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[dependencies]
+base64.workspace = true
+bytes.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+jsonwebtoken.workspace = true
+rustls.workspace = true
+rustls-pki-types.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+url.workspace = true
+x509-parser.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true
+
+[target.x86_64-unknown-linux-gnu.dependencies]
+openssl-probe.workspace = true
+
+[target.aarch64-apple-darwin.dependencies]
+security-framework.workspace = true
+
+[target.x86_64-pc-windows-msvc.dependencies]
+schannel.workspace = true
+
 [lints]
 workspace = true
