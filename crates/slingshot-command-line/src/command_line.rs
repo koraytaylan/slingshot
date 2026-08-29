@@ -52,8 +52,8 @@ pub struct ProductArguments {
     /// Environment half of the target this invocation addresses.
     #[arg(long, global = true)]
     pub environment: Option<String>,
-    /// Runtime root the target's objects live in.
-    #[arg(long, global = true, hide = true)]
+    /// Runtime root the target's objects live in, instead of this user's own.
+    #[arg(long, global = true)]
     pub runtime_root: Option<PathBuf>,
     /// Command this invocation runs.
     #[command(subcommand)]

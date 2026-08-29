@@ -1,0 +1,104 @@
+# Slingshot
+
+Slingshot is a command line and a local daemon for driving Adobe Experience
+Manager from one place. This commit contains the workspace, its enforceable
+engineering contract, and one proven local process boundary. No Adobe
+Experience Manager behavior exists here yet.
+
+Version 0.1.0.
+
+## What this commit does
+
+One daemon owns one `(profile, environment)` target. Several clients that
+address the same target converge on that one daemon; different targets have
+independent daemons, endpoints, locks, and state. A target name is a bounded
+opaque value here, and nothing reads a profile document yet.
+
+```sh
+# Reach the daemon that owns a target, creating it if nobody has.
+slingshot --profile local --environment author daemon start
+
+# Report whether a daemon already owns that target. This never creates one.
+slingshot --profile local --environment author daemon ping
+```
+
+Both commands write one structured result to the result stream and every
+diagnostic to the diagnostic stream. `--runtime-root` places the target's
+runtime objects somewhere other than this user's own runtime directory.
+
+## Crates
+
+| Crate | Responsibility |
+|---|---|
+| `slingshot-domain` | Value objects, operation and durable agent-job vocabulary, execution ports, errors, and limits |
+| `slingshot-configuration` | Profile documents, target resolution, and credential references |
+| `slingshot-agent-protocol` | Language-neutral author-agent messages, schemas, and wire conversions |
+| `slingshot-local-protocol` | Daemon request, response, event, and framing contracts |
+| `slingshot-agent-connection` | Authentication and Author network transport |
+| `slingshot-storage` | Operation ledger and artifact persistence |
+| `slingshot-daemon` | Target-scoped application service and local server |
+| `slingshot-command-line` | The `slingshot` executable, its command-line adapter, and its daemon client |
+| `slingshot-test-support` | Fake services, temporary roots, path-only executable values, and process harnesses |
+| `slingshot-development` | Repository policy, orchestration, compatibility, and release commands |
+
+The first eight form the product graph. The last two exist for tests and
+repository policy, and no product crate reaches either through a library or
+build dependency.
+
+Every package is unpublished. No package declares a license, a license file, or
+a repository, because no owner has supplied those values, and none is inferred
+from anywhere else. A release artifact stays refused until they are supplied.
+
+## Supported targets
+
+`support/platforms.toml` is the only abstract supported-target authority. It
+declares three rows and their release artifact layout:
+
+| Target | Executable | Archive | Native smoke |
+|---|---|---|---|
+| `x86_64-unknown-linux-gnu` | `slingshot` | `tar.gz` | `direct` |
+| `aarch64-apple-darwin` | `slingshot` | `tar.gz` | `direct` |
+| `x86_64-pc-windows-msvc` | `slingshot.exe` | `zip` | `direct` |
+
+Each row also names the capabilities the target must provide: the
+provider-record trust decisions a store must not flatten, the endpoint, the two
+separate locks, the current-user protection, atomic readiness, detachment,
+stable supervised cleanup, the filesystem evidence a credential check reads,
+and the deterministic build-policy requirements. The Windows row requires every
+named-pipe server creation to reject remote clients.
+
+A row is a declaration, not evidence. Every row is evaluated here through
+deterministic observations, and real behavior runs only for the single row that
+matches the machine the run is on. That result is one report labelled
+`untrusted_current_native_observation`: it describes one machine nobody has
+attested. This commit makes no aggregate claim across rows, names no
+continuous-integration provider, runner image, linker, or system root, and
+claims no release readiness.
+
+## Limits
+
+`support/foundation-contract.toml` is the only place a wire bound, a namespace
+bound, an endpoint bound, a startup deadline, or a process-harness value is
+written. Those bytes are embedded into `slingshot-local-protocol` and read
+through one typed interface, and an assertion refuses a second copy of any of
+them anywhere in the crates that consume them.
+
+## Checking a change
+
+```sh
+SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY=<checkout> scripts/quality
+```
+
+The gate takes no argument. It verifies every pinned external executable,
+authenticates the advisory database as one exact snapshot, and then runs
+formatting, compilation, lints, tests, documentation, script linting, the
+dependency direction, the source policy, and the dependency policy. It never
+fetches anything.
+
+The advisory input is one exact snapshot pinned in
+`compatibility/rustsec-advisory-database.toml` by origin, full commit, and
+content tree. There is deliberately no timestamp and no freshness claim: a Git
+author chooses those values, so none of them authenticates anything.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together and
+[CONTRIBUTING.md](CONTRIBUTING.md) for the rules a change is held to.
