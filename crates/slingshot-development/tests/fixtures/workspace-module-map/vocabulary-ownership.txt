@@ -1,0 +1,16 @@
+# Ownership of the named vocabulary the architecture places by crate.
+#
+#   item | owning module path
+#
+# The row asserts which module owns the item, so a durable domain value cannot
+# be declared by a wire-protocol crate and a reusable process or path value
+# cannot be declared by the development crate.
+AgentJobIdentifier|slingshot_domain::remote_job
+AgentJobState|slingshot_domain::remote_job
+JobEventSequence|slingshot_domain::remote_job
+EventStreamCursor|slingshot_domain::remote_job
+RemoteJobWireConversion|slingshot_agent_protocol::remote_job
+ProcessCheckpointObserver|slingshot_daemon::process_checkpoint
+FiniteStateMachineExecutable|slingshot_test_support::finite_state_machine_executable
+ProcessHarness|slingshot_test_support::process_harness
+SupervisedChild|slingshot_test_support::supervised_child
