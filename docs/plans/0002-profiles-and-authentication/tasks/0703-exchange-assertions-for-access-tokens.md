@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-agent-connection/tests/identity_management_exchange.rs
   - crates/slingshot-test-support/src/identity_management_server.rs
 status: done
-merged_as: ""
+merged_as: "5024ab80bec1cb26d517e42e0203c4394a402e90"
 ---
 # Exchange Assertions For Access Tokens
 
