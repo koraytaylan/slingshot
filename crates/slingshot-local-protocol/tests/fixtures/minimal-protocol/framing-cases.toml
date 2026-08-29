@@ -1,0 +1,65 @@
+# Byte-level framing cases, authored as the exact bytes a reader receives.
+#
+# A frame is the contract's fixed-width unsigned payload length in network byte
+# order, followed by exactly that many payload bytes. Every case below is the
+# literal buffer, in lowercase hexadecimal, and the progress the reader must
+# report for it without consulting a clock or parsing the payload twice.
+
+format = "slingshot.minimal-protocol-frames/1"
+
+[[case]]
+name = "no-bytes"
+bytes = ""
+expected = "empty"
+
+
+[[case]]
+name = "one-prefix-byte"
+bytes = "00"
+expected = "partial-prefix"
+received = 1
+
+[[case]]
+name = "three-prefix-bytes"
+bytes = "000000"
+expected = "partial-prefix"
+received = 3
+
+[[case]]
+name = "whole-prefix-no-payload"
+bytes = "00000005"
+expected = "partial-payload"
+received = 0
+declared = 5
+
+[[case]]
+name = "partial-payload"
+bytes = "000000057b2261"
+expected = "partial-payload"
+received = 3
+declared = 5
+
+[[case]]
+name = "complete-frame"
+bytes = "000000027b7d"
+expected = "complete"
+declared = 2
+
+[[case]]
+name = "empty-payload-frame"
+bytes = "00000000"
+expected = "complete"
+declared = 0
+
+[[case]]
+name = "payload-at-frame-limit"
+bytes = "00100000"
+expected = "partial-payload"
+received = 0
+declared = 1048576
+
+[[case]]
+name = "payload-beyond-frame-limit"
+bytes = "00100001"
+expected = "payload-too-large"
+

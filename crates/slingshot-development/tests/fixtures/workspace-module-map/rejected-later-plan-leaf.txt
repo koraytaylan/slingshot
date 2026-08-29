@@ -31,7 +31,11 @@ crates/slingshot-development/src/supported_platform_matrix.rs|slingshot-developm
 crates/slingshot-domain/src/command/mod.rs|slingshot-domain|domain|family-root|slingshot_domain::command|workspace-module-map
 crates/slingshot-domain/src/lib.rs|slingshot-domain|domain|crate-root|slingshot_domain|workspace-module-map
 crates/slingshot-domain/src/remote_job.rs|slingshot-domain|domain|leaf|slingshot_domain::remote_job|workspace-module-map
+crates/slingshot-local-protocol/src/envelope.rs|slingshot-local-protocol|contract|leaf|slingshot_local_protocol::envelope|minimal-local-protocol
+crates/slingshot-local-protocol/src/foundation_contract.rs|slingshot-local-protocol|contract|leaf|slingshot_local_protocol::foundation_contract|minimal-local-protocol
+crates/slingshot-local-protocol/src/framing.rs|slingshot-local-protocol|contract|leaf|slingshot_local_protocol::framing|minimal-local-protocol
 crates/slingshot-local-protocol/src/lib.rs|slingshot-local-protocol|contract|crate-root|slingshot_local_protocol|workspace-module-map
+crates/slingshot-local-protocol/src/ping.rs|slingshot-local-protocol|contract|leaf|slingshot_local_protocol::ping|minimal-local-protocol
 crates/slingshot-storage/src/lib.rs|slingshot-storage|adapter|crate-root|slingshot_storage|workspace-module-map
 crates/slingshot-storage/src/operation/mod.rs|slingshot-storage|adapter|family-root|slingshot_storage::operation|workspace-module-map
 crates/slingshot-test-support/src/daemon_process.rs|slingshot-test-support|support|leaf|slingshot_test_support::daemon_process|workspace-module-map

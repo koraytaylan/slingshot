@@ -1,0 +1,60 @@
+# Canonical Plan 0001 limit source for the Slingshot local control path.
+#
+# Every wire bound, namespace-security bound, endpoint-interoperability bound,
+# startup deadline, and process-harness value that Plan 0001 relies on is
+# declared exactly once here. These bytes are embedded into
+# `slingshot-local-protocol` and parsed through one typed interface, so no
+# source module, fixture, script, platform row, or later plan may carry a second
+# numeric value for any field below.
+#
+# This manifest does not own command leaves or command-contract limits.
+
+format = "slingshot.foundation-contract/1"
+
+[control]
+# Version of the retained control surface: framing, ping, and nonce-bound stop.
+version = 1
+
+[framing]
+# Fixed-width unsigned payload length prefix, in network byte order.
+length-prefix-bytes = 4
+maximum-payload-bytes = 1_048_576
+maximum-nesting-depth = 64
+maximum-collection-items = 1_024
+
+[names]
+request-identifier-bytes = 128
+method-bytes = 32
+error-code-bytes = 64
+error-message-bytes = 4_096
+profile-bytes = 128
+environment-bytes = 128
+
+[namespace]
+digest-bytes = 32
+digest-rendered-bytes = 64
+readiness-nonce-bytes = 32
+readiness-nonce-rendered-bytes = 64
+readiness-record-bytes = 4_096
+unix-socket-address-bytes = 100
+windows-named-pipe-name-code-units = 240
+windows-named-pipe-flag = "PIPE_REJECT_REMOTE_CLIENTS"
+
+[server]
+connection-capacity = 64
+initial-control-frame-milliseconds = 5_000
+incomplete-frame-read-idle-milliseconds = 2_000
+absolute-frame-completion-milliseconds = 10_000
+response-write-milliseconds = 5_000
+
+[startup]
+explicit-start-total-milliseconds = 30_000
+start-retry-maximum-delay-milliseconds = 100
+
+[shutdown]
+cooperative-stop-milliseconds = 5_000
+supervised-termination-and-wait-milliseconds = 10_000
+
+[process-harness]
+scheduling-tolerance-milliseconds = 5_000
+walking-start-client-count = 20

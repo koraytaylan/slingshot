@@ -1,0 +1,1 @@
+{"control_version":1,"request_identifier":"two","outcome":"failure","error":{"code":"stale_daemon_instance","message":"the supplied readiness nonce belongs to an instance that is no longer running"}}
