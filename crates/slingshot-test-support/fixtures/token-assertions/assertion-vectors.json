@@ -1,0 +1,9 @@
+{
+  "compact": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJodHRwczovL2ltcy1uYTEuYWRvYmVsb2dpbi5jb20vYy9hMWIyYzNkNGU1ZjYiLCJleHAiOjE3ODgxNDAxNzMsImh0dHBzOi8vaW1zLW5hMS5hZG9iZWxvZ2luLmNvbS9zL2VudF9hZG9iZWlvX3NkayI6dHJ1ZSwiaHR0cHM6Ly9pbXMtbmExLmFkb2JlbG9naW4uY29tL3MvZW50X2FlbV9jbG91ZF9hcGkiOnRydWUsImlzcyI6IjFBMkIzQzRENUU2RjdBOEI5QzBEMUUyRkBBZG9iZU9yZyIsInN1YiI6IjZFMUIwRjJBNUMzRDRFNUZAdGVjaGFjY3QuYWRvYmUuY29tIn0.kDYuU5yhX7i-BcnaWbtfcYtbr43vqpuywQE8qR3wHCt_gGfeqfMAloyW64lgNHUMStaoS0j2XEHL4cZs-TWc1F8WhNz8Z9Fh5JQYc7a38HxsbIlflEwU5Pjqdce8y2fLQDB3RegisFXCCUhnAueM8llMh3ngu2TORcznUkZkQ8zW3BYUWujlJQPT2LiQl8T92Sd41gD64LVpVk6vh4t66hhrJcgSfd9p6KU8SdtBEDSjDQzQPjux8qEXnOCNBb9kXSpr3Ke8MGRBJxsZrXE-alhdYjr8O0PsmylUerd4OxlWv7YBnlBAl7FKeE3Rqoi2Vg0HfnSJZkzsLaL2lbK3-Q",
+  "expiry_second": 1788140173,
+  "format": "slingshot.assertion-vectors/1",
+  "payload": "{\"aud\":\"https://ims-na1.adobelogin.com/c/a1b2c3d4e5f6\",\"exp\":1788140173,\"https://ims-na1.adobelogin.com/s/ent_adobeio_sdk\":true,\"https://ims-na1.adobelogin.com/s/ent_aem_cloud_api\":true,\"iss\":\"1A2B3C4D5E6F7A8B9C0D1E2F@AdobeOrg\",\"sub\":\"6E1B0F2A5C3D4E5F@techacct.adobe.com\"}",
+  "protected_header": "{\"alg\":\"RS256\",\"typ\":\"JWT\"}",
+  "sampled_second": 1788111373,
+  "signing_input": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJodHRwczovL2ltcy1uYTEuYWRvYmVsb2dpbi5jb20vYy9hMWIyYzNkNGU1ZjYiLCJleHAiOjE3ODgxNDAxNzMsImh0dHBzOi8vaW1zLW5hMS5hZG9iZWxvZ2luLmNvbS9zL2VudF9hZG9iZWlvX3NkayI6dHJ1ZSwiaHR0cHM6Ly9pbXMtbmExLmFkb2JlbG9naW4uY29tL3MvZW50X2FlbV9jbG91ZF9hcGkiOnRydWUsImlzcyI6IjFBMkIzQzRENUU2RjdBOEI5QzBEMUUyRkBBZG9iZU9yZyIsInN1YiI6IjZFMUIwRjJBNUMzRDRFNUZAdGVjaGFjY3QuYWRvYmUuY29tIn0"
+}

@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-agent-connection/src/authentication/token_assertion.rs
   - crates/slingshot-agent-connection/tests/token_assertions.rs
   - crates/slingshot-test-support/fixtures/token-assertions/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Build Signed Token Assertions
