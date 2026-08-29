@@ -24,9 +24,7 @@ use slingshot_development::supported_platform_matrix::{
     current_target_triple,
 };
 use slingshot_local_protocol::foundation_contract::FoundationContract;
-use slingshot_test_support::platform_runtime::supervision::{
-    Disposition, SupervisedChild, SupervisionFailure,
-};
+use slingshot_test_support::supervised_child::{Disposition, SupervisedChild, SupervisionFailure};
 
 /// Directory holding the fixtures this test evaluates.
 const FIXTURE_DIRECTORY: &str = "crates/slingshot-development/tests/fixtures/platform-runtime";
