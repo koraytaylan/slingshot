@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-agent-connection/src/authentication/access_token_cache.rs
   - crates/slingshot-agent-connection/src/authentication/environment_provider.rs
   - crates/slingshot-agent-connection/tests/access_token_cache.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Cache Cloud Access Tokens

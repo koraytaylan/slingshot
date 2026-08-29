@@ -14,7 +14,7 @@ gated: false
 touches:
   - crates/slingshot-agent-connection/src/authentication/environment_provider.rs
   - crates/slingshot-agent-connection/tests/environment_provider.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Provide Environment Authentication

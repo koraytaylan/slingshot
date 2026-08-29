@@ -146,6 +146,14 @@ impl AccessToken {
         self.deadline_milliseconds
     }
 
+    /// Overwrites the token bytes and reports how many were overwritten.
+    ///
+    /// A cache evicting a rejected generation calls this, so the superseded
+    /// token does not stay in memory beside its replacement.
+    pub fn scrub(&mut self) -> usize {
+        self.token.scrub()
+    }
+
     /// Reports whether the token should be refreshed at `reading`.
     ///
     /// Equality is refresh-required, because a token that expires exactly at
