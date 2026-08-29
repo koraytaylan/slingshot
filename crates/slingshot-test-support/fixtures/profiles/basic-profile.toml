@@ -1,0 +1,16 @@
+format_version = 1
+name = "local-site"
+
+[environments.development]
+deployment = "adobe_experience_manager_6_5"
+
+[environments.development.author]
+base_address = "http://localhost:4502"
+
+[environments.development.publisher]
+base_address = "http://localhost:4503"
+
+[environments.development.authentication]
+method = "basic"
+user_name = "admin"
+password = "admin"

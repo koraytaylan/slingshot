@@ -18,7 +18,7 @@ touches:
   - crates/slingshot-test-support/fixtures/profiles/basic-profile.toml
   - crates/slingshot-test-support/fixtures/profiles/cloud-profile.toml
   - crates/slingshot-test-support/fixtures/profiles/invalid-authentication-pair.toml
-status: planned
+status: done
 merged_as: ""
 ---
 # Define Profile And Authentication Contract

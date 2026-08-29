@@ -1,0 +1,9 @@
+format_version = 1
+
+[[sources]]
+reference = "profiles/cloud-site.toml"
+sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+[[sources]]
+reference = "profiles/cloud-site.toml"
+sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"

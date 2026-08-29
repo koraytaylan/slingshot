@@ -1,0 +1,47 @@
+# Exact and next-over vectors for every bounded string this task validates.
+#
+# A row names the subject and the manifest limit that bounds it. The test builds
+# an input of exactly that many bytes and one of one byte more, so no numeric
+# limit is copied here and a change to the manifest moves both cases at once.
+
+format = "slingshot.contract-boundary-vectors/1"
+
+[[vector]]
+subject = "profile_name"
+limit = "maximum_profile_name_bytes"
+
+[[vector]]
+subject = "environment_name"
+limit = "maximum_environment_name_bytes"
+
+[[vector]]
+subject = "basic_user_name"
+limit = "maximum_basic_username_bytes"
+
+[[vector]]
+subject = "basic_password"
+limit = "maximum_basic_password_bytes"
+
+[[vector]]
+subject = "reference_component"
+limit = "maximum_configuration_reference_component_bytes"
+
+[[vector]]
+subject = "reference_components"
+limit = "maximum_configuration_reference_components"
+
+[[vector]]
+subject = "tier_host"
+limit = "maximum_tier_host_bytes"
+
+[[vector]]
+subject = "context_path_segment"
+limit = "maximum_tier_context_path_segment_bytes"
+
+[[vector]]
+subject = "context_path_segments"
+limit = "maximum_tier_context_path_segments"
+
+[[vector]]
+subject = "environments_per_profile"
+limit = "maximum_environments_per_profile"

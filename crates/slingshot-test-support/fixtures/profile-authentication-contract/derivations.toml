@@ -1,0 +1,23 @@
+# Manifest maxima that are sums of other manifest maxima.
+#
+# A derived maximum is the reachable worst case, not an allowance chosen
+# separately. Recomputing it from its terms is what keeps that true: change one
+# input bound and the derived total must move with it or this fixture fails.
+#
+# Each term names a limit and how many times the worst case charges it. The
+# request body charges the three fixed field names and separators once, the
+# client identifier three times because every unreserved byte of it expands to
+# three form bytes, the client secret three times for the same reason, and the
+# assertion once because every one of its bytes is already form-literal.
+
+format = "slingshot.contract-derivations/1"
+
+[[derivation]]
+name = "identity_management_request_body"
+total = "maximum_identity_management_request_body_bytes"
+terms = [
+    { limit = "identity_management_request_field_overhead_bytes", charges = 1 },
+    { limit = "maximum_technical_account_client_identifier_bytes", charges = 3 },
+    { limit = "maximum_technical_account_client_secret_bytes", charges = 3 },
+    { limit = "maximum_service_credential_assertion_bytes", charges = 1 },
+]
