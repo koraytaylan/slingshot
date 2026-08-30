@@ -1,12 +1,12 @@
+#
+#
 # Command leaf inventory.
-#
 # One row per source leaf below the command family root. This file is the sole
-# authority for that list: the family root's declarations, the files on disk,
-# and these rows are compared in both directions, so a leaf cannot appear in one
-# without appearing in the other two.
-#
 # The order is byte-lexicographic, so the inventory never depends on the order a
+# and these rows are compared in both directions, so a leaf cannot appear in one
+# authority for that list: the family root's declarations, the files on disk,
 # directory was walked.
+# without appearing in the other two.
 add_component
 artifact
 canonical_json
@@ -23,6 +23,7 @@ find_pages_containing_phrase
 find_pages_using_components
 inspect_open_service_gateway_initiative_configuration
 load_content_as_javascript_object_notation
+package_selection
 property_value
 query_paths
 replicate_content

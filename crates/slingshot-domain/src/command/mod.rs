@@ -26,6 +26,7 @@ pub mod find_pages_containing_phrase;
 pub mod find_pages_using_components;
 pub mod inspect_open_service_gateway_initiative_configuration;
 pub mod load_content_as_javascript_object_notation;
+pub mod package_selection;
 pub mod property_value;
 pub mod query_paths;
 pub mod replicate_content;

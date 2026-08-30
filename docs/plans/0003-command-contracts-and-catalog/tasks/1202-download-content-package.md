@@ -12,7 +12,11 @@ touches:
   - crates/slingshot-domain/src/command/download_content_package.rs
   - crates/slingshot-domain/tests/fixtures/commands/download_content_package/**
   - crates/slingshot-domain/tests/download_content_package.rs
-status: planned
+  - crates/slingshot-domain/src/command/package_selection.rs
+  - crates/slingshot-domain/tests/package_selection.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
+  - crates/slingshot-domain/src/command/mod.rs
+status: done
 merged_as: ""
 ---
 # Download a Content Package
