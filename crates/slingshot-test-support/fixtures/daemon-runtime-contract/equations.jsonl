@@ -1,0 +1,10 @@
+{"formula":"maximum_sqlite_database_bytes","note":"page bytes times database pages","operands":[4096,262144],"value":1073741824}
+{"formula":"maximum_sqlite_write_transaction_bytes","note":"page bytes times transaction pages","operands":[4096,4096],"value":16777216}
+{"formula":"maximum_sqlite_write_transaction_write_ahead_log_bytes","note":"transaction pages times one frame, header included","operands":[4096,24,4096],"value":16875520}
+{"formula":"maximum_sqlite_write_ahead_log_bytes","note":"one file header plus frames times one frame, which is not pages times page size","operands":[32,16384,24,4096],"value":67502112}
+{"formula":"sqlite_write_backpressure_bytes","note":"the log maximum less one whole transaction, so refusing at that length cannot cross the cap","operands":[67502112,16875520],"value":50626592}
+{"formula":"maximum_sqlite_physical_bytes","note":"the database, its log, and its shared memory","operands":[1073741824,67502112,262144],"value":1141506080}
+{"formula":"maximum_sqlite_replacement_physical_bytes","note":"two databases during replacement, plus log and shared memory","operands":[1073741824,67502112,262144],"value":2215247904}
+{"formula":"persistent_filesystem_safety_reserve_bytes","note":"the whole replacement maximum, so a migration cannot eat capacity promised to operations","operands":[1073741824,67502112,262144],"value":2215247904}
+{"formula":"maximum_total_diagnostic_bytes","note":"one file times the files retained","operands":[1048576,4],"value":4194304}
+{"formula":"maximum_terminal_maintenance_result_associations_per_target","note":"one current preview plus two documents per retained receipt","operands":[1,2,128],"value":257}
