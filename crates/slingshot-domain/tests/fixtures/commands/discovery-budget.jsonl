@@ -1,0 +1,55 @@
+{"accepted":true,"amount":100000,"budget":"candidate_nodes","kind":"charge","note":"spending the whole candidate_nodes budget at once succeeds","remaining":100000}
+{"accepted":false,"amount":100001,"budget":"candidate_nodes","kind":"charge","note":"one unit past the whole candidate_nodes budget fails","remaining":100000}
+{"accepted":true,"amount":1,"budget":"candidate_nodes","kind":"charge","note":"the last candidate_nodes unit is spendable","remaining":1}
+{"accepted":false,"amount":1,"budget":"candidate_nodes","kind":"charge","note":"the next candidate_nodes charge after the last one fails","remaining":0}
+{"accepted":false,"amount":18446744073709551615,"budget":"candidate_nodes","kind":"charge","note":"an enormous candidate_nodes charge is exhaustion, never a wrapped counter","remaining":1}
+{"accepted":true,"amount":0,"budget":"candidate_nodes","kind":"charge","note":"charging nothing against an exhausted candidate_nodes budget is not a failure","remaining":0}
+{"accepted":true,"amount":1000000,"budget":"property_values","kind":"charge","note":"spending the whole property_values budget at once succeeds","remaining":1000000}
+{"accepted":false,"amount":1000001,"budget":"property_values","kind":"charge","note":"one unit past the whole property_values budget fails","remaining":1000000}
+{"accepted":true,"amount":1,"budget":"property_values","kind":"charge","note":"the last property_values unit is spendable","remaining":1}
+{"accepted":false,"amount":1,"budget":"property_values","kind":"charge","note":"the next property_values charge after the last one fails","remaining":0}
+{"accepted":false,"amount":18446744073709551615,"budget":"property_values","kind":"charge","note":"an enormous property_values charge is exhaustion, never a wrapped counter","remaining":1}
+{"accepted":true,"amount":0,"budget":"property_values","kind":"charge","note":"charging nothing against an exhausted property_values budget is not a failure","remaining":0}
+{"accepted":true,"amount":67108864,"budget":"property_bytes","kind":"charge","note":"spending the whole property_bytes budget at once succeeds","remaining":67108864}
+{"accepted":false,"amount":67108865,"budget":"property_bytes","kind":"charge","note":"one unit past the whole property_bytes budget fails","remaining":67108864}
+{"accepted":true,"amount":1,"budget":"property_bytes","kind":"charge","note":"the last property_bytes unit is spendable","remaining":1}
+{"accepted":false,"amount":1,"budget":"property_bytes","kind":"charge","note":"the next property_bytes charge after the last one fails","remaining":0}
+{"accepted":false,"amount":18446744073709551615,"budget":"property_bytes","kind":"charge","note":"an enormous property_bytes charge is exhaustion, never a wrapped counter","remaining":1}
+{"accepted":true,"amount":0,"budget":"property_bytes","kind":"charge","note":"charging nothing against an exhausted property_bytes budget is not a failure","remaining":0}
+{"accepted":true,"amount":2000000,"budget":"criterion_evaluations","kind":"charge","note":"spending the whole criterion_evaluations budget at once succeeds","remaining":2000000}
+{"accepted":false,"amount":2000001,"budget":"criterion_evaluations","kind":"charge","note":"one unit past the whole criterion_evaluations budget fails","remaining":2000000}
+{"accepted":true,"amount":1,"budget":"criterion_evaluations","kind":"charge","note":"the last criterion_evaluations unit is spendable","remaining":1}
+{"accepted":false,"amount":1,"budget":"criterion_evaluations","kind":"charge","note":"the next criterion_evaluations charge after the last one fails","remaining":0}
+{"accepted":false,"amount":18446744073709551615,"budget":"criterion_evaluations","kind":"charge","note":"an enormous criterion_evaluations charge is exhaustion, never a wrapped counter","remaining":1}
+{"accepted":true,"amount":0,"budget":"criterion_evaluations","kind":"charge","note":"charging nothing against an exhausted criterion_evaluations budget is not a failure","remaining":0}
+{"cancelled":false,"elapsed":0,"kind":"boundary","note":"a job that has just begun proceeds","outcome":"proceed"}
+{"cancelled":false,"elapsed":29999,"kind":"boundary","note":"one millisecond before the deadline is still inside the budget","outcome":"proceed"}
+{"cancelled":false,"elapsed":30000,"kind":"boundary","note":"the deadline is the first instant the job no longer has","outcome":"execution_duration"}
+{"cancelled":false,"elapsed":30001,"kind":"boundary","note":"past the deadline","outcome":"execution_duration"}
+{"cancelled":true,"elapsed":0,"kind":"boundary","note":"cancellation observed before any time has passed","outcome":"cancelled"}
+{"cancelled":true,"elapsed":30000,"kind":"boundary","note":"a job both cancelled and out of time is reported as cancelled, because that is what the caller asked for","outcome":"cancelled"}
+{"cancelled":true,"elapsed":18446744073709551615,"kind":"boundary","note":"no elapsed time outranks cancellation","outcome":"cancelled"}
+{"elapsed":29999,"kind":"call_return","note":"a call that returns before the deadline has its value read","outcome":"interpreted"}
+{"elapsed":30000,"kind":"call_return","note":"a call returning exactly at the deadline is a duration failure before its value or its error is looked at","outcome":"execution_duration"}
+{"elapsed":30001,"kind":"call_return","note":"a call returning after the deadline, likewise","outcome":"execution_duration"}
+{"bytes":6,"kind":"property_bytes","note":"a textual value charges its UTF-8 length","repository_type":"string","spelling":"widget"}
+{"bytes":5,"kind":"property_bytes","note":"UTF-8 length, not character count","repository_type":"string","spelling":"caf\u00e9"}
+{"bytes":0,"kind":"property_bytes","note":"an empty string charges no bytes and still charges one value","repository_type":"string","spelling":""}
+{"bytes":8,"kind":"property_bytes","note":"a Long charges eight whatever its decimal spelling costs","repository_type":"long","spelling":"9223372036854775807"}
+{"bytes":8,"kind":"property_bytes","note":"a Double charges eight for the same reason","repository_type":"double","spelling":"1.5"}
+{"bytes":1,"kind":"property_bytes","note":"a Boolean charges one","repository_type":"boolean","spelling":"true"}
+{"bytes":1048576,"kind":"property_bytes","note":"a Binary charges its length without being read","repository_type":"binary","spelling":""}
+{"disposition":"skipped_for_offset","kind":"disposition","match_bytes":512,"note":"a positive offset consumes the match and charges no result bytes","remaining_limit":10,"remaining_offset":3,"remaining_result_bytes":1048576}
+{"disposition":"skipped_for_offset","kind":"disposition","match_bytes":512,"note":"the last skipped match","remaining_limit":10,"remaining_offset":1,"remaining_result_bytes":1048576}
+{"disposition":"admitted","kind":"disposition","match_bytes":512,"note":"the first match after the offset is admitted","remaining_limit":10,"remaining_offset":0,"remaining_result_bytes":1048576}
+{"disposition":"admitted","kind":"disposition","match_bytes":512,"note":"the last match a full page can hold","remaining_limit":1,"remaining_offset":0,"remaining_result_bytes":1048576}
+{"disposition":"page_completed","kind":"disposition","match_bytes":512,"note":"a page with no room left completes rather than admitting","remaining_limit":0,"remaining_offset":0,"remaining_result_bytes":1048576}
+{"disposition":"admitted","kind":"disposition","match_bytes":512,"note":"a match that exactly fits the remaining bytes is admitted","remaining_limit":10,"remaining_offset":0,"remaining_result_bytes":512}
+{"disposition":"page_completed","kind":"disposition","match_bytes":512,"note":"a match one byte too large completes the page before it","remaining_limit":10,"remaining_offset":0,"remaining_result_bytes":511}
+{"disposition":"skipped_for_offset","kind":"disposition","match_bytes":1048577,"note":"a match larger than the whole byte budget is still skipped while the offset lasts, because offset is spent before bytes are consulted","remaining_limit":10,"remaining_offset":2,"remaining_result_bytes":1048576}
+{"disposition":"skipped_for_offset","kind":"disposition","match_bytes":1048577,"note":"the same holds on the last skip before the page begins filling","remaining_limit":1,"remaining_offset":1,"remaining_result_bytes":1048576}
+{"budget":"candidate_nodes","kind":"failure","note":"the closed failure carries the literal and the budget and nothing else","rendering":"{\"failure\":\"discovery_budget_exceeded\",\"budget\":\"candidate_nodes\"}"}
+{"budget":"property_values","kind":"failure","note":"one literal budget value per failure","rendering":"{\"failure\":\"discovery_budget_exceeded\",\"budget\":\"property_values\"}"}
+{"budget":"property_bytes","kind":"failure","note":"no partial matches accompany it","rendering":"{\"failure\":\"discovery_budget_exceeded\",\"budget\":\"property_bytes\"}"}
+{"budget":"criterion_evaluations","kind":"failure","note":"no continuation token accompanies it either","rendering":"{\"failure\":\"discovery_budget_exceeded\",\"budget\":\"criterion_evaluations\"}"}
+{"budget":"execution_duration","kind":"failure","note":"result bytes are absent from this inventory because reaching them completes a page rather than failing a job","rendering":"{\"failure\":\"discovery_budget_exceeded\",\"budget\":\"execution_duration\"}"}
