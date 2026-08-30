@@ -8,6 +8,7 @@ depends_on:
 gated: false
 touches:
   - crates/slingshot-storage/src/operation_repository.rs
+  - crates/slingshot-storage/src/sqlite_statement_inventory.rs
   - crates/slingshot-storage/tests/operation_repository.rs
 status: planned
 merged_as: ""

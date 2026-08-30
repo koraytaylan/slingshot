@@ -442,3 +442,196 @@ fn a_replacement_is_built_with_nothing_beside_it() {
     assert!(AMBIENT_TEMPORARY_VARIABLES.contains(&"TMPDIR"));
     assert_eq!(AMBIENT_TEMPORARY_VARIABLES.len(), 4, "every ambient root SQLite consults");
 }
+
+/// Directories between this crate's manifest and the workspace root.
+const WORKSPACE_ROOT_ANCESTORS: usize = 2;
+
+/// Where this crate's own source lives, relative to the workspace root.
+const SOURCE_DIRECTORY: &str = "crates/slingshot-storage/src";
+
+/// The file that declares the inventory, which is where statement text belongs.
+const INVENTORY_SOURCE: &str = "sqlite_statement_inventory.rs";
+
+/// Words that begin a statement the inventory governs.
+///
+/// Data definition is governed by the migration files instead, and a pragma
+/// cannot take a bind marker at all, so both are held to their own rules and
+/// neither belongs in this list.
+const STATEMENT_VERBS: &[&str] = &["SELECT", "INSERT", "UPDATE", "DELETE", "REPLACE"];
+
+/// What the scanner is reading at one position.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reading {
+    /// Ordinary source.
+    Code,
+    /// The rest of a line, after `//`.
+    LineComment,
+    /// Inside a double-quoted literal.
+    Literal,
+}
+
+/// One pass over a source file, collecting its literals.
+struct Scan {
+    /// The literal being read, when one is.
+    current: String,
+    /// Whether the previous character was a backslash inside a literal.
+    escaped: bool,
+    /// Every literal closed so far, folded.
+    literals: Vec<String>,
+    /// What this position is.
+    reading: Reading,
+}
+
+impl Scan {
+    /// Returns a scan positioned before the first character.
+    fn new() -> Self {
+        Self {
+            current: String::new(),
+            escaped: false,
+            literals: Vec::new(),
+            reading: Reading::Code,
+        }
+    }
+
+    /// Reads one character, given the one before it.
+    fn step(&mut self, character: char, previous: char) {
+        match self.reading {
+            Reading::LineComment => self.step_comment(character),
+            Reading::Code => self.step_code(character, previous),
+            Reading::Literal => self.step_literal(character),
+        }
+    }
+
+    /// Reads one character of a line comment.
+    fn step_comment(&mut self, character: char) {
+        if character == '\n' {
+            self.reading = Reading::Code;
+        }
+    }
+
+    /// Reads one character of ordinary source.
+    fn step_code(&mut self, character: char, previous: char) {
+        if character == '/' && previous == '/' {
+            self.reading = Reading::LineComment;
+        } else if character == '"' {
+            self.reading = Reading::Literal;
+        }
+    }
+
+    /// Reads one character inside a literal.
+    ///
+    /// The backslash of an escape is kept and the character it escapes is
+    /// dropped, which is exactly what a line continuation needs: the slash
+    /// marks where the fold happens and the newline is not part of the value.
+    fn step_literal(&mut self, character: char) {
+        if self.escaped {
+            self.escaped = false;
+        } else if character == '\\' {
+            self.escaped = true;
+            self.current.push(character);
+        } else if character == '"' {
+            self.literals.push(fold_continuations(&self.current));
+            self.current.clear();
+            self.reading = Reading::Code;
+        } else {
+            self.current.push(character);
+        }
+    }
+}
+
+/// Returns every double-quoted literal in `source`, already folded.
+///
+/// Comments are skipped rather than searched, because a comment quoting a
+/// statement is discussing one, not running one.
+fn quoted_literals(source: &str) -> Vec<String> {
+    let mut scan = Scan::new();
+    let mut previous = ' ';
+    for character in source.chars() {
+        scan.step(character, previous);
+        previous = character;
+    }
+    scan.literals
+}
+
+/// Folds the line continuations a Rust literal spells with a trailing slash.
+fn fold_continuations(raw: &str) -> String {
+    let mut folded = String::new();
+    let mut rest = raw;
+    while let Some(slash) = rest.find('\\') {
+        folded.push_str(&rest[..slash]);
+        rest = rest[slash + 1..].trim_start();
+    }
+    folded.push_str(rest);
+    folded
+}
+
+/// Returns whether `literal` reads as a statement the inventory governs.
+fn is_a_statement(literal: &str) -> bool {
+    let first = literal.split_whitespace().next().unwrap_or_default();
+    STATEMENT_VERBS.iter().any(|verb| first.eq_ignore_ascii_case(verb))
+}
+
+/// Returns every Rust source file at or below `root`.
+///
+/// The walk is whole-tree rather than one directory deep, because a family
+/// that grew a subdirectory would otherwise leave its statements unscanned -
+/// which is exactly the statement nobody reviewed that the inventory exists
+/// to catch.
+fn every_source_below(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(&directory).expect("a source directory reads") {
+            let path = entry.expect("one entry").path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                found.push(path);
+            }
+        }
+    }
+    found
+}
+
+#[test]
+fn the_inventory_is_closed_over_this_crate_s_own_source() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(WORKSPACE_ROOT_ANCESTORS)
+        .expect("the workspace root")
+        .join(SOURCE_DIRECTORY);
+    let sources = every_source_below(&root);
+    assert!(
+        sources.iter().any(|path| path.ends_with("database.rs")),
+        "the walk reaches this crate's source rather than an empty directory"
+    );
+    for path in sources {
+        if path.file_name().is_some_and(|name| name == INVENTORY_SOURCE) {
+            continue;
+        }
+        let source = std::fs::read_to_string(&path).expect("a source file reads");
+        for literal in quoted_literals(&source).into_iter().filter(|text| is_a_statement(text)) {
+            assert!(
+                is_inventoried(&literal),
+                "{} runs a statement the inventory does not list: {literal}",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn the_scanner_reads_a_literal_the_way_the_compiler_does() {
+    assert_eq!(
+        quoted_literals("let text = \"SELECT one \\\n             FROM two\";"),
+        vec!["SELECT one FROM two".to_owned()],
+        "a continuation joins without the slash or the indentation"
+    );
+    assert_eq!(
+        quoted_literals("// \"DELETE FROM everything\"\nlet kept = \"SELECT kept\";"),
+        vec!["SELECT kept".to_owned()],
+        "a statement inside a comment is discussed, not run"
+    );
+    assert!(is_a_statement("  select one"), "the verb is read without regard to case");
+    assert!(!is_a_statement("PRAGMA journal_mode"), "a pragma answers to its own rules");
+}

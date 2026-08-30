@@ -10,10 +10,11 @@ depends_on:
   - persistent-capacity-accounting
 gated: false
 touches:
-  - crates/slingshot-storage/src/maintenance.rs
+  - "crates/slingshot-daemon/tests/fixtures/operation-maintenance/**"
   - crates/slingshot-daemon/src/operation_maintenance.rs
   - crates/slingshot-daemon/tests/operation_maintenance.rs
-  - "crates/slingshot-daemon/tests/fixtures/operation-maintenance/**"
+  - crates/slingshot-storage/src/maintenance.rs
+  - crates/slingshot-storage/src/sqlite_statement_inventory.rs
 status: planned
 merged_as: ""
 ---
