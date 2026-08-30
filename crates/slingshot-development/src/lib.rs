@@ -12,8 +12,10 @@ pub mod dependency_direction;
 pub mod platform_runtime_contract;
 pub mod profile_authentication_harness;
 pub mod rustsec_advisory_pin;
+pub mod slingshot_test_daemon;
 pub mod source_policy;
 pub mod supported_platform_matrix;
+pub mod test_daemon_faults;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
