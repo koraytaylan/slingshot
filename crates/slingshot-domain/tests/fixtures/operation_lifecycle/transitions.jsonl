@@ -1,0 +1,36 @@
+{"held":"queued","note":"queued to queued: the same state twice is one fact","outcome":"no_op","proposed":"queued"}
+{"held":"queued","note":"queued to submitting: one step forward","outcome":"advanced","proposed":"submitting"}
+{"held":"queued","note":"queued to accepted: not a step this state may take","outcome":"transition_not_allowed","proposed":"accepted"}
+{"held":"queued","note":"queued to running: not a step this state may take","outcome":"transition_not_allowed","proposed":"running"}
+{"held":"queued","note":"queued to succeeded: one step forward","outcome":"advanced","proposed":"succeeded"}
+{"held":"queued","note":"queued to failed: one step forward","outcome":"advanced","proposed":"failed"}
+{"held":"submitting","note":"submitting to queued: not a step this state may take","outcome":"transition_not_allowed","proposed":"queued"}
+{"held":"submitting","note":"submitting to submitting: the same state twice is one fact","outcome":"no_op","proposed":"submitting"}
+{"held":"submitting","note":"submitting to accepted: one step forward","outcome":"advanced","proposed":"accepted"}
+{"held":"submitting","note":"submitting to running: not a step this state may take","outcome":"transition_not_allowed","proposed":"running"}
+{"held":"submitting","note":"submitting to succeeded: one step forward","outcome":"advanced","proposed":"succeeded"}
+{"held":"submitting","note":"submitting to failed: one step forward","outcome":"advanced","proposed":"failed"}
+{"held":"accepted","note":"accepted to queued: not a step this state may take","outcome":"transition_not_allowed","proposed":"queued"}
+{"held":"accepted","note":"accepted to submitting: not a step this state may take","outcome":"transition_not_allowed","proposed":"submitting"}
+{"held":"accepted","note":"accepted to accepted: the same state twice is one fact","outcome":"no_op","proposed":"accepted"}
+{"held":"accepted","note":"accepted to running: one step forward","outcome":"advanced","proposed":"running"}
+{"held":"accepted","note":"accepted to succeeded: one step forward","outcome":"advanced","proposed":"succeeded"}
+{"held":"accepted","note":"accepted to failed: one step forward","outcome":"advanced","proposed":"failed"}
+{"held":"running","note":"running to queued: not a step this state may take","outcome":"transition_not_allowed","proposed":"queued"}
+{"held":"running","note":"running to submitting: not a step this state may take","outcome":"transition_not_allowed","proposed":"submitting"}
+{"held":"running","note":"running to accepted: not a step this state may take","outcome":"transition_not_allowed","proposed":"accepted"}
+{"held":"running","note":"running to running: the same state twice is one fact","outcome":"no_op","proposed":"running"}
+{"held":"running","note":"running to succeeded: one step forward","outcome":"advanced","proposed":"succeeded"}
+{"held":"running","note":"running to failed: one step forward","outcome":"advanced","proposed":"failed"}
+{"held":"succeeded","note":"succeeded to queued: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"queued"}
+{"held":"succeeded","note":"succeeded to submitting: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"submitting"}
+{"held":"succeeded","note":"succeeded to accepted: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"accepted"}
+{"held":"succeeded","note":"succeeded to running: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"running"}
+{"held":"succeeded","note":"succeeded to succeeded: the same state twice is one fact","outcome":"no_op","proposed":"succeeded"}
+{"held":"succeeded","note":"succeeded to failed: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"failed"}
+{"held":"failed","note":"failed to queued: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"queued"}
+{"held":"failed","note":"failed to submitting: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"submitting"}
+{"held":"failed","note":"failed to accepted: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"accepted"}
+{"held":"failed","note":"failed to running: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"running"}
+{"held":"failed","note":"failed to succeeded: a terminal operation takes no further fact","outcome":"already_terminal","proposed":"succeeded"}
+{"held":"failed","note":"failed to failed: the same state twice is one fact","outcome":"no_op","proposed":"failed"}
