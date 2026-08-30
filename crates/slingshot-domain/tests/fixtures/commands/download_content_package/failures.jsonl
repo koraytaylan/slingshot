@@ -1,0 +1,19 @@
+{"document":"{\"failure\":\"filevault_profile_unsupported\"}","members":["failure"],"note":"a fieldless filevault profile unsupported","proves_no_publication":true}
+{"document":"{\"failure\":\"filevault_filter_unrepresentable\"}","members":["failure"],"note":"a fieldless filevault filter unrepresentable","proves_no_publication":true}
+{"document":"{\"failure\":\"repository_read_failed\"}","members":["failure"],"note":"a fieldless repository read failed","proves_no_publication":true}
+{"document":"{\"failure\":\"filevault_package_failed\"}","members":["failure"],"note":"a fieldless filevault package failed","proves_no_publication":true}
+{"document":"{\"failure\":\"staging_cleanup_failed\"}","members":["failure"],"note":"a fieldless staging cleanup failed","proves_no_publication":true}
+{"document":"{\"failure\":\"artifact_publication_failed\"}","members":["failure"],"note":"a fieldless artifact publication failed","proves_no_publication":true}
+{"document":"{\"failure\":\"artifact_publication_outcome_unknown\"}","members":["failure"],"note":"a fieldless artifact publication outcome unknown","proves_no_publication":false}
+{"document":"{\"failure\":\"pattern_rejected\",\"collection\":\"inclusion\",\"expression_index\":2}","members":["failure","collection","expression_index"],"note":"an inclusion expression refused by its position","proves_no_publication":true}
+{"document":"{\"failure\":\"pattern_rejected\",\"collection\":\"exclusion\",\"expression_index\":2}","members":["failure","collection","expression_index"],"note":"an exclusion expression refused by its position","proves_no_publication":true}
+{"document":"{\"failure\":\"root_not_found\",\"root_path\":\"/content/example\"}","members":["failure","root_path"],"note":"a root that is not_found","proves_no_publication":true}
+{"document":"{\"failure\":\"root_access_denied\",\"root_path\":\"/content/example\"}","members":["failure","root_path"],"note":"a root that is access_denied","proves_no_publication":true}
+{"document":"{\"failure\":\"evaluation_budget_exceeded\",\"budget\":\"candidate_paths\"}","members":["failure","budget"],"note":"a build that ran out of candidate_paths","proves_no_publication":true}
+{"document":"{\"failure\":\"evaluation_budget_exceeded\",\"budget\":\"pattern_evaluations\"}","members":["failure","budget"],"note":"a build that ran out of pattern_evaluations","proves_no_publication":true}
+{"document":"{\"failure\":\"evaluation_budget_exceeded\",\"budget\":\"selected_paths\"}","members":["failure","budget"],"note":"a build that ran out of selected_paths","proves_no_publication":true}
+{"document":"{\"failure\":\"evaluation_budget_exceeded\",\"budget\":\"filter_document_bytes\"}","members":["failure","budget"],"note":"a build that ran out of filter_document_bytes","proves_no_publication":true}
+{"document":"{\"failure\":\"evaluation_budget_exceeded\",\"budget\":\"package_manifest_bytes\"}","members":["failure","budget"],"note":"a build that ran out of package_manifest_bytes","proves_no_publication":true}
+{"document":"{\"failure\":\"evaluation_budget_exceeded\",\"budget\":\"archive_entries\"}","members":["failure","budget"],"note":"a build that ran out of archive_entries","proves_no_publication":true}
+{"document":"{\"failure\":\"evaluation_budget_exceeded\",\"budget\":\"uncompressed_input_bytes\"}","members":["failure","budget"],"note":"a build that ran out of uncompressed_input_bytes","proves_no_publication":true}
+{"document":"{\"failure\":\"evaluation_budget_exceeded\",\"budget\":\"package_output_bytes\"}","members":["failure","budget"],"note":"a build that ran out of package_output_bytes","proves_no_publication":true}
