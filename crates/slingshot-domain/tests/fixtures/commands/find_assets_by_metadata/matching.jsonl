@@ -1,0 +1,20 @@
+{"criteria":{},"found":{"repository_path":"/content/dam/a"},"matches":true,"note":"no criterion admits every asset"}
+{"criteria":{"media_formats":["image/jpeg"]},"found":{"media_format":"image/jpeg","repository_path":"/content/dam/a"},"matches":true,"note":"a requested format that the asset is in"}
+{"criteria":{"media_formats":["image/jpeg"]},"found":{"media_format":"image/png","repository_path":"/content/dam/a"},"matches":false,"note":"a requested format the asset is not in"}
+{"criteria":{"media_formats":["image/jpeg"]},"found":{"repository_path":"/content/dam/a"},"matches":false,"note":"an asset whose format could not be read is in no requested format"}
+{"criteria":{"media_formats":["image/jpeg","image/png"]},"found":{"media_format":"image/png","repository_path":"/content/dam/a"},"matches":true,"note":"one of several requested formats"}
+{"criteria":{"media_formats":["image/jpeg"]},"found":{"media_format":"image/JPEG","repository_path":"/content/dam/a"},"matches":false,"note":"format comparison is exact, not case-insensitive"}
+{"criteria":{"maximum_byte_length":200,"minimum_byte_length":100},"found":{"byte_length":150,"repository_path":"/content/dam/a"},"matches":true,"note":"a size inside the range"}
+{"criteria":{"minimum_byte_length":100},"found":{"byte_length":100,"repository_path":"/content/dam/a"},"matches":true,"note":"a size exactly at the minimum"}
+{"criteria":{"maximum_byte_length":200},"found":{"byte_length":200,"repository_path":"/content/dam/a"},"matches":true,"note":"a size exactly at the maximum"}
+{"criteria":{"minimum_byte_length":100},"found":{"byte_length":99,"repository_path":"/content/dam/a"},"matches":false,"note":"one byte below the minimum"}
+{"criteria":{"maximum_byte_length":200},"found":{"byte_length":201,"repository_path":"/content/dam/a"},"matches":false,"note":"one byte above the maximum"}
+{"criteria":{"minimum_byte_length":0},"found":{"repository_path":"/content/dam/a"},"matches":false,"note":"an asset with no original rendition length is in no requested range"}
+{"criteria":{"tag_match_mode":"all","tags":["marketing:brand/example","marketing:region/europe"]},"found":{"repository_path":"/content/dam/a","tags":["marketing:brand/example","marketing:region/europe"]},"matches":true,"note":"all of the requested tags"}
+{"criteria":{"tag_match_mode":"all","tags":["marketing:brand/example","marketing:region/europe"]},"found":{"repository_path":"/content/dam/a","tags":["marketing:brand/example"]},"matches":false,"note":"not all of them"}
+{"criteria":{"tag_match_mode":"any","tags":["marketing:brand/example","marketing:region/europe"]},"found":{"repository_path":"/content/dam/a","tags":["marketing:region/europe"]},"matches":true,"note":"any of them"}
+{"criteria":{"tag_match_mode":"any","tags":["marketing:brand/example","marketing:region/europe"]},"found":{"repository_path":"/content/dam/a","tags":["marketing:other"]},"matches":false,"note":"none of them"}
+{"criteria":{"tag_match_mode":"any","tags":["marketing:brand/example"]},"found":{"repository_path":"/content/dam/a"},"matches":false,"note":"an asset with no tags carries none of the requested ones"}
+{"criteria":{"tag_match_mode":"all","tags":["marketing:brand/example"]},"found":{"repository_path":"/content/dam/a","tags":["marketing:brand/example","marketing:region/europe"]},"matches":true,"note":"extra tags on the asset are not an obstacle"}
+{"criteria":{"media_formats":["image/jpeg"],"minimum_byte_length":100,"tag_match_mode":"all","tags":["marketing:brand/example"]},"found":{"byte_length":150,"media_format":"image/jpeg","repository_path":"/content/dam/a","tags":["marketing:brand/example"]},"matches":true,"note":"every family combines with logical and"}
+{"criteria":{"media_formats":["image/jpeg"],"minimum_byte_length":100,"tag_match_mode":"all","tags":["marketing:brand/example"]},"found":{"byte_length":50,"media_format":"image/jpeg","repository_path":"/content/dam/a","tags":["marketing:brand/example"]},"matches":false,"note":"and one unsatisfied family is enough to exclude"}

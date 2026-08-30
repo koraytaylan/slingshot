@@ -1,0 +1,6 @@
+{"maximum":2,"minimum":1,"note":"a minimum below its maximum","usable":true}
+{"maximum":5,"minimum":5,"note":"a minimum equal to its maximum asks for one exact size","usable":true}
+{"maximum":0,"minimum":0,"note":"zero at both ends","usable":true}
+{"maximum":9223372036854775807,"minimum":9223372036854775807,"note":"the largest length at both ends","usable":true}
+{"maximum":1,"minimum":2,"note":"a minimum one above its maximum asks for nothing","usable":false}
+{"maximum":0,"minimum":9223372036854775807,"note":"a minimum far above its maximum","usable":false}
