@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/find_assets_by_metadata/**
   - crates/slingshot-domain/tests/find_assets_by_metadata.rs
 status: done
-merged_as: ""
+merged_as: "31371867beb9e16c7cf4041ec2e9742a0f4834e1"
 ---
 # Find Assets by Metadata
 
