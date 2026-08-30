@@ -1,0 +1,2 @@
+{"cardinality":"single","note":"a single-valued property is read","read":true}
+{"cardinality":"multiple","note":"a multi-valued one is not, because a page has one template","read":false}

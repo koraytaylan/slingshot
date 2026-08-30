@@ -1,0 +1,8 @@
+{"accepted":true,"document":"{\"root_path\":\"/content/example\",\"template_path\":\"/apps/example/templates/page\"}","note":"an ordinary search","reason":""}
+{"accepted":true,"document":"{\"result_window\":{\"mode\":\"initial\",\"offset\":5,\"limit\":5},\"root_path\":\"/content\",\"template_path\":\"/apps/example/templates/page\"}","note":"with an explicit window","reason":""}
+{"accepted":true,"document":"{\"result_window\":{\"mode\":\"continuation\",\"continuation_token\":\"aGVhZGVy.cGF5bG9hZA.dGFn\"},\"root_path\":\"/content\",\"template_path\":\"/apps/example/templates/page\"}","note":"a resumed search","reason":""}
+{"accepted":false,"document":"{\"root_path\":\"/content\"}","note":"a search naming no template","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"template_path\":\"/apps/example/templates/page\"}","note":"a search naming no anchor","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"root_path\":\"/content\",\"template_path\":\"apps/example\"}","note":"a relative template address","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"root_path\":\"/content\",\"template_path\":\"/apps//example\"}","note":"a template address with a doubled separator","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"root_path\":\"/content\",\"template_path\":\"/apps/example/templates/page\",\"inherited\":true}","note":"a search carrying a surplus member","reason":"ClosedObject"}

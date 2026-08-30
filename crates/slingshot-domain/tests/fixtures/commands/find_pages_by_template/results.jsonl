@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"matches\":[]}","note":"an empty page","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"repository_path\":\"/content/a\",\"title\":\"A\"},{\"repository_path\":\"/content/b\"}]}","note":"a page with titles","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"repository_path\":\"/content/a\"}],\"next_continuation_token\":\"aGVhZGVy.cGF5bG9hZA.dGFn\"}","note":"a page that carries where to resume","reason":""}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/a\"},{\"repository_path\":\"/content/a\"}]}","note":"a path that repeats","reason":"NotStrictlyAscending"}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/b\"},{\"repository_path\":\"/content/a\"}]}","note":"a page out of order","reason":"NotStrictlyAscending"}
+{"accepted":false,"document":"{\"matches\":[],\"template\":\"/apps/example/templates/page\"}","note":"a page carrying a surplus member","reason":"ClosedObject"}
