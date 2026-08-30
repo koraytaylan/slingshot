@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/src/command/add_component.rs
   - crates/slingshot-domain/tests/fixtures/commands/add_component/**
   - crates/slingshot-domain/tests/add_component.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Add a Component
