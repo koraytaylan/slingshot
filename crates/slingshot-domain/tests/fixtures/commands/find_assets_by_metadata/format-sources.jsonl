@@ -1,0 +1,2 @@
+{"note":"the metadata format is read first","order":1,"property":"jcr:content/metadata/dc:format"}
+{"note":"the original rendition mime type is the only fallback","order":2,"property":"jcr:content/renditions/original/jcr:content/jcr:mimeType"}

@@ -1,0 +1,10 @@
+{"accepted":true,"document":"{\"matches\":[]}","note":"an empty page","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"byte_length\":2048,\"media_format\":\"image/jpeg\",\"repository_path\":\"/content/dam/a\",\"tags\":[\"marketing:brand/example\",\"marketing:region/europe\"]}]}","note":"one asset with everything read","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"repository_path\":\"/content/dam/a\",\"tags\":[]}]}","note":"one asset with nothing read","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"repository_path\":\"/content/dam/a\",\"tags\":[]},{\"repository_path\":\"/content/dam/b\",\"tags\":[]}]}","note":"several, strictly ascending","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"repository_path\":\"/content/dam/a\",\"tags\":[]}],\"next_continuation_token\":\"aGVhZGVy.cGF5bG9hZA.dGFn\"}","note":"a page that carries where to resume","reason":""}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/dam/a\",\"tags\":[]},{\"repository_path\":\"/content/dam/a\",\"tags\":[]}]}","note":"a path that repeats","reason":"NotStrictlyAscending"}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/dam/b\",\"tags\":[]},{\"repository_path\":\"/content/dam/a\",\"tags\":[]}]}","note":"a page out of order","reason":"NotStrictlyAscending"}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/dam/a\",\"tags\":[\"marketing:region/europe\",\"marketing:brand/example\"]}]}","note":"tags out of order on one asset","reason":"NotStrictlyAscending"}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/dam/a\",\"tags\":[\"marketing:brand/example\",\"marketing:brand/example\"]}]}","note":"one tag twice on one asset","reason":"NotStrictlyAscending"}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/dam/a\",\"tags\":[],\"rendition_count\":3}]}","note":"a match carrying a surplus member","reason":"ClosedObject"}
