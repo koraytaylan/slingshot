@@ -12,7 +12,8 @@ touches:
   - crates/slingshot-domain/src/command/find_pages_containing_phrase.rs
   - crates/slingshot-domain/tests/fixtures/commands/find_pages_containing_phrase/**
   - crates/slingshot-domain/tests/find_pages_containing_phrase.rs
-status: planned
+  - crates/slingshot-domain/src/command/query_paths.rs
+status: done
 merged_as: ""
 ---
 # Find Pages Containing a Phrase
