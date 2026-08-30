@@ -237,10 +237,29 @@ fn every_scaffold_leaf_is_documentation_alone_until_its_owner_lands() {
             structural, unlanded,
             "{path} holds documentation alone exactly while its owning task is unlanded"
         );
-        for marker in ["TODO", "FIXME", "will be", "for now", "placeholder"] {
-            assert!(!source.contains(marker), "{path} carries planning language: {marker}");
+        for marker in PLANNING_LANGUAGE {
+            assert!(!states_a_plan(&source, marker), "{path} carries planning language: {marker}");
         }
     }
+}
+
+/// Phrases that say a source file is describing work rather than doing it.
+const PLANNING_LANGUAGE: &[&str] = &["TODO", "FIXME", "will be", "for now", "placeholder"];
+
+/// Returns whether `source` uses `marker` as its own phrase.
+///
+/// The comparison is bounded at both ends by something other than a letter,
+/// because a bare substring search reads a plan into ordinary prose: "accounts
+/// for nowhere" contains "for now", and a statement inventory's bind markers
+/// are placeholders in the only sense SQL has for the word.
+fn states_a_plan(source: &str, marker: &str) -> bool {
+    let letter =
+        |text: &str, index: usize| text[index..].chars().next().is_some_and(char::is_alphabetic);
+    source.match_indices(marker).any(|(start, found)| {
+        let before = source[..start].chars().next_back();
+        let after = start + found.len();
+        !before.is_some_and(char::is_alphabetic) && !(after < source.len() && letter(source, after))
+    })
 }
 
 /// Returns every task in this plan that has landed.
