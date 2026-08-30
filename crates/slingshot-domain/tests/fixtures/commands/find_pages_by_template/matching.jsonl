@@ -1,0 +1,11 @@
+{"matches":true,"note":"a path property holding the template","property_type":"path","stored":"/apps/example/templates/page"}
+{"matches":true,"note":"a string property holding the same text","property_type":"string","stored":"/apps/example/templates/page"}
+{"matches":false,"note":"a path property holding another template","property_type":"path","stored":"/apps/example/templates/article"}
+{"matches":false,"note":"a trailing slash is a different spelling and not a repository path at all","property_type":"string","stored":"/apps/example/templates/page/"}
+{"matches":false,"note":"nor is a doubled separator","property_type":"string","stored":"/apps//example/templates/page"}
+{"matches":false,"note":"a same-name-sibling suffix addresses something else","property_type":"path","stored":"/apps/example/templates/page[2]"}
+{"matches":false,"note":"a relative spelling is not this absolute address","property_type":"string","stored":"apps/example/templates/page"}
+{"matches":false,"note":"an absent property does not match","property_type":"path","stored":null}
+{"matches":false,"note":"a property of another type does not match, whatever it spells","property_type":"long","stored":"/apps/example/templates/page"}
+{"matches":false,"note":"nor does a name","property_type":"name","stored":"page"}
+{"matches":false,"note":"an empty value is not a path","property_type":"string","stored":""}
