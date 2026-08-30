@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/src/command/find_pages_by_template.rs
   - crates/slingshot-domain/tests/fixtures/commands/find_pages_by_template/**
   - crates/slingshot-domain/tests/find_pages_by_template.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Find Pages by Template
