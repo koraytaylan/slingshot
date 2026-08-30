@@ -226,12 +226,13 @@ fn no_command_module_writes_a_contract_value_down_again() {
         .filter(|value| **value >= SMALLEST_SEARCHABLE_LIMIT)
         .map(|value| value.to_string())
         .collect();
+    let names: BTreeSet<String> = contract.limits.keys().map(|name| name.to_uppercase()).collect();
     let mut repeated = Vec::new();
     for path in command_modules() {
         let text = std::fs::read_to_string(&path).expect("the source reads");
         for (number, line) in text.lines().enumerate() {
             let code = line.trim();
-            if code.starts_with("//") {
+            if code.starts_with("//") || names_its_own_quantity(code, &names) {
                 continue;
             }
             for value in &values {
@@ -242,6 +243,30 @@ fn no_command_module_writes_a_contract_value_down_again() {
         }
     }
     assert_eq!(repeated, Vec::<String>::new(), "a contract value exists twice");
+}
+
+/// Returns whether this line declares a constant of its own rather than a copy
+/// of a bound.
+///
+/// A bound is redeclared by name as well as by value: the defect this test
+/// exists for is a module writing `MAXIMUM_RESULT_LIMIT` down again, and a
+/// module is caught by that name whatever the number beside it. A constant
+/// whose name matches no bound is a different quantity that happens to share a
+/// number - a tag width, a digest width, a segment count - and refusing it
+/// would push the module back to writing the number inline, which is the thing
+/// the naming rule is against.
+fn names_its_own_quantity(line: &str, names: &BTreeSet<String>) -> bool {
+    let Some(declaration) = line.split_once("const ").map(|(_, rest)| rest) else {
+        return false;
+    };
+    let Some(name) = declaration.split(':').next().map(str::trim) else {
+        return false;
+    };
+    !name.is_empty()
+        && name.chars().all(|character| {
+            character.is_ascii_uppercase() || character == '_' || character.is_ascii_digit()
+        })
+        && !names.contains(name)
 }
 
 /// Returns every command module that consumes the contract.
