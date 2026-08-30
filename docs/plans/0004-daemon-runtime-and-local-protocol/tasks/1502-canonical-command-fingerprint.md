@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-domain/tests/command_fingerprint.rs
   - "crates/slingshot-domain/tests/fixtures/command_fingerprint/**"
 status: done
-merged_as: ""
+merged_as: "3b8d2f04ec9c0bfd162852822be44b6f55cac083"
 ---
 # Canonical Command Fingerprint
 
