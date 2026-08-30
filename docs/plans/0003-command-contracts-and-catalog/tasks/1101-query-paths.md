@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/src/command/query_paths.rs
   - crates/slingshot-domain/tests/fixtures/commands/query_paths/**
   - crates/slingshot-domain/tests/query_paths.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Query Paths
