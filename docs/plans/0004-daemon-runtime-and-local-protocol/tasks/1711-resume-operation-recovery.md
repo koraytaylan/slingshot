@@ -10,11 +10,12 @@ depends_on:
   - operation-wait-and-progress
 gated: false
 touches:
-  - crates/slingshot-domain/src/operation.rs
-  - crates/slingshot-storage/src/operation_repository.rs
+  - "crates/slingshot-daemon/tests/fixtures/operation-recovery/**"
   - crates/slingshot-daemon/src/operation_recovery.rs
   - crates/slingshot-daemon/tests/operation_recovery.rs
-  - "crates/slingshot-daemon/tests/fixtures/operation-recovery/**"
+  - crates/slingshot-domain/src/operation.rs
+  - crates/slingshot-storage/src/operation_repository.rs
+  - crates/slingshot-storage/src/sqlite_statement_inventory.rs
 status: planned
 merged_as: ""
 ---

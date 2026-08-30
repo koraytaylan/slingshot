@@ -8,13 +8,14 @@ depends_on:
   - idempotent-operation-repository
 gated: false
 touches:
+  - "crates/slingshot-storage/tests/fixtures/persistent-capacity/**"
   - crates/slingshot-domain/src/operation.rs
   - crates/slingshot-domain/src/persistent_capacity.rs
-  - crates/slingshot-storage/src/persistent_capacity.rs
-  - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/src/artifact_store.rs
+  - crates/slingshot-storage/src/operation_repository.rs
+  - crates/slingshot-storage/src/persistent_capacity.rs
+  - crates/slingshot-storage/src/sqlite_statement_inventory.rs
   - crates/slingshot-storage/tests/persistent_capacity.rs
-  - "crates/slingshot-storage/tests/fixtures/persistent-capacity/**"
 status: planned
 merged_as: ""
 ---

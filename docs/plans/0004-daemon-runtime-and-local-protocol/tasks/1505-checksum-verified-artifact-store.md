@@ -7,9 +7,10 @@ depends_on:
   - sqlite-schema-and-migrations
 gated: false
 touches:
-  - crates/slingshot-storage/src/artifact_store.rs
-  - crates/slingshot-storage/tests/artifact_store.rs
   - "crates/slingshot-storage/tests/fixtures/artifacts/**"
+  - crates/slingshot-storage/src/artifact_store.rs
+  - crates/slingshot-storage/src/sqlite_statement_inventory.rs
+  - crates/slingshot-storage/tests/artifact_store.rs
 status: planned
 merged_as: ""
 ---
