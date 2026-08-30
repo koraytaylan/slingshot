@@ -1,0 +1,28 @@
+{"kind":"name","note":"the exact literal password","sensitive":true,"spelling":"password"}
+{"kind":"name","note":"password in capitals","sensitive":true,"spelling":"PASSWORD"}
+{"kind":"name","note":"the exact literal passwd","sensitive":true,"spelling":"passwd"}
+{"kind":"name","note":"passwd in capitals","sensitive":true,"spelling":"PASSWD"}
+{"kind":"name","note":"the exact literal secret","sensitive":true,"spelling":"secret"}
+{"kind":"name","note":"secret in capitals","sensitive":true,"spelling":"SECRET"}
+{"kind":"name","note":"the exact literal token","sensitive":true,"spelling":"token"}
+{"kind":"name","note":"token in capitals","sensitive":true,"spelling":"TOKEN"}
+{"kind":"name","note":"the exact literal credential","sensitive":true,"spelling":"credential"}
+{"kind":"name","note":"credential in capitals","sensitive":true,"spelling":"CREDENTIAL"}
+{"kind":"name","note":"the exact literal privatekey","sensitive":true,"spelling":"privatekey"}
+{"kind":"name","note":"privatekey in capitals","sensitive":true,"spelling":"PRIVATEKEY"}
+{"kind":"name","note":"the exact literal apikey","sensitive":true,"spelling":"apikey"}
+{"kind":"name","note":"apikey in capitals","sensitive":true,"spelling":"APIKEY"}
+{"kind":"name","note":"the exact literal accesskey","sensitive":true,"spelling":"accesskey"}
+{"kind":"name","note":"accesskey in capitals","sensitive":true,"spelling":"ACCESSKEY"}
+{"kind":"name","note":"separators are discarded before matching","sensitive":true,"spelling":"api-key"}
+{"kind":"name","note":"and so are underscores","sensitive":true,"spelling":"API_KEY"}
+{"kind":"name","note":"and so is camel case once lowercased","sensitive":true,"spelling":"apiKey"}
+{"kind":"name","note":"a literal in the middle of a longer name","sensitive":true,"spelling":"adobe.privateKey.location"}
+{"kind":"name","note":"a name with nothing ordinary left in it is not read under","sensitive":true,"spelling":"---"}
+{"kind":"name","note":"an empty name likewise","sensitive":true,"spelling":""}
+{"kind":"name","note":"a name that only looks adjacent","sensitive":true,"spelling":"tokenizer"}
+{"kind":"name","note":"an ordinary name","sensitive":false,"spelling":"connection.timeout"}
+{"kind":"name","note":"another ordinary name","sensitive":false,"spelling":"maximumPoolSize"}
+{"kind":"name","note":"a name whose separators do not make a literal appear","sensitive":true,"spelling":"pass.word"}
+{"kind":"name","note":"a name that spells nothing sensitive","sensitive":false,"spelling":"hostname"}
+{"kind":"name","note":"a name mentioning security without a literal","sensitive":false,"spelling":"securityLevel"}

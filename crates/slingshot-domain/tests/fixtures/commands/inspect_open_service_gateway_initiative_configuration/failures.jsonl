@@ -1,0 +1,19 @@
+{"document":"{\"failure\":\"configuration_lookup_failed\"}","members":["failure"],"note":"a fieldless configuration lookup failed"}
+{"document":"{\"failure\":\"configuration_lookup_mismatch\"}","members":["failure"],"note":"a fieldless configuration lookup mismatch"}
+{"document":"{\"failure\":\"configuration_lookup_ambiguous\"}","members":["failure"],"note":"a fieldless configuration lookup ambiguous"}
+{"document":"{\"failure\":\"configuration_lookup_budget_exceeded\",\"budget\":\"lookup_duration\"}","members":["failure","budget"],"note":"a lookup that ran out of lookup_duration"}
+{"document":"{\"failure\":\"configuration_lookup_budget_exceeded\",\"budget\":\"matching_configurations\"}","members":["failure","budget"],"note":"a lookup that ran out of matching_configurations"}
+{"document":"{\"failure\":\"configuration_value_unsupported\",\"reason\":\"non_primary_type\"}","members":["failure","reason"],"note":"a value that is non primary type"}
+{"document":"{\"failure\":\"configuration_value_unsupported\",\"reason\":\"non_unicode_value\"}","members":["failure","reason"],"note":"a value that is non unicode value"}
+{"document":"{\"failure\":\"configuration_value_malformed\",\"reason\":\"invalid_property_key\"}","members":["failure","reason"],"note":"a invalid property key"}
+{"document":"{\"failure\":\"configuration_value_malformed\",\"reason\":\"duplicate_property_key\"}","members":["failure","reason"],"note":"a duplicate property key"}
+{"document":"{\"failure\":\"configuration_value_malformed\",\"reason\":\"null_value\"}","members":["failure","reason"],"note":"a null value"}
+{"document":"{\"failure\":\"configuration_value_malformed\",\"reason\":\"mixed_types\"}","members":["failure","reason"],"note":"a mixed types"}
+{"document":"{\"failure\":\"configuration_value_malformed\",\"reason\":\"nested_container\"}","members":["failure","reason"],"note":"a nested container"}
+{"document":"{\"failure\":\"configuration_value_malformed\",\"reason\":\"carrier_type_mismatch\"}","members":["failure","reason"],"note":"a carrier type mismatch"}
+{"document":"{\"failure\":\"configuration_value_malformed\",\"reason\":\"empty_collection_type_unavailable\"}","members":["failure","reason"],"note":"a empty collection type unavailable"}
+{"document":"{\"failure\":\"configuration_value_budget_exceeded\",\"budget\":\"scalar_string_bytes\"}","members":["failure","budget"],"note":"a value that ran out of scalar_string_bytes"}
+{"document":"{\"failure\":\"configuration_value_budget_exceeded\",\"budget\":\"sequence_items\"}","members":["failure","budget"],"note":"a value that ran out of sequence_items"}
+{"document":"{\"failure\":\"configuration_value_budget_exceeded\",\"budget\":\"sequence_canonical_bytes\"}","members":["failure","budget"],"note":"a value that ran out of sequence_canonical_bytes"}
+{"document":"{\"failure\":\"configuration_result_budget_exceeded\",\"budget\":\"property_count\"}","members":["failure","budget"],"note":"a result that ran out of property_count"}
+{"document":"{\"failure\":\"configuration_result_budget_exceeded\",\"budget\":\"serialized_result_bytes\"}","members":["failure","budget"],"note":"a result that ran out of serialized_result_bytes"}
