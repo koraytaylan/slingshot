@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-local-protocol/tests/transcripts.rs
   - "crates/slingshot-local-protocol/tests/fixtures/transcripts/**"
 status: done
-merged_as: ""
+merged_as: "d244446fc4f614db31eed1e70d43f981394856cb"
 ---
 # Local Protocol Golden Transcripts
 
