@@ -1,0 +1,68 @@
+{"accepted":true,"note":"an unqualified local name","role":"repository_name","spelling":"content"}
+{"accepted":true,"note":"one namespace prefix and a local name","role":"repository_name","spelling":"jcr:content"}
+{"accepted":true,"note":"a mixed-case local name","role":"repository_name","spelling":"sling:resourceType"}
+{"accepted":true,"note":"a prefix may open with an underscore","role":"repository_name","spelling":"_underscore:name"}
+{"accepted":true,"note":"a prefix may carry hyphen and dot after its first byte","role":"repository_name","spelling":"my-ns.v2:name"}
+{"accepted":true,"note":"a composed local name is already normalized","role":"repository_name","spelling":"caf\u00e9"}
+{"accepted":false,"note":"an empty name addresses nothing","role":"repository_name","spelling":""}
+{"accepted":false,"note":"a second namespace separator has no meaning","role":"repository_name","spelling":"a:b:c"}
+{"accepted":false,"note":"a dot addresses the node itself","role":"repository_name","spelling":"."}
+{"accepted":false,"note":"a dot-dot addresses a parent","role":"repository_name","spelling":".."}
+{"accepted":false,"note":"a leading space is invisible in a rendering","role":"repository_name","spelling":" leading"}
+{"accepted":false,"note":"a trailing space is invisible in a rendering","role":"repository_name","spelling":"trailing "}
+{"accepted":false,"note":"a separator would make one name two","role":"repository_name","spelling":"a/b"}
+{"accepted":false,"note":"a sibling suffix belongs to a segment, not a name","role":"repository_name","spelling":"a[1]"}
+{"accepted":false,"note":"a wildcard is not a name","role":"repository_name","spelling":"a*b"}
+{"accepted":false,"note":"a pipe is not a name","role":"repository_name","spelling":"a|b"}
+{"accepted":false,"note":"a control byte is not a name","role":"repository_name","spelling":"a\u0001b"}
+{"accepted":false,"note":"a prefix may not open with a digit","role":"repository_name","spelling":"2ns:name"}
+{"accepted":false,"note":"a decomposed name is not already normalized","role":"repository_name","spelling":"cafe\u0301"}
+{"accepted":true,"note":"the first sibling carries no suffix","role":"repository_path_segment","spelling":"content"}
+{"accepted":true,"note":"the second sibling is written down","role":"repository_path_segment","spelling":"content[2]"}
+{"accepted":true,"note":"the largest sibling index the contract allows","role":"repository_path_segment","spelling":"content[2147483647]"}
+{"accepted":false,"note":"the first sibling has one spelling, without a suffix","role":"repository_path_segment","spelling":"content[1]"}
+{"accepted":false,"note":"there is no zeroth sibling","role":"repository_path_segment","spelling":"content[0]"}
+{"accepted":false,"note":"a leading zero is a second spelling of one index","role":"repository_path_segment","spelling":"content[02]"}
+{"accepted":false,"note":"a sign is a second spelling of one index","role":"repository_path_segment","spelling":"content[+2]"}
+{"accepted":false,"note":"one past the largest index the contract allows","role":"repository_path_segment","spelling":"content[2147483648]"}
+{"accepted":false,"note":"an unclosed suffix","role":"repository_path_segment","spelling":"content[2"}
+{"accepted":false,"note":"an empty suffix names no sibling","role":"repository_path_segment","spelling":"content[]"}
+{"accepted":true,"note":"the root","role":"repository_path","spelling":"/"}
+{"accepted":true,"note":"one segment below the root","role":"repository_path","spelling":"/content"}
+{"accepted":true,"note":"several segments","role":"repository_path","spelling":"/content/site/en/page"}
+{"accepted":true,"note":"a qualified segment","role":"repository_path","spelling":"/content/jcr:content"}
+{"accepted":true,"note":"a sibling-indexed segment","role":"repository_path","spelling":"/content/rail[2]"}
+{"accepted":false,"note":"an absolute path opens with a separator","role":"repository_path","spelling":"content"}
+{"accepted":false,"note":"a trailing separator is a second spelling","role":"repository_path","spelling":"/content/"}
+{"accepted":false,"note":"an empty interior segment","role":"repository_path","spelling":"/content//site"}
+{"accepted":false,"note":"a traversal form addresses somewhere else","role":"repository_path","spelling":"/content/../etc"}
+{"accepted":false,"note":"a dot segment addresses the same node twice","role":"repository_path","spelling":"/content/."}
+{"accepted":false,"note":"an empty path addresses nothing","role":"repository_path","spelling":""}
+{"accepted":true,"note":"two segments with no leading separator","role":"repository_relative_path","spelling":"site/en"}
+{"accepted":true,"note":"one qualified segment","role":"repository_relative_path","spelling":"jcr:content"}
+{"accepted":false,"note":"a leading separator makes it absolute","role":"repository_relative_path","spelling":"/site"}
+{"accepted":false,"note":"a trailing separator is a second spelling","role":"repository_relative_path","spelling":"site/"}
+{"accepted":false,"note":"an empty relative path addresses nothing","role":"repository_relative_path","spelling":""}
+{"accepted":true,"note":"a qualified property name","role":"property_name","spelling":"jcr:title"}
+{"accepted":true,"note":"an unqualified property name","role":"property_name","spelling":"title"}
+{"accepted":false,"note":"a property has no siblings","role":"property_name","spelling":"title[2]"}
+{"accepted":false,"note":"a property name addresses no child","role":"property_name","spelling":"site/title"}
+{"accepted":true,"note":"one property on the candidate itself","role":"relative_property_path","spelling":"jcr:title"}
+{"accepted":true,"note":"one property below one child","role":"relative_property_path","spelling":"jcr:content/jcr:title"}
+{"accepted":true,"note":"a sibling-indexed child address","role":"relative_property_path","spelling":"jcr:content/rail[2]/jcr:title"}
+{"accepted":false,"note":"a leading separator makes it absolute","role":"relative_property_path","spelling":"/jcr:title"}
+{"accepted":false,"note":"a trailing separator names no property","role":"relative_property_path","spelling":"jcr:content/"}
+{"accepted":true,"note":"an unqualified creatable name","role":"page_name","spelling":"landing-page"}
+{"accepted":false,"note":"a created child carries no namespace","role":"page_name","spelling":"jcr:content"}
+{"accepted":false,"note":"a caller does not choose which sibling it creates","role":"page_name","spelling":"page[2]"}
+{"accepted":true,"note":"a qualified node type","role":"primary_node_type_name","spelling":"cq:Page"}
+{"accepted":false,"note":"a node type is always qualified","role":"primary_node_type_name","spelling":"Page"}
+{"accepted":true,"note":"a relative resource type","role":"component_resource_type","spelling":"wknd/components/text"}
+{"accepted":true,"note":"an absolute resource type","role":"component_resource_type","spelling":"/apps/wknd/components/text"}
+{"accepted":true,"note":"a hyphenated segment","role":"component_resource_type","spelling":"wknd/components/text-v2"}
+{"accepted":false,"note":"a trailing separator names no component","role":"component_resource_type","spelling":"wknd/components/"}
+{"accepted":false,"note":"an empty interior segment","role":"component_resource_type","spelling":"wknd//text"}
+{"accepted":false,"note":"a traversal form","role":"component_resource_type","spelling":"wknd/../text"}
+{"accepted":false,"note":"a resource type has no namespace syntax","role":"component_resource_type","spelling":"wknd/jcr:text"}
+{"accepted":false,"note":"a resource type has no sibling syntax","role":"component_resource_type","spelling":"wknd/text[2]"}
+{"accepted":false,"note":"an empty resource type addresses nothing","role":"component_resource_type","spelling":""}
