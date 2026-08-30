@@ -27,7 +27,7 @@ touches:
   - crates/slingshot-domain/tests/command_schemas.rs
   - crates/slingshot-domain/src/command/schema.rs
 status: done
-merged_as: ""
+merged_as: "8553dea7b86d256d68b05d23a30fe5a7b3dc2692"
 ---
 # Command Schemas
 
