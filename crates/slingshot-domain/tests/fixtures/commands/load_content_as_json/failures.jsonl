@@ -1,0 +1,10 @@
+{"document":"{\"failure\":\"not_found\",\"path\":\"/content/example\"}","kind":"failure","members":["failure","path"],"note":"a resource that is not_found"}
+{"document":"{\"failure\":\"access_denied\",\"path\":\"/content/example\"}","kind":"failure","members":["failure","path"],"note":"a resource that is access_denied"}
+{"document":"{\"failure\":\"unsupported_repository_value\",\"path\":\"/content/example\",\"value_role\":\"resource_name\"}","kind":"failure","members":["failure","path","value_role"],"note":"a resource name this contract cannot represent"}
+{"document":"{\"failure\":\"unsupported_repository_value\",\"path\":\"/content/example\",\"value_role\":\"property_name\"}","kind":"failure","members":["failure","path","value_role"],"note":"a property name this contract cannot represent"}
+{"document":"{\"failure\":\"unsupported_repository_value\",\"path\":\"/content/example\",\"value_role\":\"property_value\"}","kind":"failure","members":["failure","path","value_role"],"note":"a property value this contract cannot represent"}
+{"document":"{\"failure\":\"load_budget_exceeded\",\"budget\":\"resource_nodes\"}","kind":"failure","members":["failure","budget"],"note":"a traversal that ran out of resource_nodes"}
+{"document":"{\"failure\":\"load_budget_exceeded\",\"budget\":\"property_values\"}","kind":"failure","members":["failure","budget"],"note":"a traversal that ran out of property_values"}
+{"document":"{\"failure\":\"load_budget_exceeded\",\"budget\":\"property_bytes\"}","kind":"failure","members":["failure","budget"],"note":"a traversal that ran out of property_bytes"}
+{"document":"{\"failure\":\"load_budget_exceeded\",\"budget\":\"serialized_document_bytes\"}","kind":"failure","members":["failure","budget"],"note":"a traversal that ran out of serialized_document_bytes"}
+{"document":"{\"failure\":\"load_budget_exceeded\",\"budget\":\"traversal_duration\"}","kind":"failure","members":["failure","budget"],"note":"a traversal that ran out of traversal_duration"}

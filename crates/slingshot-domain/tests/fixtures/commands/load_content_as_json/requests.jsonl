@@ -1,0 +1,13 @@
+{"accepted":true,"document":"{\"path\":\"/content/example\"}","note":"a request that lets the contract choose its depth","reason":"","resolved_depth":2}
+{"accepted":true,"document":"{\"depth\":0,\"path\":\"/content/example\"}","note":"a request that asks for the requested resource alone","reason":"","resolved_depth":0}
+{"accepted":true,"document":"{\"depth\":2,\"path\":\"/content/example\"}","note":"a request that states the depth it would have got anyway","reason":"","resolved_depth":2}
+{"accepted":true,"document":"{\"depth\":32,\"path\":\"/content/example\"}","note":"the deepest subtree this contract loads","reason":"","resolved_depth":32}
+{"accepted":false,"document":"{\"depth\":33,\"path\":\"/content\"}","note":"one level deeper","reason":"DepthAboveMaximum","resolved_depth":null}
+{"accepted":true,"document":"{\"path\":\"/\"}","note":"the repository root is a resource like any other","reason":"","resolved_depth":2}
+{"accepted":true,"document":"{\"path\":\"/content/example/jcr:content/par/text[2]\"}","note":"a path with a same-name sibling","reason":"","resolved_depth":2}
+{"accepted":false,"document":"{\"depth\":-1,\"path\":\"/content\"}","note":"a negative depth","reason":"ClosedObject","resolved_depth":null}
+{"accepted":false,"document":"{\"depth\":1}","note":"a request naming no path","reason":"ClosedObject","resolved_depth":null}
+{"accepted":false,"document":"{\"path\":\"/content\",\"tier\":\"author\"}","note":"a request carrying a surplus member","reason":"ClosedObject","resolved_depth":null}
+{"accepted":false,"document":"{\"endpoint\":\"https://author.example.invalid\",\"path\":\"/content\"}","note":"a request carrying an endpoint","reason":"ClosedObject","resolved_depth":null}
+{"accepted":false,"document":"{\"password\":\"secret\",\"path\":\"/content\"}","note":"a request carrying a credential","reason":"ClosedObject","resolved_depth":null}
+{"accepted":false,"document":"{\"path\":\"content/example\"}","note":"a relative path is not a load address","reason":"ClosedObject","resolved_depth":null}
