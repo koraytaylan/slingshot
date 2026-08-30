@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-local-protocol/src/message.rs
   - crates/slingshot-local-protocol/tests/message.rs
   - "crates/slingshot-local-protocol/tests/fixtures/messages/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Local Operation Envelopes
