@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-domain/src/command/inspect_open_service_gateway_initiative_configuration.rs
   - crates/slingshot-domain/tests/fixtures/commands/inspect_open_service_gateway_initiative_configuration/**
   - crates/slingshot-domain/tests/inspect_open_service_gateway_initiative_configuration.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Inspect Open Service Gateway Initiative Configuration
