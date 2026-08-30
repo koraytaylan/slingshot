@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/src/command/find_assets_referenced_by_page.rs
   - crates/slingshot-domain/tests/fixtures/commands/find_assets_referenced_by_page/**
   - crates/slingshot-domain/tests/find_assets_referenced_by_page.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Find Assets Referenced by a Page
