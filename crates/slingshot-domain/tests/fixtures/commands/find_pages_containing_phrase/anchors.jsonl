@@ -1,0 +1,2 @@
+{"document":"{\"failure\":\"root_not_found\",\"root_path\":\"/content/example\"}","enumerated":false,"note":"an anchor that is root_not_found"}
+{"document":"{\"failure\":\"root_access_denied\",\"root_path\":\"/content/example\"}","enumerated":false,"note":"an anchor that is root_access_denied"}

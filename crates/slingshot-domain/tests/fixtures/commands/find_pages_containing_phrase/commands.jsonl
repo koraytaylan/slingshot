@@ -1,0 +1,7 @@
+{"accepted":true,"document":"{\"phrase\":\"annual report\",\"root_path\":\"/content/example\"}","note":"an ordinary search","reason":""}
+{"accepted":true,"document":"{\"phrase\":\"annual report\",\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":25},\"root_path\":\"/content\"}","note":"with an explicit window","reason":""}
+{"accepted":true,"document":"{\"phrase\":\"annual report\",\"result_window\":{\"mode\":\"continuation\",\"continuation_token\":\"aGVhZGVy.cGF5bG9hZA.dGFn\"},\"root_path\":\"/content\"}","note":"a resumed search","reason":""}
+{"accepted":false,"document":"{\"root_path\":\"/content\"}","note":"a search naming no phrase","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"phrase\":\"report\"}","note":"a search naming no anchor","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"phrase\":\" report\",\"root_path\":\"/content\"}","note":"a search whose phrase is untrimmed","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"phrase\":\"report\",\"root_path\":\"/content\",\"case_sensitive\":true}","note":"a search carrying a surplus member","reason":"ClosedObject"}
