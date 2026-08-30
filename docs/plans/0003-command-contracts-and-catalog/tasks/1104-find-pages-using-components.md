@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/find_pages_using_components/**
   - crates/slingshot-domain/tests/find_pages_using_components.rs
 status: done
-merged_as: ""
+merged_as: "b421377145128e38cc4bb49670b53600bffb55e0"
 ---
 # Find Pages Using Components
 
