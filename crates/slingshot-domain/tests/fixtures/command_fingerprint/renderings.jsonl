@@ -1,0 +1,5 @@
+{"accepted":true,"note":"a canonical rendering","spelling":"6526f4dd067efe9785f078e40310e385b1926cc87caa8f3f69cf2e9342cac614"}
+{"accepted":false,"note":"uppercase is a second spelling","spelling":"6526F4DD067EFE9785F078E40310E385B1926CC87CAA8F3F69CF2E9342CAC614"}
+{"accepted":false,"note":"one character short","spelling":"6526f4dd067efe9785f078e40310e385b1926cc87caa8f3f69cf2e9342cac61"}
+{"accepted":false,"note":"one character long","spelling":"6526f4dd067efe9785f078e40310e385b1926cc87caa8f3f69cf2e9342cac6140"}
+{"accepted":false,"note":"a character hexadecimal does not have","spelling":"g526f4dd067efe9785f078e40310e385b1926cc87caa8f3f69cf2e9342cac614"}

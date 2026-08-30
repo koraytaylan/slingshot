@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-domain/src/command_fingerprint.rs
   - crates/slingshot-domain/tests/command_fingerprint.rs
   - "crates/slingshot-domain/tests/fixtures/command_fingerprint/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Canonical Command Fingerprint
