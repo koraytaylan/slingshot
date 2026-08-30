@@ -10,7 +10,7 @@ gated: false
 touches:
   - crates/slingshot-local-protocol/tests/transcripts.rs
   - "crates/slingshot-local-protocol/tests/fixtures/transcripts/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Local Protocol Golden Transcripts
