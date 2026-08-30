@@ -15,7 +15,7 @@ touches:
   - "crates/slingshot-storage/migrations/**"
   - crates/slingshot-storage/tests/migrations.rs
   - "crates/slingshot-storage/tests/fixtures/migrations/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # SQLite Schema And Migrations

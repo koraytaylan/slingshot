@@ -1,0 +1,8 @@
+{"column":"password","note":"a credential is never a column"}
+{"column":"user_name","note":"a principal is never a column"}
+{"column":"organization_identifier","note":"nor an organization"}
+{"column":"client_secret","note":"nor a secret"}
+{"column":"metascope","note":"a metascope reaches this only through the revision"}
+{"column":"certificate","note":"nor a certificate"}
+{"column":"trust_policy","note":"nor a trust decision"}
+{"column":"profile_authentication_contract","note":"nor the profile-authentication contract"}
