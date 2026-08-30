@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-domain/src/command/property_value.rs
   - crates/slingshot-domain/tests/fixtures/commands/property-values.jsonl
   - crates/slingshot-domain/tests/property_values.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Property Values
