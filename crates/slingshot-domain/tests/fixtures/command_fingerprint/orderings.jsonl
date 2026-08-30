@@ -1,0 +1,2 @@
+{"left":"{\"depth\":2,\"path\":\"/content\"}","note":"the same command written in the order its members sort in","right":"{\"depth\":2,\"path\":\"/content\"}","same":true}
+{"left":"{\"depth\":2,\"path\":\"/content\"}","note":"the same command written with its members reordered","right":"{\"path\":\"/content\",\"depth\":2}","same":false}
