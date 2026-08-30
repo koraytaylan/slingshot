@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/find_pages_by_template/**
   - crates/slingshot-domain/tests/find_pages_by_template.rs
 status: done
-merged_as: ""
+merged_as: "fef91618a12fde9dab56ee03834061e775beda76"
 ---
 # Find Pages by Template
 
