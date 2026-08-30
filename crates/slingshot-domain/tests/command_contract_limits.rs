@@ -231,10 +231,11 @@ fn no_command_module_writes_a_contract_value_down_again() {
     for path in command_modules() {
         let text = std::fs::read_to_string(&path).expect("the source reads");
         for (number, line) in text.lines().enumerate() {
-            let code = line.trim();
-            if code.starts_with("//") || names_its_own_quantity(code, &names) {
+            let code = outside_strings(line.trim());
+            if line.trim_start().starts_with("//") || names_its_own_quantity(&code, &names) {
                 continue;
             }
+            let code = code.as_str();
             for value in &values {
                 if carries_value(code, value) {
                     repeated.push(format!("{}:{} repeats {value}", path.display(), number + 1));
@@ -243,6 +244,31 @@ fn no_command_module_writes_a_contract_value_down_again() {
         }
     }
     assert_eq!(repeated, Vec::<String>::new(), "a contract value exists twice");
+}
+
+/// Returns one line with the contents of its string literals removed.
+///
+/// A bound is redeclared in code, never in prose. "the signed 64-bit range" is
+/// a sentence that happens to contain a number which happens to equal an
+/// unrelated limit, and reading it as a redeclaration would leave the failure
+/// message no way to say what it means.
+fn outside_strings(line: &str) -> String {
+    let mut kept = String::with_capacity(line.len());
+    let mut inside = false;
+    let mut escaped = false;
+    for character in line.chars() {
+        match (inside, escaped, character) {
+            (true, false, '\\') => escaped = true,
+            (true, true, _) => escaped = false,
+            (_, _, '"') => {
+                inside = !inside;
+                kept.push(character);
+            }
+            (false, _, _) => kept.push(character),
+            (true, false, _) => (),
+        }
+    }
+    kept
 }
 
 /// Returns whether this line declares a constant of its own rather than a copy
