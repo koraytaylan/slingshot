@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/src/command/create_page.rs
   - crates/slingshot-domain/tests/fixtures/commands/create_page/**
   - crates/slingshot-domain/tests/create_page.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Create a Page
