@@ -9,10 +9,11 @@ depends_on:
   - operation-status-and-result
 gated: false
 touches:
-  - crates/slingshot-storage/src/operation_repository.rs
+  - "crates/slingshot-daemon/tests/fixtures/list-operations/**"
   - crates/slingshot-daemon/src/operation_queries.rs
   - crates/slingshot-daemon/tests/list_operations.rs
-  - "crates/slingshot-daemon/tests/fixtures/list-operations/**"
+  - crates/slingshot-storage/src/operation_repository.rs
+  - crates/slingshot-storage/src/sqlite_statement_inventory.rs
 status: planned
 merged_as: ""
 ---

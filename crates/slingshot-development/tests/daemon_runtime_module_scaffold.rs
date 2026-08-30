@@ -179,6 +179,32 @@ fn every_scaffold_leaf_has_at_least_one_descendant_owner_and_no_second_root() {
 }
 
 #[test]
+fn every_scaffold_leaf_names_exactly_the_tasks_that_record_it() {
+    let recorded = footprints();
+    for row in rows() {
+        if text(&row, "kind") != "scaffold_leaf" {
+            continue;
+        }
+        let path = text(&row, "path");
+        let declared: BTreeSet<String> = row["descendants"]
+            .as_array()
+            .expect("a descendant list")
+            .iter()
+            .map(|owner| owner.as_str().expect("a task name").to_owned())
+            .collect();
+        let recording: BTreeSet<String> = recorded
+            .iter()
+            .filter(|(task, sources)| task.as_str() != SCAFFOLD && sources.contains(path))
+            .map(|(task, _)| task.clone())
+            .collect();
+        assert_eq!(
+            declared, recording,
+            "{path}: the fixture names one set of owners and the footprints another"
+        );
+    }
+}
+
+#[test]
 fn no_two_feature_tasks_own_one_source_without_an_ancestor_between_them() {
     let recorded = footprints();
     let mut owners: BTreeMap<&String, Vec<&String>> = BTreeMap::new();
