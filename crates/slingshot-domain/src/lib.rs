@@ -8,7 +8,13 @@
 //! structure.
 
 pub mod command;
+pub mod command_fingerprint;
 pub mod configuration_snapshot;
+pub mod daemon_runtime_contract;
+pub mod installation;
+pub mod operation;
+pub mod operation_executor;
+pub mod persistent_capacity;
 pub mod profile;
 pub mod profile_authentication_contract;
 pub mod remote_job;
