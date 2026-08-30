@@ -1,0 +1,10 @@
+{"match_mode":"any","matches":true,"note":"any finds one of them","used":["example/components/text"],"wanted":["example/components/header","example/components/text"]}
+{"match_mode":"any","matches":false,"note":"any finds nothing when neither is used","used":["example/components/footer"],"wanted":["example/components/header","example/components/text"]}
+{"match_mode":"any","matches":false,"note":"any on an empty page","used":[],"wanted":["example/components/header"]}
+{"match_mode":"all","matches":true,"note":"all needs every one","used":["example/components/header","example/components/text"],"wanted":["example/components/header","example/components/text"]}
+{"match_mode":"all","matches":true,"note":"all across separate resources, which is the usual case","used":["example/components/footer","example/components/header","example/components/text"],"wanted":["example/components/header","example/components/text","example/components/footer"]}
+{"match_mode":"all","matches":false,"note":"all is not satisfied by most of them","used":["example/components/header"],"wanted":["example/components/header","example/components/text"]}
+{"match_mode":"all","matches":false,"note":"all on an empty page","used":[],"wanted":["example/components/header"]}
+{"match_mode":"any","matches":false,"note":"a complete string compares exactly, with no super-type expansion","used":["example/components/base/derived"],"wanted":["example/components/base"]}
+{"match_mode":"any","matches":false,"note":"nor does a prefix match the other way","used":["example/components/base"],"wanted":["example/components/base/derived"]}
+{"match_mode":"all","matches":true,"note":"an extra type used by the page is not an obstacle","used":["example/components/footer","example/components/header","example/components/text"],"wanted":["example/components/text"]}
