@@ -1,0 +1,16 @@
+{"fields":{},"kind":"matching","matches":true,"note":"a property that is there exists","operator":"exists","resolved":{"state":"held","value":{"cardinality":"single","value":{"type":"string","value":"Home"}}}}
+{"fields":{},"kind":"matching","matches":false,"note":"a property that is not there does not","operator":"exists","resolved":{"state":"absent"}}
+{"fields":{"value":{"cardinality":"single","value":{"type":"string","value":"Home"}}},"kind":"matching","matches":false,"note":"an absent property is not equal to anything","operator":"equals","resolved":{"state":"absent"}}
+{"fields":{"value":{"cardinality":"single","value":{"type":"string","value":"Home"}}},"kind":"matching","matches":false,"note":"an absent property does not satisfy not-equals either, because it has nothing to compare","operator":"not_equals","resolved":{"state":"absent"}}
+{"fields":{"value":{"cardinality":"single","value":{"type":"integer","value":"1"}}},"kind":"matching","matches":false,"note":"a discriminator mismatch is false rather than a coercion","operator":"equals","resolved":{"state":"held","value":{"cardinality":"single","value":{"type":"string","value":"1"}}}}
+{"fields":{"value":{"cardinality":"single","value":{"type":"string","value":"a"}}},"kind":"matching","matches":false,"note":"a cardinality mismatch likewise","operator":"equals","resolved":{"state":"held","value":{"cardinality":"multiple","values":[{"type":"string","value":"a"}]}}}
+{"fields":{"value":{"type":"integer","value":"1"}},"kind":"matching","matches":false,"note":"an ordered comparison against an unlike type never matches","operator":"greater_than","resolved":{"state":"held","value":{"cardinality":"single","value":{"type":"string","value":"5"}}}}
+{"answers":[true,true],"kind":"combination","matches":true,"note":"predicates combine with logical and"}
+{"answers":[true,false],"kind":"combination","matches":false,"note":"one false answer is enough to exclude"}
+{"answers":[false,true],"kind":"combination","matches":false,"note":"and so is the first"}
+{"answers":[],"kind":"combination","matches":true,"note":"a search with no predicates includes every candidate under its anchor"}
+{"budget":"candidate_nodes","kind":"budget","note":"exhausting candidate_nodes discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"property_values","kind":"budget","note":"exhausting property_values discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"property_bytes","kind":"budget","note":"exhausting property_bytes discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"criterion_evaluations","kind":"budget","note":"exhausting criterion_evaluations discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"execution_duration","kind":"budget","note":"exhausting execution_duration discards the page","publishes_matches":false,"publishes_token":false}
