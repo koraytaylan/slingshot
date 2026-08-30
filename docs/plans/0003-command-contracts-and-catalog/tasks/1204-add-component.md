@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/add_component/**
   - crates/slingshot-domain/tests/add_component.rs
 status: done
-merged_as: ""
+merged_as: "4ebe1e49d7e61defca15f255620edb15a78dc86a"
 ---
 # Add a Component
 
