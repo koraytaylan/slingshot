@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"page_path\":\"/content/example/en\"}","note":"one page's references","reason":""}
+{"accepted":true,"document":"{\"page_path\":\"/content/example/en\",\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":20}}","note":"with an explicit window","reason":""}
+{"accepted":true,"document":"{\"page_path\":\"/content/example/en\",\"result_window\":{\"mode\":\"continuation\",\"continuation_token\":\"aGVhZGVy.cGF5bG9hZA.dGFn\"}}","note":"a resumed search","reason":""}
+{"accepted":false,"document":"{\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":20}}","note":"a request naming no page","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"page_path\":\"content/example\"}","note":"a relative page address","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"page_path\":\"/content/example\",\"root_path\":\"/content\"}","note":"a request naming an anchor rather than a page","reason":"ClosedObject"}

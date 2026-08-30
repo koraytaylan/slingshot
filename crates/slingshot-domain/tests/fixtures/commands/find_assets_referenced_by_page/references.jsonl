@@ -1,0 +1,12 @@
+{"is_reference":true,"note":"a path property addressing an asset","property_type":"path","resolves_to_asset":true,"stored":"/content/dam/example/a.jpg"}
+{"is_reference":true,"note":"a string property addressing the same asset","property_type":"string","resolves_to_asset":true,"stored":"/content/dam/example/a.jpg"}
+{"is_reference":false,"note":"a path-shaped string that addresses nothing","property_type":"string","resolves_to_asset":false,"stored":"/content/dam/example/missing.jpg"}
+{"is_reference":false,"note":"a path-shaped string that addresses something that is not an asset","property_type":"string","resolves_to_asset":false,"stored":"/content/example/en"}
+{"is_reference":false,"note":"prose that merely mentions a path","property_type":"string","resolves_to_asset":true,"stored":"see /content/dam/example/a.jpg for details"}
+{"is_reference":false,"note":"a relative spelling is not an absolute address","property_type":"string","resolves_to_asset":true,"stored":"dam/example/a.jpg"}
+{"is_reference":false,"note":"the repository root refers to no asset","property_type":"path","resolves_to_asset":true,"stored":"/"}
+{"is_reference":false,"note":"an empty value","property_type":"string","resolves_to_asset":true,"stored":""}
+{"is_reference":false,"note":"a doubled separator is not a repository path","property_type":"string","resolves_to_asset":true,"stored":"/content//dam/a.jpg"}
+{"is_reference":false,"note":"a property of another type is not scanned","property_type":"long","resolves_to_asset":true,"stored":"/content/dam/example/a.jpg"}
+{"is_reference":false,"note":"nor is a name","property_type":"name","resolves_to_asset":true,"stored":"a.jpg"}
+{"is_reference":false,"note":"nor a boolean","property_type":"boolean","resolves_to_asset":true,"stored":"/content/dam/example/a.jpg"}

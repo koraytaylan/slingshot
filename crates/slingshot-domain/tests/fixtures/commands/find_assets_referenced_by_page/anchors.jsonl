@@ -1,0 +1,5 @@
+{"document":"{\"failure\":\"page_not_found\",\"page_path\":\"/content/example/en\"}","members":["failure","page_path"],"note":"a page that is not_found"}
+{"document":"{\"failure\":\"page_access_denied\",\"page_path\":\"/content/example/en\"}","members":["failure","page_path"],"note":"a page that is access_denied"}
+{"document":"{\"failure\":\"page_invalid\",\"page_path\":\"/content/example/en\"}","members":["failure","page_path"],"note":"a page that is invalid"}
+{"document":"{\"failure\":\"page_not_found\",\"page_path\":\"/content/example/en\",\"matches\":[]}","note":"an anchor failure carrying matches","refused":true}
+{"document":"{\"failure\":\"page_empty\",\"page_path\":\"/content/example/en\"}","note":"an anchor failure nobody declared","refused":true}
