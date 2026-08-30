@@ -1,0 +1,24 @@
+{"found":true,"kind":"occurrence","note":"the phrase occurs","phrase":"annual report","stored":"Our annual report for 2026"}
+{"found":false,"kind":"occurrence","note":"the phrase is one contiguous run, not two words anywhere","phrase":"annual report","stored":"annual and quarterly report"}
+{"found":false,"kind":"occurrence","note":"case is not folded","phrase":"Annual Report","stored":"our annual report"}
+{"found":false,"kind":"occurrence","note":"and the other way","phrase":"annual report","stored":"Our Annual Report"}
+{"found":true,"kind":"occurrence","note":"nothing is stemmed","phrase":"report","stored":"reporting"}
+{"found":false,"kind":"occurrence","note":"but a stem is not found in an unrelated word","phrase":"report","stored":"deport"}
+{"found":false,"kind":"occurrence","note":"normalization is not applied to either side","phrase":"café","stored":"the café downstairs"}
+{"found":true,"kind":"occurrence","note":"a composed spelling finds its own","phrase":"café","stored":"the café downstairs"}
+{"found":false,"kind":"occurrence","note":"internal whitespace must match exactly","phrase":"annual  report","stored":"annual report"}
+{"found":true,"kind":"occurrence","note":"a phrase at the very start","phrase":"annual","stored":"annual report"}
+{"found":true,"kind":"occurrence","note":"a phrase at the very end","phrase":"report","stored":"annual report"}
+{"found":true,"kind":"occurrence","note":"the whole value","phrase":"annual report","stored":"annual report"}
+{"candidate":true,"kind":"candidate","note":"an exact page is a candidate","primary_node_type":"cq:Page"}
+{"candidate":false,"kind":"candidate","note":"a node of another primary type is not","primary_node_type":"nt:unstructured"}
+{"candidate":false,"kind":"candidate","note":"nor is a page-like type that is not exactly cq:Page","primary_node_type":"cq:PageContent"}
+{"kind":"title","note":"a single string title is reported","property":{"cardinality":"single","type":"string"},"reported":true}
+{"kind":"title","note":"a multi-valued one is not","property":{"cardinality":"multiple","type":"string"},"reported":false}
+{"kind":"title","note":"nor is a title of another type","property":{"cardinality":"single","type":"long"},"reported":false}
+{"kind":"title","note":"an absent title is absent","property":null,"reported":false}
+{"budget":"candidate_nodes","kind":"budget","note":"exhausting candidate_nodes discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"property_values","kind":"budget","note":"exhausting property_values discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"property_bytes","kind":"budget","note":"exhausting property_bytes discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"criterion_evaluations","kind":"budget","note":"exhausting criterion_evaluations discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"execution_duration","kind":"budget","note":"exhausting execution_duration discards the page","publishes_matches":false,"publishes_token":false}
