@@ -24,7 +24,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/catalog.json
   - crates/slingshot-domain/tests/command_catalog.rs
 status: done
-merged_as: ""
+merged_as: "7616d03a84efdc179392fcc6ab0d192a21883d7c"
 ---
 # Command Registry
 
