@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"admitting\":true,\"in_flight_operations\":0,\"pending_operations\":0,\"uptime_seconds\":12}","note":"an idle daemon"}
+{"accepted":true,"document":"{\"admitting\":true,\"in_flight_operations\":8,\"pending_operations\":200,\"uptime_seconds\":86400}","note":"a busy daemon"}
+{"accepted":true,"document":"{\"admitting\":false,\"in_flight_operations\":1,\"pending_operations\":0,\"uptime_seconds\":3}","note":"a daemon that has stopped admitting"}
+{"accepted":false,"document":"{\"admitting\":true,\"in_flight_operations\":0,\"pending_operations\":0,\"queue\":[],\"uptime_seconds\":1}","note":"a status carrying a member nobody declared"}

@@ -1,0 +1,8 @@
+{"accepted":true,"methods":["daemon.hello"],"note":"a greeting first"}
+{"accepted":true,"methods":["daemon.hello","daemon.ping"],"note":"then anything else"}
+{"accepted":true,"methods":["daemon.hello","daemon.status"],"note":"status after greeting"}
+{"accepted":true,"methods":["daemon.hello","daemon.stop"],"note":"stop after greeting"}
+{"accepted":false,"methods":["daemon.ping"],"note":"a ping before greeting"}
+{"accepted":false,"methods":["daemon.stop"],"note":"a stop before greeting"}
+{"accepted":false,"methods":["daemon.status"],"note":"a status before greeting"}
+{"accepted":false,"methods":["daemon.hello","daemon.hello"],"note":"two greetings"}

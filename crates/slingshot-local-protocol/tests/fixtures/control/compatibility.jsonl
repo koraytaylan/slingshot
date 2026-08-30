@@ -1,0 +1,6 @@
+{"caller":[1],"caller_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","daemon":[1],"note":"one shared version and the same contract","outcome":"compatible","version":1}
+{"caller":[2,3],"caller_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","daemon":[1,2,3],"note":"several shared versions choose the highest","outcome":"compatible","version":3}
+{"caller":[2],"caller_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","daemon":[1],"note":"no shared version","outcome":"no_shared_version","version":null}
+{"caller":[1],"caller_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","daemon":[],"note":"a daemon serving none","outcome":"no_shared_version","version":null}
+{"caller":[],"caller_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","daemon":[1],"note":"a caller speaking none","outcome":"no_shared_version","version":null}
+{"caller":[1],"caller_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","daemon":[1],"note":"a shared version and another runtime contract","outcome":"runtime_contract_differs","version":null}
