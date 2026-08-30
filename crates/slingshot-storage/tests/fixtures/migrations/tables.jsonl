@@ -1,0 +1,8 @@
+{"note":"one artifact per operation and slot","table":"artifact_association"}
+{"note":"content addressed once per digest","table":"artifact_blob"}
+{"note":"one identifier, and only one","table":"installation"}
+{"note":"receipts partitioned by target","table":"maintenance_application_receipt"}
+{"note":"keyed by target and identifier, referencing no operation","table":"maintenance_result_association"}
+{"note":"keyed by target and caller-chosen identifier","table":"operation"}
+{"note":"one outstanding recovery per operation","table":"recovery_fact"}
+{"note":"keyed by its source fingerprint","table":"recovery_resume_receipt"}

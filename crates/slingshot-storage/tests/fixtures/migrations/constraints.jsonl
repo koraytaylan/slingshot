@@ -1,0 +1,8 @@
+{"accepted":true,"note":"two operations may share an identifier across targets","scenario":"same_identifier_distinct_targets"}
+{"accepted":false,"note":"one target holds one operation per identifier","scenario":"same_identifier_same_target"}
+{"accepted":false,"note":"a target holds at most one current preview","scenario":"two_current_previews"}
+{"accepted":true,"note":"a target may hold one current preview and applied results beside it","scenario":"preview_and_application"}
+{"accepted":false,"note":"an association owned by no receipt is a current preview","scenario":"applied_without_receipt"}
+{"accepted":false,"note":"a recovery claiming certainty declares which kind it is","scenario":"proven_success_with_certainty"}
+{"accepted":false,"note":"an unresolved recovery carries a certainty","scenario":"unresolved_without_certainty"}
+{"accepted":false,"note":"an artifact association needs its blob","scenario":"association_without_blob"}
