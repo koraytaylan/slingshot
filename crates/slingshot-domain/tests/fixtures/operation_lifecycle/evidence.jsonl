@@ -1,0 +1,28 @@
+{"admitted":true,"category":"ambiguous_submission","evidence":{"certainty":"confirmed_not_executed","evidence":"execution_certainty"},"note":"ambiguous_submission carries a certainty"}
+{"admitted":true,"category":"ambiguous_submission","evidence":{"certainty":"submission_unknown","evidence":"execution_certainty"},"note":"ambiguous_submission carries a certainty"}
+{"admitted":true,"category":"ambiguous_submission","evidence":{"certainty":"remote_outcome_unknown","evidence":"execution_certainty"},"note":"ambiguous_submission carries a certainty"}
+{"admitted":false,"category":"ambiguous_submission","evidence":{"evidence":"authoritative_remote_success"},"note":"ambiguous_submission cannot claim proven success"}
+{"admitted":true,"category":"event_reconnection","evidence":{"certainty":"confirmed_not_executed","evidence":"execution_certainty"},"note":"event_reconnection carries a certainty"}
+{"admitted":true,"category":"event_reconnection","evidence":{"certainty":"submission_unknown","evidence":"execution_certainty"},"note":"event_reconnection carries a certainty"}
+{"admitted":true,"category":"event_reconnection","evidence":{"certainty":"remote_outcome_unknown","evidence":"execution_certainty"},"note":"event_reconnection carries a certainty"}
+{"admitted":false,"category":"event_reconnection","evidence":{"evidence":"authoritative_remote_success"},"note":"event_reconnection cannot claim proven success"}
+{"admitted":true,"category":"operation_lookup","evidence":{"certainty":"confirmed_not_executed","evidence":"execution_certainty"},"note":"operation_lookup carries a certainty"}
+{"admitted":true,"category":"operation_lookup","evidence":{"certainty":"submission_unknown","evidence":"execution_certainty"},"note":"operation_lookup carries a certainty"}
+{"admitted":true,"category":"operation_lookup","evidence":{"certainty":"remote_outcome_unknown","evidence":"execution_certainty"},"note":"operation_lookup carries a certainty"}
+{"admitted":false,"category":"operation_lookup","evidence":{"evidence":"authoritative_remote_success"},"note":"operation_lookup cannot claim proven success"}
+{"admitted":true,"category":"job_snapshot_recovery","evidence":{"certainty":"confirmed_not_executed","evidence":"execution_certainty"},"note":"job_snapshot_recovery carries a certainty"}
+{"admitted":true,"category":"job_snapshot_recovery","evidence":{"certainty":"submission_unknown","evidence":"execution_certainty"},"note":"job_snapshot_recovery carries a certainty"}
+{"admitted":true,"category":"job_snapshot_recovery","evidence":{"certainty":"remote_outcome_unknown","evidence":"execution_certainty"},"note":"job_snapshot_recovery carries a certainty"}
+{"admitted":false,"category":"job_snapshot_recovery","evidence":{"evidence":"authoritative_remote_success"},"note":"job_snapshot_recovery cannot claim proven success"}
+{"admitted":true,"category":"result_acquisition","evidence":{"evidence":"authoritative_remote_success"},"note":"result_acquisition follows a proven success"}
+{"admitted":false,"category":"result_acquisition","evidence":{"certainty":"confirmed_not_executed","evidence":"execution_certainty"},"note":"result_acquisition cannot be uncertain whether the work happened"}
+{"admitted":false,"category":"result_acquisition","evidence":{"certainty":"submission_unknown","evidence":"execution_certainty"},"note":"result_acquisition cannot be uncertain whether the work happened"}
+{"admitted":false,"category":"result_acquisition","evidence":{"certainty":"remote_outcome_unknown","evidence":"execution_certainty"},"note":"result_acquisition cannot be uncertain whether the work happened"}
+{"admitted":true,"category":"artifact_transfer","evidence":{"evidence":"authoritative_remote_success"},"note":"artifact_transfer follows a proven success"}
+{"admitted":false,"category":"artifact_transfer","evidence":{"certainty":"confirmed_not_executed","evidence":"execution_certainty"},"note":"artifact_transfer cannot be uncertain whether the work happened"}
+{"admitted":false,"category":"artifact_transfer","evidence":{"certainty":"submission_unknown","evidence":"execution_certainty"},"note":"artifact_transfer cannot be uncertain whether the work happened"}
+{"admitted":false,"category":"artifact_transfer","evidence":{"certainty":"remote_outcome_unknown","evidence":"execution_certainty"},"note":"artifact_transfer cannot be uncertain whether the work happened"}
+{"admitted":true,"category":"persistent_capacity_unavailable","evidence":{"evidence":"authoritative_remote_success"},"note":"persistent_capacity_unavailable follows a proven success"}
+{"admitted":false,"category":"persistent_capacity_unavailable","evidence":{"certainty":"confirmed_not_executed","evidence":"execution_certainty"},"note":"persistent_capacity_unavailable cannot be uncertain whether the work happened"}
+{"admitted":false,"category":"persistent_capacity_unavailable","evidence":{"certainty":"submission_unknown","evidence":"execution_certainty"},"note":"persistent_capacity_unavailable cannot be uncertain whether the work happened"}
+{"admitted":false,"category":"persistent_capacity_unavailable","evidence":{"certainty":"remote_outcome_unknown","evidence":"execution_certainty"},"note":"persistent_capacity_unavailable cannot be uncertain whether the work happened"}

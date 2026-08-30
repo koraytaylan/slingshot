@@ -1,0 +1,6 @@
+{"delay":500,"note":"no time has passed","now":1000,"observed":1000,"remaining":500}
+{"delay":500,"note":"half the delay has passed","now":1250,"observed":1000,"remaining":250}
+{"delay":500,"note":"the delay has passed exactly","now":1500,"observed":1000,"remaining":0}
+{"delay":500,"note":"a clock that moved forward makes it eligible now","now":99999,"observed":1000,"remaining":0}
+{"delay":500,"note":"a clock that moved backward waits at most the original delay","now":0,"observed":1000,"remaining":500}
+{"delay":0,"note":"a zero delay is eligible now","now":1000,"observed":1000,"remaining":0}
