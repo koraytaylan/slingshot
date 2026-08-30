@@ -340,15 +340,18 @@ impl PropertyPredicate {
 
     /// Returns whether `observed` answers this predicate affirmatively.
     ///
-    /// An absent property answers no to everything except a `NotEquals`, which
-    /// asks whether the property holds some particular value and is answered by
-    /// a property that holds nothing at all.
+    /// An absent property answers no to every operator, `NotEquals` included.
+    /// That reads oddly until you take the question literally: a discovery
+    /// command answers about nodes it can see, and a node with no such property
+    /// has not been shown to differ from the value - it has been shown to have
+    /// nothing to compare. The alternative would make a single misspelled
+    /// property path match the entire repository.
     #[must_use]
     pub fn matches(&self, observed: Option<&ObservedProperty>) -> bool {
         match self {
             Self::Exists { .. } => observed.is_some(),
             Self::Equals { value, .. } => held(observed).is_some_and(|held| held.equals(value)),
-            Self::NotEquals { value, .. } => !held(observed).is_some_and(|held| held.equals(value)),
+            Self::NotEquals { value, .. } => held(observed).is_some_and(|held| !held.equals(value)),
             Self::ScalarIn { values, .. } => {
                 matches!(held(observed), Some(PropertyValue::Single(scalar)) if values.contains(scalar))
             }
