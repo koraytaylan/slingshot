@@ -15,7 +15,7 @@ touches:
   - policy/workspace-capabilities.toml
   - crates/slingshot-development/tests/fixtures/workspace-capability-inventory/consumer-capabilities.toml
 status: done
-merged_as: ""
+merged_as: "d0d3e9cab93a3305a986ba05ddbd9a087fe521f1"
 ---
 # Persistent Installation Identifier
 
