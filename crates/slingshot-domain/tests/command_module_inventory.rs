@@ -155,9 +155,11 @@ fn the_inventory_the_declarations_and_the_files_describe_one_set() {
 #[test]
 fn the_workspace_map_keeps_the_family_root_and_enumerates_no_command_leaf() {
     let map = read_crate_file(WORKSPACE_MAP);
+    // The family is a directory, so the separator is part of the prefix: without
+    // it a later sibling named `command_fingerprint.rs` reads as a command leaf.
     let rooted: Vec<&str> = map
         .lines()
-        .filter(|line| line.starts_with("crates/slingshot-domain/src/command"))
+        .filter(|line| line.starts_with("crates/slingshot-domain/src/command/"))
         .collect();
     assert_eq!(
         rooted,
