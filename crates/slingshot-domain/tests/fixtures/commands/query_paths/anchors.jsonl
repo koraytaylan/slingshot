@@ -1,0 +1,5 @@
+{"document":"{\"failure\":\"root_not_found\",\"root_path\":\"/content/example\"}","kind":"anchor","members":["failure","root_path"],"note":"an anchor that is root_not_found"}
+{"document":"{\"failure\":\"root_access_denied\",\"root_path\":\"/content/example\"}","kind":"anchor","members":["failure","root_path"],"note":"an anchor that is root_access_denied"}
+{"document":"{\"failure\":\"root_not_found\",\"root_path\":\"/content/example\",\"matches\":[]}","kind":"anchor_refused","note":"an anchor failure carrying matches"}
+{"document":"{\"failure\":\"root_access_denied\",\"root_path\":\"/content/example\",\"next_continuation_token\":\"aGVhZGVy.cGF5bG9hZA.dGFn\"}","kind":"anchor_refused","note":"an anchor failure carrying a continuation token"}
+{"document":"{\"failure\":\"root_invalid\",\"root_path\":\"/content/example\"}","kind":"anchor_refused","note":"an anchor failure nobody declared"}

@@ -1,0 +1,11 @@
+{"accepted":true,"document":"{\"matches\":[]}","note":"an empty page","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"repository_path\":\"/content/example\"}]}","note":"one match","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"repository_path\":\"/content/a\"},{\"repository_path\":\"/content/b\"},{\"repository_path\":\"/content/c\"}]}","note":"several, strictly ascending","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"repository_path\":\"/content/a\"}],\"next_continuation_token\":\"aGVhZGVy.cGF5bG9hZA.dGFn\"}","note":"a page that carries where to resume","reason":""}
+{"accepted":true,"document":"{\"matches\":[{\"repository_path\":\"/content/Z\"},{\"repository_path\":\"/content/a\"}]}","note":"byte order, not display order","reason":""}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/a\"},{\"repository_path\":\"/content/a\"}]}","note":"a path that repeats","reason":"NotStrictlyAscending"}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/b\"},{\"repository_path\":\"/content/a\"}]}","note":"a page out of order","reason":"NotStrictlyAscending"}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/a\"},{\"repository_path\":\"/content/Z\"}]}","note":"byte order is not folded order","reason":"NotStrictlyAscending"}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/a\"}],\"next_continuation_token\":\"\"}","note":"an empty token names no page","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"matches\":[],\"total\":0}","note":"a page carrying a surplus member","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"matches\":[{\"repository_path\":\"/content/a\",\"score\":1}]}","note":"a match carrying a surplus member","reason":"ClosedObject"}
