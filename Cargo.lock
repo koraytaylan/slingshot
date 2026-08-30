@@ -2254,10 +2254,12 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "slingshot-domain",
  "tempfile",
  "thiserror",
  "tracing",
  "uuid",
+ "uzers",
 ]
 
 [[package]]
