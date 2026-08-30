@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/property-values.jsonl
   - crates/slingshot-domain/tests/property_values.rs
 status: done
-merged_as: ""
+merged_as: "05467328a32cb5093e6b71f9d05cdeeabb5af016"
 ---
 # Property Values
 
