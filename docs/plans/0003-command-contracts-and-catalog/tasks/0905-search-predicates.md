@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-domain/src/command/search_predicate.rs
   - crates/slingshot-domain/tests/fixtures/commands/search-predicates.jsonl
   - crates/slingshot-domain/tests/search_predicates.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Search Predicates
