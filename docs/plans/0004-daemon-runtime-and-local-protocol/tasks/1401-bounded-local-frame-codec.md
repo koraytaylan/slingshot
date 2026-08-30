@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-local-protocol/tests/framing.rs
   - "crates/slingshot-local-protocol/tests/fixtures/framing/**"
 status: done
-merged_as: ""
+merged_as: "bcf3125150404ae24af83b2e659e65c0cf11ad42"
 ---
 # Bounded Local Frame Codec
 
