@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-domain/src/operation.rs
   - crates/slingshot-domain/tests/operation_lifecycle.rs
   - "crates/slingshot-domain/tests/fixtures/operation_lifecycle/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Operation Lifecycle
