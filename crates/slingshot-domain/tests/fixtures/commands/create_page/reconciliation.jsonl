@@ -1,0 +1,9 @@
+{"checkpoint":"not_started","conflicting_receipt":false,"matching_receipt":false,"note":"nothing attempted and nothing there permits one attempt","outcome":"not_committed","target_present":false}
+{"checkpoint":"not_started","conflicting_receipt":false,"matching_receipt":false,"note":"nothing attempted and something already there","outcome":"target_already_exists","target_present":true}
+{"checkpoint":"in_flight","conflicting_receipt":false,"matching_receipt":true,"note":"a matching receipt is proof the save committed","outcome":"committed","target_present":true}
+{"checkpoint":"in_flight","conflicting_receipt":false,"matching_receipt":true,"note":"and stays proof after somebody else deleted the target","outcome":"committed","target_present":false}
+{"checkpoint":"in_flight","conflicting_receipt":false,"matching_receipt":false,"note":"neither receipt nor target after an attempt proves no commit","outcome":"not_committed","target_present":false}
+{"checkpoint":"in_flight","conflicting_receipt":false,"matching_receipt":false,"note":"a target without its receipt is unknown","outcome":"unknown","target_present":true}
+{"checkpoint":"in_flight","conflicting_receipt":true,"matching_receipt":false,"note":"an unreadable receipt is unknown","outcome":"unknown","target_present":true}
+{"checkpoint":"in_flight","conflicting_receipt":true,"matching_receipt":true,"note":"a conflicting receipt is unknown even with a matching one beside it","outcome":"unknown","target_present":true}
+{"checkpoint":"committed","conflicting_receipt":false,"matching_receipt":true,"note":"a committed checkpoint with its receipt","outcome":"committed","target_present":true}
