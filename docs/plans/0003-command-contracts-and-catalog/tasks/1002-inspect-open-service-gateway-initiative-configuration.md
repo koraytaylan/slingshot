@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/inspect_open_service_gateway_initiative_configuration/**
   - crates/slingshot-domain/tests/inspect_open_service_gateway_initiative_configuration.rs
 status: done
-merged_as: ""
+merged_as: "5b9e7867d99bf66d3dbdd8b772070fa001bf4ee9"
 ---
 # Inspect Open Service Gateway Initiative Configuration
 
