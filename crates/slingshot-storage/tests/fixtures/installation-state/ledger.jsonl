@@ -1,0 +1,6 @@
+{"accepted":true,"action":"stage","held":null,"note":"a new target is staged","result":"initializing"}
+{"accepted":true,"action":"register","held":"initializing","note":"a staged target is registered","result":"registered"}
+{"accepted":true,"action":"register","held":"registered","note":"registering a registered target changes nothing","result":"registered"}
+{"accepted":false,"action":"stage","held":"registered","note":"a registered target is not staged again","result":null}
+{"accepted":false,"action":"register","held":null,"note":"a target that was never staged is not registered","result":null}
+{"accepted":true,"action":"stage","held":"initializing","note":"staging a staged target changes nothing","result":"initializing"}
