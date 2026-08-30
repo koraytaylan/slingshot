@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/src/command/find_pages_using_components.rs
   - crates/slingshot-domain/tests/fixtures/commands/find_pages_using_components/**
   - crates/slingshot-domain/tests/find_pages_using_components.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Find Pages Using Components

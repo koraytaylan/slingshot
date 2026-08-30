@@ -1,0 +1,3 @@
+{"cardinality":"single","note":"a single string resource type is read","read":true,"type":"string"}
+{"cardinality":"multiple","note":"a multi-valued one is not","read":false,"type":"string"}
+{"cardinality":"single","note":"nor is one of another type","read":false,"type":"name"}
