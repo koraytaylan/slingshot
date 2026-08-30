@@ -6,7 +6,7 @@
 //! refuse the adjacent one. A separate inventory assertion proves that no other
 //! repository file carries a second copy of a contract value.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -488,9 +488,37 @@ fn standalone_literal(characters: &[char], start: usize, end: usize) -> Option<u
 }
 
 /// Reports every contract value one source file repeats as a literal.
+/// Returns whether this line declares a constant of its own.
+///
+/// The defect this scan exists for is a source writing a contract value down
+/// again, and that is caught by the *name*: a line declaring
+/// `MAXIMUM_NESTING_DEPTH` is caught whatever number stands beside it. A
+/// constant whose name matches no contract field is a different quantity that
+/// happens to share a number - a digest width, a segment count - and refusing
+/// it would push the source back to writing the number inline with no name at
+/// all, which is what the naming rule is against.
+fn declares_its_own_quantity(line: &str, contract_names: &BTreeSet<String>) -> bool {
+    let Some(declaration) = line.split_once("const ").map(|(_, rest)| rest) else {
+        return false;
+    };
+    let Some(name) = declaration.split(':').next().map(str::trim) else {
+        return false;
+    };
+    !name.is_empty()
+        && name.chars().all(|character| {
+            character.is_ascii_uppercase() || character == '_' || character.is_ascii_digit()
+        })
+        && !contract_names.contains(name)
+}
+
 fn repeated_values(relative: &str, source: &str, values: &BTreeMap<u64, &str>) -> Vec<String> {
+    let contract_names: BTreeSet<String> =
+        values.values().map(|name| name.replace('-', "_").to_uppercase()).collect();
     let mut reported = Vec::new();
     for (line_number, line) in source.lines().enumerate() {
+        if declares_its_own_quantity(line, &contract_names) {
+            continue;
+        }
         for number in numeric_literals(line) {
             if let Some(field) = values.get(&number) {
                 reported.push(format!(
