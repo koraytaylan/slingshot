@@ -1,0 +1,5 @@
+{"note":"a descendant that begins with the content segment","parent":"jcr:content","repeats":true}
+{"note":"and one that begins with it and a sibling index","parent":"jcr:content[2]","repeats":true}
+{"note":"and one that begins with it and continues","parent":"jcr:content/par","repeats":true}
+{"note":"an ordinary descendant does not","parent":"par","repeats":false}
+{"note":"nor does one whose later segment happens to be it","parent":"par/jcr:content","repeats":false}

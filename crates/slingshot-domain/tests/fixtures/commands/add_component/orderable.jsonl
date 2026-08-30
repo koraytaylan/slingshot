@@ -1,0 +1,2 @@
+{"accepted":true,"note":"an orderable parent may take an appended child","orderable":true}
+{"accepted":false,"note":"a non-orderable one is refused rather than appended to hopefully","orderable":false}
