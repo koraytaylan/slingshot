@@ -1,0 +1,7 @@
+{"frame":"00100001","note":"a prefix declaring one byte past the maximum","reason":"PayloadTooLarge"}
+{"frame":"ffffffff","note":"a prefix declaring the largest unsigned value the prefix can hold","reason":"PayloadTooLarge"}
+{"frame":"00000002fffe","note":"a payload that is not valid text","reason":"NotText"}
+{"frame":"000000077b2261223a2278","note":"a payload that ends inside a string","reason":"Unfinished"}
+{"frame":"000000067b2261223a31","note":"a payload that ends inside an object","reason":"Unfinished"}
+{"frame":"0000000e7b2261223a317d7b2262223a327d","note":"a payload carrying a second value","reason":"TrailingValue"}
+{"frame":"00000000","note":"a zero-length payload","reason":"NoValue"}
