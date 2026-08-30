@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 hex.workspace = true
+slingshot-domain.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -14,6 +15,12 @@ sha2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+
+[target.x86_64-unknown-linux-gnu.dependencies]
+uzers.workspace = true
+
+[target.aarch64-apple-darwin.dependencies]
+uzers.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
