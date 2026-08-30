@@ -1,0 +1,3 @@
+{"may_be_offered":true,"note":"a path never offered may be offered by a retry","state":"not_started"}
+{"may_be_offered":false,"note":"a path already offered is ambiguous and is never offered again","state":"in_flight"}
+{"may_be_offered":false,"note":"an accepted path is done","state":"accepted"}

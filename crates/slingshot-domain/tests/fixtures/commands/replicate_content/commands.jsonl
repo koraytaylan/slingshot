@@ -1,0 +1,7 @@
+{"accepted":true,"document":"{\"path\":\"/content/example/en\",\"recursive\":false}","note":"one node","reason":""}
+{"accepted":true,"document":"{\"path\":\"/content/example\",\"recursive\":true}","note":"a subtree","reason":""}
+{"accepted":false,"document":"{\"recursive\":true}","note":"a request naming no path","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"path\":\"/content/example\"}","note":"a request that does not say whether it is recursive","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"path\":\"content/example\",\"recursive\":false}","note":"a relative path","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"path\":\"/content\",\"recursive\":true,\"publisher\":\"https://publish.example.invalid\"}","note":"a request carrying a publisher address","reason":"ClosedObject"}
+{"accepted":false,"document":"{\"path\":\"/content\",\"recursive\":true,\"password\":\"secret\"}","note":"a request carrying a credential","reason":"ClosedObject"}

@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-domain/src/command/replicate_content.rs
   - crates/slingshot-domain/tests/fixtures/commands/replicate_content/**
   - crates/slingshot-domain/tests/replicate_content.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Replicate Content
