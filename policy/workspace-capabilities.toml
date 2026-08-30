@@ -268,14 +268,14 @@ owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-c
 
 [[capability]]
 name = "operating-system-account-database"
-purpose = "Read the account-database home directory of an effective user identifier."
+purpose = "Read the account-database home directory or identifier of an effective user."
 package = "uzers"
 version = "0.12.2"
 default-features = true
 features = []
 targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
 kinds = ["normal"]
-owners = ["slingshot-configuration"]
+owners = ["slingshot-configuration", "slingshot-storage"]
 
 [[capability]]
 name = "platform-directories"

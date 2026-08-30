@@ -11,7 +11,10 @@ touches:
   - crates/slingshot-storage/src/installation_state.rs
   - crates/slingshot-storage/tests/installation_state.rs
   - "crates/slingshot-storage/tests/fixtures/installation-state/**"
-status: planned
+  - crates/slingshot-storage/Cargo.toml
+  - policy/workspace-capabilities.toml
+  - crates/slingshot-development/tests/fixtures/workspace-capability-inventory/consumer-capabilities.toml
+status: done
 merged_as: ""
 ---
 # Persistent Installation Identifier

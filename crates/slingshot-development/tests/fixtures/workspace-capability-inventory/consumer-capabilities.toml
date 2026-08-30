@@ -70,7 +70,7 @@ development = []
 [[consumer]]
 name = "slingshot_storage"
 package = "slingshot-storage"
-normal = ["typed-errors", "embedded-structured-query-language", "serialization", "javascript-object-notation", "secure-hash-digests", "hexadecimal-encoding", "unique-identifiers", "diagnostics"]
+normal = ["typed-errors", "embedded-structured-query-language", "serialization", "javascript-object-notation", "secure-hash-digests", "hexadecimal-encoding", "unique-identifiers", "diagnostics", "operating-system-account-database"]
 build = []
 development = ["temporary-files", "property-tests"]
 
