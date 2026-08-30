@@ -1,0 +1,11 @@
+{"note":"an ordinary stem","stem":"example-pages","suggested_file_name":"example-pages.zip","valid":true}
+{"note":"digits alone","stem":"2026","suggested_file_name":"2026.zip","valid":true}
+{"note":"underscores","stem":"example_pages","suggested_file_name":"example_pages.zip","valid":true}
+{"note":"mixed case","stem":"ExamplePages","suggested_file_name":"ExamplePages.zip","valid":true}
+{"note":"a space","stem":"example pages","suggested_file_name":null,"valid":false}
+{"note":"a dot","stem":"example.pages","suggested_file_name":null,"valid":false}
+{"note":"a solidus","stem":"example/pages","suggested_file_name":null,"valid":false}
+{"note":"a reverse solidus","stem":"example\\pages","suggested_file_name":null,"valid":false}
+{"note":"a non-ASCII letter","stem":"café","suggested_file_name":null,"valid":false}
+{"note":"the longest stem","stem":"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn","suggested_file_name":"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn.zip","valid":true}
+{"note":"one byte further","stem":"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn","suggested_file_name":null,"valid":false}

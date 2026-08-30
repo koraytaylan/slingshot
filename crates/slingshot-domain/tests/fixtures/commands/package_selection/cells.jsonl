@@ -1,0 +1,4 @@
+{"cells":1,"note":"the root expression against the root","segments":0,"tokens":0}
+{"cells":4,"note":"one token against one segment","segments":1,"tokens":1}
+{"cells":20,"note":"three tokens against four segments","segments":4,"tokens":3}
+{"cells":36,"note":"the table is one wider and one taller than the sequences","segments":5,"tokens":5}

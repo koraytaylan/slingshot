@@ -1,0 +1,8 @@
+{"escaped":"a&amp;b","note":"an ampersand","raw":"a&b"}
+{"escaped":"a&lt;b","note":"a less-than","raw":"a<b"}
+{"escaped":"a&gt;b","note":"a greater-than","raw":"a>b"}
+{"escaped":"a&quot;b","note":"a double quote","raw":"a\"b"}
+{"escaped":"a&apos;b","note":"an apostrophe","raw":"a'b"}
+{"escaped":"&amp;&lt;&gt;&quot;&apos;","note":"all five at once","raw":"&<>\"'"}
+{"escaped":"&amp;amp;","note":"the bytes an escape produces are never scanned again","raw":"&amp;"}
+{"escaped":"/content/example","note":"text with nothing to escape","raw":"/content/example"}
