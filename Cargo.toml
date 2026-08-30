@@ -74,6 +74,7 @@ tracing = { version = "0.1.44" }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
 url = { version = "2.5.8" }
 uzers = { version = "0.12.2" }
+unicode-normalization = { version = "0.1.25" }
 uuid = { version = "1.26.0", features = ["v4", "serde"] }
 windows-permissions = { version = "0.2.4" }
 windows-sys = { version = "0.61.2", features = ["Win32_System_Threading"] }
