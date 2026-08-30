@@ -1,0 +1,26 @@
+{"candidate":"/content/bar/image","expression":"/content/bar/(.*)/image","matches":true,"note":"zero middle segments"}
+{"candidate":"/content/bar/a/image","expression":"/content/bar/(.*)/image","matches":true,"note":"one middle segment"}
+{"candidate":"/content/bar/a/b/image","expression":"/content/bar/(.*)/image","matches":true,"note":"two middle segments"}
+{"candidate":"/content/baz/a/image","expression":"/content/bar/(.*)/image","matches":false,"note":"a different literal prefix"}
+{"candidate":"/content/bar/a/photo","expression":"/content/bar/(.*)/image","matches":false,"note":"a different literal suffix"}
+{"candidate":"/content/bar/a/image/child","expression":"/content/bar/(.*)/image","matches":false,"note":"a trailing segment past the suffix"}
+{"candidate":"/content/bar","expression":"/content/bar/(.*)/image","matches":false,"note":"a prefix of the expression is not a match"}
+{"candidate":"/","expression":"/","matches":true,"note":"the root matches the root expression"}
+{"candidate":"/content","expression":"/","matches":false,"note":"and nothing else does"}
+{"candidate":"/content/bar","expression":"/","matches":false,"note":"the root expression does not match a deep path"}
+{"candidate":"/content/bar/image","expression":"/content/*/image","matches":true,"note":"one-segment wildcard consumes exactly one"}
+{"candidate":"/content/image","expression":"/content/*/image","matches":false,"note":"and not zero"}
+{"candidate":"/content/a/b/image","expression":"/content/*/image","matches":false,"note":"and not two"}
+{"candidate":"/content/a/b/c","expression":"/content/(.*)","matches":true,"note":"any-segments at the end consumes the rest"}
+{"candidate":"/content","expression":"/content/(.*)","matches":true,"note":"and consumes nothing happily"}
+{"candidate":"/a/b/bar/c/d","expression":"/(.*)/bar/(.*)","matches":true,"note":"two any-segments tokens"}
+{"candidate":"/bar","expression":"/(.*)/bar/(.*)","matches":true,"note":"with nothing on either side"}
+{"candidate":"/content/a.b","expression":"/content/a.b","matches":true,"note":"a literal metacharacter is compared as a character"}
+{"candidate":"/content/axb","expression":"/content/a.b","matches":false,"note":"and does not match what a regular expression would"}
+{"candidate":"/content/a+","expression":"/content/a+","matches":true,"note":"a plus is literal too"}
+{"candidate":"/content/aa","expression":"/content/a+","matches":false,"note":"and does not repeat anything"}
+{"candidate":"/content/café","expression":"/content/café","matches":true,"note":"a Unicode segment compares byte for byte"}
+{"candidate":"/content/cafè","expression":"/content/café","matches":false,"note":"and a different accented spelling is a different segment"}
+{"candidate":"/content/bar","expression":"/content/Bar","matches":false,"note":"comparison is not case folded"}
+{"candidate":"/content/bar/child","expression":"/content/bar","matches":false,"note":"matching is anchored at the end"}
+{"candidate":"/content/bar","expression":"/bar","matches":false,"note":"and at the beginning"}

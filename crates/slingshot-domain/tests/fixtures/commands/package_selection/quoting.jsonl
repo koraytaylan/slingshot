@@ -1,0 +1,15 @@
+{"node_include":"\\A\\Q/content/example\\E\\z","note":"an ordinary path","path":"/content/example","property_exclude":"\\A\\Q/content/example\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a(b\\E\\z","note":"a path carrying an opening parenthesis","path":"/content/a(b","property_exclude":"\\A\\Q/content/a(b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a+b\\E\\z","note":"a path carrying a plus","path":"/content/a+b","property_exclude":"\\A\\Q/content/a+b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a^b\\E\\z","note":"a path carrying a caret","path":"/content/a^b","property_exclude":"\\A\\Q/content/a^b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a$b\\E\\z","note":"a path carrying a dollar","path":"/content/a$b","property_exclude":"\\A\\Q/content/a$b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a\\b\\E\\z","note":"a path carrying a backslash","path":"/content/a\\b","property_exclude":"\\A\\Q/content/a\\b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a\\E\\\\E\\Qb\\E\\z","note":"a path carrying the two-scalar sequence that closes a quoted region","path":"/content/a\\Eb","property_exclude":"\\A\\Q/content/a\\E\\\\E\\Qb\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a\\E\\\\E\\Qb\\E\\\\E\\Qc\\E\\z","note":"a path carrying that sequence twice","path":"/content/a\\Eb\\Ec","property_exclude":"\\A\\Q/content/a\\E\\\\E\\Qb\\E\\\\E\\Qc\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a&b\\E\\z","note":"a path carrying an ampersand","path":"/content/a&b","property_exclude":"\\A\\Q/content/a&b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a\"b\\E\\z","note":"a path carrying a double quote","path":"/content/a\"b","property_exclude":"\\A\\Q/content/a\"b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a'b\\E\\z","note":"a path carrying an apostrophe","path":"/content/a'b","property_exclude":"\\A\\Q/content/a'b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a<b>c\\E\\z","note":"a path carrying both angle characters","path":"/content/a<b>c","property_exclude":"\\A\\Q/content/a<b>c\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a😀b\\E\\z","note":"a path carrying a supplementary scalar","path":"/content/a😀b","property_exclude":"\\A\\Q/content/a😀b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a{1}b\\E\\z","note":"a path carrying braces","path":"/content/a{1}b","property_exclude":"\\A\\Q/content/a{1}b\\E/(?:[^/]+)\\z"}
+{"node_include":"\\A\\Q/content/a?b\\E\\z","note":"a path carrying a question mark","path":"/content/a?b","property_exclude":"\\A\\Q/content/a?b\\E/(?:[^/]+)\\z"}
