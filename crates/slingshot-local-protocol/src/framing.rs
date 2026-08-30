@@ -47,6 +47,15 @@ pub enum FramingFailure {
     /// The payload ends inside a string, an array, or an object.
     #[error("the payload ends inside an unfinished container or string")]
     Unfinished,
+    /// The payload carries no value at all.
+    #[error("a frame carries exactly one value, and this one carries none")]
+    NoValue,
+    /// The transport failed partway through a frame.
+    #[error("the transport failed partway through a frame: {0}")]
+    TransportFailed(String),
+    /// The reader already refused a frame on this connection.
+    #[error("a reader that refused a frame reads no further bytes on that connection")]
+    ReaderPoisoned,
     /// Bytes follow the payload value that are neither whitespace nor part of it.
     #[error("the payload carries a trailing value")]
     TrailingValue,
@@ -136,6 +145,23 @@ pub fn render(limits: &FramingLimits, payload: &[u8]) -> Result<Vec<u8>, Framing
     Ok(frame)
 }
 
+/// Refuses a significant byte after the payload's one value has closed.
+///
+/// A payload holds exactly one value. Once that value has closed, the next
+/// significant byte starts a second one, and a reader that took it would be
+/// reading a frame the sender never framed.
+///
+/// # Errors
+///
+/// Returns [`FramingFailure::TrailingValue`] for that byte.
+fn starts_second_value(scan: &StructuralScan, byte: u8) -> Result<(), FramingFailure> {
+    let significant = !INSIGNIFICANT_BYTES.contains(&byte);
+    if scan.completed && scan.open.is_empty() && significant {
+        return Err(FramingFailure::TrailingValue);
+    }
+    Ok(())
+}
+
 /// One container the structural scan is inside.
 #[derive(Debug, Clone, Copy)]
 struct OpenContainer {
@@ -215,6 +241,7 @@ fn scan(payload: &[u8]) -> Result<StructuralScan, FramingFailure> {
     let mut position = 0_usize;
     while position < payload.len() {
         let byte = payload[position];
+        starts_second_value(&scan, byte)?;
         match byte {
             b'"' => {
                 scan.mark_entry();
@@ -258,6 +285,9 @@ pub fn read_payload<'payload>(
     let text = std::str::from_utf8(payload)
         .map_err(|failure| FramingFailure::NotText(failure.to_string()))?;
     let measured = scan(payload)?;
+    if !measured.completed && !measured.top_level_started {
+        return Err(FramingFailure::NoValue);
+    }
     if measured.depth > limits.maximum_nesting_depth {
         return Err(FramingFailure::NestingTooDeep {
             depth: measured.depth,
@@ -271,4 +301,132 @@ pub fn read_payload<'payload>(
         });
     }
     Ok(text)
+}
+
+/// One connection's incoming bytes, assembled into frames.
+///
+/// Bytes arrive in whatever pieces the transport delivers them, so the reader
+/// accumulates and yields a payload only when a whole frame is present. It never
+/// reserves room for a declared length it has not checked: an oversized prefix
+/// is refused while the buffer still holds only the prefix, so a peer cannot
+/// make this process allocate by lying about what it is about to send.
+///
+/// A reader that has refused a frame refuses everything after it. The bytes
+/// following a malformed frame have no meaning - the sender and the receiver no
+/// longer agree where the next one starts - and reading them anyway is how one
+/// bad frame turns into a stream of plausible nonsense.
+#[derive(Debug)]
+pub struct FrameReader {
+    /// Bytes received and not yet consumed by a frame.
+    buffer: Vec<u8>,
+    /// Whether a frame has already been refused here.
+    poisoned: bool,
+}
+
+impl FrameReader {
+    /// Returns a reader with nothing received yet.
+    #[must_use]
+    pub fn new() -> Self {
+        Self { buffer: Vec::new(), poisoned: false }
+    }
+
+    /// Takes `received` and returns one payload when a whole frame is present.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FramingFailure::PayloadTooLarge`] before any payload byte is
+    /// reserved, [`FramingFailure::ReaderPoisoned`] once a frame has been
+    /// refused here, and whatever [`read_payload`] refuses about the bytes of a
+    /// complete frame.
+    pub fn absorb(
+        &mut self,
+        limits: &FramingLimits,
+        received: &[u8],
+    ) -> Result<Option<Vec<u8>>, FramingFailure> {
+        if self.poisoned {
+            return Err(FramingFailure::ReaderPoisoned);
+        }
+        self.buffer.extend_from_slice(received);
+        match self.checked_progress(limits) {
+            Err(failure) => {
+                self.poisoned = true;
+                Err(failure)
+            }
+            Ok(FrameProgress::Complete { declared }) => {
+                let prefix = limits.length_prefix_bytes as usize;
+                let payload = self.buffer[prefix..prefix + declared].to_vec();
+                // The payload is validated before it is handed over and before
+                // the buffer moves on, so a refused frame leaves the reader
+                // poisoned rather than half consumed.
+                if let Err(failure) = read_payload(limits, &payload) {
+                    self.poisoned = true;
+                    return Err(failure);
+                }
+                self.buffer.drain(..prefix + declared);
+                Ok(Some(payload))
+            }
+            Ok(_) => Ok(None),
+        }
+    }
+
+    /// Returns how much of the next frame this reader holds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FramingFailure::PayloadTooLarge`] for an oversized prefix and
+    /// [`FramingFailure::ReaderPoisoned`] after a refusal.
+    pub fn progress(&self, limits: &FramingLimits) -> Result<FrameProgress, FramingFailure> {
+        if self.poisoned {
+            return Err(FramingFailure::ReaderPoisoned);
+        }
+        self.checked_progress(limits)
+    }
+
+    /// Returns the progress of the buffer without consulting the poison flag.
+    fn checked_progress(&self, limits: &FramingLimits) -> Result<FrameProgress, FramingFailure> {
+        progress(limits, &self.buffer)
+    }
+
+    /// Returns how many bytes are held for the next frame.
+    ///
+    /// A server distinguishes a quiescent boundary from an incomplete frame by
+    /// asking this rather than by reparsing what it already read.
+    #[must_use]
+    pub fn buffered(&self) -> usize {
+        self.buffer.len()
+    }
+
+    /// Returns whether this reader has refused a frame.
+    #[must_use]
+    pub fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
+}
+
+impl Default for FrameReader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Writes one payload as a complete frame and flushes it.
+///
+/// A partial write is a failure rather than a shorter frame: the peer is
+/// counting bytes against a prefix this side already declared, so stopping
+/// halfway leaves the stream saying something untrue about its own length.
+///
+/// # Errors
+///
+/// Returns [`FramingFailure::PayloadTooLarge`] before anything is written, and
+/// [`FramingFailure::TransportFailed`] when the transport refuses the write or
+/// the flush.
+pub fn write_frame(
+    limits: &FramingLimits,
+    payload: &[u8],
+    sink: &mut impl std::io::Write,
+) -> Result<(), FramingFailure> {
+    let frame = render(limits, payload)?;
+    sink.write_all(&frame)
+        .map_err(|failure| FramingFailure::TransportFailed(failure.to_string()))?;
+    sink.flush().map_err(|failure| FramingFailure::TransportFailed(failure.to_string()))
 }
