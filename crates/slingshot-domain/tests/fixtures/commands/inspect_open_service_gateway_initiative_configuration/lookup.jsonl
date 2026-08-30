@@ -1,0 +1,17 @@
+{"calls":["listConfigurations","getPid","getProperties","keys"],"kind":"trace","note":"one exact match is the configuration inspected","outcome":"present"}
+{"calls":["listConfigurations"],"kind":"trace","note":"a null list means the configuration is absent","outcome":"absent"}
+{"calls":["listConfigurations"],"kind":"trace","note":"an empty list means the same","outcome":"absent"}
+{"calls":["listConfigurations","getPid"],"kind":"trace","note":"a returned identifier that is not the one asked for","outcome":"configuration_lookup_mismatch"}
+{"calls":["listConfigurations","getPid"],"kind":"trace","note":"a null identifier postcheck","outcome":"configuration_lookup_mismatch"}
+{"calls":["listConfigurations","getPid","getPid"],"kind":"trace","note":"two exact matches","outcome":"configuration_lookup_ambiguous"}
+{"calls":["listConfigurations"],"kind":"trace","note":"more matches than the bound admits, refused before any is inspected","outcome":"configuration_lookup_budget_exceeded:matching_configurations"}
+{"calls":["listConfigurations"],"kind":"trace","note":"a list call that returns at the deadline","outcome":"configuration_lookup_budget_exceeded:lookup_duration"}
+{"calls":["listConfigurations","getPid","getProperties"],"kind":"trace","note":"a properties call that returns at the deadline","outcome":"configuration_lookup_budget_exceeded:lookup_duration"}
+{"calls":["listConfigurations","getPid","getProperties"],"kind":"trace","note":"a null property dictionary","outcome":"configuration_lookup_failed"}
+{"calls":["listConfigurations","getPid","getProperties"],"kind":"trace","note":"a deleted configuration","outcome":"configuration_lookup_failed"}
+{"calls":["listConfigurations","getPid","getProperties","keys"],"kind":"trace","note":"a null key enumeration","outcome":"configuration_lookup_failed"}
+{"calls":["listConfigurations","getPid","getProperties","keys","hasMoreElements","nextElement","hasMoreElements","getFactoryPid","getBundleLocation","getObjectClassDefinition","get"],"kind":"trace","note":"one property read exactly once","outcome":"present"}
+{"calls":["listConfigurations","getPid","getProperties","keys","hasMoreElements","nextElement","hasMoreElements","getFactoryPid","getBundleLocation","getObjectClassDefinition"],"kind":"trace","note":"a redacted property is never fetched","outcome":"present"}
+{"calls":["getConfiguration","getFactoryConfiguration","createFactoryConfiguration","getProcessedProperties","elements","setBundleLocation","update","delete"],"kind":"forbidden","note":"no call that creates, binds, or mutates a configuration appears in any trace"}
+{"kind":"bound","matches":2,"note":"the most configurations one filter may match"}
+{"kind":"bound","note":"the most properties one inspection reports","properties":512}
