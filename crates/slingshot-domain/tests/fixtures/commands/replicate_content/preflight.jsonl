@@ -1,0 +1,7 @@
+{"admitted":0,"document":"{\"failure\":\"source_not_found\",\"source_path\":\"/content/example\"}","members":["failure","source_path"],"note":"a preflight that ended in source not found"}
+{"admitted":0,"document":"{\"failure\":\"source_access_denied\",\"source_path\":\"/content/example\"}","members":["failure","source_path"],"note":"a preflight that ended in source access denied"}
+{"admitted":0,"document":"{\"failure\":\"candidate_limit_exceeded\",\"source_path\":\"/content/example\"}","members":["failure","source_path"],"note":"a preflight that ended in candidate limit exceeded"}
+{"admitted":0,"document":"{\"failure\":\"traversal_budget_exceeded\",\"source_path\":\"/content/example\"}","members":["failure","source_path"],"note":"a preflight that ended in traversal budget exceeded"}
+{"document":"{\"failure\":\"source_not_found\",\"source_path\":\"/content/example\",\"accepted_item_count\":0}","note":"a preflight failure carrying a count","refused":true}
+{"document":"{\"failure\":\"traversal_budget_exceeded\",\"source_path\":\"/content/example\",\"paths\":[\"/content/example\"]}","note":"a preflight failure carrying a partial manifest","refused":true}
+{"document":"{\"failure\":\"source_empty\",\"source_path\":\"/content/example\"}","note":"a preflight failure nobody declared","refused":true}
