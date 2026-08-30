@@ -16,7 +16,7 @@ touches:
   - crates/slingshot-storage/tests/migrations.rs
   - "crates/slingshot-storage/tests/fixtures/migrations/**"
 status: done
-merged_as: ""
+merged_as: "adda8f74038a90b18e09620b40a879a349045aa0"
 ---
 # SQLite Schema And Migrations
 
