@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/search-predicates.jsonl
   - crates/slingshot-domain/tests/search_predicates.rs
 status: done
-merged_as: ""
+merged_as: "b38af75deb8b355c922064c1fd1e13cfb90aac5f"
 ---
 # Search Predicates
 
