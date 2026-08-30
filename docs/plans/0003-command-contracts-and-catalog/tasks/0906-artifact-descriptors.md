@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-domain/src/command/artifact.rs
   - crates/slingshot-domain/tests/fixtures/commands/artifacts.jsonl
   - crates/slingshot-domain/tests/artifacts.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Artifact Descriptors
