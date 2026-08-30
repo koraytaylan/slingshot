@@ -1,0 +1,20 @@
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at before_root_call","position":"before_root_call"}
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at after_root_call","position":"after_root_call"}
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at before_child_call","position":"before_child_call"}
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at after_child_call","position":"after_child_call"}
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at before_property_call","position":"before_property_call"}
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at after_property_call","position":"after_property_call"}
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at before_binary_metadata_call","position":"before_binary_metadata_call"}
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at after_binary_metadata_call","position":"after_binary_metadata_call"}
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at before_canonical_output_step","position":"before_canonical_output_step"}
+{"checks":["cancellation","traversal_duration","next_charge"],"kind":"boundary","note":"the same three checks, in the same order, at after_canonical_output_step","position":"after_canonical_output_step"}
+{"calls":["root","child","property"],"kind":"trace","note":"a traversal that finishes","outcome":"completed","publishes":true}
+{"calls":["root","child"],"kind":"trace","note":"a call that returns exactly at the deadline is a duration failure before its payload is read","outcome":"load_budget_exceeded:traversal_duration","publishes":false}
+{"calls":["root"],"kind":"trace","note":"a call that returns after the deadline, likewise","outcome":"load_budget_exceeded:traversal_duration","publishes":false}
+{"calls":["root"],"kind":"trace","note":"an error returned after the deadline is still a duration failure","outcome":"load_budget_exceeded:traversal_duration","publishes":false}
+{"calls":[],"kind":"trace","note":"cancellation observed before the first call stops there","outcome":"cancelled","publishes":false}
+{"calls":["root"],"kind":"trace","note":"cancellation observed after a call returns stops every later call","outcome":"cancelled","publishes":false}
+{"calls":["root","child"],"kind":"trace","note":"a resource-node budget that runs out","outcome":"load_budget_exceeded:resource_nodes","publishes":false}
+{"calls":["root","property"],"kind":"trace","note":"a property-value budget that runs out","outcome":"load_budget_exceeded:property_values","publishes":false}
+{"calls":["root","property"],"kind":"trace","note":"a property-byte budget that runs out","outcome":"load_budget_exceeded:property_bytes","publishes":false}
+{"calls":["root","child"],"kind":"trace","note":"a document-byte budget that runs out","outcome":"load_budget_exceeded:serialized_document_bytes","publishes":false}

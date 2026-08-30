@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/src/command/load_content_as_javascript_object_notation.rs
   - crates/slingshot-domain/tests/fixtures/commands/load_content_as_json/**
   - crates/slingshot-domain/tests/load_content_as_javascript_object_notation.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Load Content as JSON
