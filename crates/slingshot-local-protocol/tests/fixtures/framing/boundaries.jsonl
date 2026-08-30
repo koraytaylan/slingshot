@@ -1,0 +1,3 @@
+{"accepted":true,"declared":1048576,"note":"the largest payload the contract allows"}
+{"accepted":false,"declared":1048577,"note":"one byte further"}
+{"accepted":true,"declared":1048575,"note":"one byte below the maximum"}

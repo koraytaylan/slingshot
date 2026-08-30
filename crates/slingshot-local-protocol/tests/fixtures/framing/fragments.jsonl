@@ -1,0 +1,7 @@
+{"first":"","note":"delivered in two pieces, split after 0 bytes","payload":"{\"a\":1,\"b\":[1,2,3]}","second":"000000137b2261223a312c2262223a5b312c322c335d7d"}
+{"first":"00","note":"delivered in two pieces, split after 1 bytes","payload":"{\"a\":1,\"b\":[1,2,3]}","second":"0000137b2261223a312c2262223a5b312c322c335d7d"}
+{"first":"000000","note":"delivered in two pieces, split after 3 bytes","payload":"{\"a\":1,\"b\":[1,2,3]}","second":"137b2261223a312c2262223a5b312c322c335d7d"}
+{"first":"00000013","note":"delivered in two pieces, split after 4 bytes","payload":"{\"a\":1,\"b\":[1,2,3]}","second":"7b2261223a312c2262223a5b312c322c335d7d"}
+{"first":"000000137b","note":"delivered in two pieces, split after 5 bytes","payload":"{\"a\":1,\"b\":[1,2,3]}","second":"2261223a312c2262223a5b312c322c335d7d"}
+{"first":"000000137b2261223a312c2262223a5b312c322c335d","note":"delivered in two pieces, split after 22 bytes","payload":"{\"a\":1,\"b\":[1,2,3]}","second":"7d"}
+{"first":"000000137b2261223a312c2262223a5b312c322c335d7d","note":"delivered in two pieces, split after 23 bytes","payload":"{\"a\":1,\"b\":[1,2,3]}","second":""}
