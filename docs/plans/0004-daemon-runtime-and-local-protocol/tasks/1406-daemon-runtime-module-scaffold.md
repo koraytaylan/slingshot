@@ -49,7 +49,8 @@ touches:
   - crates/slingshot-development/src/test_daemon_faults.rs
   - crates/slingshot-development/tests/daemon_runtime_module_scaffold.rs
   - "crates/slingshot-development/tests/fixtures/daemon-runtime-module-scaffold/**"
-status: planned
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
+status: done
 merged_as: ""
 ---
 # Daemon Runtime Module Scaffold
