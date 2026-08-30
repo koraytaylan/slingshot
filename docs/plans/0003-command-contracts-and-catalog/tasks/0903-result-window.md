@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/discovery-budget.jsonl
   - crates/slingshot-domain/tests/result_window.rs
   - crates/slingshot-domain/tests/discovery_budget.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Result Window
