@@ -7,8 +7,9 @@
 //! from here rather than defining its own, which is the only way they cannot
 //! drift apart.
 //!
-//! This commit declares the family root and every leaf the command inventory
-//! names.
+//! The two closed enums every boundary above this crate speaks in live in the
+//! `catalog` leaf beside the registry that describes them, because a family
+//! root declares its children and nothing else.
 
 pub mod add_component;
 pub mod artifact;
