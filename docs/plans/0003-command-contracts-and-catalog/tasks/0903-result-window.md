@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/result_window.rs
   - crates/slingshot-domain/tests/discovery_budget.rs
 status: done
-merged_as: ""
+merged_as: "8011705667d12f3c9a52cbd1c9282dcb329a88cd"
 ---
 # Result Window
 
