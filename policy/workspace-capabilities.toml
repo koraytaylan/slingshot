@@ -520,6 +520,17 @@ kinds = ["normal"]
 owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-command-line", "slingshot-configuration", "slingshot-daemon", "slingshot-development", "slingshot-domain", "slingshot-local-protocol", "slingshot-storage", "slingshot-test-support"]
 
 [[capability]]
+name = "unicode-normalization"
+purpose = "Report whether text is already in normalization form C."
+package = "unicode-normalization"
+version = "0.1.25"
+default-features = true
+features = []
+targets = []
+kinds = ["normal"]
+owners = ["slingshot-domain"]
+
+[[capability]]
 name = "uniform-resource-locators"
 purpose = "Parse, normalize, and join absolute locators."
 package = "url"
