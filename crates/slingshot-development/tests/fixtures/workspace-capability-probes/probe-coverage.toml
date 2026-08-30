@@ -381,6 +381,14 @@ interface = ["thiserror::Error", "std::error::Error", "source()"]
 targets = []
 
 [[probe]]
+capability = "unicode-normalization"
+package = "slingshot-domain"
+module = "unicode_normalization"
+kind = "normal"
+interface = ["unicode_normalization::is_nfc_quick", "IsNormalized", "nfc()"]
+targets = []
+
+[[probe]]
 capability = "uniform-resource-locators"
 package = "slingshot-configuration"
 module = "uniform_resource_locators"

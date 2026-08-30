@@ -6,3 +6,4 @@
 
 mod property_tests;
 mod typed_errors;
+mod unicode_normalization;

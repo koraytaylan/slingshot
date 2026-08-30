@@ -11,7 +11,14 @@ touches:
   - crates/slingshot-domain/src/command/component_resource_type.rs
   - crates/slingshot-domain/tests/fixtures/commands/repository-path.jsonl
   - crates/slingshot-domain/tests/repository_path.rs
-status: planned
+  - Cargo.toml
+  - crates/slingshot-domain/Cargo.toml
+  - policy/workspace-capabilities.toml
+  - crates/slingshot-development/tests/fixtures/workspace-capability-inventory/consumer-capabilities.toml
+  - crates/slingshot-development/tests/fixtures/workspace-capability-probes/probe-coverage.toml
+  - crates/slingshot-domain/tests/workspace-capabilities/main.rs
+  - crates/slingshot-domain/tests/workspace-capabilities/unicode_normalization.rs
+status: done
 merged_as: ""
 ---
 # Repository Path
