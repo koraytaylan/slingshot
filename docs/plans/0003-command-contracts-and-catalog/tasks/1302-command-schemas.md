@@ -25,7 +25,8 @@ touches:
   - schemas/command-canonical-json-vectors.json
   - schemas/command-schema-digest-vectors.json
   - crates/slingshot-domain/tests/command_schemas.rs
-status: planned
+  - crates/slingshot-domain/src/command/schema.rs
+status: done
 merged_as: ""
 ---
 # Command Schemas
