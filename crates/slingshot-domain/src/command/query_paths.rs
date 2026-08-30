@@ -92,8 +92,11 @@ impl AnchorRefusal {
 /// Returns whether `anchor` is at or above `path`.
 ///
 /// Byte containment on segment boundaries, so `/content/ex` does not contain
-/// `/content/example` the way a plain prefix test would say it does.
-fn contains(anchor: &RepositoryPath, path: &RepositoryPath) -> bool {
+/// `/content/example` the way a plain prefix test would say it does. Every
+/// discovery command correlates its matches with its anchor this way, so the
+/// rule lives here rather than five more times.
+#[must_use]
+pub fn anchor_contains(anchor: &RepositoryPath, path: &RepositoryPath) -> bool {
     if anchor.is_root() {
         return true;
     }
@@ -185,7 +188,7 @@ impl QueryPathsResult {
         command: &QueryPathsCommand,
     ) -> Result<(), DiscoveryResultFailure> {
         let within =
-            self.matches.iter().all(|found| contains(&command.root_path, &found.repository_path));
+            self.matches.iter().all(|found| anchor_contains(&command.root_path, &found.repository_path));
         if within { Ok(()) } else { Err(DiscoveryResultFailure::NotThisRequest) }
     }
 }
