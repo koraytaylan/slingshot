@@ -11,6 +11,7 @@ pub mod command_line;
 pub mod commands;
 pub mod daemon_connection;
 pub mod daemon_entry;
+pub mod daemon_process;
 pub mod explicit_daemon_start;
 pub mod model_context_protocol;
 pub mod platform_runtime;

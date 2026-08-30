@@ -5,4 +5,12 @@
 //! to the wire protocol crate. This commit declares the crate's
 //! module families as documentation-only roots.
 
+pub mod artifact_store;
+pub mod database;
+pub mod installation_state;
+pub mod maintenance;
 pub mod operation;
+pub mod operation_repository;
+pub mod persistent_capacity;
+pub mod sqlite_statement_inventory;
+pub mod sqlite_vfs;

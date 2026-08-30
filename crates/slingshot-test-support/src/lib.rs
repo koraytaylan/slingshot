@@ -9,9 +9,12 @@
 //! identity-management server leaf as documentation-only structure.
 
 pub mod daemon_process;
+pub mod fake_operation_executor;
 pub mod finite_state_machine_executable;
 pub mod identity_management_server;
+pub mod operation_fault_injection;
 pub mod platform_runtime;
+pub mod process_barrier;
 pub mod process_harness;
 pub mod runtime_harness;
 pub mod supervised_child;
