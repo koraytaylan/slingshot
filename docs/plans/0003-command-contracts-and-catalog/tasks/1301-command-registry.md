@@ -23,7 +23,7 @@ touches:
   - crates/slingshot-domain/src/command/catalog.rs
   - crates/slingshot-domain/tests/fixtures/commands/catalog.json
   - crates/slingshot-domain/tests/command_catalog.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Command Registry
