@@ -187,8 +187,10 @@ impl QueryPathsResult {
         &self,
         command: &QueryPathsCommand,
     ) -> Result<(), DiscoveryResultFailure> {
-        let within =
-            self.matches.iter().all(|found| anchor_contains(&command.root_path, &found.repository_path));
+        let within = self
+            .matches
+            .iter()
+            .all(|found| anchor_contains(&command.root_path, &found.repository_path));
         if within { Ok(()) } else { Err(DiscoveryResultFailure::NotThisRequest) }
     }
 }
