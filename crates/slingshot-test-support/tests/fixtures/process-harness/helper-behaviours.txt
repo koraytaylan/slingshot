@@ -1,0 +1,8 @@
+# What each helper child does when the harness starts it.
+# mode | behaviour
+report-environment | names which variables it can see and exits successfully
+report-roots | writes one witness file under the root it was given and names it
+report-terminal | says whether its standard output is a terminal
+flood-streams | writes far more than a pipe holds to both streams
+exit-with-code | exits immediately with the code the scenario expects
+sleep-forever | never exits on its own and answers nothing

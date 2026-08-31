@@ -1,0 +1,16 @@
+# Every capability this harness offers, and the test that proves it.
+# capability | test
+environment-isolation | sealed_child_starts_from_an_empty_environment
+filesystem-root | child_writes_land_under_the_scenario_root
+stream-backpressure | flooded_streams_are_drained_while_the_child_runs
+terminal-mode | terminal_and_redirected_children_answer_differently
+signal-delivery | interrupt_reaches_the_child_through_the_retained_handle
+exit-status | child_exit_code_is_reported_exactly
+deadline-overrun | child_outliving_its_deadline_is_ended_and_reported
+responsive-cleanup | responsive_daemon_stops_when_the_current_nonce_is_quoted
+stale-nonce-refusal | stale_nonce_refuses_rather_than_escalating
+unresponsive-cleanup | unresponsive_owned_child_ends_through_the_retained_handle
+unowned-refusal | a_child_this_harness_does_not_own_is_never_ended
+replacement-after-reap | reaped_handle_refuses_and_a_replacement_keeps_running
+identifier-is-diagnostic | no_path_turns_a_process_identifier_into_an_action
+leak-detection | orphaned_children_are_reported_rather_than_hidden

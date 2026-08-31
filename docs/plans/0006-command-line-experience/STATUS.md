@@ -30,6 +30,16 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     nothing that exists: every other declaration list in the workspace is already
     alphabetical, and stays so because that is how it was written rather than because a
     tool insists.
+  - **2801 needed a handle a signal can be delivered through.** The task requires
+    signal injection through a retained instance-bound primitive and forbids discovering
+    or signalling a numeric process identifier. The standard library ends a child only by
+    killing it outright, so the harness takes a process file descriptor at spawn and sends
+    every signal through that; the same crate opens the pseudo-terminal the terminal-mode
+    scenarios need. `rustix` was already the workspace's platform primitive and already
+    centralized, so what joins the footprint is the test-support manifest, the capability
+    policy row that now also names the `pty` feature and this owner, and the consumer
+    fixture. Only Linux publishes such a descriptor; on the other supported target the
+    harness retains no child at all rather than fall back to signalling a number.
 - **Outcome:** Every exact-version/limits-bound catalog operation is available from the command line with canonical phrase/asset/token inputs, reaches one profile/environment daemon, survives detachment or interrupt, exposes complete maintenance results through exact target-qualified operation-free identities, and renders every registered closed result or failure byte-stably without aliases, lost fields, or secret exposure.
 
-_Last updated: 2026-08-29, against `main` @ `8d286e8`._
+_Last updated: 2026-08-31, against `main` @ `8d286e8`._
