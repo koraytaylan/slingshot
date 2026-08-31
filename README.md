@@ -83,6 +83,12 @@ written. Those bytes are embedded into `slingshot-local-protocol` and read
 through one typed interface, and an assertion refuses a second copy of any of
 them anywhere in the crates that consume them.
 
+## The daemon
+
+One daemon serves one profile and environment, outliving the clients that ask
+it for work. [docs/DAEMON.md](docs/DAEMON.md) says what it guarantees, what it
+refuses, and what a product build deliberately does not do.
+
 ## Checking a change
 
 ```sh
