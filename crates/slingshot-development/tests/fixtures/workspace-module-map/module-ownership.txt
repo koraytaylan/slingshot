@@ -107,6 +107,7 @@ crates/slingshot-storage/src/database.rs|slingshot-storage|adapter|leaf|slingsho
 crates/slingshot-storage/src/installation_state.rs|slingshot-storage|adapter|leaf|slingshot_storage::installation_state|daemon-runtime-module-scaffold
 crates/slingshot-storage/src/lib.rs|slingshot-storage|adapter|crate-root|slingshot_storage|workspace-module-map
 crates/slingshot-storage/src/maintenance.rs|slingshot-storage|adapter|leaf|slingshot_storage::maintenance|daemon-runtime-module-scaffold
+crates/slingshot-storage/src/operation/listing.rs|slingshot-storage|adapter|leaf|slingshot_storage::operation::listing|daemon-runtime-module-scaffold
 crates/slingshot-storage/src/operation/mod.rs|slingshot-storage|adapter|family-root|slingshot_storage::operation|workspace-module-map
 crates/slingshot-storage/src/operation_repository.rs|slingshot-storage|adapter|leaf|slingshot_storage::operation_repository|daemon-runtime-module-scaffold
 crates/slingshot-storage/src/persistent_capacity.rs|slingshot-storage|adapter|leaf|slingshot_storage::persistent_capacity|daemon-runtime-module-scaffold
