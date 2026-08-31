@@ -1,0 +1,3 @@
+{"accepted":true,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\",\"reference_policy\":\"refuse_when_referenced\"}","note":"a deletion that refuses while anything points at it"}
+{"accepted":true,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\",\"reference_policy\":\"ignore_references\"}","note":"a deletion that removes it regardless"}
+{"accepted":false,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\"}","note":"no reference policy, which has no default"}

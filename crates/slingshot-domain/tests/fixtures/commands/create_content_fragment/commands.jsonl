@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"model_path\":\"/conf/example/settings/dam/cfm/models/offer\",\"name\":\"offer\",\"parent_path\":\"/content/dam/example/fragments\"}","note":"the plainest fragment"}
+{"accepted":true,"document":"{\"elements\":{\"tags\":[\"spring\",\"sale\"],\"title\":\"Spring offer\"},\"model_path\":\"/conf/example/settings/dam/cfm/models/offer\",\"name\":\"offer\",\"parent_path\":\"/content/dam/example/fragments\",\"title\":\"Offer\"}","note":"a fragment with a single value and a list"}
+{"accepted":false,"document":"{\"name\":\"offer\",\"parent_path\":\"/content/dam/example/fragments\"}","note":"no model"}
+{"accepted":false,"document":"{\"elements\":{\"tags\":[]},\"model_path\":\"/conf/example/settings/dam/cfm/models/offer\",\"name\":\"offer\",\"parent_path\":\"/content/dam/example/fragments\"}","note":"an empty element list"}
+{"accepted":false,"document":"{\"elements\":{\"ti/tle\":\"Spring offer\"},\"model_path\":\"/conf/example/settings/dam/cfm/models/offer\",\"name\":\"offer\",\"parent_path\":\"/content/dam/example/fragments\"}","note":"an element name that is a path"}
+{"accepted":false,"document":"{\"model_path\":\"/conf/example/settings/dam/cfm/models/offer\",\"name\":\"offer\",\"parent_path\":\"/content/dam/example/fragments\",\"extra\":1}","note":"a member this command does not have"}

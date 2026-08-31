@@ -1,0 +1,7 @@
+{"document":"{\"failure\":\"parent_not_found\",\"target_path\":\"/content/experience-fragments/example/hero\"}","members":["failure","target_path"],"note":"refused as parent not found","proves_no_effect":true}
+{"document":"{\"failure\":\"parent_access_denied\",\"target_path\":\"/content/experience-fragments/example/hero\"}","members":["failure","target_path"],"note":"refused as parent access denied","proves_no_effect":true}
+{"document":"{\"failure\":\"target_already_exists\",\"target_path\":\"/content/experience-fragments/example/hero\"}","members":["failure","target_path"],"note":"refused as target already exists","proves_no_effect":true}
+{"document":"{\"failure\":\"template_not_found\",\"target_path\":\"/content/experience-fragments/example/hero\"}","members":["failure","target_path"],"note":"refused as template not found","proves_no_effect":true}
+{"document":"{\"failure\":\"template_invalid\",\"target_path\":\"/content/experience-fragments/example/hero\"}","members":["failure","target_path"],"note":"refused as template invalid","proves_no_effect":true}
+{"document":"{\"failure\":\"repository_commit_failed\",\"target_path\":\"/content/experience-fragments/example/hero\"}","members":["failure","target_path"],"note":"refused as repository commit failed","proves_no_effect":true}
+{"document":"{\"failure\":\"mutation_outcome_unknown\",\"target_path\":\"/content/experience-fragments/example/hero\"}","members":["failure","target_path"],"note":"refused as mutation outcome unknown","proves_no_effect":false}

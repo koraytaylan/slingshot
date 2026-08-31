@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"title\":\"Hero\",\"variation_path\":\"/content/experience-fragments/example/hero/web\"}","note":"a title alone"}
+{"accepted":true,"document":"{\"properties\":{\"jcr:description\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"A hero\"}}},\"variation_path\":\"/content/experience-fragments/example/hero/web\"}","note":"one assigned property"}
+{"accepted":true,"document":"{\"removed_property_names\":[\"jcr:description\"],\"variation_path\":\"/content/experience-fragments/example/hero/web\"}","note":"one removal"}
+{"accepted":false,"document":"{\"variation_path\":\"/content/experience-fragments/example/hero/web\",\"removed_property_names\":[]}","note":"an empty removal list"}
