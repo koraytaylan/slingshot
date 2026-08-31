@@ -1,0 +1,168 @@
+{
+  "errors": {
+    "codes": [
+      -32700,
+      -32600,
+      -32601,
+      -32602,
+      -32603,
+      -32002
+    ],
+    "forbidden": [],
+    "required": [
+      "code",
+      "message"
+    ]
+  },
+  "inbound_notifications": {
+    "notifications/cancelled": {
+      "forbidden": [
+        "id"
+      ],
+      "required": [
+        "requestId"
+      ]
+    },
+    "notifications/initialized": {
+      "forbidden": [
+        "id"
+      ],
+      "required": []
+    }
+  },
+  "outbound_notifications": {
+    "notifications/progress": {
+      "forbidden": [
+        "id"
+      ],
+      "required": [
+        "progressToken",
+        "progress"
+      ]
+    }
+  },
+  "requests": {
+    "initialize": {
+      "forbidden": [],
+      "required": [
+        "protocolVersion",
+        "capabilities",
+        "clientInfo"
+      ]
+    },
+    "ping": {
+      "forbidden": [
+        "resultType"
+      ],
+      "required": []
+    },
+    "resources/list": {
+      "forbidden": [],
+      "required": []
+    },
+    "resources/read": {
+      "forbidden": [],
+      "required": [
+        "uri"
+      ]
+    },
+    "resources/templates/list": {
+      "forbidden": [],
+      "required": []
+    },
+    "server/discover": {
+      "forbidden": [],
+      "required": []
+    },
+    "tools/call": {
+      "forbidden": [],
+      "required": [
+        "name",
+        "arguments"
+      ]
+    },
+    "tools/list": {
+      "forbidden": [],
+      "required": []
+    }
+  },
+  "results": {
+    "initialize": {
+      "forbidden": [
+        "resultType",
+        "ttlMs",
+        "cacheScope"
+      ],
+      "required": [
+        "protocolVersion",
+        "capabilities",
+        "serverInfo"
+      ]
+    },
+    "ping": {
+      "forbidden": [
+        "resultType",
+        "ttlMs",
+        "cacheScope"
+      ],
+      "required": []
+    },
+    "resources/list": {
+      "forbidden": [
+        "resultType",
+        "ttlMs",
+        "cacheScope"
+      ],
+      "required": [
+        "resources"
+      ]
+    },
+    "resources/read": {
+      "forbidden": [
+        "resultType",
+        "ttlMs",
+        "cacheScope"
+      ],
+      "required": [
+        "contents"
+      ]
+    },
+    "resources/templates/list": {
+      "forbidden": [
+        "resultType",
+        "ttlMs",
+        "cacheScope"
+      ],
+      "required": [
+        "resourceTemplates"
+      ]
+    },
+    "server/discover": {
+      "forbidden": [
+        "resultType"
+      ],
+      "required": []
+    },
+    "tools/call": {
+      "forbidden": [
+        "resultType",
+        "ttlMs",
+        "cacheScope"
+      ],
+      "required": [
+        "content"
+      ]
+    },
+    "tools/list": {
+      "forbidden": [
+        "resultType",
+        "ttlMs",
+        "cacheScope"
+      ],
+      "required": [
+        "tools"
+      ]
+    }
+  },
+  "revision": "2025-06-18"
+}

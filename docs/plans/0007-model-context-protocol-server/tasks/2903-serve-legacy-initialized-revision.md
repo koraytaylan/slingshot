@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/legacy_initialized_revision.rs
   - crates/slingshot-command-line/tests/legacy_initialized_revision.rs
   - "crates/slingshot-test-support/fixtures/model-context-protocol/official-schemas/2025-06-18/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Serve Legacy Initialized Revision
