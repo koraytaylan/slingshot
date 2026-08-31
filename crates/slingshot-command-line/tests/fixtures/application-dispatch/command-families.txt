@@ -5,6 +5,7 @@
 # against itself.
 
 content
+operational_values
 package
 replication
 configuration
@@ -12,3 +13,13 @@ page_query
 path_query
 asset_query
 page_mutation
+page_lifecycle
+asset_lifecycle
+content_fragment
+experience_fragment
+platform_configuration
+resource_mapping
+workflow
+sling_job
+authorizable
+replication_queue

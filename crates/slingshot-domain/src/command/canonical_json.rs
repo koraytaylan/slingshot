@@ -39,12 +39,61 @@ pub const REPOSITORY_PATH_COMPARATOR: &str = "repository_path_utf8_ascending_uni
 pub const RELATIVE_REPOSITORY_PATH_COMPARATOR: &str =
     "relative_repository_path_utf8_ascending_unique";
 
+/// Comparator for a set of objects ordered by the replication agent each names.
+pub const AGENT_IDENTIFIER_COMPARATOR: &str = "agent_identifier_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the authorizable each names.
+pub const AUTHORIZABLE_IDENTIFIER_COMPARATOR: &str =
+    "authorizable_identifier_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the replication queue entry each names.
+pub const ENTRY_IDENTIFIER_COMPARATOR: &str = "entry_identifier_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the mapping entry address each names.
+pub const ENTRY_PATH_COMPARATOR: &str = "entry_path_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the workflow instance each names.
+pub const INSTANCE_IDENTIFIER_COMPARATOR: &str = "instance_identifier_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the Sling job each names.
+pub const JOB_IDENTIFIER_COMPARATOR: &str = "job_identifier_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the workflow model each names.
+pub const MODEL_IDENTIFIER_COMPARATOR: &str = "model_identifier_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the name each carries.
+pub const NAME_COMPARATOR: &str = "name_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the configuration each names.
+pub const PERSISTENT_IDENTIFIER_COMPARATOR: &str = "persistent_identifier_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the queue each names.
+pub const QUEUE_NAME_COMPARATOR: &str = "queue_name_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by symbolic name and then by version, because one deployment can hold two versions of one bundle.
+pub const SYMBOLIC_NAME_COMPARATOR: &str = "symbolic_name_then_version_utf8_ascending_unique";
+
+/// Comparator for a set of objects ordered by the work item each names.
+pub const WORK_ITEM_IDENTIFIER_COMPARATOR: &str = "work_item_identifier_utf8_ascending_unique";
+
 /// Every comparator this contract defines.
 pub const DECLARED_COMPARATORS: &[&str] = &[
     PRESERVE_COMPARATOR,
     UTF8_ASCENDING_UNIQUE_COMPARATOR,
     REPOSITORY_PATH_COMPARATOR,
     RELATIVE_REPOSITORY_PATH_COMPARATOR,
+    AGENT_IDENTIFIER_COMPARATOR,
+    AUTHORIZABLE_IDENTIFIER_COMPARATOR,
+    ENTRY_IDENTIFIER_COMPARATOR,
+    ENTRY_PATH_COMPARATOR,
+    INSTANCE_IDENTIFIER_COMPARATOR,
+    JOB_IDENTIFIER_COMPARATOR,
+    MODEL_IDENTIFIER_COMPARATOR,
+    NAME_COMPARATOR,
+    PERSISTENT_IDENTIFIER_COMPARATOR,
+    QUEUE_NAME_COMPARATOR,
+    SYMBOLIC_NAME_COMPARATOR,
+    WORK_ITEM_IDENTIFIER_COMPARATOR,
 ];
 
 /// Reason a document is not canonical.

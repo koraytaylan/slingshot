@@ -2,18 +2,24 @@
 //!
 //! Everything a presentation needs to decide how to treat a command comes from
 //! here, and from nowhere else. The three classifications are data in a closed
-//! twelve-row table, not something inferred from a command's name, its result
+//! sixty-four-row table - written in `classification`, beside the families the
+//! rows describe - not something inferred from a command's name, its result
 //! size, or whether it publishes an artifact. A name that reads like a read is
 //! not evidence, and a command that writes a file is not thereby a write.
 //!
 //! The distinctions are narrower than they look:
 //!
-//! - `Read` means the command changes no repository or replicated content.
-//!   Operation bookkeeping and artifact publication do not make it a `Write`,
-//!   which is why loading and packaging stay reads.
-//! - `Destructive` means a success can replace content that was already
-//!   visible. Refusing an existing target is not destructive; replacing what a
-//!   publisher is already serving is.
+//! - `Read` means no state the author retains after the command returns is
+//!   different because the command ran. Operation bookkeeping, artifact
+//!   publication, and evaluation cost do not make it a `Write`, which is why
+//!   loading and packaging stay reads. Retained state is wider than content: a
+//!   bundle's lifecycle state, a workflow instance's state, a job's
+//!   disposition, an authorizable's existence, and a replication queue's
+//!   contents are all retained, so changing any of them is a `Write`.
+//! - `Destructive` means a success can replace or end something that was
+//!   already visible or already in effect. Refusing an existing target is not
+//!   destructive; replacing what a publisher is serving, stopping an active
+//!   bundle, terminating a running instance, or emptying a queue is.
 //! - `IntrinsicallyIdempotent` means running it twice is running it once. It is
 //!   the only source of both the idempotency hint and the operation-key
 //!   requirement, so the two can never disagree.
@@ -42,7 +48,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::command::artifact::ArtifactSlotDeclaration;
 use crate::command::canonical_json::{canonical_digest, write_canonical};
+use crate::command::classification::{CLASSIFICATIONS, ClassificationRow, DISCOVERY_FAILURES};
 use crate::command::command_identity::{CommandContract, INITIAL_COMMAND_VERSION};
+use crate::command::result_context::AnswersCommand;
 use crate::command::schema::{COMMAND_WIRE_NAMES, SchemaRole, command_schema};
 
 /// Whether a command changes content.
@@ -161,246 +169,6 @@ impl CommandDescriptor {
     }
 }
 
-/// One row of the closed classification table.
-///
-/// Data rather than a rule, because there is no rule: whether packaging is a
-/// read is a judgement somebody made, and it belongs written down where it can
-/// be read and argued with.
-struct ClassificationRow {
-    /// Stable name.
-    wire_name: &'static str,
-    /// Human title.
-    title: &'static str,
-    /// Present-state description.
-    description: &'static str,
-    /// Whether it changes content.
-    access: AccessClassification,
-    /// Whether a success can replace visible content.
-    destructive: DestructiveClassification,
-    /// Whether running it twice is running it once.
-    intrinsic_idempotency: IntrinsicIdempotencyClassification,
-    /// Limit naming its largest canonical success result.
-    result_bytes_limit: &'static str,
-    /// Failure categories this version allows beside the shared ones.
-    failure_categories: &'static [&'static str],
-    /// Whether the shared discovery categories apply.
-    discovery: bool,
-}
-
-/// Failure categories every discovery command allows.
-const DISCOVERY_FAILURES: &[&str] = &[
-    "discovery_budget_exceeded",
-    "continuation_token_malformed",
-    "continuation_token_integrity_invalid",
-    "continuation_token_wrong_target",
-    "continuation_token_wrong_query",
-    "continuation_token_expired",
-];
-
-/// Anchor failures the five rooted discovery commands allow.
-const ROOT_ANCHOR_FAILURES: &[&str] = &["root_not_found", "root_access_denied"];
-
-/// The closed twelve-row table, in ascending wire-name order.
-const CLASSIFICATIONS: &[ClassificationRow] = &[
-    ClassificationRow {
-        wire_name: "add_component",
-        title: "Add a component",
-        description: "Creates one component under a page's content resource and appends it \
-                      last in its orderable parent.",
-        access: AccessClassification::Write,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::NotIntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_mutation_success_result_bytes",
-        failure_categories: &[
-            "page_not_found",
-            "page_invalid",
-            "parent_not_found",
-            "parent_access_denied",
-            "parent_not_orderable",
-            "target_already_exists",
-            "property_rejected",
-            "repository_commit_failed",
-            "mutation_outcome_unknown",
-        ],
-        discovery: false,
-    },
-    ClassificationRow {
-        wire_name: "create_page",
-        title: "Create a page",
-        description: "Creates one page from a template and applies its title and initial \
-                      properties to the new page's content resource.",
-        access: AccessClassification::Write,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::NotIntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_mutation_success_result_bytes",
-        failure_categories: &[
-            "target_already_exists",
-            "parent_not_found",
-            "parent_access_denied",
-            "template_not_found",
-            "template_invalid",
-            "property_rejected",
-            "repository_commit_failed",
-            "mutation_outcome_unknown",
-        ],
-        discovery: false,
-    },
-    ClassificationRow {
-        wire_name: "download_content_package",
-        title: "Download a content package",
-        description: "Builds one FileVault content package from roots and ordered selection \
-                      filters and returns its artifact metadata.",
-        access: AccessClassification::Read,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::NotIntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_command_result_bytes",
-        failure_categories: &[
-            "pattern_rejected",
-            "filevault_profile_unsupported",
-            "filevault_filter_unrepresentable",
-            "root_not_found",
-            "root_access_denied",
-            "repository_read_failed",
-            "filevault_package_failed",
-            "staging_cleanup_failed",
-            "artifact_publication_failed",
-            "artifact_publication_outcome_unknown",
-            "evaluation_budget_exceeded",
-        ],
-        discovery: false,
-    },
-    ClassificationRow {
-        wire_name: "find_assets_by_metadata",
-        title: "Find assets by metadata",
-        description: "Finds assets under an anchor by media format, original-rendition size, \
-                      tags, and property predicates.",
-        access: AccessClassification::Read,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_discovery_result_bytes",
-        failure_categories: ROOT_ANCHOR_FAILURES,
-        discovery: true,
-    },
-    ClassificationRow {
-        wire_name: "find_assets_referenced_by_page",
-        title: "Find assets referenced by a page",
-        description: "Reports the assets one page refers to and the relative property paths \
-                      it refers to them from.",
-        access: AccessClassification::Read,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_discovery_result_bytes",
-        failure_categories: &["page_not_found", "page_access_denied", "page_invalid"],
-        discovery: true,
-    },
-    ClassificationRow {
-        wire_name: "find_pages_by_template",
-        title: "Find pages by template",
-        description: "Finds pages under an anchor whose recorded template equals one \
-                      repository address.",
-        access: AccessClassification::Read,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_discovery_result_bytes",
-        failure_categories: ROOT_ANCHOR_FAILURES,
-        discovery: true,
-    },
-    ClassificationRow {
-        wire_name: "find_pages_containing_phrase",
-        title: "Find pages containing a phrase",
-        description: "Finds pages under an anchor holding one exact phrase as a contiguous \
-                      sequence of Unicode scalar values.",
-        access: AccessClassification::Read,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_discovery_result_bytes",
-        failure_categories: ROOT_ANCHOR_FAILURES,
-        discovery: true,
-    },
-    ClassificationRow {
-        wire_name: "find_pages_using_components",
-        title: "Find pages using components",
-        description: "Finds pages under an anchor whose subtree uses any or all of the \
-                      requested component resource types.",
-        access: AccessClassification::Read,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_discovery_result_bytes",
-        failure_categories: ROOT_ANCHOR_FAILURES,
-        discovery: true,
-    },
-    ClassificationRow {
-        wire_name: "inspect_open_service_gateway_initiative_configuration",
-        title: "Inspect a configuration",
-        description: "Reads one effective configuration by its exact persistent identifier, \
-                      redacting every value the evidence does not clear.",
-        access: AccessClassification::Read,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_inspected_configuration_result_bytes",
-        failure_categories: &[
-            "configuration_lookup_failed",
-            "configuration_lookup_mismatch",
-            "configuration_lookup_ambiguous",
-            "configuration_lookup_budget_exceeded",
-            "configuration_value_unsupported",
-            "configuration_value_malformed",
-            "configuration_value_budget_exceeded",
-            "configuration_result_budget_exceeded",
-        ],
-        discovery: false,
-    },
-    ClassificationRow {
-        wire_name: "load_content_as_json",
-        title: "Load content as JSON",
-        description: "Reads one repository subtree to a bounded depth and returns it inline \
-                      or as an artifact, decided by the document's own canonical bytes.",
-        access: AccessClassification::Read,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::NotIntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_command_result_bytes",
-        failure_categories: &[
-            "not_found",
-            "access_denied",
-            "unsupported_repository_value",
-            "load_budget_exceeded",
-        ],
-        discovery: false,
-    },
-    ClassificationRow {
-        wire_name: "query_paths",
-        title: "Query paths",
-        description: "Finds nodes under an anchor by primary type and a bounded collection \
-                      of property predicates.",
-        access: AccessClassification::Read,
-        destructive: DestructiveClassification::NonDestructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_discovery_result_bytes",
-        failure_categories: ROOT_ANCHOR_FAILURES,
-        discovery: true,
-    },
-    ClassificationRow {
-        wire_name: "replicate_content",
-        title: "Replicate content",
-        description: "Offers one path, or a path and its descendants, to the author \
-                      replication service and reports what was admitted.",
-        access: AccessClassification::Write,
-        destructive: DestructiveClassification::Destructive,
-        intrinsic_idempotency: IntrinsicIdempotencyClassification::NotIntrinsicallyIdempotent,
-        result_bytes_limit: "maximum_replication_result_bytes",
-        failure_categories: &[
-            "source_not_found",
-            "source_access_denied",
-            "candidate_limit_exceeded",
-            "traversal_budget_exceeded",
-            "admission_rejected",
-            "admission_budget_exceeded",
-            "admission_outcome_unknown",
-        ],
-        discovery: false,
-    },
-];
-
 /// Every command this plan defines, with everything the registry knows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
@@ -418,6 +186,26 @@ impl CommandCatalog {
     /// commands exist, which is a defect in this repository.
     #[must_use]
     pub fn published() -> Self {
+        /// The catalog, built once.
+        ///
+        /// Building it writes one hundred and twenty-eight canonical schema
+        /// documents and digests every one of them. Every boundary above this
+        /// crate asks for the catalog while it parses a single invocation, so
+        /// rebuilding it per question turned an executable's startup into
+        /// arithmetic - noticeably, on the path where a signal has to reach an
+        /// installed handler. It is built once and handed out as a copy.
+        static PUBLISHED: std::sync::OnceLock<CommandCatalog> = std::sync::OnceLock::new();
+
+        PUBLISHED.get_or_init(Self::build).clone()
+    }
+
+    /// Returns the catalog, built from the table and the schema inventory.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the table and the schema inventory disagree about which
+    /// commands exist, which is a defect in this repository.
+    fn build() -> Self {
         let limits_digest = canonical_digest(
             &write_canonical(
                 &serde_json::from_str(CommandContract::embedded_manifest())
@@ -484,9 +272,9 @@ fn describe(
 
 /// Returns the artifact slots one command declares.
 ///
-/// Two commands declare one each and the other ten declare none. A command that
-/// declares no slot forbids one, so an empty list is a statement rather than an
-/// omission.
+/// Two commands declare one each and the other sixty-two declare none. A command
+/// that declares no slot forbids one, so an empty list is a statement rather
+/// than an omission.
 fn declared_slots(wire_name: &str) -> Vec<ArtifactSlotDeclaration> {
     match wire_name {
         "load_content_as_json" => vec![ArtifactSlotDeclaration::loaded_content()],
@@ -504,130 +292,10 @@ pub fn catalog_matches_schema_inventory() -> bool {
     names == COMMAND_WIRE_NAMES
 }
 
-/// Whether one result answers the request that produced it.
-///
-/// Implemented once per command pair so the dispatch below stays one rule
-/// rather than twelve. What "answers" means is each command's own business:
-/// most compare a path or an identifier the result echoes, and one has nothing
-/// to compare.
-trait AnswersCommand {
-    /// The command this result answers.
-    type Asked;
-
-    /// Returns whether this result answers `asked`.
-    fn answers(&self, asked: &Self::Asked) -> bool;
-}
-
-impl AnswersCommand for crate::command::add_component::AddComponentResult {
-    type Asked = crate::command::add_component::AddComponentCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand for crate::command::create_page::CreatePageResult {
-    type Asked = crate::command::create_page::CreatePageCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand for crate::command::download_content_package::DownloadContentPackageResult {
-    type Asked = crate::command::download_content_package::DownloadContentPackageCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand for crate::command::find_assets_by_metadata::FindAssetsByMetadataResult {
-    type Asked = crate::command::find_assets_by_metadata::FindAssetsByMetadataCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand
-    for crate::command::find_assets_referenced_by_page::FindAssetsReferencedByPageResult
-{
-    type Asked = crate::command::find_assets_referenced_by_page::FindAssetsReferencedByPageCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand for crate::command::find_pages_by_template::FindPagesByTemplateResult {
-    type Asked = crate::command::find_pages_by_template::FindPagesByTemplateCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand
-    for crate::command::find_pages_containing_phrase::FindPagesContainingPhraseResult
-{
-    type Asked = crate::command::find_pages_containing_phrase::FindPagesContainingPhraseCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand
-    for crate::command::find_pages_using_components::FindPagesUsingComponentsResult
-{
-    type Asked = crate::command::find_pages_using_components::FindPagesUsingComponentsCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand for crate::command::inspect_open_service_gateway_initiative_configuration::InspectOpenServiceGatewayInitiativeConfigurationResult {
-    type Asked = crate::command::inspect_open_service_gateway_initiative_configuration::InspectOpenServiceGatewayInitiativeConfigurationCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand
-    for crate::command::load_content_as_javascript_object_notation::LoadContentAsJavaScriptObjectNotationResult
-{
-    type Asked =
-        crate::command::load_content_as_javascript_object_notation::LoadContentAsJavaScriptObjectNotationCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand for crate::command::query_paths::QueryPathsResult {
-    type Asked = crate::command::query_paths::QueryPathsCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand for crate::command::replicate_content::ReplicateContentResult {
-    type Asked = crate::command::replicate_content::ReplicateContentCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        let _ = asked;
-        true
-    }
-}
-
 /// Builds the two parallel enums and the one rule that pairs them.
 ///
-/// Written as a macro because the alternative is three twelve-armed matches
-/// that have to be kept in step by hand, and a thirteenth command would need
+/// Written as a macro because the alternative is three sixty-four-armed matches
+/// that have to be kept in step by hand, and a sixty-fifth command would need
 /// remembering in all three.
 macro_rules! command_family {
     ($($(#[$attribute:meta])* $variant:ident, $wire:literal, $command:path, $result:path;)+) => {
@@ -712,9 +380,54 @@ command_family! {
     /// Add one component to a page.
     /// What adding a component produced.
     AddComponent, "add_component", crate::command::add_component::AddComponentCommand, crate::command::add_component::AddComponentResult;
+    /// Ask the author to add group member.
+    /// What add group member answered.
+    AddGroupMember, "add_group_member", crate::command::group_membership::AddGroupMemberCommand, crate::command::group_membership::AddGroupMemberResult;
+    /// Ask the author to cancel sling job.
+    /// What cancel sling job answered.
+    CancelSlingJob, "cancel_sling_job", crate::command::cancel_sling_job::CancelSlingJobCommand, crate::command::cancel_sling_job::CancelSlingJobResult;
+    /// Ask the author to create asset.
+    /// What create asset answered.
+    CreateAsset, "create_asset", crate::command::create_asset::CreateAssetCommand, crate::command::create_asset::CreateAssetResult;
+    /// Ask the author to create asset folder.
+    /// What create asset folder answered.
+    CreateAssetFolder, "create_asset_folder", crate::command::create_asset_folder::CreateAssetFolderCommand, crate::command::create_asset_folder::CreateAssetFolderResult;
+    /// Ask the author to create content fragment.
+    /// What create content fragment answered.
+    CreateContentFragment, "create_content_fragment", crate::command::create_content_fragment::CreateContentFragmentCommand, crate::command::create_content_fragment::CreateContentFragmentResult;
+    /// Ask the author to create experience fragment.
+    /// What create experience fragment answered.
+    CreateExperienceFragment, "create_experience_fragment", crate::command::create_experience_fragment::CreateExperienceFragmentCommand, crate::command::create_experience_fragment::CreateExperienceFragmentResult;
+    /// Ask the author to create group.
+    /// What create group answered.
+    CreateGroup, "create_group", crate::command::create_authorizable::CreateGroupCommand, crate::command::create_authorizable::CreateGroupResult;
     /// Create one page from a template.
     /// What creating a page produced.
     CreatePage, "create_page", crate::command::create_page::CreatePageCommand, crate::command::create_page::CreatePageResult;
+    /// Ask the author to create user.
+    /// What create user answered.
+    CreateUser, "create_user", crate::command::create_authorizable::CreateUserCommand, crate::command::create_authorizable::CreateUserResult;
+    /// Ask the author to delete asset.
+    /// What delete asset answered.
+    DeleteAsset, "delete_asset", crate::command::delete_asset::DeleteAssetCommand, crate::command::delete_asset::DeleteAssetResult;
+    /// Ask the author to delete authorizable.
+    /// What delete authorizable answered.
+    DeleteAuthorizable, "delete_authorizable", crate::command::delete_authorizable::DeleteAuthorizableCommand, crate::command::delete_authorizable::DeleteAuthorizableResult;
+    /// Ask the author to delete component.
+    /// What delete component answered.
+    DeleteComponent, "delete_component", crate::command::delete_component::DeleteComponentCommand, crate::command::delete_component::DeleteComponentResult;
+    /// Ask the author to delete content fragment.
+    /// What delete content fragment answered.
+    DeleteContentFragment, "delete_content_fragment", crate::command::delete_content_fragment::DeleteContentFragmentCommand, crate::command::delete_content_fragment::DeleteContentFragmentResult;
+    /// Ask the author to delete experience fragment.
+    /// What delete experience fragment answered.
+    DeleteExperienceFragment, "delete_experience_fragment", crate::command::delete_experience_fragment::DeleteExperienceFragmentCommand, crate::command::delete_experience_fragment::DeleteExperienceFragmentResult;
+    /// Ask the author to delete open service gateway initiative configuration.
+    /// What delete open service gateway initiative configuration answered.
+    DeleteOpenServiceGatewayInitiativeConfiguration, "delete_open_service_gateway_initiative_configuration", crate::command::delete_open_service_gateway_initiative_configuration::DeleteOpenServiceGatewayInitiativeConfigurationCommand, crate::command::delete_open_service_gateway_initiative_configuration::DeleteOpenServiceGatewayInitiativeConfigurationResult;
+    /// Ask the author to delete page.
+    /// What delete page answered.
+    DeletePage, "delete_page", crate::command::delete_page::DeletePageCommand, crate::command::delete_page::DeletePageResult;
     /// Build one content package.
     /// What building a package produced.
     DownloadContentPackage, "download_content_package", crate::command::download_content_package::DownloadContentPackageCommand, crate::command::download_content_package::DownloadContentPackageResult;
@@ -724,6 +437,9 @@ command_family! {
     /// Find the assets one page refers to.
     /// What the reference search found.
     FindAssetsReferencedByPage, "find_assets_referenced_by_page", crate::command::find_assets_referenced_by_page::FindAssetsReferencedByPageCommand, crate::command::find_assets_referenced_by_page::FindAssetsReferencedByPageResult;
+    /// Ask the author to find open service gateway initiative configurations.
+    /// What find open service gateway initiative configurations answered.
+    FindOpenServiceGatewayInitiativeConfigurations, "find_open_service_gateway_initiative_configurations", crate::command::find_open_service_gateway_initiative_configurations::FindOpenServiceGatewayInitiativeConfigurationsCommand, crate::command::find_open_service_gateway_initiative_configurations::FindOpenServiceGatewayInitiativeConfigurationsResult;
     /// Find pages built from one template.
     /// What the template search found.
     FindPagesByTemplate, "find_pages_by_template", crate::command::find_pages_by_template::FindPagesByTemplateCommand, crate::command::find_pages_by_template::FindPagesByTemplateResult;
@@ -733,16 +449,124 @@ command_family! {
     /// Find pages using particular components.
     /// What the component search found.
     FindPagesUsingComponents, "find_pages_using_components", crate::command::find_pages_using_components::FindPagesUsingComponentsCommand, crate::command::find_pages_using_components::FindPagesUsingComponentsResult;
+    /// Ask the author to find sling jobs.
+    /// What find sling jobs answered.
+    FindSlingJobs, "find_sling_jobs", crate::command::find_sling_jobs::FindSlingJobsCommand, crate::command::find_sling_jobs::FindSlingJobsResult;
+    /// Ask the author to find workflow instances.
+    /// What find workflow instances answered.
+    FindWorkflowInstances, "find_workflow_instances", crate::command::find_workflow_instances::FindWorkflowInstancesCommand, crate::command::find_workflow_instances::FindWorkflowInstancesResult;
+    /// Ask the author to flush replication queue.
+    /// What flush replication queue answered.
+    FlushReplicationQueue, "flush_replication_queue", crate::command::flush_replication_queue::FlushReplicationQueueCommand, crate::command::flush_replication_queue::FlushReplicationQueueResult;
     /// Inspect one effective configuration.
     /// What the configuration inspection found.
     InspectOpenServiceGatewayInitiativeConfiguration, "inspect_open_service_gateway_initiative_configuration", crate::command::inspect_open_service_gateway_initiative_configuration::InspectOpenServiceGatewayInitiativeConfigurationCommand, crate::command::inspect_open_service_gateway_initiative_configuration::InspectOpenServiceGatewayInitiativeConfigurationResult;
+    /// Ask the author to inspect replication agent.
+    /// What inspect replication agent answered.
+    InspectReplicationAgent, "inspect_replication_agent", crate::command::replication_agent::InspectReplicationAgentCommand, crate::command::replication_agent::InspectReplicationAgentResult;
+    /// Ask the author to inspect replication queue.
+    /// What inspect replication queue answered.
+    InspectReplicationQueue, "inspect_replication_queue", crate::command::inspect_replication_queue::InspectReplicationQueueCommand, crate::command::inspect_replication_queue::InspectReplicationQueueResult;
+    /// Ask the author to inspect sling job.
+    /// What inspect sling job answered.
+    InspectSlingJob, "inspect_sling_job", crate::command::inspect_sling_job::InspectSlingJobCommand, crate::command::inspect_sling_job::InspectSlingJobResult;
+    /// Ask the author to inspect workflow instance.
+    /// What inspect workflow instance answered.
+    InspectWorkflowInstance, "inspect_workflow_instance", crate::command::inspect_workflow_instance::InspectWorkflowInstanceCommand, crate::command::inspect_workflow_instance::InspectWorkflowInstanceResult;
+    /// Ask the author to list asset renditions.
+    /// What list asset renditions answered.
+    ListAssetRenditions, "list_asset_renditions", crate::command::list_asset_renditions::ListAssetRenditionsCommand, crate::command::list_asset_renditions::ListAssetRenditionsResult;
+    /// Ask the author to list child pages.
+    /// What list child pages answered.
+    ListChildPages, "list_child_pages", crate::command::list_child_pages::ListChildPagesCommand, crate::command::list_child_pages::ListChildPagesResult;
+    /// Ask the author to list group members.
+    /// What list group members answered.
+    ListGroupMembers, "list_group_members", crate::command::list_group_members::ListGroupMembersCommand, crate::command::list_group_members::ListGroupMembersResult;
+    /// Ask the author to list open service gateway initiative bundles.
+    /// What list open service gateway initiative bundles answered.
+    ListOpenServiceGatewayInitiativeBundles, "list_open_service_gateway_initiative_bundles", crate::command::list_open_service_gateway_initiative_bundles::ListOpenServiceGatewayInitiativeBundlesCommand, crate::command::list_open_service_gateway_initiative_bundles::ListOpenServiceGatewayInitiativeBundlesResult;
+    /// Ask the author to list open service gateway initiative components.
+    /// What list open service gateway initiative components answered.
+    ListOpenServiceGatewayInitiativeComponents, "list_open_service_gateway_initiative_components", crate::command::list_open_service_gateway_initiative_components::ListOpenServiceGatewayInitiativeComponentsCommand, crate::command::list_open_service_gateway_initiative_components::ListOpenServiceGatewayInitiativeComponentsResult;
+    /// Ask the author to list replication agents.
+    /// What list replication agents answered.
+    ListReplicationAgents, "list_replication_agents", crate::command::replication_agent::ListReplicationAgentsCommand, crate::command::replication_agent::ListReplicationAgentsResult;
+    /// Ask the author to list resource mappings.
+    /// What list resource mappings answered.
+    ListResourceMappings, "list_resource_mappings", crate::command::list_resource_mappings::ListResourceMappingsCommand, crate::command::list_resource_mappings::ListResourceMappingsResult;
+    /// Ask the author to list sling job queues.
+    /// What list sling job queues answered.
+    ListSlingJobQueues, "list_sling_job_queues", crate::command::list_sling_job_queues::ListSlingJobQueuesCommand, crate::command::list_sling_job_queues::ListSlingJobQueuesResult;
+    /// Ask the author to list workflow models.
+    /// What list workflow models answered.
+    ListWorkflowModels, "list_workflow_models", crate::command::list_workflow_models::ListWorkflowModelsCommand, crate::command::list_workflow_models::ListWorkflowModelsResult;
     /// Load one repository subtree.
     /// What the load produced.
     LoadContentAsJson, "load_content_as_json", crate::command::load_content_as_javascript_object_notation::LoadContentAsJavaScriptObjectNotationCommand, crate::command::load_content_as_javascript_object_notation::LoadContentAsJavaScriptObjectNotationResult;
+    /// Ask the author to map resource path.
+    /// What map resource path answered.
+    MapResourcePath, "map_resource_path", crate::command::resource_resolution::MapResourcePathCommand, crate::command::resource_resolution::MapResourcePathResult;
+    /// Ask the author to move asset.
+    /// What move asset answered.
+    MoveAsset, "move_asset", crate::command::move_asset::MoveAssetCommand, crate::command::move_asset::MoveAssetResult;
+    /// Ask the author to move page.
+    /// What move page answered.
+    MovePage, "move_page", crate::command::move_page::MovePageCommand, crate::command::move_page::MovePageResult;
     /// Find nodes answering a structured question.
     /// What the query found.
     QueryPaths, "query_paths", crate::command::query_paths::QueryPathsCommand, crate::command::query_paths::QueryPathsResult;
+    /// Ask the author to read content fragment.
+    /// What read content fragment answered.
+    ReadContentFragment, "read_content_fragment", crate::command::read_content_fragment::ReadContentFragmentCommand, crate::command::read_content_fragment::ReadContentFragmentResult;
+    /// Ask the author to remove group member.
+    /// What remove group member answered.
+    RemoveGroupMember, "remove_group_member", crate::command::group_membership::RemoveGroupMemberCommand, crate::command::group_membership::RemoveGroupMemberResult;
+    /// Ask the author to reorder component.
+    /// What reorder component answered.
+    ReorderComponent, "reorder_component", crate::command::reorder_component::ReorderComponentCommand, crate::command::reorder_component::ReorderComponentResult;
     /// Offer content to the replication service.
     /// What the replication admitted.
     ReplicateContent, "replicate_content", crate::command::replicate_content::ReplicateContentCommand, crate::command::replicate_content::ReplicateContentResult;
+    /// Ask the author to resolve resource path.
+    /// What resolve resource path answered.
+    ResolveResourcePath, "resolve_resource_path", crate::command::resource_resolution::ResolveResourcePathCommand, crate::command::resource_resolution::ResolveResourcePathResult;
+    /// Ask the author to retry replication queue entry.
+    /// What retry replication queue entry answered.
+    RetryReplicationQueueEntry, "retry_replication_queue_entry", crate::command::retry_replication_queue_entry::RetryReplicationQueueEntryCommand, crate::command::retry_replication_queue_entry::RetryReplicationQueueEntryResult;
+    /// Ask the author to set open service gateway initiative bundle state.
+    /// What set open service gateway initiative bundle state answered.
+    SetOpenServiceGatewayInitiativeBundleState, "set_open_service_gateway_initiative_bundle_state", crate::command::set_open_service_gateway_initiative_bundle_state::SetOpenServiceGatewayInitiativeBundleStateCommand, crate::command::set_open_service_gateway_initiative_bundle_state::SetOpenServiceGatewayInitiativeBundleStateResult;
+    /// Ask the author to set user disabled.
+    /// What set user disabled answered.
+    SetUserDisabled, "set_user_disabled", crate::command::set_user_disabled::SetUserDisabledCommand, crate::command::set_user_disabled::SetUserDisabledResult;
+    /// Ask the author to set workflow instance suspension.
+    /// What set workflow instance suspension answered.
+    SetWorkflowInstanceSuspension, "set_workflow_instance_suspension", crate::command::set_workflow_instance_suspension::SetWorkflowInstanceSuspensionCommand, crate::command::set_workflow_instance_suspension::SetWorkflowInstanceSuspensionResult;
+    /// Ask the author to start workflow.
+    /// What start workflow answered.
+    StartWorkflow, "start_workflow", crate::command::start_workflow::StartWorkflowCommand, crate::command::start_workflow::StartWorkflowResult;
+    /// Ask the author to terminate workflow instance.
+    /// What terminate workflow instance answered.
+    TerminateWorkflowInstance, "terminate_workflow_instance", crate::command::terminate_workflow_instance::TerminateWorkflowInstanceCommand, crate::command::terminate_workflow_instance::TerminateWorkflowInstanceResult;
+    /// Ask the author to update asset metadata.
+    /// What update asset metadata answered.
+    UpdateAssetMetadata, "update_asset_metadata", crate::command::update_asset_metadata::UpdateAssetMetadataCommand, crate::command::update_asset_metadata::UpdateAssetMetadataResult;
+    /// Ask the author to update component.
+    /// What update component answered.
+    UpdateComponent, "update_component", crate::command::update_component::UpdateComponentCommand, crate::command::update_component::UpdateComponentResult;
+    /// Ask the author to update content fragment.
+    /// What update content fragment answered.
+    UpdateContentFragment, "update_content_fragment", crate::command::update_content_fragment::UpdateContentFragmentCommand, crate::command::update_content_fragment::UpdateContentFragmentResult;
+    /// Ask the author to update experience fragment.
+    /// What update experience fragment answered.
+    UpdateExperienceFragment, "update_experience_fragment", crate::command::update_experience_fragment::UpdateExperienceFragmentCommand, crate::command::update_experience_fragment::UpdateExperienceFragmentResult;
+    /// Ask the author to update open service gateway initiative configuration.
+    /// What update open service gateway initiative configuration answered.
+    UpdateOpenServiceGatewayInitiativeConfiguration, "update_open_service_gateway_initiative_configuration", crate::command::update_open_service_gateway_initiative_configuration::UpdateOpenServiceGatewayInitiativeConfigurationCommand, crate::command::update_open_service_gateway_initiative_configuration::UpdateOpenServiceGatewayInitiativeConfigurationResult;
+    /// Ask the author to update page.
+    /// What update page answered.
+    UpdatePage, "update_page", crate::command::update_page::UpdatePageCommand, crate::command::update_page::UpdatePageResult;
+    /// Ask the author to update user profile.
+    /// What update user profile answered.
+    UpdateUserProfile, "update_user_profile", crate::command::update_user_profile::UpdateUserProfileCommand, crate::command::update_user_profile::UpdateUserProfileResult;
 }

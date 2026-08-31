@@ -110,7 +110,7 @@ fn content_parent(invocation: &Invocation) -> Result<PageContentParent, RequestR
 }
 
 /// Returns the properties one invocation's document holds, when it names one.
-fn properties(
+pub(crate) fn properties(
     invocation: &Invocation,
     reserved: &[&str],
 ) -> Result<Option<MutationProperties>, RequestRefusal> {

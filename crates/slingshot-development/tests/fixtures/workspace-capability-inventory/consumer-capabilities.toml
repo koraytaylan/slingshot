@@ -14,7 +14,7 @@ format = "slingshot.consumer-capabilities/1"
 [[consumer]]
 name = "slingshot_domain"
 package = "slingshot-domain"
-normal = ["typed-errors", "serialization", "unique-identifiers", "secret-buffers", "javascript-object-notation", "toml-documents", "secure-hash-digests", "unicode-normalization"]
+normal = ["base64-encoding", "typed-errors", "serialization", "unique-identifiers", "secret-buffers", "javascript-object-notation", "toml-documents", "secure-hash-digests", "unicode-normalization"]
 build = []
 development = ["property-tests"]
 

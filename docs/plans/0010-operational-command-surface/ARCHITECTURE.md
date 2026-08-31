@@ -47,7 +47,7 @@ Sixty-four commands do not fit the shape twelve fit. Three files that are single
 - `command/classification_foundation.rs`, `classification_authoring.rs`, `classification_platform.rs`, `classification_process.rs`, and `classification_administration.rs` declare those constants, one per command, beside the family they belong to. The original twelve move to the foundation leaf unchanged.
 - `command/result_context.rs` holds every `AnswersCommand` implementation, which is one impl per command and nothing else.
 - `command/schema.rs` keeps the dialect, the identifier and file-name rules, `COMMAND_WIRE_NAMES`, the shared body helpers, and the dispatch. `schema_authoring.rs`, `schema_platform.rs`, `schema_process.rs`, and `schema_administration.rs` hold the per-family bodies the dispatch asks in order.
-- `slingshot-command-line` gains `commands/page_lifecycle.rs`, `asset_lifecycle.rs`, `content_fragment.rs`, `experience_fragment.rs`, `platform_configuration.rs`, `resource_mapping.rs`, `workflow.rs`, `sling_job.rs`, `authorizable.rs`, and `replication_queue.rs`, and moves its option table out of `invocation.rs` into `invocation_options.rs` when that file would otherwise exceed the size rule.
+- `slingshot-command-line` gains `commands/page_lifecycle.rs`, `asset_lifecycle.rs`, `content_fragment.rs`, `experience_fragment.rs`, `platform_configuration.rs`, `resource_mapping.rs`, `workflow.rs`, `sling_job.rs`, `authorizable.rs`, and `replication_queue.rs`, and keeps its option table in `invocation.rs`, which the thirty-eight new options leave inside the size rule.
 
 ## Operational vocabulary
 

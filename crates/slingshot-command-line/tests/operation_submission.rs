@@ -47,10 +47,10 @@ const GENERATED: &str = "generated-identifier";
 const ROOT: &str = "/content/site";
 
 /// How many published commands repeat harmlessly.
-const IDEMPOTENT_COMMANDS: usize = 7;
+const IDEMPOTENT_COMMANDS: usize = 26;
 
 /// How many need a caller key.
-const NON_IDEMPOTENT_COMMANDS: usize = 5;
+const NON_IDEMPOTENT_COMMANDS: usize = 38;
 
 /// Returns what this client requires of a daemon.
 fn expectation() -> DaemonExpectation {
