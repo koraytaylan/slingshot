@@ -25,6 +25,7 @@ pub mod explicit_daemon_start;
 pub mod human_renderer;
 pub mod interrupt;
 pub mod invocation;
+pub mod live_adobe_experience_manager;
 pub mod machine_outcome_envelope;
 pub mod machine_readable_renderer;
 pub mod model_context_protocol;

@@ -1,0 +1,16 @@
+# Roots a verification accepts, and roots it refuses with the reason.
+#
+# A repository path and a filesystem path are both a slash and some segments,
+# which is exactly why the tree a root starts in is what decides it.
+{"named": "/content", "refusal": null}
+{"named": "/content/site/en", "refusal": null}
+{"named": "/content/dam/example", "refusal": null}
+{"named": "/", "refusal": "ContentRootElsewhere"}
+{"named": "/apps/example", "refusal": "ContentRootElsewhere"}
+{"named": "/home/somebody/checkout", "refusal": "ContentRootElsewhere"}
+{"named": "/contentious/site", "refusal": "ContentRootElsewhere"}
+{"named": "content/site", "refusal": "ContentRootUnusable"}
+{"named": "", "refusal": "ContentRootUnusable"}
+{"named": "/content/../apps", "refusal": "ContentRootUnusable"}
+{"named": "C:\\content\\site", "refusal": "ContentRootUnusable"}
+{"named": "file:///content/site", "refusal": "ContentRootUnusable"}

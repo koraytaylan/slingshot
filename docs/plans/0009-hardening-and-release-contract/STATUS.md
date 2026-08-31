@@ -10,6 +10,30 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 16/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3901 adds a leaf, and a leaf joins registries its footprint does not name.**
+    Its footprint names six files. A new local leaf is also a row in the command-line
+    module scaffold inventory and the workspace module map, a row in the
+    application-dispatch service matrix, a golden session with its expected bytes, and
+    a line in the generated command reference; each of those exists precisely so that a
+    leaf cannot be added without joining it. The two derivations the report needs - the
+    author address and the deployment - went into `target_selection.rs` rather than
+    `configuration_check.rs`, because that file carries a check that it names nothing
+    which could reach a daemon and the accessor that yields an address has the word in
+    its name.
+  - **3901 delivers the decision content and the composed branch, not a live run.**
+    Driving heartbeat, reconnect, snapshot recovery, and a verified artifact through
+    the command line needs a running daemon and a served author, and this environment
+    has neither; a recorded observation of one would be a fabrication. What is
+    delivered is everything that decides such a run: enablement that reads nothing
+    before it refuses, admission taken row by row from the registry's own access and
+    destructive columns with idempotency never consulted, capability agreement over the
+    five identity fields with both canonical-contract annotations authenticated
+    separately from them, the exact-count configuration conformance attestation, the
+    report and what it may and may not claim - and the branch itself, which runs the
+    three read shapes through the same submission path an operator's own invocation
+    takes. Agreement is checked where a capability is visible: the daemon's own
+    discovery holds the agent's advertised contracts, and this crate may not depend on
+    the crate that defines them.
   - **3808 delivers the offline cache contract and refuses to invent the owner's part
     of it.** Its own steps reach into three tasks that have not been through their
     owner gate: the native row map and the protected review environment

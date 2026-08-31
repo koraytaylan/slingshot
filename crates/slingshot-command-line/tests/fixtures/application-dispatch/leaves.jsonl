@@ -15,3 +15,4 @@
 {"leaf": "operation-result", "service": "operation-observation"}
 {"leaf": "operation-artifact", "service": "operation-observation"}
 {"leaf": "operation-restart", "service": "operation-observation"}
+{"leaf": "verify-live-author", "service": "live-author-verification"}

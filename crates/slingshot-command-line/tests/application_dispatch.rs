@@ -37,6 +37,7 @@ use slingshot_command_line::invocation::{
 };
 use slingshot_command_line::target_selection::NamespacePair;
 use slingshot_domain::command::catalog::CommandCatalog;
+use slingshot_domain::profile::AdobeExperienceManagerDeployment;
 use slingshot_local_protocol::control::HelloResult;
 use slingshot_local_protocol::message::{OperationEnvelope, OperationResponse};
 
@@ -45,6 +46,9 @@ const PROFILE: &str = "local";
 
 /// Environment every scenario names.
 const ENVIRONMENT: &str = "author";
+
+/// The address the fake selection resolves an author at.
+const AUTHOR_TARGET: &str = "https://author.example/";
 
 /// The target digest the scenario daemon serves.
 const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -141,6 +145,7 @@ fn service_spelling(service: Service) -> &'static str {
         Service::OperationObservation => "operation-observation",
         Service::OperationMaintenance => "operation-maintenance",
         Service::ModelContextProtocolServer => "model-context-protocol-server",
+        Service::LiveAuthorVerification => "live-author-verification",
     }
 }
 
@@ -336,6 +341,8 @@ impl Default for Fakes {
     fn default() -> Self {
         Self {
             report: CheckReport::Resolved(Box::new(ResolvedFacts {
+                author_target: AUTHOR_TARGET.to_owned(),
+                deployment: AdobeExperienceManagerDeployment::AdobeExperienceManager65,
                 environment: ENVIRONMENT.to_owned(),
                 profile: PROFILE.to_owned(),
                 warned_cleartext_transport: false,
