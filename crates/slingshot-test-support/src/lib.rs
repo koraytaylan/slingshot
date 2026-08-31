@@ -15,6 +15,7 @@
 //! the scenario builds rather than inherits, against pipes the harness drains
 //! or a pseudo-terminal it holds the controlling end of, and inside a deadline.
 
+pub mod daemon_fault_checkpoints;
 pub mod daemon_process;
 pub mod fake_author;
 pub mod fake_operation_executor;
