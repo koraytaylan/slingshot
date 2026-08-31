@@ -31,6 +31,7 @@ use crate::sqlite_statement_inventory::FORBIDDEN_CONSTRUCTS;
 pub const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("../migrations/0001-operations.sql")),
     (2, include_str!("../migrations/0002-agent-jobs.sql")),
+    (3, include_str!("../migrations/0003-execution-fence.sql")),
 ];
 
 /// Compile option that would make the temporary-storage pragma a dead letter.
