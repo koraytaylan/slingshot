@@ -10,12 +10,15 @@
 //! returns what a validated constructor built or names the option that carried
 //! something the constructor would not take.
 
+use slingshot_domain::command::find_pages_containing_phrase::PageTitle;
 use slingshot_domain::command::repository_path::{PropertyName, RepositoryPath};
 use slingshot_domain::command::resource_mutation::{ReferencePolicy, RemovedPropertyNames};
 
 use crate::commands::content::{RequestRefusal, required};
 use crate::commands::package::LIST_SEPARATOR;
-use crate::invocation::{Invocation, REFERENCE_POLICY_OPTION, REMOVED_PROPERTIES_OPTION};
+use crate::invocation::{
+    Invocation, REFERENCE_POLICY_OPTION, REMOVED_PROPERTIES_OPTION, TITLE_OPTION,
+};
 
 /// The spelling that refuses a deletion while anything points at its subject.
 pub const REFUSE_WHEN_REFERENCED: &str = "refuse-when-referenced";
@@ -190,4 +193,19 @@ pub fn decision(
     } else {
         Err(unusable(option))
     }
+}
+
+/// Returns the title one invocation records, when it records one.
+///
+/// Four families record a title and every one of them reads it the same way, so
+/// it is read here rather than four times.
+///
+/// # Errors
+///
+/// Returns [`RequestRefusal::ValueUnusable`] when the value is longer than a
+/// title may be.
+pub fn title(invocation: &Invocation) -> Result<Option<PageTitle>, RequestRefusal> {
+    optional_text(invocation, TITLE_OPTION)
+        .map(|stated| PageTitle::new(stated).map_err(|_| unusable(TITLE_OPTION)))
+        .transpose()
 }

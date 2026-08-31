@@ -14,7 +14,6 @@ use slingshot_domain::command::catalog::Command;
 use slingshot_domain::command::create_asset::CreateAssetCommand;
 use slingshot_domain::command::create_asset_folder::CreateAssetFolderCommand;
 use slingshot_domain::command::delete_asset::DeleteAssetCommand;
-use slingshot_domain::command::find_pages_containing_phrase::PageTitle;
 use slingshot_domain::command::list_asset_renditions::ListAssetRenditionsCommand;
 use slingshot_domain::command::move_asset::MoveAssetCommand;
 use slingshot_domain::command::repository_path::RepositoryName;
@@ -23,13 +22,13 @@ use slingshot_domain::command::update_asset_metadata::UpdateAssetMetadataCommand
 
 use crate::commands::content::{RequestRefusal, require_key, required};
 use crate::commands::operational_values::{
-    flag, optional_text, path, reference_policy, removed_property_names, unusable,
+    flag, path, reference_policy, removed_property_names, title, unusable,
 };
 use crate::commands::page_mutation::properties;
 use crate::commands::path_query::window;
 use crate::invocation::{
     ADJUST_REFERENCES_OPTION, DESTINATION_PATH_OPTION, Invocation, MEDIA_TYPE_OPTION, NAME_OPTION,
-    PATH_OPTION, PAYLOAD_OPTION, TITLE_OPTION,
+    PATH_OPTION, PAYLOAD_OPTION,
 };
 
 /// The wire name of the folder creation.
@@ -132,11 +131,4 @@ fn move_asset(invocation: &Invocation) -> Result<Command, RequestRefusal> {
 /// Returns the name a creation gives its subject.
 fn name(invocation: &Invocation) -> Result<RepositoryName, RequestRefusal> {
     RepositoryName::parse(required(invocation, NAME_OPTION)?).map_err(|_| unusable(NAME_OPTION))
-}
-
-/// Returns the title a creation records, when it records one.
-fn title(invocation: &Invocation) -> Result<Option<PageTitle>, RequestRefusal> {
-    optional_text(invocation, TITLE_OPTION)
-        .map(|stated| PageTitle::new(stated).map_err(|_| unusable(TITLE_OPTION)))
-        .transpose()
 }

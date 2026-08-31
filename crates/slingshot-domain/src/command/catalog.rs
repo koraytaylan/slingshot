@@ -367,12 +367,13 @@ macro_rules! command_family {
 
 /// Why a request is not one this contract will carry.
 ///
-/// Fourteen commands can be handed two arguments that contradict each other: a
-/// move into its own subtree, a component asked to precede itself, an update
-/// that changes nothing, a group asked to contain itself. Each of them says so
-/// in its own type, and this is the one place a caller can ask the question
-/// without knowing which of the sixty-four it is holding - so a boundary that
-/// builds commands checks it once rather than fourteen times, or not at all.
+/// Seventeen commands can be handed arguments that contradict each other: a move
+/// into its own subtree, a component asked to precede itself, an update that
+/// changes nothing, a group asked to contain itself, a byte range whose smallest
+/// value is larger than its largest. Each of them says so in its own type, and
+/// this is the one place a caller can ask the question without knowing which of
+/// the sixty-four it is holding - so a boundary that builds commands checks it
+/// once rather than seventeen times, or not at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{wire_name} refuses this request: {reason}")]
 pub struct RequestNotUsable {
@@ -404,6 +405,9 @@ impl Command {
             reason: reason.to_string(),
         };
         match self {
+            Self::CreatePage(asked) => {
+                asked.require_title_not_redefined().map_err(|why| refused(&why))
+            }
             Self::UpdatePage(asked) => asked.require_usable().map_err(|why| refused(&why)),
             Self::UpdateComponent(asked) => asked.require_usable().map_err(|why| refused(&why)),
             Self::UpdateAssetMetadata(asked) => asked.require_usable().map_err(|why| refused(&why)),
@@ -428,6 +432,9 @@ impl Command {
             reason: reason.to_string(),
         };
         match self {
+            Self::FindAssetsByMetadata(asked) => {
+                asked.require_usable_range().map_err(|why| refused(&why))
+            }
             Self::MovePage(asked) => asked.require_usable().map_err(|why| refused(&why)),
             Self::MoveAsset(asked) => asked.require_usable().map_err(|why| refused(&why)),
             Self::ReorderComponent(asked) => asked.require_usable().map_err(|why| refused(&why)),

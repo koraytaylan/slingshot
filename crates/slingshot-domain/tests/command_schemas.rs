@@ -13,9 +13,9 @@ use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 use slingshot_domain::command::canonical_json::{
-    ArrayOrderInventory, CANONICAL_JSON_FORMAT, CanonicalFailure, DECLARED_COMPARATORS,
-    PRESERVE_COMPARATOR, canonical_digest, require_array_order, require_canonical_bytes,
-    write_canonical,
+    ArrayOrderInventory, CANONICAL_JSON_FORMAT, COMPARATOR_MEMBERS, CanonicalFailure,
+    DECLARED_COMPARATORS, PRESERVE_COMPARATOR, canonical_digest, require_array_order,
+    require_canonical_bytes, write_canonical,
 };
 use slingshot_domain::command::command_identity::{CommandContract, INITIAL_COMMAND_VERSION};
 use slingshot_domain::command::schema::{
@@ -176,6 +176,20 @@ fn the_byte_contract_is_itself_canonical_and_closed() {
     let mut expected: Vec<&str> = DECLARED_COMPARATORS.to_vec();
     expected.sort_unstable();
     assert_eq!(declared, expected, "the file and the module declare the same comparators");
+    for (comparator, declared) in comparators {
+        let key = declared["key"].as_str().expect("a comparator names its key");
+        let members: Vec<&str> = COMPARATOR_MEMBERS
+            .iter()
+            .find(|(named, _)| *named == comparator)
+            .map(|(_, members)| members.to_vec())
+            .unwrap_or_default();
+        let stated: Vec<&str> =
+            key.split(',').filter_map(|part| part.strip_prefix("member:")).collect();
+        assert_eq!(
+            members, stated,
+            "{comparator}: the module and the contract disagree about the member it orders by"
+        );
+    }
     let arrays = value["arrays"].as_object().expect("an array inventory");
     for wire_name in COMMAND_WIRE_NAMES {
         let command =
