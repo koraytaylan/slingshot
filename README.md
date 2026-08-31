@@ -34,6 +34,8 @@ other than this user's own runtime directory.
 answer, failure category, and exit this executable has, and
 [docs/MODEL_CONTEXT_PROTOCOL.md](docs/MODEL_CONTEXT_PROTOCOL.md) is the one for
 the protocol server it can hand its streams to.
+[docs/WORKFLOWS.md](docs/WORKFLOWS.md) records what the pinned external workflow
+executor is integrated with and what that integration guarantees.
 
 ## Crates
 

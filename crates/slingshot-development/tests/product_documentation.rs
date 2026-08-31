@@ -20,6 +20,7 @@ const AREA_DOCUMENTS: &[&str] = &[
     "docs/CONFIGURATION.md",
     "docs/DAEMON.md",
     "docs/MODEL_CONTEXT_PROTOCOL.md",
+    "docs/WORKFLOWS.md",
 ];
 
 /// Headings the daemon document must carry.
