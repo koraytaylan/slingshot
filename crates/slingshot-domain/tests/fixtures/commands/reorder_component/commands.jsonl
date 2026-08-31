@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"placement\":{\"mode\":\"last\"}}","note":"moved to the end"}
+{"accepted":true,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"placement\":{\"mode\":\"before\",\"sibling_name\":\"image\"}}","note":"moved in front of a named sibling"}
+{"accepted":false,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"placement\":{\"mode\":\"before\"}}","note":"a before placement naming no sibling"}
+{"accepted":false,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"placement\":{\"mode\":\"last\",\"sibling_name\":\"image\"}}","note":"a last placement naming a sibling"}
+{"accepted":false,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"placement\":{\"mode\":\"first\"}}","note":"a placement nobody declared"}
+{"accepted":false,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\"}","note":"no placement at all"}

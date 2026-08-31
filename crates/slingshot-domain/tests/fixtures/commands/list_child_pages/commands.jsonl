@@ -1,0 +1,7 @@
+{"accepted":true,"document":"{\"root_path\":\"/content/example/en\"}","note":"the plainest listing"}
+{"accepted":true,"document":"{\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":25},\"root_path\":\"/content/example/en\"}","note":"an explicit first page"}
+{"accepted":true,"document":"{\"result_window\":{\"mode\":\"continuation\",\"continuation_token\":\"abc\"},\"root_path\":\"/content/example/en\"}","note":"a resumed page"}
+{"accepted":true,"document":"{\"root_path\":\"/\"}","note":"the repository root"}
+{"accepted":false,"document":"{\"root_path\":\"content/example/en\"}","note":"an anchor that is not absolute"}
+{"accepted":false,"document":"{}","note":"no anchor at all"}
+{"accepted":false,"document":"{\"extra\":1,\"root_path\":\"/content/example/en\"}","note":"a member this command does not have"}
