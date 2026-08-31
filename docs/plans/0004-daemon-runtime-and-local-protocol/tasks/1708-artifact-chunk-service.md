@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-daemon/src/artifact_transfer.rs
   - crates/slingshot-daemon/tests/artifact_transfer.rs
   - "crates/slingshot-daemon/tests/fixtures/artifact-transfer/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Artifact Chunk Service
