@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/tests/command_secret_scans.rs
   - crates/slingshot-test-support/fixtures/command-secret-scans/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Scan Command Output For Secrets

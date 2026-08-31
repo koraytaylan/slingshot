@@ -54,6 +54,18 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     cooperative stop, and 2803 scans exactly that stream for exactly that kind of value.
     The module-map checker also counted a process entry as a claimed module, which no
     task had tripped before because none both owned a module row and touched the entry.
+  - **2803 scans the channels a run has and proves its scanner before trusting it.** The
+    task lists tracing and a daemon transcript among the channels. This executable emits
+    no tracing of its own and the daemon it drives writes none for a client to capture,
+    so what is searched is what a run actually produces: its arguments, both streams, and
+    every file it left under its runtime root, in seven encodings each. A scanner that
+    found nothing because it was looking wrongly would pass every scenario, so each
+    encoding is proved against a helper that deliberately emits it, and each boundary is
+    checked to have carried a sentinel into the process and produced output at all -
+    without that, a scan of an empty stream would look like a clean one.
+    The inclusive thirty-two-item bound is asserted where the bound lives, against the
+    configuration's own summarizer, because the account's configuration root is chosen by
+    the operating system and no scenario can make it produce thirty-three diagnostics.
   - **2802 pins the surface the compiled process actually has.** The task asks for
     sessions across admitted operations, receipts, publication races, and lost-receipt
     replay. Reaching one needs a daemon that answers a versioned operation request, and
