@@ -9,11 +9,15 @@ depends_on:
   - sqlite-schema-and-migrations
 gated: false
 touches:
+  - crates/slingshot-daemon/Cargo.toml
   - crates/slingshot-daemon/src/startup.rs
+  - crates/slingshot-storage/src/operation_repository.rs
+  - crates/slingshot-storage/src/sqlite_statement_inventory.rs
   - crates/slingshot-command-line/src/daemon_process.rs
+  - crates/slingshot-command-line/tests/daemon_process.rs
   - crates/slingshot-daemon/tests/configuration_startup.rs
   - "crates/slingshot-daemon/tests/fixtures/configuration-startup/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Daemon Configuration Startup
