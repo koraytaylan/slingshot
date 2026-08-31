@@ -10,7 +10,7 @@ touches:
   - examples/finite-state-machine/success.machine.json
   - crates/slingshot-development/tests/fixtures/finite-state-machine-success/**
   - crates/slingshot-development/tests/finite_state_machine_success.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Successful Workflow Command

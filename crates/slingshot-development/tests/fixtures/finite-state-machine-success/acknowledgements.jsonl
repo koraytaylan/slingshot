@@ -1,0 +1,4 @@
+# One row per outcome a successful command journals.
+{"name": "a-receipt", "envelope": {"outcome": "operation_receipt", "operation_identifier": "one", "replayed": false, "revision": 1}, "ok": true, "event": "replicated", "whole": true}
+{"name": "a-result", "envelope": {"outcome": "operation_result", "result": {"replicated": 3}}, "ok": true, "event": "replicated", "whole": true}
+{"name": "a-replayed-receipt", "envelope": {"outcome": "operation_receipt", "operation_identifier": "one", "replayed": true, "revision": 1}, "ok": true, "event": "replicated", "whole": true}
