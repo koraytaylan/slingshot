@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/tests/current_stateless_revision.rs
   - "crates/slingshot-test-support/fixtures/model-context-protocol/official-schemas/2026-07-28/**"
 status: done
-merged_as: ""
+merged_as: "b969f6edbb8d24445fed297b5cbed0577221418e"
 ---
 # Serve Current Stateless Revision
 
