@@ -19,7 +19,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/workflow-documentation-commands.txt
   - crates/slingshot-development/tests/workflow_documentation.rs
 status: done
-merged_as: ""
+merged_as: "b3e6ccd0e29593a69d324895f08bf40e7f024458"
 ---
 # Pinned Finite State Machine Compatibility Gate
 
