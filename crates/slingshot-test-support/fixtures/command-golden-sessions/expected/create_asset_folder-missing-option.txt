@@ -1,0 +1,4 @@
+exit: 2
+standard output:
+standard error:
+slingshot: create_asset_folder changes something, so a repeat needs the key that makes it the same request

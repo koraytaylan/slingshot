@@ -19,22 +19,22 @@ use slingshot_command_line::model_context_protocol::tool_catalog::{
 use slingshot_domain::command::catalog::CommandCatalog;
 
 /// How many commands the registry publishes.
-const PUBLISHED_COMMANDS: usize = 12;
+const PUBLISHED_COMMANDS: usize = 64;
 
 /// How many of them are read-only.
-const READ_ONLY_COMMANDS: usize = 9;
+const READ_ONLY_COMMANDS: usize = 28;
 
 /// How many of them change something.
-const CHANGING_COMMANDS: usize = 3;
+const CHANGING_COMMANDS: usize = 36;
 
 /// How many of them may remove something.
-const DESTRUCTIVE_COMMANDS: usize = 1;
+const DESTRUCTIVE_COMMANDS: usize = 25;
 
 /// How many of them are the same request twice over.
-const IDEMPOTENT_COMMANDS: usize = 7;
+const IDEMPOTENT_COMMANDS: usize = 26;
 
 /// How many of them require the caller's key.
-const KEY_REQUIRING_COMMANDS: usize = 5;
+const KEY_REQUIRING_COMMANDS: usize = 38;
 
 /// The one command that may remove something.
 const DESTRUCTIVE_COMMAND: &str = "replicate_content";
@@ -132,13 +132,13 @@ fn the_annotation_matrix_is_the_one_the_registry_produces() {
 #[test]
 fn the_two_rows_that_are_easy_to_get_wrong_are_the_ones_the_registry_says() {
     let destructive = tool(DESTRUCTIVE_COMMAND);
-    assert!(destructive.destructive_hint, "the one destructive command is the destructive tool");
+    assert!(destructive.destructive_hint, "a destructive command is a destructive tool");
     assert!(!destructive.read_only_hint);
     assert_eq!(destructive.operation_key, KeyPresence::Required);
     assert_eq!(
         command_tools().iter().filter(|held| held.destructive_hint).count(),
         DESTRUCTIVE_COMMANDS,
-        "and it is the only one"
+        "and every destructive row is one"
     );
 
     let read_but_not_idempotent = tool(READ_BUT_NOT_IDEMPOTENT);

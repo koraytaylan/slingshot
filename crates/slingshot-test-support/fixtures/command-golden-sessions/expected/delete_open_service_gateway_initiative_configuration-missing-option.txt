@@ -1,0 +1,4 @@
+exit: 2
+standard output:
+standard error:
+slingshot: delete_open_service_gateway_initiative_configuration changes something, so a repeat needs the key that makes it the same request

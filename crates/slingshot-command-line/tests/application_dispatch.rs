@@ -258,7 +258,7 @@ fn the_target_a_leaf_needs_is_read_from_one_table_and_not_two() {
 }
 
 #[test]
-fn the_dispatch_matrix_and_the_module_inventory_name_the_same_eight_families() {
+fn the_dispatch_matrix_and_the_module_inventory_name_the_same_families() {
     let inventory = std::fs::read_to_string(SCAFFOLD_FIXTURE).expect("the scaffold is readable");
     let mut declared: Vec<(usize, String)> = inventory
         .lines()
