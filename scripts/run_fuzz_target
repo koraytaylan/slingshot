@@ -1,0 +1,40 @@
+#!/bin/sh
+# Run one fuzz target with the verified pinned tool and nothing else.
+#
+# The tool is supplied as a verified bundle rather than found: this wrapper
+# resolves the executable through the verifier, which answers with one absolute
+# path, and runs that. A run that reached for a tool by name would be a run
+# nobody can say which tool performed.
+
+set -eu
+
+TARGET=''
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --target)
+            [ "$#" -ge 2 ] || report_refusal 'the target option names a fuzz target'
+            TARGET=$2
+            shift 2
+            ;;
+        *)
+            report_refusal "$1 is not an option this wrapper takes"
+            ;;
+    esac
+done
+
+[ -n "$TARGET" ] || report_refusal 'this wrapper is told which target to run'
+[ -n "${SLINGSHOT_COVERAGE_FUZZING_TOOL_BUNDLE:-}" ] \
+    || report_refusal 'SLINGSHOT_COVERAGE_FUZZING_TOOL_BUNDLE names the verified bundle to run from'
+[ -f "fuzz/fuzz_targets/$TARGET.rs" ] || report_refusal "$TARGET is not a target this repository has"
+
+EXECUTABLE=$(scripts/verify_coverage_fuzzing_tool --bundle "$SLINGSHOT_COVERAGE_FUZZING_TOOL_BUNDLE")
+[ -x "$EXECUTABLE" ] || report_refusal 'the verified bundle names no runnable executable'
+
+RUN_SECONDS=${SLINGSHOT_FUZZ_SECONDS:-60}
+exec "$EXECUTABLE" run "$TARGET" -- -max_total_time="$RUN_SECONDS"

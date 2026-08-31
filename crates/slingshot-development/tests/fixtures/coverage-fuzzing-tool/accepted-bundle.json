@@ -1,0 +1,15 @@
+{
+  "binary_sha256": "0cbfc3c7b38f69ad15875e144721533275fe42d17b75c36f7fdd7a9343cc0da2",
+  "build_toolchain": "1.98.0",
+  "commit": "0c1c9d7c3f3b0dbd77e7d7e2ba1bd12a5ad19cfc",
+  "dependency_cache_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "environment": {
+    "CARGO_HOME": "<private>",
+    "PATH": ""
+  },
+  "format": "slingshot.coverage-fuzzing-bundle/1",
+  "host": "x86_64-unknown-linux-gnu",
+  "lock_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "repository": "https://github.com/rust-fuzz/cargo-fuzz",
+  "tree_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+}

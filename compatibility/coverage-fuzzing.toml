@@ -1,0 +1,27 @@
+# The one authority for the coverage-guided fuzzing tool this repository uses.
+#
+# A tool that fuzzes this product decides which inputs it is tried against, so
+# which tool it is has to be as exact as anything else that is pinned: one
+# repository, one full commit, one locked dependency graph, and one dated
+# toolchain. A branch, a tag, a shortened commit, or a name found on the path
+# would each let a different tool answer to the same description.
+
+format = "slingshot.coverage-fuzzing/1"
+repository = "https://github.com/rust-fuzz/cargo-fuzz"
+commit = "0c1c9d7c3f3b0dbd77e7d7e2ba1bd12a5ad19cfc"
+package = "cargo-fuzz"
+version = "0.13.1"
+binary = "cargo-fuzz"
+build_toolchain = "1.98.0"
+fuzz_toolchain = "nightly-2026-06-01"
+
+[bundle]
+maximum_entries = 4096
+maximum_entry_utf8_bytes = 4096
+maximum_bytes = 268435456
+
+[policy]
+allows_git_dependencies = false
+allows_source_replacement = false
+requires_locked_resolution = true
+requires_checksums = true

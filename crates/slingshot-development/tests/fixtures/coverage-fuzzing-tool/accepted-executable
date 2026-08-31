@@ -1,0 +1,2 @@
+#!/bin/sh
+printf 'cargo-fuzz 0.13.1\n'

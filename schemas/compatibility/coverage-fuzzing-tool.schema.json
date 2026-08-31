@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:slingshot:compatibility:coverage-fuzzing-tool",
+  "title": "A built coverage-fuzzing tool bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "binary_sha256",
+    "build_toolchain",
+    "commit",
+    "dependency_cache_sha256",
+    "environment",
+    "format",
+    "host",
+    "lock_sha256",
+    "repository",
+    "tree_sha256"
+  ],
+  "properties": {
+    "binary_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "build_toolchain": { "type": "string", "minLength": 1 },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "dependency_cache_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "environment": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "format": { "const": "slingshot.coverage-fuzzing-bundle/1" },
+    "host": { "type": "string", "minLength": 1 },
+    "lock_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "repository": { "type": "string", "minLength": 1 },
+    "tree_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}
