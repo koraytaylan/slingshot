@@ -5,13 +5,16 @@ workstream: "0040"
 kind: task
 depends_on:
   - operational-contract-limits
+  - operational-listing
 gated: false
 touches:
   - crates/slingshot-domain/src/command/platform_service_identity.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/src/command/operational_listing.rs
+  - crates/slingshot-domain/src/command/repository_path.rs
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/platform_service_identity.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Platform Service Identity
