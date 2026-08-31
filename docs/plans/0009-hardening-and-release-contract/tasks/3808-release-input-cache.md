@@ -24,7 +24,7 @@ touches:
   - crates/slingshot-development/tests/release_input_cache.rs
   - "crates/slingshot-development/tests/fixtures/release-input-cache/**"
 status: done
-merged_as: ""
+merged_as: "5be5678ed399d19bd96e779c7b33cbfa98c246ec"
 ---
 # Release Input Cache
 
