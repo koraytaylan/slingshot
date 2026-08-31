@@ -11,7 +11,8 @@ use std::process::ExitCode;
 
 use slingshot_development::{
     RepositoryCommandFailure, dependency_direction, finite_state_machine_compatibility,
-    github_automation_authority, release_input_cache, rustsec_advisory_pin, source_policy,
+    github_automation_authority, release_artifacts, release_input_cache, rustsec_advisory_pin,
+    source_policy, supported_platform_matrix,
 };
 
 /// Number of leading process arguments that carry the executable path.
@@ -31,6 +32,12 @@ const RUSTSEC_PIN_COMMAND: &str = "rustsec-advisory-pin";
 
 /// Name of the command that proposes pin bytes for a reviewed candidate.
 const RUSTSEC_PIN_REVIEW_COMMAND: &str = "rustsec-pin-review";
+
+/// Name of the command that builds one row's release archive.
+const PACKAGE_COMMAND: &str = "package-release-artifacts";
+
+/// Name of the command that verifies one row's release archive.
+const VERIFY_ARTIFACTS_COMMAND: &str = "verify-release-artifacts";
 
 /// Name of the command that validates the hosted automation authority.
 const AUTHORITY_COMMAND: &str = "github-automation-authority";
@@ -126,6 +133,8 @@ fn release_command(
         }
         PREPARE_CACHE_COMMAND => prepare_locked_source_cache(arguments, working_directory, output),
         VERIFY_CACHE_COMMAND => verify_locked_source_cache(arguments, working_directory, output),
+        PACKAGE_COMMAND => package_release_artifacts(arguments, working_directory, output),
+        VERIFY_ARTIFACTS_COMMAND => verify_release_artifacts(arguments, working_directory, output),
         _ => Err(RepositoryCommandFailure::UnknownCommand(requested.to_owned())),
     }
 }
@@ -471,6 +480,188 @@ fn review_repository_identity(
         github_automation_authority::propose_repository_identifier(&authority, &response)
             .map_err(|failure| refuse(failure.to_string()))?;
     write!(output, "{proposed}")
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Returns the value one named option carries.
+fn named_value(
+    arguments: &[String],
+    option: &str,
+    program: &str,
+) -> Result<String, RepositoryCommandFailure> {
+    arguments
+        .windows(OPTION_AND_VALUE)
+        .find(|pair| pair[0] == option)
+        .map(|pair| pair[1].clone())
+        .ok_or_else(|| RepositoryCommandFailure::ToolFailed {
+            program: program.to_owned(),
+            reason: format!("name it with {option}"),
+        })
+}
+
+/// Returns the archive members and profile the supported matrix declares.
+fn declared_archive(
+    working_directory: &Path,
+    triple: &str,
+    program: &str,
+) -> Result<(String, Vec<String>), RepositoryCommandFailure> {
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let path = workspace_root.join("support/platforms.toml");
+    let text = std::fs::read_to_string(&path).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
+    })?;
+    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
+        program: program.to_owned(),
+        reason,
+    };
+    let matrix = supported_platform_matrix::parse_matrix(&text)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    let row = matrix
+        .target
+        .into_iter()
+        .find(|row| row.triple == triple)
+        .ok_or_else(|| refuse(format!("{triple} is not a supported target")))?;
+    Ok((row.archive_profile, row.archive_members))
+}
+
+/// Builds one row's release archive, its checksum manifest, and its evidence.
+fn package_release_artifacts(
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let named = |option| named_value(arguments, option, PACKAGE_COMMAND);
+    let triple = named("--row")?;
+    let executable = named("--executable")?;
+    let destination = PathBuf::from(named("--output-directory")?);
+    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
+        program: PACKAGE_COMMAND.to_owned(),
+        reason,
+    };
+    let (profile, members) = declared_archive(working_directory, &triple, PACKAGE_COMMAND)?;
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let built = collect_members(&members, Path::new(&executable), &workspace_root)?;
+    let archive = destination.join(format!("slingshot-{triple}.{profile}"));
+    release_artifacts::write_archive(&archive, &profile, &built, executable_member(&members))
+        .map_err(|failure| refuse(failure.to_string()))?;
+    let evidence = release_artifacts::EvidenceManifest {
+        archive: archive.file_name().unwrap_or_default().to_string_lossy().to_string(),
+        archive_sha256: digest_of_file(&archive)?,
+        cache_sha256: digest_of_file(
+            Path::new(&named("--cache-set")?).join("cache.json").as_path(),
+        )?,
+        format: release_artifacts::EVIDENCE_FORMAT.to_owned(),
+        provider_run: std::env::var("SLINGSHOT_REPORTED_WORKFLOW").unwrap_or_default(),
+        rustsec_review_record_sha256: digest_of_file(Path::new(&named(
+            "--rustsec-owner-review-record",
+        )?))?,
+        source_commit: named("--source-commit")?,
+        source_tree: named("--source-tree")?,
+        toolchain: read_pinned_toolchain(&workspace_root)?,
+        triple,
+    };
+    let rendered =
+        toml::to_string_pretty(&evidence).map_err(|failure| refuse(failure.to_string()))?;
+    std::fs::write(destination.join("evidence.toml"), rendered)
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))?;
+    writeln!(output, "{} holds {} members", archive.display(), built.len())
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Returns the member that is the executable.
+fn executable_member(members: &[String]) -> &str {
+    members.iter().find(|held| held.starts_with("slingshot")).map_or("slingshot", String::as_str)
+}
+
+/// Reads every declared member's bytes.
+fn collect_members(
+    members: &[String],
+    executable: &Path,
+    workspace_root: &Path,
+) -> Result<std::collections::BTreeMap<String, Vec<u8>>, RepositoryCommandFailure> {
+    use sha2::Digest as _;
+
+    let mut held = std::collections::BTreeMap::new();
+    for name in members {
+        if name == release_artifacts::CHECKSUM_MANIFEST {
+            continue;
+        }
+        let source = if name == executable_member(members) {
+            executable.to_path_buf()
+        } else {
+            workspace_root.join(name)
+        };
+        let bytes = std::fs::read(&source).map_err(|failure| {
+            RepositoryCommandFailure::PathUnreadable { path: source, reason: failure.to_string() }
+        })?;
+        held.insert(name.clone(), bytes);
+    }
+    let digests = held
+        .iter()
+        .map(|(name, bytes)| (name.clone(), hex::encode(sha2::Sha256::digest(bytes))))
+        .collect();
+    let manifest = release_artifacts::render_checksum_manifest(&digests);
+    held.insert(release_artifacts::CHECKSUM_MANIFEST.to_owned(), manifest.into_bytes());
+    Ok(held)
+}
+
+/// Returns what one file's bytes digest to.
+fn digest_of_file(path: &Path) -> Result<String, RepositoryCommandFailure> {
+    use sha2::Digest as _;
+
+    let bytes =
+        std::fs::read(path).map_err(|failure| RepositoryCommandFailure::PathUnreadable {
+            path: path.to_path_buf(),
+            reason: failure.to_string(),
+        })?;
+    Ok(hex::encode(sha2::Sha256::digest(&bytes)))
+}
+
+/// Returns the toolchain this repository pins.
+fn read_pinned_toolchain(workspace_root: &Path) -> Result<String, RepositoryCommandFailure> {
+    let path = workspace_root.join("rust-toolchain.toml");
+    let text = std::fs::read_to_string(&path).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
+    })?;
+    let held: toml::Value =
+        toml::from_str(&text).map_err(|failure| RepositoryCommandFailure::ToolFailed {
+            program: PACKAGE_COMMAND.to_owned(),
+            reason: failure.to_string(),
+        })?;
+    Ok(held["toolchain"]["channel"].as_str().unwrap_or_default().to_owned())
+}
+
+/// Verifies one row's release archive against what it claims.
+fn verify_release_artifacts(
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let named = |option| named_value(arguments, option, VERIFY_ARTIFACTS_COMMAND);
+    let archive = PathBuf::from(named("--archive")?);
+    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
+        program: VERIFY_ARTIFACTS_COMMAND.to_owned(),
+        reason,
+    };
+    let evidence_text = std::fs::read_to_string(named("--evidence")?)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    let evidence = release_artifacts::parse_evidence(&evidence_text)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    release_artifacts::require_evidence_binds(
+        &evidence,
+        &evidence.triple,
+        &named("--source-commit")?,
+        &named("--cache-sha256")?,
+    )
+    .map_err(|failure| refuse(failure.to_string()))?;
+    let (profile, members) =
+        declared_archive(working_directory, &evidence.triple, VERIFY_ARTIFACTS_COMMAND)?;
+    let surveyed = release_artifacts::survey_archive(&archive, &profile)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    let compressed = std::fs::metadata(&archive).map(|held| held.len()).unwrap_or_default();
+    release_artifacts::require_admissible(&surveyed, &members, compressed)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    writeln!(output, "this archive holds exactly the {} members its row declares", members.len())
         .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
 }
 

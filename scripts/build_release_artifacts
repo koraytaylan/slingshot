@@ -1,0 +1,115 @@
+#!/bin/sh
+# Build one native row's release archive, twice, from a verified tree.
+#
+# Two independent exports of the same verified commit are built with the same
+# verified cache, and their executables are compared byte for byte. One build
+# proves that a build happened; two identical builds prove that the bytes come
+# from the source rather than from the machine.
+#
+# Nothing ambient decides anything. The Cargo home is the verified cache and
+# nothing else, resolution is frozen and offline, incremental compilation is
+# off, source paths are remapped, and the archive's metadata is normalized
+# rather than inherited from a filesystem.
+
+set -eu
+
+# An option and the value beside it are two arguments.
+OPTION_AND_VALUE=2
+
+ROW=''
+CACHE_SET=''
+SOURCE_COMMIT=''
+OUTPUT_DIRECTORY=''
+REVIEW_RECORD=''
+
+report_stage() {
+    printf '\n== %s ==\n' "$1"
+}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+require_absolute() {
+    case "$1" in
+        /*) ;;
+        *) report_refusal "$1 is not an absolute path" ;;
+    esac
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --row) ROW=$2; shift "$OPTION_AND_VALUE" ;;
+        --cache-set) CACHE_SET=$2; shift "$OPTION_AND_VALUE" ;;
+        --source-commit) SOURCE_COMMIT=$2; shift "$OPTION_AND_VALUE" ;;
+        --rustsec-owner-review-record) REVIEW_RECORD=$2; shift "$OPTION_AND_VALUE" ;;
+        --output-directory) OUTPUT_DIRECTORY=$2; shift "$OPTION_AND_VALUE" ;;
+        *) report_refusal "$1 is not an option this command takes" ;;
+    esac
+done
+
+[ -n "$ROW" ] || report_refusal 'name the abstract target row this build is for'
+[ -n "$CACHE_SET" ] || report_refusal 'name the verified cache this build resolves from'
+[ -n "$SOURCE_COMMIT" ] || report_refusal 'name the exact source commit'
+[ -n "$REVIEW_RECORD" ] || report_refusal 'name the same-run owner review record'
+[ -n "$OUTPUT_DIRECTORY" ] || report_refusal 'name the directory to build into'
+require_absolute "$CACHE_SET"
+require_absolute "$OUTPUT_DIRECTORY"
+[ -d "$CACHE_SET" ] || report_refusal "$CACHE_SET is not a directory"
+[ -f "$REVIEW_RECORD" ] || report_refusal "$REVIEW_RECORD is not a file"
+[ ! -e "$OUTPUT_DIRECTORY" ] || report_refusal "$OUTPUT_DIRECTORY already exists"
+
+report_stage 'the automation authority'
+cargo run --locked --quiet -p slingshot-development -- github-automation-authority
+
+report_stage 'the verified cache'
+scripts/verify_locked_source_cache --cache-set "$CACHE_SET"
+
+report_stage 'the source tree'
+# A dirty tree is a tree whose bytes nobody can name. The commit is compared
+# rather than trusted, because a reference is a name somebody can move.
+OBSERVED=$(git rev-parse HEAD)
+[ "$OBSERVED" = "$SOURCE_COMMIT" ] || report_refusal "the checkout is at $OBSERVED"
+git diff --quiet HEAD || report_refusal 'the working tree differs from the commit being built'
+SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')
+
+mkdir -p "$OUTPUT_DIRECTORY"
+build_once() {
+    export_root=$1
+    target_root=$2
+    git archive --format=tar "$SOURCE_COMMIT" | ( mkdir -p "$export_root" && tar -x -C "$export_root" )
+    ( cd "$export_root" && \
+        CARGO_HOME="$CACHE_SET" \
+        CARGO_INCREMENTAL=0 \
+        CARGO_TARGET_DIR="$target_root" \
+        RUSTFLAGS="--remap-path-prefix=$export_root=/slingshot" \
+        SOURCE_DATE_EPOCH=0 \
+        cargo build --locked --frozen --offline --release --target "$ROW" \
+            -p slingshot-command-line )
+}
+
+report_stage 'the first export'
+build_once "$OUTPUT_DIRECTORY/first" "$OUTPUT_DIRECTORY/first-target"
+report_stage 'the second export'
+build_once "$OUTPUT_DIRECTORY/second" "$OUTPUT_DIRECTORY/second-target"
+
+report_stage 'the two builds'
+FIRST=$(find "$OUTPUT_DIRECTORY/first-target/$ROW/release" -maxdepth 1 -type f -name 'slingshot*' ! -name '*.d' | head -n 1)
+SECOND=$(find "$OUTPUT_DIRECTORY/second-target/$ROW/release" -maxdepth 1 -type f -name 'slingshot*' ! -name '*.d' | head -n 1)
+[ -n "$FIRST" ] || report_refusal 'the first build produced no executable'
+[ -n "$SECOND" ] || report_refusal 'the second build produced no executable'
+cmp -s "$FIRST" "$SECOND" || report_refusal 'two builds of one commit produced different bytes'
+
+report_stage 'the archive'
+cargo run --locked --quiet -p slingshot-development -- \
+    package-release-artifacts \
+    --row "$ROW" \
+    --executable "$FIRST" \
+    --cache-set "$CACHE_SET" \
+    --source-commit "$SOURCE_COMMIT" \
+    --source-tree "$SOURCE_TREE" \
+    --rustsec-owner-review-record "$REVIEW_RECORD" \
+    --output-directory "$OUTPUT_DIRECTORY"
+
+printf '\n== the archive is built ==\n'

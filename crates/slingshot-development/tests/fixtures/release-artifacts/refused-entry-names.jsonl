@@ -1,0 +1,11 @@
+# One entry name per row, and the refusal it earns before extraction.
+{"name": "an-absolute-path", "entry": "/etc/passwd", "refusal": "NameEscapes"}
+{"name": "a-parent-path", "entry": "../slingshot", "refusal": "NameEscapes"}
+{"name": "a-nested-parent-path", "entry": "a/../../slingshot", "refusal": "NameEscapes"}
+{"name": "a-drive-letter", "entry": "C:slingshot", "refusal": "NameEscapes"}
+{"name": "a-backslash-separator", "entry": "dir\\slingshot", "refusal": "NameUnacceptable"}
+{"name": "a-nested-path", "entry": "bin/slingshot", "refusal": "NameUnacceptable"}
+{"name": "a-control-character", "entry": "slingshot\u0007", "refusal": "NameUnacceptable"}
+{"name": "an-empty-name", "entry": "", "refusal": "NameUnacceptable"}
+{"name": "a-name-longer-than-a-name-may-be", "entry": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss", "refusal": "NameUnacceptable"}
+{"name": "a-single-dot", "entry": ".", "refusal": "NameEscapes"}

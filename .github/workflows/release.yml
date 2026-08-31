@@ -1,0 +1,97 @@
+# The release, one job per native row, with provenance from the provider.
+#
+# The order is deliberate. The RustSec review happens first, in a protected
+# environment, and emits one record this run is bound to; the cache is prepared
+# once, over the network, on purpose; every row then builds twice offline from
+# that cache and compares bytes; and only the one attestation job holds a
+# permission beyond reading content.
+name: release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rustsec-owner-review:
+    name: the same-release advisory review
+    runs-on: ubuntu-24.04
+    environment: release-rustsec-review
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: validate the committed authority against what this run reports
+        env:
+          SLINGSHOT_REPORTED_REPOSITORY: ${{ github.repository }}
+          SLINGSHOT_REPORTED_REPOSITORY_IDENTIFIER: ${{ github.repository_id }}
+          SLINGSHOT_REPORTED_OWNER_IDENTIFIER: ${{ github.repository_owner_id }}
+          SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
+          SLINGSHOT_REPORTED_RUNNER: ubuntu-24.04
+        run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
+      - name: check out the exact pinned advisory snapshot
+        run: scripts/checkout_pinned_advisory_database "$RUNNER_TEMP/advisory-db"
+      - name: verify the pin this release is bound to
+        env:
+          SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY: ${{ runner.temp }}/advisory-db
+        run: cargo run --locked --quiet -p slingshot-development -- rustsec-advisory-pin
+      - name: record the review this run was approved by
+        env:
+          SLINGSHOT_REVIEW_SOURCE_COMMIT: ${{ github.sha }}
+          SLINGSHOT_REVIEW_RUN: ${{ github.run_id }}
+          SLINGSHOT_REVIEW_ATTEMPT: ${{ github.run_attempt }}
+        run: scripts/record_rustsec_owner_review "$RUNNER_TEMP/review-record.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustsec-owner-review-record
+          path: ${{ runner.temp }}/review-record.json
+  release-binary-provenance:
+    name: the archives and their provenance
+    needs: rustsec-owner-review
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            triple: x86_64-unknown-linux-gnu
+          - runner: macos-14
+            triple: aarch64-apple-darwin
+          - runner: windows-2022
+            triple: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: rustsec-owner-review-record
+          path: ${{ runner.temp }}/review
+      - name: validate the committed authority against what this run reports
+        env:
+          SLINGSHOT_REPORTED_REPOSITORY: ${{ github.repository }}
+          SLINGSHOT_REPORTED_REPOSITORY_IDENTIFIER: ${{ github.repository_id }}
+          SLINGSHOT_REPORTED_OWNER_IDENTIFIER: ${{ github.repository_owner_id }}
+          SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
+          SLINGSHOT_REPORTED_RUNNER: ${{ matrix.runner }}
+        run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
+      - name: prepare the cache this row builds from
+        run: scripts/prepare_locked_source_cache --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine" --rustsec-advisory-database "$RUNNER_TEMP/advisory-db" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --coverage-fuzzing-tool-bundle "$RUNNER_TEMP/coverage-bundle" --output-directory "$RUNNER_TEMP/cache"
+      - name: build this row twice and compare the bytes
+        env:
+          SLINGSHOT_ROW: ${{ matrix.triple }}
+          SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
+        run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: ${{ runner.temp }}/release/*.tar.gz
+          predicate-type: https://slsa.dev/provenance/v1
+          predicate-path: ${{ runner.temp }}/release/evidence.toml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-${{ matrix.triple }}
+          path: ${{ runner.temp }}/release

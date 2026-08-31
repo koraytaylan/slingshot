@@ -149,6 +149,7 @@ crates/slingshot-development/src/lib.rs|slingshot-development|tooling|crate-root
 crates/slingshot-development/src/github_automation_authority.rs|slingshot-development|tooling|leaf|slingshot_development::github_automation_authority|owner-confirmed-github-automation
 crates/slingshot-development/src/platform_runtime_contract.rs|slingshot-development|tooling|leaf|slingshot_development::platform_runtime_contract|workspace-module-map
 crates/slingshot-development/src/profile_authentication_harness.rs|slingshot-development|tooling|leaf|slingshot_development::profile_authentication_harness|profile-authentication-module-scaffold
+crates/slingshot-development/src/release_artifacts.rs|slingshot-development|tooling|leaf|slingshot_development::release_artifacts|release-artifact-contract
 crates/slingshot-development/src/release_attestation_policy.rs|slingshot-development|tooling|leaf|slingshot_development::release_attestation_policy|owner-confirmed-native-evidence-trust
 crates/slingshot-development/src/release_input_cache.rs|slingshot-development|tooling|leaf|slingshot_development::release_input_cache|release-input-cache
 crates/slingshot-development/src/release_metadata.rs|slingshot-development|tooling|leaf|slingshot_development::release_metadata|owner-supplied-release-metadata
