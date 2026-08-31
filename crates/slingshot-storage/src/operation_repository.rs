@@ -1,25 +1,19 @@
 //! Admission, transition, lookup, and recovery, with every decision durable.
 //!
-//! Idempotency here is a property of committed rows rather than of anything the
-//! caller remembers. A client that retries after a lost acknowledgement, a
-//! daemon that restarts mid-flight, and two clients racing on one identifier all
-//! reach the same row through the same rule: an operation is named by its target
-//! partition and its identifier together, and a repeat is the same work only
-//! when the selected environment revision and the command fingerprint also
-//! match. Anything else wearing that name is a conflict, and a conflict changes
-//! nothing.
+//! Idempotency here is a property of committed rows rather than of anything a
+//! caller remembers. An operation is named by its target partition and its
+//! identifier together, and a repeat is the same work only when the selected
+//! environment revision and the fingerprint also match. Anything else wearing
+//! that name is a conflict, and a conflict changes nothing.
 //!
-//! The partition is the opaque author-target digest, so one caller's identifier
-//! against two targets is two operations - including two targets that differ
-//! only by the opaque authentication principal behind the same deployment. That
-//! is why replay can never cross a partition: the row it would replay is not
-//! the row the caller asked about.
+//! The partition is the opaque author-target digest, so one identifier against
+//! two targets is two operations - including two targets that differ only by
+//! the principal behind the same deployment. Replay cannot cross a partition,
+//! because the row it would replay is not the row the caller asked about.
 //!
-//! Every write is a compare-and-set against the revision the caller last saw,
-//! folded through [`OperationRecord`] so a transition's legality is decided
-//! once, in the domain, rather than separately by each writer. A fold that
-//! changes nothing commits nothing and keeps the revision, which is what makes
-//! two writers recording one fact one recorded fact.
+//! Every write is a compare-and-set folded through [`OperationRecord`], so a
+//! transition's legality is decided once, in the domain, rather than
+//! separately by each writer.
 
 use rusqlite::OptionalExtension as _;
 use serde::Serialize;
@@ -34,8 +28,12 @@ use slingshot_domain::operation::{
     RecoveryExecutionEvidence, RecoveryFact, TerminalFailure, TerminalFailureDisposition,
     TerminalFailureKind,
 };
+pub use slingshot_domain::operation::{RecoveryResumeReceipt, ResultDisposition};
+
+use slingshot_domain::persistent_capacity::{CapacityRefusal, PersistentCapacityPolicy};
 
 use crate::database::{DatabaseFailure, OperationDatabase};
+use crate::persistent_capacity::{AccountingFailure, PersistentCapacityAccount};
 use crate::sqlite_statement_inventory::STATEMENTS;
 
 /// The recovery evidence column value for unproved execution.
@@ -48,8 +46,7 @@ const AUTHORITATIVE_REMOTE_SUCCESS_KIND: &str = "authoritative_remote_success";
 const ONE_ROW: usize = 1;
 /// Returns the text of the inventoried statement with `purpose`.
 ///
-/// Looking the text up rather than writing it here is what makes the inventory
-/// the single place a statement exists: a statement that is not in the list
+/// Looked up rather than written here, so a statement not in the inventory
 /// cannot be reached from this module at all.
 fn statement(purpose: &str) -> &'static str {
     STATEMENTS
@@ -109,6 +106,9 @@ pub enum RepositoryFailure {
         /// How many it may hold.
         allowed: u64,
     },
+    /// The namespace could not take more, or could not be counted.
+    #[error(transparent)]
+    Capacity(#[from] AccountingFailure),
 }
 
 /// Encodes one domain value as the text a column holds.
@@ -128,7 +128,7 @@ fn decode<Value: DeserializeOwned>(
         .map_err(|failure| RepositoryFailure::NotDecodable { column, detail: failure.to_string() })
 }
 
-/// Encodes one unit-variant domain value as the bare word a column holds.
+/// Encodes one unit-variant value as the bare word a column holds.
 fn encode_word<Value: Serialize>(value: &Value) -> Result<String, RepositoryFailure> {
     let quoted = encode(value)?;
     Ok(quoted.trim_matches('"').to_owned())
@@ -154,18 +154,21 @@ fn require_within(field: &'static str, limit: &str, text: &str) -> Result<(), Re
 
 /// Begins a transaction that will write.
 ///
-/// `IMMEDIATE` rather than the default, and the difference matters under
-/// contention. A deferred transaction starts as a reader and asks for the write
-/// lock when it first writes; two of them that both read and then both try to
-/// upgrade cannot both be granted, and SQLite refuses the upgrade at once
-/// rather than waiting, because waiting could not help - each is holding the
-/// read lock the other needs. Taking the write lock up front makes contenders
-/// queue on it instead, which is what the busy timeout is for.
+/// `IMMEDIATE` rather than the default. A deferred transaction starts as a
+/// reader and asks for the write lock when it first writes; two of them that
+/// both read and then both try to upgrade cannot both be granted, and SQLite
+/// refuses at once rather than waiting, because each holds the read lock the
+/// other needs. Taking the write lock up front makes contenders queue instead.
 fn write_transaction(
     connection: &rusqlite::Connection,
 ) -> Result<rusqlite::Transaction<'_>, RepositoryFailure> {
     Ok(rusqlite::Transaction::new_unchecked(connection, rusqlite::TransactionBehavior::Immediate)?)
 }
+
+/// What a compare-and-set write decides one row becomes.
+///
+/// `None` when it becomes what it already was, which commits nothing.
+type Change = Option<(OperationSummary, OperationRecord, Option<u64>)>;
 
 /// Requires the stored revision to be the one the caller last saw.
 fn require_revision(
@@ -183,27 +186,25 @@ fn require_revision(
 
 /// One request to admit an operation.
 ///
-/// Everything here is written in the first-admission transaction, before the
-/// row is visible to a scheduler and therefore before any executor could act on
-/// it. The installation identifier in particular is a snapshot rather than a
-/// reference: a row that survives a reinstall has to say which installation
-/// admitted it, and asking the current process afterwards would answer with the
-/// wrong one.
+/// Everything here is written in the first-admission transaction, before a
+/// scheduler can see the row. The installation identifier is a snapshot rather
+/// than a reference: a row that survives a reinstall has to say which
+/// installation admitted it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdmissionRequest {
     /// The opaque author-target identity, stored whole.
     pub author_target_identity: String,
-    /// The digest of that identity, which is what partitions every table.
+    /// The digest that partitions every table.
     pub author_target_identity_digest: String,
     /// Who asked, when a caller said.
     pub caller_identity: Option<String>,
     /// The canonical command text.
     pub canonical_command: String,
-    /// The fingerprint of that command against that revision.
+    /// That command's fingerprint against that revision.
     pub command_fingerprint: CommandFingerprint,
     /// The command's wire name.
     pub command_wire_name: String,
-    /// The runtime contract this daemon is running under.
+    /// The runtime contract this daemon runs under.
     pub daemon_runtime_contract_digest: String,
     /// The installation admitting this operation.
     pub installation_identifier: InstallationIdentifier,
@@ -215,22 +216,12 @@ pub struct AdmissionRequest {
     pub workflow_correlation_identifier: Option<String>,
 }
 
-/// Where an operation's result went.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ResultDisposition {
-    /// Small enough to travel in the response itself.
-    Inline,
-    /// Kept as a content-addressed artifact.
-    Artifact,
-}
-
 /// One operation as the repository holds it.
 ///
-/// Every field is a decoded domain value rather than the text a column holds,
-/// so a caller cannot read a lifecycle state this daemon does not have or a
-/// terminal pairing the domain would refuse. The target digest travels on the
-/// summary because it is not a secret; the identity it digests does not.
+/// Every field is a decoded domain value rather than a column's text, so a
+/// caller cannot read a lifecycle state this daemon does not have. The target
+/// digest travels here because it is not a secret; the identity it digests
+/// does not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OperationSummary {
     /// The partition this operation belongs to.
@@ -282,21 +273,6 @@ impl AdmissionOutcome {
     }
 }
 
-/// One durable proof that a recovery resume was already applied.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecoveryResumeReceipt {
-    /// The revision the resume committed.
-    pub applied_operation_revision: u64,
-    /// The operation it resumed.
-    pub operation_identifier: String,
-    /// When it was recorded.
-    pub recorded_at_unix_milliseconds: u64,
-    /// The environment revision it was recorded against.
-    pub selected_environment_revision: String,
-    /// The source it is keyed by.
-    pub source_fingerprint: String,
-}
-
 /// What recording a resume receipt did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResumeOutcome {
@@ -310,6 +286,8 @@ pub enum ResumeOutcome {
 pub struct OperationRepository {
     /// The open database every call runs inside.
     database: OperationDatabase,
+    /// The bounds this namespace is held to.
+    policy: PersistentCapacityPolicy,
 }
 
 /// Returns one column as a count, refusing a stored negative.
@@ -380,29 +358,34 @@ fn terminal_from_columns(
 }
 
 impl OperationRepository {
-    /// Returns a repository over `database`.
+    /// Returns a repository over `database`, held to the contract's bounds.
     #[must_use]
     pub fn new(database: OperationDatabase) -> Self {
-        Self { database }
+        Self { database, policy: PersistentCapacityPolicy::embedded() }
+    }
+
+    /// Returns a repository holding its namespace to `policy` rather than to
+    /// the contract's own bounds, which is what a test with reachable limits
+    /// needs.
+    #[must_use]
+    pub fn bounded(database: OperationDatabase, policy: PersistentCapacityPolicy) -> Self {
+        Self { database, policy }
     }
 
     /// Admits one operation, or returns the row that already answers for it.
     ///
     /// One `synchronous = FULL` transaction reserves the arrival sequence,
-    /// writes the row as `queued`, and commits; the caller is told it was
-    /// admitted only after the commit returns, so an acknowledged operation is
-    /// always a durable one.
+    /// writes the row as `queued`, and commits; a caller is told it was
+    /// admitted only after that commit returns.
     ///
     /// A row already under that identifier is a replay when the selected
     /// environment revision and the fingerprint both match, and a conflict
-    /// otherwise. A conflict writes nothing at all: the stored row is returned
-    /// exactly as it stands, because the caller needs to see what is really
-    /// there rather than a partial overwrite of it.
+    /// otherwise. A conflict writes nothing at all.
     ///
     /// # Errors
     ///
-    /// Returns [`RepositoryFailure`] when a bounded field is too long or the
-    /// database refuses.
+    /// Returns [`RepositoryFailure`] for a bounded field over its bound, a
+    /// namespace at its capacity, or a refusal.
     pub fn admit(
         &self,
         request: &AdmissionRequest,
@@ -423,6 +406,7 @@ impl OperationRepository {
         )? {
             Some(stored) => Self::classify_stored(request, stored),
             None => {
+                self.require_room()?;
                 self.insert(&transaction, request, now_unix_milliseconds)?;
                 let admitted = self.read_required(
                     &transaction,
@@ -434,6 +418,20 @@ impl OperationRepository {
         };
         transaction.commit()?;
         Ok(outcome)
+    }
+
+    /// Requires this namespace to have room for one more operation row.
+    ///
+    /// Asked only where a row would be created, so a replay consumes nothing
+    /// and is never refused for space.
+    fn require_room(&self) -> Result<(), RepositoryFailure> {
+        self.account().require_room_for_operation()?;
+        Ok(())
+    }
+
+    /// Returns the accounting this namespace is held to.
+    fn account(&self) -> PersistentCapacityAccount<'_> {
+        PersistentCapacityAccount::new(&self.database, self.policy)
     }
 
     /// Returns what a stored row makes of a repeated identifier.
@@ -490,8 +488,7 @@ impl OperationRepository {
     ///
     /// # Errors
     ///
-    /// Returns [`RepositoryFailure`] when a stored value does not decode or the
-    /// database refuses.
+    /// Returns [`RepositoryFailure`] for an undecodable value or a refusal.
     pub fn read(
         &self,
         author_target_identity_digest: &str,
@@ -506,9 +503,8 @@ impl OperationRepository {
 
     /// Reads one operation and its outstanding recovery in one transaction.
     ///
-    /// Both halves are read together because a summary that showed a state from
-    /// one instant and a recovery fact from another would be a description of
-    /// no moment that ever existed.
+    /// Together, because a summary showing a state from one instant and a
+    /// recovery fact from another would describe no moment that ever existed.
     fn read_within(
         &self,
         transaction: &rusqlite::Transaction<'_>,
@@ -534,10 +530,9 @@ impl OperationRepository {
 
     /// Reads one operation that has to be there.
     ///
-    /// Every caller of this has already established the row exists - it just
-    /// wrote it, or read it a moment ago inside the same transaction. Its
-    /// absence would mean the transaction is not seeing its own writes, which
-    /// is worth a distinct failure rather than an empty answer.
+    /// Every caller has already established it exists, so its absence means the
+    /// transaction is not seeing its own writes - a failure, not an empty
+    /// answer.
     fn read_required(
         &self,
         transaction: &rusqlite::Transaction<'_>,
@@ -649,20 +644,15 @@ impl OperationRepository {
 
     /// Folds one fact into an operation, under compare-and-set.
     ///
-    /// The caller states the revision it last saw. A stale one writes nothing
-    /// and says so, which is how two writers racing on the same operation
-    /// produce one winner rather than a row neither of them described.
-    ///
-    /// A fold that changes nothing commits nothing: the revision stays where it
-    /// is and the stored row is returned. That is what makes recording the same
-    /// fact twice one recorded fact rather than two revisions of it.
+    /// A stale revision writes nothing and says so, which is how two writers
+    /// racing on one operation produce a winner rather than a row neither
+    /// described. A fold that changes nothing commits nothing.
     ///
     /// # Errors
     ///
-    /// Returns [`RepositoryFailure::NoSuchOperation`],
-    /// [`RepositoryFailure::RevisionMoved`], [`RepositoryFailure::TooLong`],
-    /// [`RepositoryFailure::Lifecycle`] when the domain refuses the fact, or a
-    /// database failure.
+    /// Returns [`RepositoryFailure`] naming the first rule the write breaks: a
+    /// missing row, a stale revision, a bounded text over its bound, or a fact
+    /// the domain refuses.
     pub fn apply(
         &self,
         author_target_identity_digest: &str,
@@ -672,14 +662,39 @@ impl OperationRepository {
         now_unix_milliseconds: u64,
     ) -> Result<OperationSummary, RepositoryFailure> {
         Self::require_bounded(fact)?;
+        self.mutate(
+            author_target_identity_digest,
+            operation_identifier,
+            expected_revision,
+            |stored| {
+                let folded = stored.record.fold(fact)?;
+                let settled = Self::settlement(stored, &folded, now_unix_milliseconds);
+                Ok((folded.revision != stored.record.revision)
+                    .then(|| (stored.clone(), folded, settled)))
+            },
+        )
+    }
+
+    /// Runs one compare-and-set write, whatever the write turns out to be.
+    ///
+    /// Reading the row, holding the caller to the revision it last saw, and
+    /// reading back what was committed are the same for every write. `change`
+    /// decides only what the row becomes, and answers with nothing when it
+    /// becomes what it already was, which commits nothing and keeps the
+    /// revision.
+    fn mutate(
+        &self,
+        author_target_identity_digest: &str,
+        operation_identifier: &str,
+        expected_revision: u64,
+        change: impl FnOnce(&OperationSummary) -> Result<Change, RepositoryFailure>,
+    ) -> Result<OperationSummary, RepositoryFailure> {
         let transaction = write_transaction(self.database.connection())?;
         let stored =
             self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
         require_revision(&stored, expected_revision)?;
-        let folded = stored.record.fold(fact)?;
-        let settled = Self::settlement(&stored, &folded, now_unix_milliseconds);
-        if folded.revision != stored.record.revision {
-            self.write_folded(&transaction, &stored, &folded, settled)?;
+        if let Some((carried, folded, settled)) = change(&stored)? {
+            self.write_folded(&transaction, &carried, &folded, settled)?;
         }
         let current =
             self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
@@ -710,9 +725,8 @@ impl OperationRepository {
 
     /// Returns the settlement instant a fold produces, when it settles one.
     ///
-    /// An operation settles once. A fold that leaves an already terminal row
-    /// terminal keeps the instant it settled at, because the moment work ended
-    /// is not something a later write gets to restate.
+    /// An operation settles once, so a fold that leaves an already terminal row
+    /// terminal keeps the instant it settled at.
     fn settlement(
         stored: &OperationSummary,
         folded: &OperationRecord,
@@ -797,15 +811,14 @@ impl OperationRepository {
 
     /// Records where an operation's result went, under compare-and-set.
     ///
-    /// The disposition is settled separately from the lifecycle because it
-    /// answers a different question. Reaching `Succeeded` says the work
-    /// happened; this says where what it produced can be found, and the two are
-    /// written by different parts of the daemon at different moments.
+    /// Settled separately from the lifecycle because it answers a different
+    /// question: reaching `Succeeded` says the work happened, this says where
+    /// what it produced can be found.
     ///
     /// # Errors
     ///
-    /// Returns [`RepositoryFailure::NoSuchOperation`],
-    /// [`RepositoryFailure::RevisionMoved`], or a database failure.
+    /// Returns [`RepositoryFailure`] for a missing row, a stale revision, or a
+    /// database refusal.
     pub fn record_result_disposition(
         &self,
         author_target_identity_digest: &str,
@@ -813,34 +826,29 @@ impl OperationRepository {
         expected_revision: u64,
         disposition: ResultDisposition,
     ) -> Result<OperationSummary, RepositoryFailure> {
-        let transaction = write_transaction(self.database.connection())?;
-        let stored =
-            self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
-        require_revision(&stored, expected_revision)?;
-        if stored.result_disposition != Some(disposition) {
-            let advanced =
-                OperationRecord { revision: stored.record.revision + 1, ..stored.record.clone() };
-            let carried =
-                OperationSummary { result_disposition: Some(disposition), ..stored.clone() };
-            self.write_folded(
-                &transaction,
-                &carried,
-                &advanced,
-                stored.settled_at_unix_milliseconds,
-            )?;
-        }
-        let current =
-            self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
-        transaction.commit()?;
-        Ok(current)
+        self.mutate(
+            author_target_identity_digest,
+            operation_identifier,
+            expected_revision,
+            |stored| {
+                if stored.result_disposition == Some(disposition) {
+                    return Ok(None);
+                }
+                let advanced = OperationRecord {
+                    revision: stored.record.revision + 1,
+                    ..stored.record.clone()
+                };
+                let carried =
+                    OperationSummary { result_disposition: Some(disposition), ..stored.clone() };
+                Ok(Some((carried, advanced, stored.settled_at_unix_milliseconds)))
+            },
+        )
     }
 
     /// Returns every operation in one partition, in the order it arrived.
     ///
     /// Reopening reconstructs from this: nonterminal rows are the work still to
-    /// do, in the order their callers asked for it, and terminal rows come back
-    /// too because a client that asks about finished work deserves the answer
-    /// rather than a shrug.
+    /// do, in their callers' order, and terminal rows come back too.
     ///
     /// # Errors
     ///
@@ -874,21 +882,15 @@ impl OperationRepository {
     /// Records one recovery-resume receipt, or replays the one already there.
     ///
     /// The receipt is keyed by target and source fingerprint, so an identical
-    /// resume request finds its own committed proof no matter what the
-    /// operation has done since. That is the point of it: the answer to "did my
-    /// resume take effect" cannot be reconstructed from the operation's current
-    /// state, because later progress, another recovery cycle, or terminal
-    /// settlement all look the same from outside.
-    ///
-    /// A replay is only a replay when the selected environment revision matches
-    /// too. A receipt recorded against a revision this daemon no longer runs is
-    /// not proof about the daemon that is running.
+    /// request finds its own committed proof whatever the operation has done
+    /// since. That is the point: whether a resume took effect cannot be
+    /// reconstructed from current state, because later progress, another
+    /// recovery cycle, and terminal settlement all look the same from outside.
     ///
     /// # Errors
     ///
-    /// Returns [`RepositoryFailure::ReceiptsExhausted`] when the operation
-    /// already holds every receipt the contract allows,
-    /// [`RepositoryFailure::NoSuchOperation`], or a database failure.
+    /// Returns [`RepositoryFailure::ReceiptsExhausted`] once the operation
+    /// holds every receipt the contract allows, or a database failure.
     pub fn record_resume_receipt(
         &self,
         author_target_identity_digest: &str,
@@ -905,11 +907,7 @@ impl OperationRepository {
             transaction.commit()?;
             return Ok(ResumeOutcome::Replayed(Box::new(held)));
         }
-        Self::require_receipt_capacity(
-            &transaction,
-            author_target_identity_digest,
-            operation_identifier,
-        )?;
+        self.require_receipt_capacity(author_target_identity_digest, operation_identifier)?;
         transaction.execute(
             statement("record one recovery-resume receipt"),
             rusqlite::params![
@@ -931,22 +929,23 @@ impl OperationRepository {
     }
 
     /// Refuses a fresh receipt once an operation holds all it may.
+    ///
+    /// The bound is the namespace's rather than this module's.
     fn require_receipt_capacity(
-        transaction: &rusqlite::Transaction<'_>,
+        &self,
         author_target_identity_digest: &str,
         operation_identifier: &str,
     ) -> Result<(), RepositoryFailure> {
-        let allowed = DaemonRuntimeContract::embedded()
-            .limit("maximum_recovery_resume_receipts_per_operation");
-        let held: i64 = transaction.query_row(
-            statement("count one operation's recovery-resume receipts"),
-            rusqlite::params![author_target_identity_digest, operation_identifier],
-            |row| row.get(0),
-        )?;
-        if u64::try_from(held).unwrap_or(u64::MAX) >= allowed {
-            return Err(RepositoryFailure::ReceiptsExhausted { allowed });
+        match self
+            .account()
+            .require_room_for_resume_receipt(author_target_identity_digest, operation_identifier)
+        {
+            Ok(_) => Ok(()),
+            Err(AccountingFailure::Refused(CapacityRefusal::ResumeReceipts { facts })) => {
+                Err(RepositoryFailure::ReceiptsExhausted { allowed: facts.limit })
+            }
+            Err(other) => Err(other.into()),
         }
-        Ok(())
     }
 
     /// Returns one recovery-resume receipt, or nothing.
