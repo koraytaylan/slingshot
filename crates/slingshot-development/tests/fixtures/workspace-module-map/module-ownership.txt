@@ -23,8 +23,10 @@ crates/slingshot-agent-connection/src/authentication/mod.rs|slingshot-agent-conn
 crates/slingshot-agent-connection/src/authentication/token_assertion.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::authentication::token_assertion|profile-authentication-module-scaffold
 crates/slingshot-agent-connection/src/lib.rs|slingshot-agent-connection|adapter|crate-root|slingshot_agent_connection|workspace-module-map
 crates/slingshot-agent-connection/src/transport_policy.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::transport_policy|profile-authentication-module-scaffold
+crates/slingshot-agent-protocol/src/identity.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::identity|agent-identity-and-wire-schema-contract
 crates/slingshot-agent-protocol/src/lib.rs|slingshot-agent-protocol|contract|crate-root|slingshot_agent_protocol|workspace-module-map
 crates/slingshot-agent-protocol/src/remote_job.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::remote_job|workspace-module-map
+crates/slingshot-agent-protocol/src/wire_contract.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::wire_contract|agent-identity-and-wire-schema-contract
 crates/slingshot-command-line/src/command_line.rs|slingshot-command-line|entry|leaf|slingshot_command_line::command_line|workspace-module-map
 crates/slingshot-command-line/src/commands/mod.rs|slingshot-command-line|entry|family-root|slingshot_command_line::commands|workspace-module-map
 crates/slingshot-command-line/src/daemon_connection.rs|slingshot-command-line|entry|leaf|slingshot_command_line::daemon_connection|workspace-module-map
@@ -81,6 +83,7 @@ crates/slingshot-development/src/slingshot_test_daemon.rs|slingshot-development|
 crates/slingshot-development/src/source_policy.rs|slingshot-development|tooling|leaf|slingshot_development::source_policy|workspace-module-map
 crates/slingshot-development/src/supported_platform_matrix.rs|slingshot-development|tooling|leaf|slingshot_development::supported_platform_matrix|workspace-module-map
 crates/slingshot-development/src/test_daemon_faults.rs|slingshot-development|tooling|leaf|slingshot_development::test_daemon_faults|daemon-runtime-module-scaffold
+crates/slingshot-domain/src/agent_identity.rs|slingshot-domain|domain|leaf|slingshot_domain::agent_identity|agent-identity-and-wire-schema-contract
 crates/slingshot-domain/src/command/mod.rs|slingshot-domain|domain|family-root|slingshot_domain::command|workspace-module-map
 crates/slingshot-domain/src/command_fingerprint.rs|slingshot-domain|domain|leaf|slingshot_domain::command_fingerprint|daemon-runtime-module-scaffold
 crates/slingshot-domain/src/configuration_snapshot.rs|slingshot-domain|domain|leaf|slingshot_domain::configuration_snapshot|profile-authentication-module-scaffold
@@ -94,6 +97,7 @@ crates/slingshot-domain/src/profile.rs|slingshot-domain|domain|leaf|slingshot_do
 crates/slingshot-domain/src/profile_authentication_contract.rs|slingshot-domain|domain|leaf|slingshot_domain::profile_authentication_contract|profile-authentication-module-scaffold
 crates/slingshot-domain/src/remote_job.rs|slingshot-domain|domain|leaf|slingshot_domain::remote_job|workspace-module-map
 crates/slingshot-domain/src/secret_value.rs|slingshot-domain|domain|leaf|slingshot_domain::secret_value|profile-authentication-module-scaffold
+crates/slingshot-domain/src/selected_command_contract_identity.rs|slingshot-domain|domain|leaf|slingshot_domain::selected_command_contract_identity|agent-identity-and-wire-schema-contract
 crates/slingshot-domain/src/selected_environment_revision.rs|slingshot-domain|domain|leaf|slingshot_domain::selected_environment_revision|profile-authentication-module-scaffold
 crates/slingshot-local-protocol/src/control.rs|slingshot-local-protocol|contract|leaf|slingshot_local_protocol::control|daemon-runtime-module-scaffold
 crates/slingshot-local-protocol/src/envelope.rs|slingshot-local-protocol|contract|leaf|slingshot_local_protocol::envelope|minimal-local-protocol

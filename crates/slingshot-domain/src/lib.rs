@@ -7,6 +7,7 @@
 //! profile, secret, and selected-environment leaves as documentation-only
 //! structure.
 
+pub mod agent_identity;
 pub mod command;
 pub mod command_fingerprint;
 pub mod configuration_snapshot;
@@ -19,4 +20,5 @@ pub mod profile;
 pub mod profile_authentication_contract;
 pub mod remote_job;
 pub mod secret_value;
+pub mod selected_command_contract_identity;
 pub mod selected_environment_revision;
