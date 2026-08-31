@@ -94,6 +94,22 @@ written. Those bytes are embedded into `slingshot-local-protocol` and read
 through one typed interface, and an assertion refuses a second copy of any of
 them anywhere in the crates that consume them.
 
+## Verifying against a real author
+
+The hermetic suite against the fake author is the gate. To watch the same read
+path run against an actual author, ask for it explicitly:
+
+```sh
+slingshot --profile local --environment author verify live-author --enable-live-author --content-root /content/site/en
+```
+
+Without `--enable-live-author` the leaf is refused before a byte of
+configuration is read. What it may run is the registry's own answer: the nine
+rows it calls reads that replace nothing, never the three that write. One run is
+evidence about the author it ran against and about nothing else.
+[docs/COMMANDS.md](docs/COMMANDS.md) says what it reports and what it refuses to
+claim.
+
 ## The daemon
 
 One daemon serves one profile and environment, outliving the clients that ask
@@ -117,5 +133,17 @@ The advisory input is one exact snapshot pinned in
 content tree. There is deliberately no timestamp and no freshness claim: a Git
 author chooses those values, so none of them authenticates anything.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together and
-[CONTRIBUTING.md](CONTRIBUTING.md) for the rules a change is held to.
+A release builds from a cache prepared once, deliberately, over the network, and
+verified offline before anything is compiled from it. `scripts/prepare_locked_source_cache`
+is the one command here that reaches the network and says so when it runs;
+`scripts/verify_locked_source_cache` never fetches, repairs, installs, or
+consults an ambient cache. What verification establishes is narrow and stated as
+narrowly as it is true: the cache is the one prepared for this lockfile,
+unchanged, and inside what a Cargo home may be. Whether its bytes were
+trustworthy when they were fetched is a different question that nothing here
+answers.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together,
+[CONTRIBUTING.md](CONTRIBUTING.md) for the rules a change is held to, and
+[docs/AGENT_PROTOCOL.md](docs/AGENT_PROTOCOL.md) for the contract the daemon
+holds an author to.
