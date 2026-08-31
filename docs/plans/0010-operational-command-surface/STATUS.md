@@ -16,6 +16,8 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
   - **The vocabulary leaves share three shapes, and each was about to be written four times.** A nonempty ascending requested-state set, the rule that an opaque identifier refuses a control and an edge space, and the validated-address wrapper are each one thing four leaves need. They were hoisted into the leaf that already owns their kind - the requested set into the listing leaf, the identifier body rule beside the address bound rule - and 4003 and 4004 gained those two files in their footprints and the listing leaf in their dependencies, before either landed.
   - **Five update commands carry the same pair of documents, so 4006 owns the pair.** The removal list, the refusal of a property named in both documents, and the refusal of a mutation that changes nothing are the shared mutation vocabulary rather than `update_page`'s, so they were added to 4006's steps instead of widening 4101's footprint to reach the same leaf.
 
+  - **An instance's start time is a JCR instant, and that value had no wire form of its own.** `DateTimeString` was reachable only inside a property value, so a result carrying one directly could not be written or read. It gained the serialization its canonical spelling already implied - one string, validated on the way in - and `property_value.rs` joined 4703's footprint rather than the instant being restated as an unvalidated string beside it.
+
 - **Outcome:** pending.
 
 _Last updated: 2026-08-31, against `develop` @ `e1152a1b1cf8a78877b3a0f372e7635779bd85e4`._

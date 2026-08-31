@@ -467,6 +467,25 @@ pub struct DateTimeString {
     fields: [u32; INSTANT_FIELD_COUNT],
 }
 
+impl serde::Serialize for DateTimeString {
+    fn serialize<Target: serde::Serializer>(
+        &self,
+        serializer: Target,
+    ) -> Result<Target::Ok, Target::Error> {
+        serializer.serialize_str(&self.value)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DateTimeString {
+    fn deserialize<Source: serde::Deserializer<'de>>(
+        deserializer: Source,
+    ) -> Result<Self, Source::Error> {
+        use serde::de::Error as _;
+
+        Self::new(String::deserialize(deserializer)?).map_err(Source::Error::custom)
+    }
+}
+
 impl DateTimeString {
     /// Returns the instant `spelling` names.
     ///
