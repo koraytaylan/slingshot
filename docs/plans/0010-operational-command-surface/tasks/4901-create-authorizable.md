@@ -11,6 +11,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/create_authorizable.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/create_authorizable.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_authorizable/**"
 status: planned

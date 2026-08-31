@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/list_resource_mappings.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/list_resource_mappings.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_resource_mappings/**"
 status: planned

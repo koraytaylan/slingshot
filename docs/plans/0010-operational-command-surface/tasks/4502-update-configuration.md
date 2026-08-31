@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/update_open_service_gateway_initiative_configuration.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/update_open_service_gateway_initiative_configuration.rs
   - "crates/slingshot-domain/tests/fixtures/commands/update_open_service_gateway_initiative_configuration/**"
 status: planned

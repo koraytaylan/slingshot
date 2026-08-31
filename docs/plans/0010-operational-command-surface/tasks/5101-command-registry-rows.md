@@ -16,6 +16,7 @@ touches:
   - crates/slingshot-domain/src/command/classification_administration.rs
   - crates/slingshot-domain/src/command/result_context.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/command_catalog.rs
   - crates/slingshot-domain/tests/fixtures/commands/catalog.json
 status: planned

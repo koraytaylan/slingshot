@@ -10,6 +10,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/create_asset_folder.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/create_asset_folder.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_asset_folder/**"
 status: planned

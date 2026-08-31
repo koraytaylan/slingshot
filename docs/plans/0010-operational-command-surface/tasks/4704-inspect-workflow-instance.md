@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/inspect_workflow_instance.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/inspect_workflow_instance.rs
   - "crates/slingshot-domain/tests/fixtures/commands/inspect_workflow_instance/**"
 status: planned

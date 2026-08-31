@@ -10,6 +10,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/create_experience_fragment.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/create_experience_fragment.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_experience_fragment/**"
 status: planned
