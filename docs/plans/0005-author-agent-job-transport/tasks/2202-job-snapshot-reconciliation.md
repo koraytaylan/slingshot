@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/job-snapshot-reconciliation/**
   - crates/slingshot-agent-connection/tests/job_snapshot_reconciliation.rs
 status: done
-merged_as: ""
+merged_as: "21594a854087286d4ac79699cec599e9063272b6"
 ---
 # Job Snapshot Reconciliation
 
