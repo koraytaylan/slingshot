@@ -12,6 +12,7 @@ touches:
   - crates/slingshot-storage/src/lib.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
   - crates/slingshot-storage/src/agent_job_repository.rs
+  - crates/slingshot-storage/src/agent_subscription_ledger.rs
   - crates/slingshot-storage/src/maintenance.rs
   - crates/slingshot-daemon/src/operation_maintenance.rs
   - crates/slingshot-storage/tests/agent_job_repository.rs

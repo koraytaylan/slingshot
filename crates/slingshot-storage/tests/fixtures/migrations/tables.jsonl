@@ -1,8 +1,12 @@
-{"note":"one artifact per operation and slot","table":"artifact_association"}
-{"note":"content addressed once per digest","table":"artifact_blob"}
-{"note":"one identifier, and only one","table":"installation"}
-{"note":"receipts partitioned by target","table":"maintenance_application_receipt"}
-{"note":"keyed by target and identifier, referencing no operation","table":"maintenance_result_association"}
-{"note":"keyed by target and caller-chosen identifier","table":"operation"}
-{"note":"one outstanding recovery per operation","table":"recovery_fact"}
-{"note":"keyed by its source fingerprint","table":"recovery_resume_receipt"}
+{"note": "one remote submission per target and derived agent identifier", "table": "agent_operation"}
+{"note": "several physical Sling jobs may carry one logical submission", "table": "agent_physical_job"}
+{"note": "one artifact per operation and slot", "table": "artifact_association"}
+{"note": "content addressed once per digest", "table": "artifact_blob"}
+{"note": "one identifier, and only one", "table": "installation"}
+{"note": "receipts partitioned by target", "table": "maintenance_application_receipt"}
+{"note": "keyed by target and identifier, referencing no operation", "table": "maintenance_result_association"}
+{"note": "keyed by target and caller-chosen identifier", "table": "operation"}
+{"note": "one outstanding recovery per operation", "table": "recovery_fact"}
+{"note": "keyed by its source fingerprint", "table": "recovery_resume_receipt"}
+{"note": "one position per stream, associated to a job or to nothing", "table": "subscription_event"}
+{"note": "where one filtered stream has got to, with no job foreign key", "table": "subscription_ledger"}
