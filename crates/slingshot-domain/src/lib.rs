@@ -8,6 +8,7 @@
 //! structure.
 
 pub mod agent_identity;
+pub mod author_agent_transport_contract;
 pub mod command;
 pub mod command_fingerprint;
 pub mod configuration_snapshot;

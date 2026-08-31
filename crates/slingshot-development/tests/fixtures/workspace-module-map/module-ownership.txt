@@ -84,6 +84,7 @@ crates/slingshot-development/src/source_policy.rs|slingshot-development|tooling|
 crates/slingshot-development/src/supported_platform_matrix.rs|slingshot-development|tooling|leaf|slingshot_development::supported_platform_matrix|workspace-module-map
 crates/slingshot-development/src/test_daemon_faults.rs|slingshot-development|tooling|leaf|slingshot_development::test_daemon_faults|daemon-runtime-module-scaffold
 crates/slingshot-domain/src/agent_identity.rs|slingshot-domain|domain|leaf|slingshot_domain::agent_identity|agent-identity-and-wire-schema-contract
+crates/slingshot-domain/src/author_agent_transport_contract.rs|slingshot-domain|domain|leaf|slingshot_domain::author_agent_transport_contract|author-agent-transport-contract
 crates/slingshot-domain/src/command/mod.rs|slingshot-domain|domain|family-root|slingshot_domain::command|workspace-module-map
 crates/slingshot-domain/src/command_fingerprint.rs|slingshot-domain|domain|leaf|slingshot_domain::command_fingerprint|daemon-runtime-module-scaffold
 crates/slingshot-domain/src/configuration_snapshot.rs|slingshot-domain|domain|leaf|slingshot_domain::configuration_snapshot|profile-authentication-module-scaffold

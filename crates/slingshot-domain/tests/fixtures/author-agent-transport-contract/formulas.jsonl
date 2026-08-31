@@ -1,0 +1,5 @@
+{"name":"maximum_server_sent_event_buffer_bytes","note":"a buffer holds two whole events, so one event never straddles the end of it","operands":{"event_bytes":1048576,"events":2},"value":2097152}
+{"name":"heartbeat_timeout_milliseconds","note":"three intervals, so one late heartbeat is not a lost stream","operands":{"heartbeats":3,"interval_milliseconds":15000},"value":45000}
+{"name":"maximum_current_generation_event_rows","note":"every reserved operation may fill its own event budget","operands":{"per_operation_rows":256,"reservation_rows":65536},"value":16777216}
+{"name":"maximum_current_generation_artifact_rows","note":"two artifacts per reserved operation","operands":{"artifacts_per_operation":2,"reservation_rows":65536},"value":131072}
+{"name":"continuation_key_prior_retention_milliseconds","note":"a prior key outlives the longest token issued under it, plus the skew two clocks may differ by","operands":{"clock_skew_milliseconds":60000,"token_lifetime_milliseconds":900000},"value":960000}
