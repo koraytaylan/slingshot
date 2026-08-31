@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-agent-connection/src/lib.rs
   - crates/slingshot-agent-connection/tests/fixtures/event-stream-heartbeat.jsonl
   - crates/slingshot-agent-connection/tests/event_stream_heartbeat.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Event Stream Heartbeat

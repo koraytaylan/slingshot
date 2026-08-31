@@ -1,0 +1,11 @@
+{"kind": "deadlines", "name": "attachment-deadlines", "note": "Attaching is bounded by the shared connect and response-header deadlines, and the body by nothing: a live stream is supposed to stay open."}
+{"kind": "silence", "name": "activity-before-deadline", "quiet_for": 44999, "state": "healthy"}
+{"kind": "silence", "name": "activity-at-deadline", "quiet_for": 45000, "state": "healthy"}
+{"kind": "silence", "name": "silence-past-deadline", "quiet_for": 45001, "state": "timed-out"}
+{"kind": "silence", "name": "silence-far-past-deadline", "quiet_for": 600000, "state": "timed-out"}
+{"kind": "activity", "name": "comment-heartbeat", "refreshes": true, "stream": ":the connection is still here\n"}
+{"kind": "activity", "name": "job-event", "refreshes": true, "stream": "event:job-event\nid:cursor-0001\ndata:{\"agent_event_store_generation\":7,\"agent_operation_identifier\":\"operation-alpha\",\"daemon_subscription_identifier\":\"daemon-subscription-one\",\"kind\":\"accepted\",\"sequence\":1}\n\n"}
+{"kind": "activity", "name": "job-progress-event", "refreshes": true, "stream": "event:job-event\nid:cursor-0001\ndata:{\"agent_event_store_generation\":7,\"agent_operation_identifier\":\"operation-alpha\",\"daemon_subscription_identifier\":\"daemon-subscription-one\",\"kind\":\"progress\",\"sequence\":2}\n\n"}
+{"kind": "activity", "name": "malformed-partial-input", "refreshes": false, "stream": "event:job-event\ndata:{a document that never end"}
+{"kind": "activity", "name": "partial-comment", "refreshes": false, "stream": ":a comment with no line feed after it"}
+{"kind": "regression", "name": "clock-regression", "quiet_for": 30000}
