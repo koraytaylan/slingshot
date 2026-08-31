@@ -8,7 +8,7 @@
 
 format = "slingshot.coverage-fuzzing/1"
 repository = "https://github.com/rust-fuzz/cargo-fuzz"
-commit = "0c1c9d7c3f3b0dbd77e7d7e2ba1bd12a5ad19cfc"
+commit = "1b34938413a104856042376b285c8d1c1e11b098"
 package = "cargo-fuzz"
 version = "0.13.1"
 binary = "cargo-fuzz"

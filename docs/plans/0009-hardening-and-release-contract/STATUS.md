@@ -154,15 +154,21 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     reach. What runs on every change instead is the seed corpus replayed through the
     production reader by an ordinary test, which is the part that rots silently when
     nobody checks it. The root manifest gains one exclusion, which is how a fuzz
-    workspace is kept beside a product workspace.
-  - **3506 cannot acquire or build the tool here, and says so where it matters.** This
-    environment has no network, so the twice-built bundle cannot be produced and a
-    recorded observation of one would be a fabrication. What is committed is everything
-    that decides whether a built bundle may be believed: the pin with one full commit
-    and two toolchains, the bundle schema, the offline verifier with every refusal a
-    different tool would trip, and the three scripts - including the one command in this
-    repository that reaches the network, which says so in its own output. `fuzz/Cargo.lock`
-    is absent for the same reason: resolving it requires a registry.
+    workspace is kept beside a product workspace. The lockfile absence recorded here
+    was corrected once the network turned out to be reachable; `fuzz/Cargo.lock` is
+    committed and the exclusion stands for the reason above.
+  - **3506 was landed against a belief about this environment that turned out to be
+    wrong, and the correction is worse than the exception was.** The exception said the
+    network was unreachable, so the twice-built bundle could not be produced and
+    `fuzz/Cargo.lock` could not be resolved. The network is reachable. Worse, the pin
+    committed under that belief named a cargo-fuzz commit that does not exist - a pin
+    that looks authoritative and can never be satisfied is worse than no pin - and the
+    two subcommands its scripts invoke were never wired into the executable, so neither
+    script could ever have run. All three are fixed in `%%FIXOID%%`: the pin names the
+    real commit for the version it declares, the preparation half is written, and the
+    tool is now acquired, built twice into identical bytes, bundled, verified, and run.
+    `fuzz/Cargo.lock` is resolved and committed. The bundle itself is not committed,
+    because it is an artifact a command produces rather than source.
 - **Outcome:** One rootless network-none acceptance command proves bounded/recoverable behavior, exact command-contract and operation-key-free maintenance-result association/metadata/read presentation and durable-receipt replay parity, and deterministic archives from exact inputs, with every abstract target backed by owner-mapped provider-authenticated evidence for its real safe provider API/enumerated fields plus deterministic same-adapter decision matrix, separate exact Plan 0002 Identity Management Services and Plan 0005 author transport contracts, Windows remote-client refusal, one same-run owner-reviewed RustSec pin bound to authenticated release-time evidence, and the single compatible-row FSM report.
 
 _Last updated: 2026-08-31, against `main` @ `8d286e8`._

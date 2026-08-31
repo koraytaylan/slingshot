@@ -96,7 +96,7 @@ pub struct AcquisitionPolicy {
 }
 
 /// One built bundle, as its manifest describes it.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BundleManifest {
     /// What the executable digests to.
@@ -254,4 +254,155 @@ pub fn parse_pin(text: &str) -> Result<CoverageFuzzingPin, BundleRefusal> {
         return Err(BundleRefusal::NotThePinnedTool("the commit".to_owned()));
     }
     Ok(held)
+}
+
+/// The one command in this repository that fetches somebody else's source.
+const GIT: &str = "git";
+
+/// The command that builds it.
+const CARGO: &str = "cargo";
+
+/// The variables one build of the pinned tool is allowed to see.
+///
+/// Closed rather than inherited. A build that saw an ambient Cargo home, a
+/// source replacement, or a set of Rust flags would produce bytes that depended
+/// on the machine, and the whole point of building it twice is that they do
+/// not.
+const PERMITTED_VARIABLES: &[&str] =
+    &["CARGO_HOME", "CARGO_TARGET_DIR", "PATH", "RUSTUP_TOOLCHAIN"];
+
+/// Returns what a set of bytes digests to.
+fn digest_of(bytes: &[u8]) -> String {
+    use sha2::Digest as _;
+
+    hex::encode(sha2::Sha256::digest(bytes))
+}
+
+/// Runs one command and returns its standard output, refusing a failure.
+fn run(
+    program: &str,
+    arguments: &[&str],
+    working_directory: &Path,
+) -> Result<String, BundleRefusal> {
+    let produced = std::process::Command::new(program)
+        .args(arguments)
+        .current_dir(working_directory)
+        .output()
+        .map_err(|failure| BundleRefusal::Unreadable(format!("{program}: {failure}")))?;
+    if !produced.status.success() {
+        return Err(BundleRefusal::Unreadable(format!(
+            "{program} {}: {}",
+            arguments.join(" "),
+            String::from_utf8_lossy(&produced.stderr).trim()
+        )));
+    }
+    Ok(String::from_utf8_lossy(&produced.stdout).trim().to_owned())
+}
+
+/// Acquires the pinned tool, builds it twice, and writes the bundle.
+///
+/// The fetch is verified against the pin afterwards rather than trusted from
+/// the reference that produced it: a reference is a name somebody can move, and
+/// the commit is what the pin names.
+///
+/// Two builds from one source, into two separate target roots, under one closed
+/// environment. One build proves that a build happened; two identical builds
+/// prove that the bytes come from the source. If they differ, there is no
+/// bundle, because a tool whose bytes depend on the machine cannot be the tool
+/// this repository pins.
+///
+/// # Errors
+///
+/// Returns [`BundleRefusal`] naming what stopped it: a fetch that produced
+/// another commit, a build that failed, or two builds that disagreed.
+pub fn prepare(
+    destination: &Path,
+    pin: &CoverageFuzzingPin,
+    host: &str,
+) -> Result<BundleManifest, BundleRefusal> {
+    let unreadable = |failure: std::io::Error| BundleRefusal::Unreadable(failure.to_string());
+    let scratch = destination.with_extension("build");
+    std::fs::remove_dir_all(&scratch).ok();
+    let source = scratch.join("source");
+    std::fs::create_dir_all(&source).map_err(unreadable)?;
+    std::fs::create_dir_all(destination).map_err(unreadable)?;
+
+    run(GIT, &["init", "--quiet", "."], &source)?;
+    run(GIT, &["remote", "add", "origin", &pin.repository], &source)?;
+    run(GIT, &["fetch", "--quiet", "--depth", "1", "origin", &pin.commit], &source)?;
+    run(GIT, &["checkout", "--quiet", &pin.commit], &source)?;
+    let observed = run(GIT, &["rev-parse", "HEAD"], &source)?;
+    if observed != pin.commit {
+        return Err(BundleRefusal::NotThePinnedTool(format!("the checkout is at {observed}")));
+    }
+
+    let listing = run(GIT, &["ls-tree", "-r", "--full-tree", &pin.commit], &source)?;
+    let tree_sha256 = digest_of(listing.as_bytes());
+    let lock = std::fs::read(source.join("Cargo.lock")).map_err(unreadable)?;
+    let lock_sha256 = digest_of(&lock);
+
+    let cargo_home = scratch.join("cargo-home");
+    let first = build_once(&source, &scratch.join("first"), &cargo_home, pin)?;
+    let second = build_once(&source, &scratch.join("second"), &cargo_home, pin)?;
+    if first != second {
+        return Err(BundleRefusal::ExecutableUnusable);
+    }
+
+    let executable = scratch.join("first").join("release").join(&pin.binary);
+    let bytes = std::fs::read(&executable).map_err(unreadable)?;
+    // Copied rather than written, so the bundle's executable is executable. A
+    // consumer that verified a bundle and then could not run what is in it
+    // would have verified a file rather than a tool.
+    std::fs::copy(&executable, destination.join(&pin.binary)).map_err(unreadable)?;
+    let manifest = BundleManifest {
+        binary_sha256: digest_of(&bytes),
+        build_toolchain: pin.build_toolchain.clone(),
+        commit: pin.commit.clone(),
+        dependency_cache_sha256: crate::release_input_cache::survey(&cargo_home)
+            .map(|surveyed| surveyed.digest)
+            .map_err(|failure| BundleRefusal::Unreadable(failure.to_string()))?,
+        environment: PERMITTED_VARIABLES
+            .iter()
+            .map(|named| ((*named).to_owned(), "<closed>".to_owned()))
+            .collect(),
+        format: BUNDLE_FORMAT.to_owned(),
+        host: host.to_owned(),
+        lock_sha256,
+        repository: pin.repository.clone(),
+        tree_sha256,
+    };
+    let rendered = serde_json::to_string_pretty(&manifest)
+        .map_err(|failure| BundleRefusal::Unreadable(failure.to_string()))?;
+    std::fs::write(destination.join(BUNDLE_MANIFEST), format!("{rendered}\n"))
+        .map_err(unreadable)?;
+    std::fs::remove_dir_all(&scratch).ok();
+    Ok(manifest)
+}
+
+/// Builds the pinned tool once into `target_root` and returns its digest.
+fn build_once(
+    source: &Path,
+    target_root: &Path,
+    cargo_home: &Path,
+    pin: &CoverageFuzzingPin,
+) -> Result<String, BundleRefusal> {
+    let produced = std::process::Command::new(CARGO)
+        .args(["build", "--locked", "--release", "--bin", &pin.binary])
+        .current_dir(source)
+        .env_clear()
+        .env("CARGO_HOME", cargo_home)
+        .env("CARGO_TARGET_DIR", target_root)
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env("RUSTUP_TOOLCHAIN", &pin.build_toolchain)
+        .env("CARGO_INCREMENTAL", "0")
+        .output()
+        .map_err(|failure| BundleRefusal::Unreadable(format!("{CARGO}: {failure}")))?;
+    if !produced.status.success() {
+        return Err(BundleRefusal::Unreadable(
+            String::from_utf8_lossy(&produced.stderr).trim().to_owned(),
+        ));
+    }
+    let executable = target_root.join("release").join(&pin.binary);
+    let bytes = std::fs::read(&executable).map_err(|_| BundleRefusal::ExecutableUnusable)?;
+    Ok(digest_of(&bytes))
 }
