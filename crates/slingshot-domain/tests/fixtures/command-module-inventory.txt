@@ -10,6 +10,7 @@
 add_component
 artifact
 authorizable_identity
+cancel_sling_job
 canonical_json
 catalog
 command_identity
@@ -34,14 +35,17 @@ find_open_service_gateway_initiative_configurations
 find_pages_by_template
 find_pages_containing_phrase
 find_pages_using_components
+find_sling_jobs
 find_workflow_instances
 inspect_open_service_gateway_initiative_configuration
+inspect_sling_job
 inspect_workflow_instance
 list_asset_renditions
 list_child_pages
 list_open_service_gateway_initiative_bundles
 list_open_service_gateway_initiative_components
 list_resource_mappings
+list_sling_job_queues
 list_workflow_models
 load_content_as_javascript_object_notation
 move_asset

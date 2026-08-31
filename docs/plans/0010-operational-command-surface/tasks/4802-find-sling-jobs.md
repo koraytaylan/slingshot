@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/find_sling_jobs.rs
   - "crates/slingshot-domain/tests/fixtures/commands/find_sling_jobs/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Find Sling Jobs

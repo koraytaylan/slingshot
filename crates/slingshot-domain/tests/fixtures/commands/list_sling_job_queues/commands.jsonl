@@ -1,0 +1,3 @@
+{"accepted":true,"document":"{}","note":"every queue"}
+{"accepted":true,"document":"{\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":25}}","note":"an explicit first page"}
+{"accepted":false,"document":"{\"state\":\"running\"}","note":"a filter this command does not take"}

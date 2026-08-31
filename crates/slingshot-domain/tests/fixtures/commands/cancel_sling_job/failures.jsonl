@@ -1,0 +1,4 @@
+{"document":"{\"failure\":\"job_not_found\",\"job_identifier\":\"2024/01/01/example-job-1\"}","members":["failure","job_identifier"],"note":"refused as job not found","proves_no_effect":true}
+{"document":"{\"failure\":\"job_not_cancellable\",\"job_identifier\":\"2024/01/01/example-job-1\"}","members":["failure","job_identifier"],"note":"refused as job not cancellable","proves_no_effect":true}
+{"document":"{\"failure\":\"platform_control_rejected\",\"job_identifier\":\"2024/01/01/example-job-1\"}","members":["failure","job_identifier"],"note":"refused as platform control rejected","proves_no_effect":true}
+{"document":"{\"failure\":\"platform_control_outcome_unknown\",\"job_identifier\":\"2024/01/01/example-job-1\"}","members":["failure","job_identifier"],"note":"refused as platform control outcome unknown","proves_no_effect":false}
