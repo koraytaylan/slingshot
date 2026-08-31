@@ -1,0 +1,4 @@
+exit: 130
+standard output:
+{"outcome":"local_application_error","interruption":{"phase":"pre_receipt","retry_identifier":"command-line-<instant>"}}
+standard error:

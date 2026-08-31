@@ -54,6 +54,33 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     cooperative stop, and 2803 scans exactly that stream for exactly that kind of value.
     The module-map checker also counted a process entry as a claimed module, which no
     task had tripped before because none both owned a module row and touched the entry.
+  - **2802 pins the surface the compiled process actually has.** The task asks for
+    sessions across admitted operations, receipts, publication races, and lost-receipt
+    replay. Reaching one needs a daemon that answers a versioned operation request, and
+    this one serves the retained control surface, so a session claiming an admitted
+    operation would be a fiction rather than a proof. What is pinned instead is every
+    byte the compiled process does produce: every leaf this build offers in both output
+    forms, every refusal the parser and the services can make, the daemon lifecycle
+    against absence and against a real owner, what a versioned leaf does when the daemon
+    says it serves no such method, a stale nonce beside its replacement, an unresponsive
+    owned child ended through its retained handle, and a real interrupt delivered to a
+    run waiting on a silent endpoint - exit `130`, nothing on standard output in human
+    form, one envelope on it in machine form.
+    A configuration check is compared by shape rather than by bytes. Its answer depends
+    on the account's own configuration root, which the operating system chooses rather
+    than the environment, precisely so that nothing ambient can redirect where a
+    credential is read from; committing its bytes would pin one machine. The exit, the
+    single line of answer, and the five-field grammar of every diagnostic are asserted
+    instead, along with the absence of a path or a home directory in any of them.
+    Two defects were fixed on the way. The pre-receipt interruption template ended
+    mid-sentence, so a person interrupted before a receipt was told "quoting X will say
+    whether anything was" and nothing more. And a refused configuration check answered
+    that the selection does not resolve while saying nothing about why, because the
+    closed outcome envelope has no member for diagnostics; the diagnostics now go to the
+    diagnostic stream where they belong, in Plan 0002's own five fields.
+    `daemon_request.rs` joins the footprint for the same reason `daemon_answer.rs` did:
+    turning an invocation into a request is its own concern, and keeping it in the
+    assembly pushed that file past the length ceiling.
   - **2801 needed a handle a signal can be delivered through.** The task requires
     signal injection through a retained instance-bound primitive and forbids discovering
     or signalling a numeric process identifier. The standard library ends a child only by

@@ -1,0 +1,4 @@
+exit: 2
+standard output:
+standard error:
+slingshot: not-a-command is not a command this build offers

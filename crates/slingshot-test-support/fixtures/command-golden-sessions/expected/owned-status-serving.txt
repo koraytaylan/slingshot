@@ -1,0 +1,4 @@
+exit: 0
+standard output:
+daemon-status: serving
+standard error:

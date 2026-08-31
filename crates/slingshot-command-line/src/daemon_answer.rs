@@ -230,7 +230,11 @@ fn released_rows(manifest: &serde_json::Value) -> u64 {
 
 /// Returns the completion one successful envelope makes.
 fn succeeded(envelope: MachineOutcomeEnvelope) -> Completion {
-    Completion { answer: Answer::Envelope(Box::new(envelope)), exit: exit_classification::SUCCESS }
+    Completion {
+        answer: Answer::Envelope(Box::new(envelope)),
+        diagnostics: Vec::new(),
+        exit: exit_classification::SUCCESS,
+    }
 }
 
 /// Returns what an answer every service may receive means.
@@ -255,6 +259,7 @@ fn ended(response: &OperationResponse) -> Option<Completion> {
         OperationResponse::TerminalFailure { disposition, kind, metadata, .. } => {
             let ending = classify_ending(*disposition);
             Some(Completion {
+                diagnostics: Vec::new(),
                 answer: Answer::Envelope(Box::new(
                     MachineOutcomeEnvelope::OperationTerminalError {
                         disposition: format!("{disposition:?}"),
@@ -294,6 +299,7 @@ pub fn recovering(category: String, evidence: String, revision: u64) -> Completi
             evidence,
             revision,
         })),
+        diagnostics: Vec::new(),
         exit: exit_classification::INDETERMINATE,
     }
 }

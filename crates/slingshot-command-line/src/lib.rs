@@ -17,6 +17,7 @@ pub mod commands;
 pub mod configuration_check;
 pub mod daemon_answer;
 pub mod daemon_connection;
+pub mod daemon_request;
 pub mod daemon_entry;
 pub mod daemon_process;
 pub mod exit_classification;

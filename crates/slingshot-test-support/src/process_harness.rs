@@ -566,6 +566,30 @@ impl RetainedChild {
         self.wait_within(deadline)
     }
 
+    /// Waits for this child inside `deadline`, draining both streams as it goes.
+    ///
+    /// The streams are read on their own threads for as long as the child runs,
+    /// so a child that writes more than a pipe holds keeps going rather than
+    /// blocking on a reader that is itself waiting for it to exit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HarnessFailure::DeadlineElapsed`] when the child outlives the
+    /// deadline, leaving the handle valid so the caller can still end it.
+    pub fn capture_within(
+        &mut self,
+        deadline: Duration,
+    ) -> Result<CapturedProcess, HarnessFailure> {
+        let output = self.child.stdout.take().map(drain_on_thread);
+        let errors = self.child.stderr.take().map(drain_on_thread);
+        let status = self.wait_within(deadline)?;
+        Ok(CapturedProcess {
+            status,
+            standard_output: joined(output),
+            standard_error: joined(errors),
+        })
+    }
+
     /// Reads everything the child wrote to its terminal.
     ///
     /// Answers only for a child on a pseudo-terminal, and only once it has

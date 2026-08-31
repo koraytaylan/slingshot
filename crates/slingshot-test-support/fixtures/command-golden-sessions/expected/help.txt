@@ -1,0 +1,80 @@
+exit: 0
+standard output:
+slingshot - one command line over one daemon
+
+commands:
+  check-configuration
+  daemon-ping
+  daemon-start
+  daemon-status
+  daemon-stop
+  help
+  maintenance-apply
+  maintenance-preview
+  maintenance-result
+  operation-artifact
+  operation-list
+  operation-restart
+  operation-result
+  operation-status
+  operation-wait
+  version
+
+commands this daemon runs against an author:
+  add_component - Add a component
+  create_page - Create a page
+  download_content_package - Download a content package
+  find_assets_by_metadata - Find assets by metadata
+  find_assets_referenced_by_page - Find assets referenced by a page
+  find_pages_by_template - Find pages by template
+  find_pages_containing_phrase - Find pages containing a phrase
+  find_pages_using_components - Find pages using components
+  inspect_open_service_gateway_initiative_configuration - Inspect a configuration
+  load_content_as_json - Load content as JSON
+  query_paths - Query paths
+  replicate_content - Replicate content
+
+options:
+  --profile
+  --environment
+  --machine
+  --detach
+  --operation-key
+  --author-target-digest
+  --expected-revision
+  --expected-category
+  --reviewed-digest
+  --limit
+  --before
+  --result-identifier
+  --expected-digest
+  --destination
+  --path
+  --depth
+  --recursive
+  --package-name
+  --roots
+  --include
+  --exclude
+  --node-type
+  --offset
+  --continuation-token
+  --property-predicate
+  --template
+  --phrase
+  --resource-types
+  --match-all
+  --persistent-identifier
+  --media-formats
+  --tags
+  --minimum-bytes
+  --maximum-bytes
+  --name
+  --title
+  --resource-type
+  --content-parent
+  --properties
+  --operation
+  --artifact
+  --runtime-root
+standard error:

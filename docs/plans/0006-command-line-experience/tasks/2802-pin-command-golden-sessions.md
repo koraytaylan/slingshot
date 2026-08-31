@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/tests/command_golden_sessions.rs
   - crates/slingshot-test-support/fixtures/command-golden-sessions/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Pin Command Golden Sessions
