@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/tests/legacy_initialized_revision.rs
   - "crates/slingshot-test-support/fixtures/model-context-protocol/official-schemas/2025-06-18/**"
 status: done
-merged_as: ""
+merged_as: "5b124a640f73dc720f1d6ebdd78a25fa62c49a36"
 ---
 # Serve Legacy Initialized Revision
 
