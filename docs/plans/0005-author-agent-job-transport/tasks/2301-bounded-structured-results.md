@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-daemon/src/operation/mod.rs
   - crates/slingshot-agent-connection/tests/fixtures/structured-job-results/**
   - crates/slingshot-agent-connection/tests/structured_job_results.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Bounded Structured Results
