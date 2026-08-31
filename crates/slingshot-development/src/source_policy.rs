@@ -13,6 +13,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde::Deserialize;
+use slingshot_domain::command::command_identity::CommandContract;
 use syn::visit::Visit;
 
 /// Repository path of the source policy values.
@@ -51,6 +52,14 @@ pub struct SourcePolicy {
     pub planning_headings: Vec<String>,
     /// Macros whose expansion is a placeholder rather than behavior.
     pub placeholder_macros: Vec<String>,
+    /// Markers that switch a rule off where somebody found it inconvenient.
+    pub suppression_markers: Vec<String>,
+    /// Markers that record an expectation the compiler keeps honest.
+    pub expectation_markers: Vec<String>,
+    /// What an expectation has to state.
+    pub required_expectation_reason: String,
+    /// The directory that owns Plan 0003's command contract.
+    pub command_contract_directory: String,
     /// Directories the scan does not enter.
     pub excluded_directories: Vec<String>,
     /// The one workflow job that may hold provenance-attestation permissions.
@@ -99,6 +108,10 @@ pub struct DocumentationRules {
     pub required_panic_section: String,
     /// Judgements a reader makes, which this module never infers.
     pub review_checklist: Vec<String>,
+    /// Where the completed review is recorded.
+    pub review_record: String,
+    /// The closed subjects the checklist covers, by the entry that covers each.
+    pub review_subjects: std::collections::BTreeMap<String, String>,
 }
 
 /// One rule a repository file breaks.
@@ -117,7 +130,7 @@ pub struct Violation {
 impl Violation {
     /// Records one rule a file broke.
     #[must_use]
-    fn at(path: &str, line: usize, rule: &str, symbol: impl Into<String>) -> Self {
+    pub(crate) fn at(path: &str, line: usize, rule: &str, symbol: impl Into<String>) -> Self {
         Self { path: path.to_owned(), line, rule: rule.to_owned(), symbol: symbol.into() }
     }
 }
@@ -573,12 +586,95 @@ pub fn classify(relative: &str) -> Option<SourceKind> {
 }
 
 /// Refuses a file that is longer than the policy allows.
-fn check_line_count(policy: &LoadedPolicy, path: &str, text: &str) -> Vec<Violation> {
+pub(crate) fn check_line_count(policy: &LoadedPolicy, path: &str, text: &str) -> Vec<Violation> {
     let lines = text.lines().count();
     if lines <= policy.source.maximum_code_file_lines {
         return Vec::new();
     }
     vec![Violation::at(path, lines, "file-is-longer-than-the-ceiling", format!("{lines} lines"))]
+}
+
+/// Refuses a marker that switches a rule off where somebody found it awkward.
+///
+/// A rule with an escape hatch holds only where nobody minded it, which is not
+/// what a rule is for. This looks at raw lines rather than at parsed syntax,
+/// because the point is to catch the marker wherever it is written - inside a
+/// comment, above an item, or at the top of a file.
+///
+/// An expectation is a different thing and is admitted when it says why it is
+/// there. The compiler reports an expectation whose lint has stopped firing, so
+/// it cannot quietly outlive the situation it was written for; a suppression
+/// can, and does.
+pub(crate) fn check_suppressions(policy: &LoadedPolicy, path: &str, text: &str) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    let rule = "suppression-marker-silences-a-rule";
+    let reason = policy.source.required_expectation_reason.as_str();
+    for (offset, line) in text.lines().enumerate() {
+        let line_number = offset + FIRST_LINE;
+        for marker in &policy.source.suppression_markers {
+            if line.contains(marker.as_str()) {
+                violations.push(Violation::at(path, line_number, rule, marker.clone()));
+            }
+        }
+        let unexplained = policy
+            .source
+            .expectation_markers
+            .iter()
+            .filter(|marker| line.contains(marker.as_str()) && !line.contains(reason));
+        for marker in unexplained {
+            violations.push(Violation::at(path, line_number, rule, marker.clone()));
+        }
+    }
+    violations
+}
+
+/// Refuses a source that writes Plan 0003's command contract down again.
+///
+/// The contract is one document and every consumer asks it for a limit by
+/// name. A constant named after a limit, or the contract's own format
+/// identifier spelled out, is a second declaration - and a second declaration
+/// is a thing that can disagree with the first, quietly, for as long as nobody
+/// compares them.
+pub(crate) fn check_contract_redeclaration(
+    policy: &LoadedPolicy,
+    path: &str,
+    text: &str,
+) -> Vec<Violation> {
+    if path.starts_with(policy.source.command_contract_directory.as_str()) {
+        return Vec::new();
+    }
+    let contract = CommandContract::embedded();
+    let mut violations = Vec::new();
+    let rule = "contract-value-is-declared-again";
+    for (offset, line) in text.lines().enumerate() {
+        let line_number = offset + FIRST_LINE;
+        for identifier in [contract.format.as_str(), contract.canonicalization.as_str()] {
+            if line.contains(identifier) {
+                violations.push(Violation::at(path, line_number, rule, identifier));
+            }
+        }
+        let Some(declared) = declared_constant_name(line) else {
+            continue;
+        };
+        if contract.limits.contains_key(&declared.to_lowercase()) {
+            violations.push(Violation::at(path, line_number, rule, declared));
+        }
+    }
+    violations
+}
+
+/// Returns the name one line declares a constant or static under.
+fn declared_constant_name(line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    let rest = trimmed
+        .strip_prefix("pub const ")
+        .or_else(|| trimmed.strip_prefix("const "))
+        .or_else(|| trimmed.strip_prefix("pub static "))
+        .or_else(|| trimmed.strip_prefix("static "))
+        .or_else(|| trimmed.strip_prefix("readonly "))?;
+    let named: String =
+        rest.chars().take_while(|held| held.is_ascii_alphanumeric() || *held == '_').collect();
+    if named.is_empty() { None } else { Some(named) }
 }
 
 /// Refuses an unfinished-work marker or a planning heading in product prose.
@@ -632,6 +728,8 @@ fn check_rust(policy: &LoadedPolicy, path: &str, text: &str) -> Vec<Violation> {
     scan.visit_file(&parsed);
     violations.extend(scan.violations);
     violations.extend(check_prose(policy, path, &documentation_lines(text)));
+    violations.extend(check_suppressions(policy, path, text));
+    violations.extend(check_contract_redeclaration(policy, path, text));
     violations.sort();
     violations
 }
@@ -643,107 +741,6 @@ fn documentation_lines(text: &str) -> String {
         trimmed.strip_prefix("///").or_else(|| trimmed.strip_prefix("//!"))
     });
     documented.collect::<Vec<&str>>().join("\n")
-}
-
-/// Counts the decisions one shell list reaches.
-fn shell_complexity(list: &brush_parser::ast::CompoundList) -> u32 {
-    let mut decisions = 0_u32;
-    for item in &list.0 {
-        decisions += u32::try_from(item.0.additional.len()).unwrap_or_default();
-        let following = item.0.additional.iter().map(following_pipeline);
-        let pipelines = std::iter::once(&item.0.first).chain(following);
-        for pipeline in pipelines {
-            for command in &pipeline.seq {
-                decisions += shell_command_complexity(command);
-            }
-        }
-    }
-    decisions
-}
-
-/// Returns the pipeline one and-or operator guards.
-fn following_pipeline(operator: &brush_parser::ast::AndOr) -> &brush_parser::ast::Pipeline {
-    match operator {
-        brush_parser::ast::AndOr::And(pipeline) | brush_parser::ast::AndOr::Or(pipeline) => {
-            pipeline
-        }
-    }
-}
-
-/// Counts the decisions one shell command reaches.
-fn shell_command_complexity(command: &brush_parser::ast::Command) -> u32 {
-    use brush_parser::ast::Command;
-
-    match command {
-        Command::Simple(_) | Command::ExtendedTest(_, _) => 0,
-        Command::Function(defined) => compound_complexity(&defined.body.0),
-        Command::Compound(compound, _) => compound_complexity(compound),
-    }
-}
-
-/// Counts the decisions one compound shell command reaches.
-fn compound_complexity(compound: &brush_parser::ast::CompoundCommand) -> u32 {
-    use brush_parser::ast::CompoundCommand;
-
-    match compound {
-        CompoundCommand::Arithmetic(_) => 0,
-        CompoundCommand::BraceGroup(group) => shell_complexity(&group.list),
-        CompoundCommand::Subshell(subshell) => shell_complexity(&subshell.list),
-        CompoundCommand::ArithmeticForClause(clause) => 1 + shell_complexity(&clause.body.list),
-        CompoundCommand::ForClause(clause) => 1 + shell_complexity(&clause.body.list),
-        CompoundCommand::WhileClause(clause) | CompoundCommand::UntilClause(clause) => {
-            1 + shell_complexity(&clause.0) + shell_complexity(&clause.1.list)
-        }
-        CompoundCommand::IfClause(clause) => {
-            let branches = clause.elses.as_ref().map_or(0, Vec::len);
-            let otherwise = u32::try_from(branches).unwrap_or_default();
-            1 + otherwise + shell_complexity(&clause.condition) + shell_complexity(&clause.then)
-        }
-        CompoundCommand::CaseClause(clause) => {
-            u32::try_from(clause.cases.len()).unwrap_or_default().saturating_sub(1)
-        }
-        CompoundCommand::Coprocess(coprocess) => shell_command_complexity(&coprocess.body),
-    }
-}
-
-/// Refuses every rule one executable script breaks.
-fn check_script(policy: &LoadedPolicy, path: &str, text: &str) -> Vec<Violation> {
-    let mut violations = check_line_count(policy, path, text);
-    let options = brush_parser::ParserOptions::default();
-    let mut parser = brush_parser::Parser::new(std::io::Cursor::new(text.as_bytes()), &options);
-    let program = match parser.parse_program() {
-        Ok(program) => program,
-        Err(failure) => {
-            let rule = "source-is-not-parseable";
-            violations.push(Violation::at(path, FIRST_LINE, rule, failure.to_string()));
-            return violations;
-        }
-    };
-    for complete in &program.complete_commands {
-        for item in &complete.0 {
-            for command in &item.0.first.seq {
-                let brush_parser::ast::Command::Function(defined) = command else { continue };
-                let name = defined.fname.value.clone();
-                let line = defined.fname.loc.as_ref().map_or(FIRST_LINE, |span| span.start.line);
-                if !policy.name_is_spelled_in_full(&name) {
-                    let rule = "declared-name-is-not-spelled-in-full";
-                    violations.push(Violation::at(path, line, rule, name.clone()));
-                }
-                let reached = 1 + compound_complexity(&defined.body.0);
-                if reached > policy.source.maximum_cyclomatic_complexity {
-                    let detail = format!("{name} reaches {reached}");
-                    violations.push(Violation::at(
-                        path,
-                        line,
-                        "function-branches-too-many-ways",
-                        detail,
-                    ));
-                }
-            }
-        }
-    }
-    violations.sort();
-    violations
 }
 
 /// Refuses every rule one migration breaks.
@@ -786,134 +783,7 @@ fn check_migration(policy: &LoadedPolicy, path: &str, text: &str) -> Vec<Violati
 }
 
 /// Line a violation is attributed to when its source has no line of its own.
-const FIRST_LINE: usize = 1;
-
-/// Length of a full commit identifier, in hexadecimal characters.
-const FULL_COMMIT_LENGTH: usize = 40;
-
-/// Permission value a job may hold without being the attestation job.
-const READ_PERMISSION: &str = "read";
-
-/// Permission value that grants nothing.
-const NO_PERMISSION: &str = "none";
-
-/// Reports whether one action reference is pinned to a full commit.
-fn action_is_pinned(reference: &str) -> bool {
-    if reference.starts_with("./") {
-        return true;
-    }
-    reference.rsplit_once('@').is_some_and(|(_, revision)| {
-        revision.len() == FULL_COMMIT_LENGTH
-            && revision.bytes().all(|byte| byte.is_ascii_hexdigit())
-    })
-}
-
-/// Refuses every rule one workflow step breaks.
-fn check_workflow_step(
-    policy: &LoadedPolicy,
-    path: &str,
-    step: &serde_yaml_ng::Value,
-    violations: &mut Vec<Violation>,
-) {
-    if let Some(reference) = step.get("uses").and_then(serde_yaml_ng::Value::as_str) {
-        if !action_is_pinned(reference) {
-            let rule = "action-is-not-pinned-to-a-full-commit";
-            violations.push(Violation::at(path, FIRST_LINE, rule, reference));
-        }
-        let persists = step.get("with").and_then(|with| with.get("persist-credentials"))
-            != Some(&serde_yaml_ng::Value::Bool(false));
-        if reference.contains("actions/checkout") && persists {
-            let rule = "checkout-persists-its-credential";
-            violations.push(Violation::at(path, FIRST_LINE, rule, reference));
-        }
-    }
-    if let Some(script) = step.get("run").and_then(serde_yaml_ng::Value::as_str)
-        && script.contains("${{")
-    {
-        let rule = "workflow-expression-reaches-a-shell";
-        let first = script.lines().next().unwrap_or_default();
-        violations.push(Violation::at(path, FIRST_LINE, rule, first));
-    }
-    let values = step.get("env").and_then(serde_yaml_ng::Value::as_mapping).into_iter().flatten();
-    for (name, value) in values {
-        let rendered = value.as_str().unwrap_or_default();
-        let untrusted = &policy.source.untrusted_expression_prefixes;
-        if untrusted.iter().any(|prefix| rendered.contains(prefix.as_str())) {
-            let rule = "untrusted-expression-reaches-a-shell-value";
-            violations.push(Violation::at(
-                path,
-                FIRST_LINE,
-                rule,
-                name.as_str().unwrap_or_default(),
-            ));
-        }
-    }
-}
-
-/// Refuses every permission one job holds beyond least privilege.
-fn check_workflow_permissions(
-    policy: &LoadedPolicy,
-    path: &str,
-    name: &str,
-    job: &serde_yaml_ng::Value,
-    violations: &mut Vec<Violation>,
-) {
-    let Some(permissions) = job.get("permissions").and_then(serde_yaml_ng::Value::as_mapping)
-    else {
-        violations.push(Violation::at(
-            path,
-            FIRST_LINE,
-            "job-declares-no-explicit-permissions",
-            name,
-        ));
-        return;
-    };
-    let attesting = name == policy.source.release_attestation_job;
-    for (permission, value) in permissions {
-        let permission = permission.as_str().unwrap_or_default();
-        let granted = value.as_str().unwrap_or_default();
-        if granted == READ_PERMISSION || granted == NO_PERMISSION {
-            continue;
-        }
-        let attestation = &policy.source.release_attestation_permissions;
-        if !(attesting && attestation.iter().any(|allowed| allowed == permission)) {
-            let rule = "job-holds-a-permission-beyond-least-privilege";
-            violations.push(Violation::at(path, FIRST_LINE, rule, format!("{name}: {permission}")));
-        }
-    }
-}
-
-/// Refuses every rule one workflow document breaks.
-fn check_workflow(policy: &LoadedPolicy, path: &str, text: &str) -> Vec<Violation> {
-    let mut violations = check_line_count(policy, path, text);
-    let document: serde_yaml_ng::Value = match serde_yaml_ng::from_str(text) {
-        Ok(document) => document,
-        Err(failure) => {
-            violations.push(Violation {
-                path: path.to_owned(),
-                line: failure.location().map_or(FIRST_LINE, |location| location.line()),
-                rule: "source-is-not-parseable".to_owned(),
-                symbol: failure.to_string(),
-            });
-            return violations;
-        }
-    };
-    let Some(jobs) = document.get("jobs").and_then(serde_yaml_ng::Value::as_mapping) else {
-        violations.push(Violation::at(path, FIRST_LINE, "workflow-declares-no-job", "jobs"));
-        return violations;
-    };
-    for (name, job) in jobs {
-        let name = name.as_str().unwrap_or_default();
-        check_workflow_permissions(policy, path, name, job, &mut violations);
-        for step in
-            job.get("steps").and_then(serde_yaml_ng::Value::as_sequence).into_iter().flatten()
-        {
-            check_workflow_step(policy, path, step, &mut violations);
-        }
-    }
-    violations.sort();
-    violations
-}
+pub(crate) const FIRST_LINE: usize = 1;
 
 /// Refuses every rule one repository file breaks.
 ///
@@ -934,13 +804,14 @@ pub fn check_file(
     })?;
     Ok(match kind {
         SourceKind::Rust => check_rust(policy, relative, &text),
-        SourceKind::Workflow => check_workflow(policy, relative, &text),
-        SourceKind::Script => check_script(policy, relative, &text),
+        SourceKind::Workflow => crate::workflow_policy::check(policy, relative, &text),
+        SourceKind::Script => crate::script_policy::check(policy, relative, &text),
         SourceKind::Migration => check_migration(policy, relative, &text),
         SourceKind::Manifest => check_line_count(policy, relative, &text),
         SourceKind::Prose => {
             let mut found = check_line_count(policy, relative, &text);
             found.extend(check_prose(policy, relative, &text));
+            found.extend(check_suppressions(policy, relative, &text));
             found
         }
     })

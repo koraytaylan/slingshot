@@ -22,3 +22,17 @@ review-checklist = [
     "A comment exists wherever a constraint is not visible from the code.",
     "A rendered failure message names what the caller can do about it.",
 ]
+
+# Where the completed review is recorded. Automation checks that the record is
+# present and names every subject below; it never judges an answer, because
+# every answer is a judgement.
+review-record = "docs/DOCUMENTATION_REVIEW.md"
+
+# The four subjects the checklist covers, each named by exactly one entry above.
+# Closed on purpose: a subject nobody can point to an entry for is a subject
+# nobody reviews, and an entry belonging to no subject is one nobody records.
+[review-subjects]
+public-contract-and-failure-coverage = "Every contract, invariant, side effect, and bound that applies is stated."
+non-obvious-invariant-comments = "A comment exists wherever a constraint is not visible from the code."
+non-narration = "No comment narrates syntax the types and control flow already show."
+present-factual-prose = "The documentation describes the code in this commit, not a plan for it."

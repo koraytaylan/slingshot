@@ -10,6 +10,25 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 17/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3902 split three files rather than raise a ceiling, and its footprint records
+    it.** Its own steps say to split a violating file instead of raising a limit, and
+    adding rules to a checker that already stood at 995 lines meant doing exactly that:
+    the workflow rules and the script rules are now leaves of their own, and both join
+    the workspace module map. The footprint gained those two modules, the crate root
+    that declares them, `policy/source-policy.toml` where the two new rules read their
+    values, the review record the checklist asks for, and one script that had a
+    quantity nobody had named. `release-artifact-contract`, which this task depends on,
+    is blocked behind three owner gates; the release code that exists - the two cache
+    commands and their scripts - is audited, and there is no other release code to
+    audit yet.
+  - **3902 found a contract stated twice, and the second statement disagreed.**
+    `slingshot-storage` declared an artifact-slot bound of its own where the command
+    contract already declares one, and the two numbers were different: the contract
+    says 64 and the crate enforced 128. Nothing broke, because the looser bound sat
+    behind the stricter one, but that is precisely the failure a second declaration
+    causes and precisely what nobody had noticed. Both artifact bounds now come from
+    the contract by name, landed separately in `bb62423`, and the new
+    `contract-value-is-declared-again` rule is what would have caught it.
   - **3901 adds a leaf, and a leaf joins registries its footprint does not name.**
     Its footprint names six files. A new local leaf is also a row in the command-line
     module scaffold inventory and the workspace module map, a row in the

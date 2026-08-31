@@ -10,10 +10,17 @@ gated: false
 touches:
   - policy/abbreviated-identifiers.txt
   - policy/documentation-rules.toml
+  - policy/source-policy.toml
+  - docs/DOCUMENTATION_REVIEW.md
+  - scripts/prepare_locked_source_cache
+  - crates/slingshot-development/src/lib.rs
+  - crates/slingshot-development/src/script_policy.rs
   - crates/slingshot-development/src/source_policy.rs
+  - crates/slingshot-development/src/workflow_policy.rs
   - crates/slingshot-development/tests/source_policy.rs
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - "crates/slingshot-development/tests/fixtures/source-policy/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Complete Repository Policy Audit

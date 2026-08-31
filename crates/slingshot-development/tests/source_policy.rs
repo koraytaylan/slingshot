@@ -4,6 +4,7 @@
 //! repository alone, so an accepted sample and the sample one step beyond it
 //! both have to behave. The repository is then checked with the same checker.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -25,6 +26,11 @@ const ACCEPTED: &[(&str, &str)] = &[
     ("accepted-script", "scripts/probe"),
     ("accepted-migration.sql", "probe.sql"),
     ("accepted-product-prose.md", "probe.md"),
+    ("accepted-workspace-shapes.rs", "probe.rs"),
+    ("accepted-structural-numbers.rs", "probe.rs"),
+    ("accepted-expectation-with-a-reason.rs", "probe.rs"),
+    ("accepted-script-named-quantity", "scripts/probe"),
+    ("accepted-script-line-ceiling", "scripts/probe"),
 ];
 
 /// Samples that must produce the named rule, with the name they are checked
@@ -102,6 +108,29 @@ const REJECTED: &[(&str, &str, &str)] = &[
     ),
     ("rejected-marker-in-prose.md", "probe.md", "unfinished-work-marker"),
     ("rejected-planning-heading-in-prose.md", "probe.md", "planning-heading-in-product-prose"),
+    (
+        "rejected-single-character-type-parameter.rs",
+        "probe.rs",
+        "declared-name-is-not-spelled-in-full",
+    ),
+    ("rejected-single-character-lifetime.rs", "probe.rs", "declared-name-is-not-spelled-in-full"),
+    ("rejected-suppression-marker.rs", "probe.rs", "suppression-marker-silences-a-rule"),
+    ("rejected-unexplained-expectation.rs", "probe.rs", "suppression-marker-silences-a-rule"),
+    ("rejected-suppression-in-prose.md", "probe.md", "suppression-marker-silences-a-rule"),
+    ("rejected-redeclared-contract-limit.rs", "probe.rs", "contract-value-is-declared-again"),
+    ("rejected-redeclared-contract-identifier.rs", "probe.rs", "contract-value-is-declared-again"),
+    ("rejected-asynchronous-timing-number.rs", "probe.rs", "numeric-value-carries-no-name"),
+    ("rejected-status-code-number.rs", "probe.rs", "numeric-value-carries-no-name"),
+    ("rejected-retry-schedule-number.rs", "probe.rs", "numeric-value-carries-no-name"),
+    ("rejected-collection-bound-number.rs", "probe.rs", "numeric-value-carries-no-name"),
+    ("rejected-test-iteration-number.rs", "probe.rs", "numeric-value-carries-no-name"),
+    ("rejected-empty-export-documentation.rs", "probe.rs", "exported-item-is-not-documented"),
+    ("rejected-script-unnamed-quantity", "scripts/probe", "numeric-value-carries-no-name"),
+    (
+        "rejected-script-one-line-beyond-the-ceiling",
+        "scripts/probe",
+        "file-is-longer-than-the-ceiling",
+    ),
 ];
 
 /// Returns the workspace root directory.
@@ -222,4 +251,126 @@ fn the_repository_follows_every_rule_through_its_own_command() {
         .output()
         .expect("the repository command runs");
     assert!(produced.status.success(), "{}", String::from_utf8_lossy(&produced.stdout));
+}
+
+/// Where the review the checklist asks for is recorded.
+fn review_record(policy: &LoadedPolicy) -> String {
+    let path = workspace_root().join(&policy.documentation.review_record);
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|failure| panic!("{} could not be read: {failure}", path.display()))
+}
+
+#[test]
+fn the_checklist_inventory_is_closed_and_each_subject_is_named_once() {
+    let policy = policy();
+    let subjects = &policy.documentation.review_subjects;
+    assert!(!subjects.is_empty(), "the inventory names something");
+    for (subject, entry) in subjects {
+        let named = policy
+            .documentation
+            .review_checklist
+            .iter()
+            .filter(|held| held.as_str() == entry.as_str())
+            .count();
+        assert_eq!(named, 1, "{subject} is covered by {named} entries rather than one");
+    }
+    let covered: BTreeSet<&String> = subjects.values().collect();
+    assert_eq!(
+        covered.len(),
+        subjects.len(),
+        "two subjects are covered by one entry, so one of them is nobody's"
+    );
+}
+
+#[test]
+fn the_review_record_is_present_and_answers_every_subject() {
+    let policy = policy();
+    let record = review_record(&policy);
+    for (subject, entry) in &policy.documentation.review_subjects {
+        assert!(record.contains(entry.as_str()), "the record does not quote {subject}");
+    }
+    assert!(
+        record.contains("judgement"),
+        "the record says what it is: answers a reader gave, not answers a checker inferred"
+    );
+}
+
+#[test]
+fn the_checker_never_claims_to_have_judged_what_the_checklist_asks() {
+    let policy = policy();
+    let source = std::fs::read_to_string(
+        workspace_root().join("crates/slingshot-development/src/source_policy.rs"),
+    )
+    .expect("the checker is readable");
+    for entry in &policy.documentation.review_checklist {
+        assert!(
+            !source.contains(entry.as_str()),
+            "the checker restates a review question, which reads as a claim to answer it"
+        );
+    }
+}
+
+#[test]
+fn the_abbreviation_table_is_a_sorted_table_of_lowercase_shortenings() {
+    let text = std::fs::read_to_string(
+        workspace_root().join(slingshot_development::source_policy::ABBREVIATED_IDENTIFIERS_PATH),
+    )
+    .expect("the table is readable");
+    let entries: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect();
+    assert!(!entries.is_empty());
+    let mut sorted = entries.clone();
+    sorted.sort_unstable();
+    assert_eq!(entries, sorted, "the table is sorted, so a reader can find an entry");
+    let unique: BTreeSet<&&str> = entries.iter().collect();
+    assert_eq!(unique.len(), entries.len(), "an entry is listed twice");
+    for entry in &entries {
+        assert_eq!(*entry, entry.to_lowercase(), "{entry} is compared lowercased");
+        assert!(
+            entry.chars().all(|held| held.is_ascii_lowercase() || held.is_ascii_digit()),
+            "{entry} is one word"
+        );
+    }
+}
+
+#[test]
+fn one_authority_declares_every_wire_visible_command_value() {
+    let policy = policy();
+    let root = workspace_root();
+    let owning = policy.source.command_contract_directory.as_str();
+    let restating: Vec<String> = source_policy::examined_paths(&policy, &root)
+        .expect("the repository reads")
+        .into_iter()
+        .filter(|path| !path.starts_with(owning))
+        .filter(|path| {
+            source_policy::check_file(&policy, &root, path)
+                .expect("the file reads")
+                .iter()
+                .any(|violation| violation.rule == "contract-value-is-declared-again")
+        })
+        .collect();
+    assert_eq!(restating, Vec::<String>::new(), "these sources declare a contract value again");
+}
+
+#[test]
+fn every_repository_owned_code_file_is_inside_the_line_ceiling() {
+    let policy = policy();
+    let root = workspace_root();
+    let ceiling = policy.source.maximum_code_file_lines;
+    let beyond: Vec<(String, usize)> = source_policy::examined_paths(&policy, &root)
+        .expect("the repository reads")
+        .into_iter()
+        .filter_map(|path| {
+            let lines = std::fs::read_to_string(root.join(&path)).ok()?.lines().count();
+            (lines > ceiling).then_some((path, lines))
+        })
+        .collect();
+    assert_eq!(
+        beyond,
+        Vec::new(),
+        "a file past the ceiling is split rather than the ceiling raised"
+    );
 }

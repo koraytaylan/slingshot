@@ -151,8 +151,10 @@ crates/slingshot-development/src/profile_authentication_harness.rs|slingshot-dev
 crates/slingshot-development/src/release_input_cache.rs|slingshot-development|tooling|leaf|slingshot_development::release_input_cache|release-input-cache
 crates/slingshot-development/src/rustsec_advisory_pin.rs|slingshot-development|tooling|leaf|slingshot_development::rustsec_advisory_pin|workspace-module-map
 crates/slingshot-development/src/slingshot_test_daemon.rs|slingshot-development|tooling|leaf|slingshot_development::slingshot_test_daemon|daemon-runtime-module-scaffold
+crates/slingshot-development/src/script_policy.rs|slingshot-development|tooling|leaf|slingshot_development::script_policy|complete-repository-policy-audit
 crates/slingshot-development/src/source_policy.rs|slingshot-development|tooling|leaf|slingshot_development::source_policy|workspace-module-map
 crates/slingshot-development/src/supported_platform_matrix.rs|slingshot-development|tooling|leaf|slingshot_development::supported_platform_matrix|workspace-module-map
+crates/slingshot-development/src/workflow_policy.rs|slingshot-development|tooling|leaf|slingshot_development::workflow_policy|complete-repository-policy-audit
 crates/slingshot-development/src/test_daemon_faults.rs|slingshot-development|tooling|leaf|slingshot_development::test_daemon_faults|daemon-runtime-module-scaffold
 crates/slingshot-domain/src/agent_identity.rs|slingshot-domain|domain|leaf|slingshot_domain::agent_identity|agent-identity-and-wire-schema-contract
 crates/slingshot-domain/src/author_agent_transport_contract.rs|slingshot-domain|domain|leaf|slingshot_domain::author_agent_transport_contract|author-agent-transport-contract

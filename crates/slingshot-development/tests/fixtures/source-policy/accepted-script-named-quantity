@@ -1,0 +1,13 @@
+#!/bin/sh
+# A script quantity with a name beside it.
+
+set -eu
+
+# How long the probe waits for the daemon to answer.
+PROBE_DEADLINE_SECONDS=30
+
+wait_for_the_daemon() {
+    sleep "$PROBE_DEADLINE_SECONDS"
+}
+
+wait_for_the_daemon
