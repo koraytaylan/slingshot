@@ -11,7 +11,7 @@ use std::process::ExitCode;
 
 use slingshot_development::{
     RepositoryCommandFailure, dependency_direction, finite_state_machine_compatibility,
-    release_input_cache, rustsec_advisory_pin, source_policy,
+    github_automation_authority, release_input_cache, rustsec_advisory_pin, source_policy,
 };
 
 /// Number of leading process arguments that carry the executable path.
@@ -31,6 +31,21 @@ const RUSTSEC_PIN_COMMAND: &str = "rustsec-advisory-pin";
 
 /// Name of the command that proposes pin bytes for a reviewed candidate.
 const RUSTSEC_PIN_REVIEW_COMMAND: &str = "rustsec-pin-review";
+
+/// Name of the command that validates the hosted automation authority.
+const AUTHORITY_COMMAND: &str = "github-automation-authority";
+
+/// Name of the command that proposes a reviewed repository identity.
+const REPOSITORY_REVIEW_COMMAND: &str = "github-repository-review";
+
+/// Variables one hosted run reports itself through.
+const REPORTED_VARIABLES: [&str; 5] = [
+    "SLINGSHOT_REPORTED_REPOSITORY",
+    "SLINGSHOT_REPORTED_REPOSITORY_IDENTIFIER",
+    "SLINGSHOT_REPORTED_OWNER_IDENTIFIER",
+    "SLINGSHOT_REPORTED_WORKFLOW",
+    "SLINGSHOT_REPORTED_RUNNER",
+];
 
 /// Name of the command that writes the manifest for a cache just fetched.
 const PREPARE_CACHE_COMMAND: &str = "prepare-locked-source-cache";
@@ -61,27 +76,67 @@ const VERIFY_SEED_OPTION: &str = "--cargo-home-seed";
 const TEST_DAEMON_COMMAND: &str = slingshot_development::slingshot_test_daemon::TEST_DAEMON_COMMAND;
 
 /// Runs the repository command named by the first argument.
+///
+/// Two tables rather than one, split where the subject changes: the commands
+/// that inspect this repository, and the commands that adapt it to a provider
+/// or prepare a release. A reader looking for one knows which half to read.
 fn dispatch(
     arguments: &[String],
     working_directory: &Path,
     output: &mut dyn Write,
 ) -> Result<(), RepositoryCommandFailure> {
     let requested = arguments.first().ok_or(RepositoryCommandFailure::MissingCommand)?;
-    match requested.as_str() {
-        WORKSPACE_METADATA_COMMAND => {
-            let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
-            slingshot_development::emit_workspace_metadata(&workspace_root, output)
-        }
+    match inspection_command(requested, arguments, working_directory, output) {
+        Some(outcome) => outcome,
+        None => release_command(requested, arguments, working_directory, output),
+    }
+}
+
+/// Runs one command that inspects this repository, when the name is one.
+fn inspection_command(
+    requested: &str,
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Option<Result<(), RepositoryCommandFailure>> {
+    let outcome = match requested {
+        WORKSPACE_METADATA_COMMAND => emit_metadata(working_directory, output),
         DEPENDENCY_DIRECTION_COMMAND => check_dependency_direction(working_directory, output),
         SOURCE_POLICY_COMMAND => check_source_policy(working_directory, output),
         RUSTSEC_PIN_COMMAND => verify_advisory_pin(working_directory, output),
         RUSTSEC_PIN_REVIEW_COMMAND => review_advisory_pin(arguments, output),
         VERIFY_SEED_COMMAND => verify_cargo_home_seed(arguments, working_directory, output),
+        TEST_DAEMON_COMMAND => run_test_daemon(output),
+        _ => return None,
+    };
+    Some(outcome)
+}
+
+/// Runs one command that adapts this repository to a provider or a release.
+fn release_command(
+    requested: &str,
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    match requested {
+        AUTHORITY_COMMAND => check_automation_authority(working_directory, output),
+        REPOSITORY_REVIEW_COMMAND => {
+            review_repository_identity(arguments, working_directory, output)
+        }
         PREPARE_CACHE_COMMAND => prepare_locked_source_cache(arguments, working_directory, output),
         VERIFY_CACHE_COMMAND => verify_locked_source_cache(arguments, working_directory, output),
-        TEST_DAEMON_COMMAND => run_test_daemon(output),
-        _ => Err(RepositoryCommandFailure::UnknownCommand(requested.clone())),
+        _ => Err(RepositoryCommandFailure::UnknownCommand(requested.to_owned())),
     }
+}
+
+/// Emits the resolved workspace metadata.
+fn emit_metadata(
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    slingshot_development::emit_workspace_metadata(&workspace_root, output)
 }
 
 /// Runs a daemon composed with a scripted executor.
@@ -337,6 +392,85 @@ fn verify_locked_source_cache(
         })?;
     let held = counted(manifest.entries, "entry", "entries");
     writeln!(output, "this cache is the one prepared for this lockfile and holds {held}")
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Reads the committed hosted-automation authority.
+fn committed_authority(
+    working_directory: &Path,
+    program: &str,
+) -> Result<github_automation_authority::GithubAutomationAuthority, RepositoryCommandFailure> {
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let path = workspace_root.join(github_automation_authority::AUTHORITY_PATH);
+    let text = std::fs::read_to_string(&path).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
+    })?;
+    github_automation_authority::parse_authority(&text).map_err(|failure| {
+        RepositoryCommandFailure::ToolFailed {
+            program: program.to_owned(),
+            reason: failure.to_string(),
+        }
+    })
+}
+
+/// Requires this hosted run to be one the committed authority authorizes.
+///
+/// The run reports itself through the provider's own values, passed in
+/// explicitly. Nothing about the machine is consulted: an ambient Git remote is
+/// a file anybody can edit, and reading one would make the authority whatever
+/// the checkout happened to contain.
+fn check_automation_authority(
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let authority = committed_authority(working_directory, AUTHORITY_COMMAND)?;
+    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
+        program: AUTHORITY_COMMAND.to_owned(),
+        reason,
+    };
+    let mut reported = Vec::new();
+    for named in REPORTED_VARIABLES {
+        let held = std::env::var(named)
+            .map_err(|_| refuse(format!("{named} names what this run reports, and is unset")))?;
+        reported.push(held);
+    }
+    let run = github_automation_authority::ReportedRun {
+        repository: reported[0].clone(),
+        repository_identifier: reported[1].clone(),
+        repository_owner_identifier: reported[2].clone(),
+        workflow_path: reported[3].clone(),
+        runner_selector: reported[4].clone(),
+    };
+    github_automation_authority::require_authorized(&authority, &run)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    writeln!(output, "this run is the repository the owner confirmed, on a runner it maps")
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Reads one named provider response and proposes the identity bytes to commit.
+fn review_repository_identity(
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
+        program: REPOSITORY_REVIEW_COMMAND.to_owned(),
+        reason,
+    };
+    let named = arguments.get(1).ok_or_else(|| {
+        refuse("name the provider response to propose an identity from".to_owned())
+    })?;
+    let authority = committed_authority(working_directory, REPOSITORY_REVIEW_COMMAND)?;
+    let response = std::fs::read_to_string(named).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable {
+            path: PathBuf::from(named),
+            reason: failure.to_string(),
+        }
+    })?;
+    let proposed =
+        github_automation_authority::propose_repository_identifier(&authority, &response)
+            .map_err(|failure| refuse(failure.to_string()))?;
+    write!(output, "{proposed}")
         .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
 }
 

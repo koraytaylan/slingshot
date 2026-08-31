@@ -1,0 +1,90 @@
+# The provider, repository, environments, and rows the owner confirmed.
+#
+# Nothing here is inferred. A Git remote is a configuration file anybody can
+# edit, a branch name moves, and a repository display name can be changed or
+# reused, so none of them is an authority. What is written here was chosen by
+# the repository owner and is compared against what the provider reports at run
+# time; a run whose reported identity differs from this document contributes no
+# evidence.
+#
+# No credential, token, signing key, or certificate private material belongs in
+# this file. It is committed, public, and read by every job.
+
+format = "slingshot.github-automation-authority/1"
+provider = "github-actions"
+workflow-root = ".github/workflows"
+
+[repository]
+canonical-address = "https://github.com/koraytaylan/slingshot"
+owner = "koraytaylan"
+name = "slingshot"
+visibility = "public"
+
+# The immutable numeric identity GitHub assigns an account. This one exists and
+# is exact: a fork under another account reports a different owner identifier
+# whatever it calls itself.
+owner-identifier = 101099
+
+# The immutable numeric identity GitHub assigns a repository when it is created.
+# The repository does not exist at the address above yet, so there is no
+# identifier to record and none is invented here. While it reads `unassigned`
+# this build refuses every hosted evidence claim rather than accepting one on
+# the strength of a name. `github-repository-review` verifies a named provider
+# response and emits the exact bytes to commit in its place.
+identifier = "unassigned"
+
+[release-review]
+# The protected environment the per-release RustSec review runs in, and the
+# policy that decides whose approval counts. A record produced outside this
+# environment authenticates nothing.
+environment = "release-rustsec-review"
+reviewer-policy = "required-reviewers"
+record-format = "slingshot.rustsec-owner-review-record/1"
+
+[[row]]
+triple = "x86_64-unknown-linux-gnu"
+runner-selector = "ubuntu-24.04"
+runner-class = "github-hosted"
+observed-image = "ubuntu-24.04"
+architecture = "x86_64"
+toolchain = "1.98.0"
+linker = "cc"
+system-root-or-software-development-kit = "gnu-libc-system-root"
+source-protection = "digest_observation_only"
+source-protection-probe = "read-only-permission-bits-and-before-after-digest"
+network-denial = "unshare-network-namespace"
+network-denial-probe = "non-loopback-connect-refused"
+coordinator = true
+finite-state-machine = true
+
+[[row]]
+triple = "aarch64-apple-darwin"
+runner-selector = "macos-14"
+runner-class = "github-hosted"
+observed-image = "macos-14"
+architecture = "aarch64"
+toolchain = "1.98.0"
+linker = "cc"
+system-root-or-software-development-kit = "macos-software-development-kit"
+source-protection = "digest_observation_only"
+source-protection-probe = "read-only-permission-bits-and-before-after-digest"
+network-denial = "packet-filter-deny-non-loopback"
+network-denial-probe = "non-loopback-connect-refused"
+coordinator = false
+finite-state-machine = false
+
+[[row]]
+triple = "x86_64-pc-windows-msvc"
+runner-selector = "windows-2022"
+runner-class = "github-hosted"
+observed-image = "windows-2022"
+architecture = "x86_64"
+toolchain = "1.98.0"
+linker = "link.exe"
+system-root-or-software-development-kit = "windows-software-development-kit"
+source-protection = "digest_observation_only"
+source-protection-probe = "read-only-permission-bits-and-before-after-digest"
+network-denial = "windows-filtering-platform-deny-non-loopback"
+network-denial-probe = "non-loopback-connect-refused"
+coordinator = false
+finite-state-machine = false

@@ -1,0 +1,15 @@
+# One change to the committed authority per row, and the refusal it earns.
+# Each is applied to the committed bytes so that the document under test is
+# the real one with one thing wrong, rather than a document written to fail.
+{"name": "another-format", "find": "format = \"slingshot.github-automation-authority/1\"", "replace": "format = \"something.else/1\"", "refusal": "ForeignFormat"}
+{"name": "another-provider", "find": "provider = \"github-actions\"", "replace": "provider = \"another-provider\"", "refusal": "ProviderUnacceptable"}
+{"name": "a-credential-shaped-field", "find": "reviewer-policy = \"required-reviewers\"", "replace": "reviewer-policy = \"required-reviewers\"\ntoken = \"a-token\"", "refusal": "CredentialShaped"}
+{"name": "a-renamed-repository", "find": "name = \"slingshot\"", "replace": "name = \"slingshot-renamed\"", "refusal": "ValueUnacceptable"}
+{"name": "an-ineligible-visibility", "find": "visibility = \"public\"", "replace": "visibility = \"github-enterprise-server\"", "refusal": "ValueUnacceptable"}
+{"name": "a-self-hosted-runner", "find": "runner-class = \"github-hosted\"", "replace": "runner-class = \"self-hosted\"", "refusal": "ValueUnacceptable"}
+{"name": "an-unprobed-source-protection", "find": "source-protection-probe = \"read-only-permission-bits-and-before-after-digest\"", "replace": "source-protection-probe = \"\"", "refusal": "ValueUnacceptable"}
+{"name": "an-unprobed-network-denial", "find": "network-denial-probe = \"non-loopback-connect-refused\"", "replace": "network-denial-probe = \"\"", "refusal": "ValueUnacceptable"}
+{"name": "a-duplicated-runner", "find": "runner-selector = \"macos-14\"", "replace": "runner-selector = \"ubuntu-24.04\"", "refusal": "RowRepeated"}
+{"name": "two-coordinators", "find": "coordinator = false\nfinite-state-machine = false\n\n[[row]]\ntriple = \"x86_64-pc-windows-msvc\"", "replace": "coordinator = true\nfinite-state-machine = false\n\n[[row]]\ntriple = \"x86_64-pc-windows-msvc\"", "refusal": "ExclusiveRole"}
+{"name": "no-compatible-row", "find": "finite-state-machine = true", "replace": "finite-state-machine = false", "refusal": "ExclusiveRole"}
+{"name": "an-invented-identifier", "find": "identifier = \"unassigned\"", "replace": "identifier = \"not-a-number\"", "refusal": "ValueUnacceptable"}
