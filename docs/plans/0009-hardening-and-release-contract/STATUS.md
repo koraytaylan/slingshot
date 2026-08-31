@@ -147,16 +147,15 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     be attached without the provenance a stream is checked against, and that type lives
     in `slingshot-agent-protocol`; the development crate's manifest gains the
     dev-reachable edge, which the dependency contract already permits.
-  - **3501 excludes the fuzz workspace from the ordinary build and commits no lockfile
-    for it.** Its targets need a dated nightly and a fuzzing runtime, so building them
-    in the everyday gate would make this repository stop building whenever that nightly
-    moved; and resolving `fuzz/Cargo.lock` needs a registry this environment cannot
-    reach. What runs on every change instead is the seed corpus replayed through the
-    production reader by an ordinary test, which is the part that rots silently when
-    nobody checks it. The root manifest gains one exclusion, which is how a fuzz
-    workspace is kept beside a product workspace. The lockfile absence recorded here
-    was corrected once the network turned out to be reachable; `fuzz/Cargo.lock` is
-    committed and the exclusion stands for the reason above.
+  - **3501 excludes the fuzz workspace from the ordinary build.** Its targets need a
+    dated nightly and a fuzzing runtime, so building them in the everyday gate would
+    make this repository stop building whenever that nightly moved. What runs on every
+    change instead is the seed corpus replayed through the production reader by an
+    ordinary test, which is the part that rots silently when nobody checks it. The root
+    manifest gains one exclusion, which is how a fuzz workspace is kept beside a
+    product workspace. This exception also said `fuzz/Cargo.lock` could not be resolved
+    because no registry was reachable; that turned out to be untrue of this
+    environment, and the lockfile is resolved and committed.
   - **3506 was landed against a belief about this environment that turned out to be
     wrong, and the correction is worse than the exception was.** The exception said the
     network was unreachable, so the twice-built bundle could not be produced and
