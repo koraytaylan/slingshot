@@ -1,0 +1,4 @@
+event:job-event
+id:cursor-0001
+data:{"agent_event_store_generation":7,"agent_operation_identifier":"operation-alpha","daemon_subscription_identifier":"daemon-subscription-one","kind":"accepted","sequence":1}
+

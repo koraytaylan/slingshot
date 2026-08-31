@@ -1,0 +1,3 @@
+event:job-event
+data:{"agent_operation_identifier":"operation-alpha","daemon_subscription_identifier":"daemon-subscription-one","kind":"accepted","sequence":1}
+
