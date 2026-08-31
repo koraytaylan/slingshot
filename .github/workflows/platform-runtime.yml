@@ -1,0 +1,42 @@
+# The native suites, one job per abstract target row.
+#
+# Every row here is one the owner mapped to one exact machine in
+# support/github-automation-authority.toml. A row nobody mapped runs nowhere,
+# and a machine nobody declared contributes no evidence.
+name: platform-runtime
+on:
+  push:
+permissions:
+  contents: read
+jobs:
+  native:
+    name: the native suites
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            triple: x86_64-unknown-linux-gnu
+          - runner: macos-14
+            triple: aarch64-apple-darwin
+          - runner: windows-2022
+            triple: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: validate the committed authority against what this run reports
+        env:
+          SLINGSHOT_REPORTED_REPOSITORY: ${{ github.repository }}
+          SLINGSHOT_REPORTED_REPOSITORY_IDENTIFIER: ${{ github.repository_id }}
+          SLINGSHOT_REPORTED_OWNER_IDENTIFIER: ${{ github.repository_owner_id }}
+          SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
+          SLINGSHOT_REPORTED_RUNNER: ${{ matrix.runner }}
+        run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
+      - name: run the platform and runtime suites for this row
+        env:
+          SLINGSHOT_AUTOMATION_ROW: ${{ matrix.triple }}
+        run: cargo test --locked -p slingshot-development --test platform_runtime_contract

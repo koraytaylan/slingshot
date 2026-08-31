@@ -1,0 +1,60 @@
+# The repository-local gate, run by the provider the owner confirmed.
+#
+# The adapter adds no check of its own. It validates the automation authority,
+# checks out what the pins name, and invokes the same commands a developer runs;
+# a hosted job that ran a narrower gate would be reporting on something other
+# than what a change is held to.
+name: quality
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  authority:
+    name: the automation authority
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: validate the committed authority against what this run reports
+        env:
+          SLINGSHOT_REPORTED_REPOSITORY: ${{ github.repository }}
+          SLINGSHOT_REPORTED_REPOSITORY_IDENTIFIER: ${{ github.repository_id }}
+          SLINGSHOT_REPORTED_OWNER_IDENTIFIER: ${{ github.repository_owner_id }}
+          SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
+          SLINGSHOT_REPORTED_RUNNER: ubuntu-24.04
+        run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
+  gate:
+    name: the repository-local gate
+    needs: authority
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: check out the exact pinned advisory snapshot
+        run: scripts/checkout_pinned_advisory_database "$RUNNER_TEMP/advisory-db"
+      - name: run the gate
+        env:
+          SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY: ${{ runner.temp }}/advisory-db
+        run: scripts/quality
+  pinned-fsm-compatibility:
+    name: the pinned compatibility gate
+    needs: authority
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: check out the pinned external source
+        run: scripts/checkout_pinned_finite_state_machine "$RUNNER_TEMP/finite-state-machine"
+      - name: run the unchanged repository-local gate
+        run: scripts/check_finite_state_machine_compatibility --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine"
