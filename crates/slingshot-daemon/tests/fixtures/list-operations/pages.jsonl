@@ -1,0 +1,5 @@
+{"admitted":0,"note":"an empty partition answers one empty page and offers no cursor","page_size":3,"pages":[[]]}
+{"admitted":2,"note":"fewer rows than a page holds arrive newest first, and end the walk","page_size":3,"pages":[[2,1]]}
+{"admitted":3,"note":"exactly one page still offers a cursor, because nothing said it was the last","page_size":3,"pages":[[3,2,1],[]]}
+{"admitted":7,"note":"several pages concatenate to the whole partition, once each","page_size":3,"pages":[[7,6,5],[4,3,2],[1]]}
+{"admitted":3,"note":"a page of one walks a row at a time, and one more request ends it","page_size":1,"pages":[[3],[2],[1],[]]}

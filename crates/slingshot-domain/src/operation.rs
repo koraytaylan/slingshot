@@ -267,6 +267,32 @@ pub enum LifecycleFailure {
     DispositionNotAdmitted,
 }
 
+/// One row of a listing page.
+///
+/// Enough to decide what to ask about next, and no payload. The terminal kind
+/// travels because knowing an operation failed without knowing how is not
+/// useful; the disposition does not, because a caller that needs it is asking
+/// about one operation rather than scanning a page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationListing {
+    /// Who asked, when a caller said.
+    pub caller_identity: Option<String>,
+    /// Where it sits in its partition's arrival order.
+    pub enqueue_sequence: u64,
+    /// The state it has reached.
+    pub lifecycle_state: OperationLifecycleState,
+    /// The identifier its caller chose.
+    pub operation_identifier: String,
+    /// The revision this row is at.
+    pub revision: u64,
+    /// When it settled, if it has.
+    pub settled_at_unix_milliseconds: Option<u64>,
+    /// Why it ended, when it ended without succeeding.
+    pub terminal_failure_kind: Option<TerminalFailureKind>,
+    /// The workflow it belongs to, when it belongs to one.
+    pub workflow_correlation_identifier: Option<String>,
+}
+
 /// One durable proof that a recovery resume was already applied.
 ///
 /// A domain value rather than a storage one, because what it records is a fact

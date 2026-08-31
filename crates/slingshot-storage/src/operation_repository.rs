@@ -3,16 +3,14 @@
 //! Idempotency here is a property of committed rows rather than of anything a
 //! caller remembers. An operation is named by its target partition and its
 //! identifier together, and a repeat is the same work only when the selected
-//! environment revision and the fingerprint also match. Anything else wearing
-//! that name is a conflict, and a conflict changes nothing.
-//!
-//! The partition is the opaque author-target digest, so one identifier against
-//! two targets is two operations, including two that differ only by the
-//! principal behind one deployment. Replay never crosses a partition.
+//! environment revision and the fingerprint also match; anything else wearing
+//! that name is a conflict, and a conflict changes nothing. The partition is
+//! the opaque author-target digest, so one identifier against two targets is
+//! two operations - including two that differ only by the principal behind one
+//! deployment - and replay never crosses one.
 //!
 //! Every write is a compare-and-set folded through [`OperationRecord`], so a
-//! transition's legality is decided once, in the domain, rather than
-//! separately by each writer.
+//! transition's legality is decided once, in the domain.
 
 use rusqlite::OptionalExtension as _;
 use serde::Serialize;
@@ -370,13 +368,19 @@ impl OperationRepository {
         Self { database, policy }
     }
 
+    /// Returns the database this repository reads and writes.
+    #[must_use]
+    pub fn database(&self) -> &OperationDatabase {
+        &self.database
+    }
+
     /// Admits one operation, or returns the row that already answers for it.
     ///
     /// One `synchronous = FULL` transaction reserves the arrival sequence,
     /// writes the row as `queued`, and commits; a caller is told it was
-    /// admitted only after that commit returns. A row already under that
-    /// identifier is a replay when the revision and fingerprint both match, and
-    /// otherwise a conflict, which writes nothing at all.
+    /// admitted only after that commit returns. A row already under that name
+    /// is a replay when the revision and fingerprint match, and otherwise a
+    /// conflict, which writes nothing.
     ///
     /// # Errors
     ///
@@ -833,8 +837,7 @@ impl OperationRepository {
 
     /// Returns every operation in one partition, in the order it arrived.
     ///
-    /// Nonterminal rows are the work still to do, in their callers' order, and
-    /// terminal rows come back too.
+    /// Nonterminal rows are the work still to do, in their callers' order.
     ///
     /// # Errors
     ///
