@@ -15,7 +15,7 @@ touches:
   - scripts/quality
   - scripts/check_minimum_supported_rust_version
   - crates/slingshot-development/tests/toolchain_and_dependency_policy.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Minimum Rust And Dependency Gates
