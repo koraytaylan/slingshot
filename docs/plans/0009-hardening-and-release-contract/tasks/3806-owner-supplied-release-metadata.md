@@ -22,7 +22,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - crates/slingshot-development/tests/workspace_scaffold.rs
 status: done
-merged_as: ""
+merged_as: "e6e37698b0aa10956434dd19d565c2108cf69c28"
 ---
 # Owner-Supplied Release Metadata
 
