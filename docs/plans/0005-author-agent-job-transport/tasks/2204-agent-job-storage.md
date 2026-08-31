@@ -16,12 +16,13 @@ touches:
   - crates/slingshot-storage/src/maintenance.rs
   - crates/slingshot-daemon/src/operation_maintenance.rs
   - crates/slingshot-storage/tests/agent_job_repository.rs
+  - crates/slingshot-daemon/tests/configuration_startup.rs
   - crates/slingshot-storage/tests/migrations.rs
   - "crates/slingshot-storage/tests/fixtures/migrations/**"
   - "crates/slingshot-storage/tests/fixtures/agent-job-storage/**"
   - crates/slingshot-daemon/tests/operation_maintenance.rs
   - "crates/slingshot-daemon/tests/fixtures/operation-maintenance/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Agent Job Storage

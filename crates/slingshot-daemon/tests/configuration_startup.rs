@@ -17,7 +17,7 @@ use slingshot_daemon::startup::{
 use slingshot_domain::command_fingerprint::{CommandFingerprint, FingerprintInput};
 use slingshot_domain::installation::InstallationIdentifier;
 use slingshot_domain::operation::{OperationFact, OperationLifecycleState};
-use slingshot_storage::database::{OperationDatabase, RequiredSettings};
+use slingshot_storage::database::{MIGRATIONS, OperationDatabase, RequiredSettings};
 use slingshot_storage::operation_repository::{
     AdmissionOutcome, AdmissionRequest, OperationRepository,
 };
@@ -168,6 +168,14 @@ fn walk_to(state: &str) -> Vec<OperationLifecycleState> {
     path[..=reached].to_vec()
 }
 
+/// Returns the schema version this binary migrates to.
+///
+/// Read from the migration list rather than written down again, so a startup
+/// test cannot disagree with the schema it just applied.
+fn current_schema_version() -> u32 {
+    MIGRATIONS.last().map(|(version, _)| *version).unwrap_or_default()
+}
+
 #[test]
 fn a_first_startup_establishes_everything_and_leaves_it_where_a_second_finds_it() {
     let directory = tempfile::tempdir().expect("a directory");
@@ -177,7 +185,7 @@ fn a_first_startup_establishes_everything_and_leaves_it_where_a_second_finds_it(
     assert!(established.paths.database_path().exists(), "with a database that exists");
     assert_eq!(
         established.database.schema_version().expect("a version"),
-        1,
+        current_schema_version(),
         "and is at the current schema"
     );
     let path = established.paths.database_path();
