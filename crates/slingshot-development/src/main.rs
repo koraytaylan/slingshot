@@ -6,11 +6,12 @@
 //! library, so a command stays testable without spawning a process.
 
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use slingshot_development::{
-    RepositoryCommandFailure, dependency_direction, rustsec_advisory_pin, source_policy,
+    RepositoryCommandFailure, dependency_direction, finite_state_machine_compatibility,
+    rustsec_advisory_pin, source_policy,
 };
 
 /// Number of leading process arguments that carry the executable path.
@@ -30,6 +31,15 @@ const RUSTSEC_PIN_COMMAND: &str = "rustsec-advisory-pin";
 
 /// Name of the command that proposes pin bytes for a reviewed candidate.
 const RUSTSEC_PIN_REVIEW_COMMAND: &str = "rustsec-pin-review";
+
+/// How many arguments one named option and its value occupy.
+const OPTION_AND_VALUE: usize = 2;
+
+/// Name of the command that bounds a supplied Cargo home.
+const VERIFY_SEED_COMMAND: &str = "verify-cargo-home-seed";
+
+/// Option naming the supplied Cargo home.
+const VERIFY_SEED_OPTION: &str = "--cargo-home-seed";
 
 /// Name of the internal command that runs a daemon with a scripted executor.
 ///
@@ -54,6 +64,7 @@ fn dispatch(
         SOURCE_POLICY_COMMAND => check_source_policy(working_directory, output),
         RUSTSEC_PIN_COMMAND => verify_advisory_pin(working_directory, output),
         RUSTSEC_PIN_REVIEW_COMMAND => review_advisory_pin(arguments, output),
+        VERIFY_SEED_COMMAND => verify_cargo_home_seed(arguments, working_directory, output),
         TEST_DAEMON_COMMAND => run_test_daemon(output),
         _ => Err(RepositoryCommandFailure::UnknownCommand(requested.clone())),
     }
@@ -177,6 +188,67 @@ fn review_advisory_pin(
         .map_err(|failure| refuse(failure.to_string()))?;
     write!(output, "{}", rustsec_advisory_pin::propose_pin(&snapshot))
         .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Returns the directory one named option carries.
+fn named_directory(
+    arguments: &[String],
+    option: &str,
+    program: &str,
+) -> Result<PathBuf, RepositoryCommandFailure> {
+    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
+        program: program.to_owned(),
+        reason,
+    };
+    let named = arguments
+        .windows(OPTION_AND_VALUE)
+        .find(|pair| pair[0] == option)
+        .map(|pair| pair[1].clone())
+        .ok_or_else(|| refuse(format!("name the cache with {option}")))?;
+    let path = PathBuf::from(&named);
+    if path.is_absolute() {
+        Ok(path)
+    } else {
+        Err(refuse(format!("{named} is not an absolute path")))
+    }
+}
+
+/// Bounds one supplied Cargo home against the committed compatibility manifest.
+///
+/// The manifest is the sole authority for every limit, so this reads it rather
+/// than restating any of its values.
+fn verify_cargo_home_seed(
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let seed = named_directory(arguments, VERIFY_SEED_OPTION, VERIFY_SEED_COMMAND)?;
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let path = workspace_root.join(finite_state_machine_compatibility::MANIFEST_PATH);
+    let text = std::fs::read_to_string(&path).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
+    })?;
+    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
+        program: VERIFY_SEED_COMMAND.to_owned(),
+        reason,
+    };
+    let pin = finite_state_machine_compatibility::FiniteStateMachineCompatibilityPin::parse(&text)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    let survey = finite_state_machine_compatibility::verify_seed(&seed, &pin.cargo_home_seed)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    writeln!(
+        output,
+        "this Cargo home holds {} in {}, {} altogether",
+        counted(survey.files, "file", "files"),
+        counted(survey.directories, "directory", "directories"),
+        counted(survey.aggregate_file_bytes, "byte", "bytes")
+    )
+    .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Returns one count worded with the noun that suits it.
+fn counted(count: u64, singular: &str, plural: &str) -> String {
+    if count == 1 { format!("{count} {singular}") } else { format!("{count} {plural}") }
 }
 
 fn main() -> ExitCode {
