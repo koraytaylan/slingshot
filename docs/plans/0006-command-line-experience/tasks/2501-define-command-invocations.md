@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-command-line/tests/invocation_parsing.rs
   - crates/slingshot-test-support/fixtures/command-invocations/**
 status: done
-merged_as: ""
+merged_as: "199a2cbf66fceb1d895c1fe3a4355ccb485899d2"
 ---
 # Define Command Invocations
 
