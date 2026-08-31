@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/event-stream-heartbeat.jsonl
   - crates/slingshot-agent-connection/tests/event_stream_heartbeat.rs
 status: done
-merged_as: ""
+merged_as: "f269677d5bfc794c1dd46d7edede8f672cf7eab6"
 ---
 # Event Stream Heartbeat
 
