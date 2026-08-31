@@ -18,10 +18,12 @@ component_resource_type
 content_fragment_element
 create_asset
 create_asset_folder
+create_authorizable
 create_content_fragment
 create_experience_fragment
 create_page
 delete_asset
+delete_authorizable
 delete_component
 delete_content_fragment
 delete_experience_fragment
@@ -37,11 +39,13 @@ find_pages_containing_phrase
 find_pages_using_components
 find_sling_jobs
 find_workflow_instances
+group_membership
 inspect_open_service_gateway_initiative_configuration
 inspect_sling_job
 inspect_workflow_instance
 list_asset_renditions
 list_child_pages
+list_group_members
 list_open_service_gateway_initiative_bundles
 list_open_service_gateway_initiative_components
 list_resource_mappings
@@ -67,6 +71,7 @@ result_window
 schema
 search_predicate
 set_open_service_gateway_initiative_bundle_state
+set_user_disabled
 set_workflow_instance_suspension
 start_workflow
 terminate_workflow_instance
@@ -76,3 +81,4 @@ update_content_fragment
 update_experience_fragment
 update_open_service_gateway_initiative_configuration
 update_page
+update_user_profile

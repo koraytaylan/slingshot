@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"authorizable_identifier\":\"author\"}","note":"the plainest user"}
+{"accepted":true,"document":"{\"authorizable_identifier\":\"author\",\"intermediate_path\":\"slingshot/editors\",\"properties\":{\"givenName\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Alex\"}}}}","note":"a user with a place and a profile"}
+{"accepted":false,"document":"{}","note":"no identifier"}
+{"accepted":false,"document":"{\"authorizable_identifier\":\"author\",\"password\":\"hunter2\"}","note":"a password this command does not have"}
+{"accepted":false,"document":"{\"authorizable_identifier\":\"aut/hor\"}","note":"an identifier that is a path"}
+{"accepted":false,"document":"{\"authorizable_identifier\":\"author\",\"intermediate_path\":\"/slingshot\"}","note":"an intermediate path that is absolute"}

@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"authorizable_identifier\":\"author\",\"properties\":{\"givenName\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Alex\"}}}}","note":"one assigned property"}
+{"accepted":true,"document":"{\"authorizable_identifier\":\"author\",\"removed_property_names\":[\"givenName\"]}","note":"one removal"}
+{"accepted":false,"document":"{\"authorizable_identifier\":\"author\",\"removed_property_names\":[]}","note":"an empty removal list"}
+{"accepted":false,"document":"{\"authorizable_identifier\":\"author\",\"extra\":1}","note":"a member this command does not have"}

@@ -1,0 +1,2 @@
+{"document":"{\"authorizable_identifier\":\"author\"}","note":"nothing to change","refusal":"changes_nothing"}
+{"document":"{\"authorizable_identifier\":\"author\",\"properties\":{\"givenName\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Alex\"}}},\"removed_property_names\":[\"givenName\"]}","note":"one property named in both documents","refusal":"both_assigned_and_removed"}

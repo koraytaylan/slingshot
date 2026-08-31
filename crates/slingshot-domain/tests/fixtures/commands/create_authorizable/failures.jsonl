@@ -1,0 +1,7 @@
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"authorizable_already_exists\"}","members":["authorizable_identifier","failure"],"note":"refused as authorizable already exists","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"identifier_rejected\"}","members":["authorizable_identifier","failure"],"note":"refused as identifier rejected","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"intermediate_path_rejected\"}","members":["authorizable_identifier","failure"],"note":"refused as intermediate path rejected","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"property_rejected\"}","members":["authorizable_identifier","failure"],"note":"refused as property rejected","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"authorizable_access_denied\"}","members":["authorizable_identifier","failure"],"note":"refused as authorizable access denied","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"repository_commit_failed\"}","members":["authorizable_identifier","failure"],"note":"refused as repository commit failed","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"mutation_outcome_unknown\"}","members":["authorizable_identifier","failure"],"note":"refused as mutation outcome unknown","proves_no_effect":false}
