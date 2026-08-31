@@ -10,6 +10,10 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 3/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3503 needed the agent protocol crate to build its expectation.** A decoder cannot
+    be attached without the provenance a stream is checked against, and that type lives
+    in `slingshot-agent-protocol`; the development crate's manifest gains the
+    dev-reachable edge, which the dependency contract already permits.
   - **3501 excludes the fuzz workspace from the ordinary build and commits no lockfile
     for it.** Its targets need a dated nightly and a fuzzing runtime, so building them
     in the everyday gate would make this repository stop building whenever that nightly
