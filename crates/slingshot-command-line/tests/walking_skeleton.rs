@@ -30,15 +30,16 @@ const PROFILE: &str = "local";
 /// Environment every assertion names its first target with.
 const ENVIRONMENT: &str = "author";
 
+/// Every line a start may write, because either is one correct answer.
+///
+/// A cohort released together contains clients that found nothing and clients
+/// that found what a neighbour had just created, and both reached the one
+/// daemon that ends up owning the namespace. Which line a given client wrote is
+/// a race; that there is exactly one owner is not.
+const EVERY_START_LINE: &[&str] = &["daemon-start: created", "daemon-start: adopted"];
+
 /// Environment the second target uses, to prove two owners coexist.
 const SECOND_ENVIRONMENT: &str = "publish";
-
-/// Members a normalized result replaces, with the placeholder each carries.
-const NORMALIZED_MEMBERS: &[(&str, &str)] = &[
-    ("\"process_identifier\":", "\"<process-identifier>\""),
-    ("\"readiness_nonce\":", "\"<readiness-nonce>\""),
-    ("\"disposition\":", "\"<disposition>\""),
-];
 
 /// Returns the product executable this proof drives.
 fn product_executable() -> ExecutablePath {
@@ -55,25 +56,6 @@ fn fixture(name: &str) -> String {
         .to_owned()
 }
 
-/// Replaces every value that differs between runs with its placeholder.
-fn normalize(result: &str) -> String {
-    let mut current = result.to_owned();
-    for (member, placeholder) in NORMALIZED_MEMBERS {
-        let mut replaced = String::new();
-        let mut scanning = current.as_str();
-        while let Some(position) = scanning.find(member) {
-            let (before, after) = scanning.split_at(position + member.len());
-            replaced.push_str(before);
-            replaced.push_str(placeholder);
-            let end = after.find([',', '}']).expect("the member ends");
-            scanning = &after[end..];
-        }
-        replaced.push_str(scanning);
-        current = replaced;
-    }
-    current
-}
-
 /// Runs the product executable with one target and command.
 fn run_product(root: &TemporaryRuntimeRoot, environment: &str, action: &str) -> CapturedProcess {
     let harness = ProcessHarness::new();
@@ -88,6 +70,27 @@ fn run_product(root: &TemporaryRuntimeRoot, environment: &str, action: &str) -> 
         action,
     ]);
     harness.run(&product_executable(), &request).expect("the product executable runs")
+}
+
+/// Returns the readiness nonce the daemon owning one target published.
+///
+/// Read from the record the daemon publishes rather than from what the command
+/// printed. A nonce authorizes a stop, so it belongs in the runtime state a
+/// daemon owns and not on a stream a caller may log, and a proof that needs one
+/// reads it where it actually lives.
+fn published_nonce(root: &TemporaryRuntimeRoot, environment: &str) -> Option<String> {
+    let target = namespace(root, environment);
+    readiness::read(target.runtime_root(), target.digest())
+        .expect("the record is readable")
+        .map(|record| record.readiness_nonce)
+}
+
+/// Returns the process identifier the daemon owning one target published.
+fn published_identifier(root: &TemporaryRuntimeRoot, environment: &str) -> Option<u32> {
+    let target = namespace(root, environment);
+    readiness::read(target.runtime_root(), target.digest())
+        .expect("the record is readable")
+        .map(|record| record.process_identifier)
 }
 
 /// Names the runtime namespace of one target inside a temporary root.
@@ -157,7 +160,7 @@ fn twenty_barrier_released_clients_converge_on_one_daemon() {
 
     let absent = run_product(&root, ENVIRONMENT, "ping");
     assert!(absent.status.success());
-    assert_eq!(normalize(absent.single_result_line()), fixture("ping-not-running-result.json"));
+    assert_eq!(absent.single_result_line(), fixture("ping-absent.txt"));
     assert!(owner_is_absent(&target), "an existing-only probe started nothing");
 
     let cohort = contract.process_harness.walking_start_client_count as usize;
@@ -190,52 +193,42 @@ fn twenty_barrier_released_clients_converge_on_one_daemon() {
         client.join().expect("the client finishes");
     }
 
-    let mut identifiers = Vec::new();
-    let mut nonces = Vec::new();
     let mut received = 0_usize;
     for produced in reported {
         received += 1;
         assert!(produced.status.success(), "{produced:?}");
         assert!(produced.standard_error.is_empty(), "a served start writes no diagnostic");
-        let line = produced.single_result_line();
-        assert_eq!(normalize(line), fixture("start-result.json"));
-        let report: serde_json::Value = serde_json::from_str(line).expect("the result reads");
-        identifiers.push(report["process_identifier"].as_u64().expect("an identifier"));
-        nonces.push(report["readiness_nonce"].as_str().expect("a nonce").to_owned());
+        let reached = produced.single_result_line().to_owned();
+        assert!(EVERY_START_LINE.contains(&reached.as_str()), "{reached}");
     }
     assert_eq!(received, cohort, "every client reported");
-    identifiers.dedup();
-    nonces.dedup();
-    assert_eq!(identifiers.len(), 1, "every client reached one daemon process");
-    assert_eq!(nonces.len(), 1, "every client observed one readiness nonce");
+    let nonce = published_nonce(&root, ENVIRONMENT).expect("the owner published a nonce");
+    assert!(published_identifier(&root, ENVIRONMENT).is_some(), "one process owns the namespace");
 
     let running = run_product(&root, ENVIRONMENT, "ping");
-    assert_eq!(normalize(running.single_result_line()), fixture("ping-running-result.json"));
+    assert_eq!(running.single_result_line(), fixture("ping-serving.txt"));
 
     let second = run_product(&root, SECOND_ENVIRONMENT, "start");
     assert!(second.status.success());
-    let second_report: serde_json::Value =
-        serde_json::from_str(second.single_result_line()).expect("the result reads");
-    assert_ne!(second_report["readiness_nonce"].as_str(), Some(nonces[0].as_str()));
-    assert_eq!(second_report["environment"].as_str(), Some(SECOND_ENVIRONMENT));
+    let second_nonce =
+        published_nonce(&root, SECOND_ENVIRONMENT).expect("the second owner published a nonce");
+    assert_ne!(second_nonce, nonce, "two namespaces are two owners");
 
     let first_again = run_product(&root, ENVIRONMENT, "ping");
-    let first_report: serde_json::Value =
-        serde_json::from_str(first_again.single_result_line()).expect("the result reads");
-    assert_eq!(first_report["readiness_nonce"].as_str(), Some(nonces[0].as_str()));
-    assert_eq!(first_report["environment"].as_str(), Some(ENVIRONMENT));
+    assert_eq!(first_again.single_result_line(), fixture("ping-serving.txt"));
+    assert_eq!(published_nonce(&root, ENVIRONMENT), Some(nonce.clone()));
+    let nonces = [nonce];
 
     cooperatively_stop(&root, SECOND_ENVIRONMENT);
     cooperatively_stop(&root, ENVIRONMENT);
 
     let stale_nonce = nonces[0].clone();
     let after = run_product(&root, ENVIRONMENT, "ping");
-    assert_eq!(normalize(after.single_result_line()), fixture("ping-not-running-result.json"));
+    assert_eq!(after.single_result_line(), fixture("ping-absent.txt"));
 
     let recovered = run_product(&root, ENVIRONMENT, "start");
-    let recovered_report: serde_json::Value =
-        serde_json::from_str(recovered.single_result_line()).expect("the result reads");
-    let fresh = recovered_report["readiness_nonce"].as_str().expect("a nonce").to_owned();
+    assert!(recovered.status.success(), "{recovered:?}");
+    let fresh = published_nonce(&root, ENVIRONMENT).expect("the replacement published a nonce");
     assert_ne!(fresh, stale_nonce, "a new cohort recovered a fresh nonce");
     let address = endpoint::endpoint_address(&contract, root.path(), target.digest())
         .expect("the endpoint is named");
@@ -292,7 +285,7 @@ fn a_supervised_daemon_is_ended_through_its_own_handle_and_leaves_nothing_behind
         "the ended daemon released its owner lock"
     );
     let after = run_product(&root, ENVIRONMENT, "ping");
-    assert_eq!(normalize(after.single_result_line()), fixture("ping-not-running-result.json"));
+    assert_eq!(after.single_result_line(), fixture("ping-absent.txt"));
     assert!(
         OwnerLock::path_for(root.path(), target.digest()).is_file(),
         "the lock file is persistent"
@@ -310,7 +303,7 @@ fn an_abandoned_election_never_blocks_the_cohort_that_follows_it() {
     drop(held);
     let created = run_product(&root, ENVIRONMENT, "start");
     assert!(created.status.success(), "{created:?}");
-    assert_eq!(normalize(created.single_result_line()), fixture("start-result.json"));
+    assert_eq!(created.single_result_line(), fixture("start-created.txt"));
     cooperatively_stop(&root, ENVIRONMENT);
 }
 

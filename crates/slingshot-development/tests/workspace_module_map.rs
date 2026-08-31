@@ -335,6 +335,12 @@ impl Footprint {
 }
 
 /// Returns the source files one task's footprint claims.
+/// A process entry is excluded the same way the map excludes it.
+///
+/// The map covers modules, and a process entry is not one: it declares no
+/// children and is owned by whichever task last shaped the executable. Counting
+/// it as a claimed module would make every task that touches the entry look
+/// like it had left a module undeclared.
 fn footprint_paths(task_document: &str) -> Footprint {
     let document = read_repository_file(task_document);
     let frontmatter = document.split("---").nth(1).expect("the task document has frontmatter");
@@ -357,7 +363,7 @@ fn footprint_paths(task_document: &str) -> Footprint {
         }
         if let Some(prefix) = entry.strip_suffix("**") {
             claimed.prefixes.push(prefix.to_owned());
-        } else if entry.ends_with(".rs") {
+        } else if entry.ends_with(".rs") && !entry.ends_with(PROCESS_ENTRY_FILE_NAME) {
             claimed.exact.insert(entry.to_owned());
         }
     }

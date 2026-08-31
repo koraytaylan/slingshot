@@ -30,6 +30,30 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     nothing that exists: every other declaration list in the workspace is already
     alphabetical, and stays so because that is how it was written rather than because a
     tool insists.
+  - **2706 landed its routing without its application, and 2801 found it.** The task
+    requires the parsed leaves to reach their services through the production binary
+    entry, and the commit that landed it delivered the routing table alone: the
+    executable still offered the walking skeleton's three clap subcommands and its own
+    exit taxonomy. Building the golden sessions on that would have pinned a surface the
+    plan had already replaced, so the composition was finished in its own review loop
+    before 2802 began. `CommandLineApplication` now holds the configuration, daemon,
+    filesystem, process, clock, signal, and network boundaries and the two typed
+    contracts; `command_line.rs` builds the real ones; and the entry maps every run onto
+    the documented exit taxonomy.
+    Four things joined the footprint. `daemon_answer.rs` is a new leaf, because reading a
+    daemon's answer as an outcome is its own concern and keeping it in the assembly would
+    have pushed that file past the length ceiling. `command_line.rs` is rewritten.
+    `invocation.rs` gains `--operation`, `--artifact`, and `--runtime-root`, without which
+    an observation leaf cannot name what it acts on and no scenario can isolate its
+    runtime root. `daemon_connection.rs` gains the versioned exchange, which had no home.
+    Three proofs from Plan 0001 move with the surface they describe. `daemon start` and
+    `daemon ping` now write the closed outcome envelope rather than an ad-hoc object, so
+    the walking skeleton, the explicit-start suite, and `README.md` say so, and the
+    skeleton reads the readiness nonce from the record the daemon publishes rather than
+    from standard output. That is a fix as much as a change: a nonce authorizes a
+    cooperative stop, and 2803 scans exactly that stream for exactly that kind of value.
+    The module-map checker also counted a process entry as a claimed module, which no
+    task had tripped before because none both owned a module row and touched the entry.
   - **2801 needed a handle a signal can be delivered through.** The task requires
     signal injection through a retained instance-bound primitive and forbids discovering
     or signalling a numeric process identifier. The standard library ends a child only by

@@ -22,9 +22,13 @@ slingshot --profile local --environment author daemon start
 slingshot --profile local --environment author daemon ping
 ```
 
-Both commands write one structured result to the result stream and every
-diagnostic to the diagnostic stream. `--runtime-root` places the target's
-runtime objects somewhere other than this user's own runtime directory.
+Both write one line to the result stream and every diagnostic to the diagnostic
+stream: an action and what it found or did, such as `daemon-start: created` or
+`daemon-ping: absent`. Adding `--machine` writes the same outcome as one
+tagged object instead. Neither form carries the daemon's readiness nonce, which
+authorizes a cooperative stop and therefore stays in the runtime state its
+daemon owns. `--runtime-root` places the target's runtime objects somewhere
+other than this user's own runtime directory.
 
 ## Crates
 

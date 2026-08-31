@@ -106,6 +106,11 @@ fn summary(envelope: &MachineOutcomeEnvelope) -> String {
         MachineOutcomeEnvelope::OperationRecoveryRequired { category, evidence, revision } => {
             format!("waiting in {category} at revision {revision}, {evidence}")
         }
+        MachineOutcomeEnvelope::DaemonControl { action, state } => format!("{action}: {state}"),
+        MachineOutcomeEnvelope::ConfigurationReport { environment, profile, resolved } => {
+            let outcome = if *resolved { "resolves" } else { "does not resolve" };
+            format!("{profile}/{environment} {outcome}")
+        }
         other => other.tag().replace('_', " "),
     }
 }
