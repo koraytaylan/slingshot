@@ -107,10 +107,14 @@ macro_rules! requested_states {
             ///
             /// # Errors
             ///
-            /// Returns [`ListingResultFailure::NotAscendingDistinct`] when the
-            /// set is empty, repeats a member, or is out of order, and
-            /// [`ListingResultFailure::TooManyRequested`] when it names more
-            /// members than the contract allows.
+            /// Returns
+            /// [`ListingResultFailure::NotAscendingDistinct`][not-ascending]
+            /// when the set is empty, repeats a member, or is out of order, and
+            /// [`ListingResultFailure::TooManyRequested`][too-many] when it
+            /// names more members than the contract allows.
+            ///
+            /// [not-ascending]: crate::command::operational_listing::ListingResultFailure::NotAscendingDistinct
+            /// [too-many]: crate::command::operational_listing::ListingResultFailure::TooManyRequested
             pub fn new(
                 states: Vec<$member>,
             ) -> Result<Self, $crate::command::operational_listing::ListingResultFailure> {

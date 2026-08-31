@@ -10,11 +10,13 @@ touches:
   - docs/COMMANDS.md
   - docs/MODEL_CONTEXT_PROTOCOL.md
   - docs/AGENT_PROTOCOL.md
+  - docs/DOCUMENTATION_REVIEW.md
+  - crates/slingshot-command-line/src/live_adobe_experience_manager.rs
   - README.md
   - ARCHITECTURE.md
   - crates/slingshot-development/tests/fixtures/protocol-compatibility/snapshot.json
   - examples/finite-state-machine/slingshot.handlers.template.json
-status: planned
+status: done
 merged_as: ""
 ---
 # Reference and Compatibility
@@ -27,7 +29,7 @@ Every document that says what this build offers currently says twelve. This task
 2. Update `docs/MODEL_CONTEXT_PROTOCOL.md` where it states how many tools the server publishes and which operation keys they take, keeping it a description of this commit rather than a plan for one.
 3. Update `docs/AGENT_PROTOCOL.md` where it states what the daemon holds an author to, so the contract an agent implements names the families it now has to implement.
 4. Update the two prose statements that count commands: the README's live-author paragraph, which says nine, and this repository's architecture note about what is and is not here.
-5. Refresh the protocol compatibility snapshot to the sixty-four-row registry, and keep the assertion that made it worth having: an existing row that changed its version, its limits digest, or either schema digest is a compatibility break and fails, while a new row is growth and passes.
+5. Refresh the protocol compatibility snapshot to the sixty-four-row registry, and keep the assertion that made it worth having: an existing row that changed its version, its limits digest, or either schema digest is a compatibility break and fails, while a new row is growth and passes. Say plainly why this refresh moves every existing row's digests as well as adding new ones: the byte contract gained the comparators the new listings order by, every role schema carries that contract's digest as an annotation by design, and so every schema digest moved. Nothing has consumed the old ones - no package is published and no release artifact exists - which is what makes a refresh the honest answer rather than a version bump on sixty-four commands whose meaning did not change.
 6. Add the new command names to the finite-state-machine handler template, so a workflow that dispatches a registry command can dispatch the ones this plan added.
 
 **Tests:**
