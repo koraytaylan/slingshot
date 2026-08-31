@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/finite-state-machine-compensation/**
   - crates/slingshot-development/tests/finite_state_machine_compensation.rs
 status: done
-merged_as: ""
+merged_as: "fd74c40a167792c8c52e57c043ac751d2880edb7"
 ---
 # Explicit Compensating Command
 
