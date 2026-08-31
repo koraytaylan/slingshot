@@ -274,3 +274,128 @@ fn require_no_refused_argument(handler: &Handler) -> Result<(), HandlerRefusal> 
     }
     Ok(())
 }
+
+// ------------------------------------------------- what a key is made out of
+
+/// The format the key preimage declares.
+pub const KEY_PREIMAGE_FORMAT: &str = "slingshot.workflow-effect-operation-key/1";
+
+/// What every key begins with.
+pub const KEY_PREFIX: &str = "slingshot-workflow-effect-1-";
+
+/// How many bytes one input may carry.
+pub const MOST_INPUT_UTF8_BYTES: usize = 128;
+
+/// How many bytes one suffix may carry.
+pub const MOST_SUFFIX_BYTES: usize = 15;
+
+/// How many bytes one key may carry.
+pub const MOST_KEY_BYTES: usize = 107;
+
+/// Every suffix a key may carry, and no others.
+///
+/// Two, and the second one exists for exactly one thing: the compensating
+/// effect, which acts on the same occurrence as the effect it compensates and
+/// must not be mistaken for it.
+pub const EVERY_SUFFIX: &[&str] = &["", "-backup-restore"];
+
+/// Why one key cannot be derived.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum KeyRefusal {
+    /// An input is empty, and an empty name names nothing.
+    #[error("{0} is empty, and a key derived from nothing identifies nothing")]
+    Empty(String),
+    /// An input is longer than the contract admits.
+    #[error("{named} carries {held} bytes, past the {MOST_INPUT_UTF8_BYTES} the contract admits")]
+    TooLong {
+        /// How many bytes it carries.
+        held: usize,
+        /// Which input.
+        named: String,
+    },
+    /// An input carries a code point the contract refuses.
+    #[error("{0} carries a control code point, which no name this contract admits carries")]
+    ControlCodePoint(String),
+    /// The suffix is not one of the two.
+    #[error("{0} is not a suffix this contract admits")]
+    SuffixUnknown(String),
+}
+
+/// Returns the exact preimage one occurrence hashes.
+///
+/// One object, no whitespace, members in byte order, and the integer in minimal
+/// base ten. Every one of those is load-bearing: two implementations that
+/// agreed on the members and differed on their order would derive different
+/// keys for the same occurrence, and the retry that was meant to attach to
+/// existing work would start new work instead.
+///
+/// # Errors
+///
+/// Returns [`KeyRefusal`] naming the first input the contract refuses.
+pub fn key_preimage(
+    workflow_operation_namespace: &str,
+    instance_request_identifier: &str,
+    occurrence: u64,
+) -> Result<String, KeyRefusal> {
+    require_admitted("workflow_operation_namespace", workflow_operation_namespace)?;
+    require_admitted("instance_request_identifier", instance_request_identifier)?;
+    Ok(format!(
+        "{{\"format\":\"{KEY_PREIMAGE_FORMAT}\",\"instance_request_identifier\":\"{}\",\
+         \"occurrence\":{occurrence},\"workflow_operation_namespace\":\"{}\"}}",
+        escaped(instance_request_identifier),
+        escaped(workflow_operation_namespace)
+    ))
+}
+
+/// Returns one input with the two characters that need escaping escaped.
+///
+/// Only two. Every other admitted code point is emitted as itself, because a
+/// contract that escaped more would have to say exactly which more, and two
+/// implementations would eventually disagree about the list.
+fn escaped(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// Requires one input to be a name this contract admits.
+fn require_admitted(named: &str, input: &str) -> Result<(), KeyRefusal> {
+    if input.is_empty() {
+        return Err(KeyRefusal::Empty(named.to_owned()));
+    }
+    if input.len() > MOST_INPUT_UTF8_BYTES {
+        return Err(KeyRefusal::TooLong { held: input.len(), named: named.to_owned() });
+    }
+    let controlled =
+        input.chars().any(|held| matches!(held, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}'));
+    if controlled {
+        return Err(KeyRefusal::ControlCodePoint(named.to_owned()));
+    }
+    Ok(())
+}
+
+/// Returns the key one command-effect occurrence carries.
+///
+/// The same occurrence always derives the same key, whatever happened in
+/// between: that is what makes a retry the same operation and a restart
+/// transparent. Two deliberate occurrences, or two stores with their own
+/// namespaces, derive different keys and therefore start different work.
+///
+/// # Errors
+///
+/// Returns [`KeyRefusal`] naming the first input the contract refuses.
+pub fn workflow_effect_operation_key(
+    workflow_operation_namespace: &str,
+    instance_request_identifier: &str,
+    occurrence: u64,
+    suffix: &str,
+) -> Result<String, KeyRefusal> {
+    if !EVERY_SUFFIX.contains(&suffix) || suffix.len() > MOST_SUFFIX_BYTES {
+        return Err(KeyRefusal::SuffixUnknown(suffix.to_owned()));
+    }
+    let preimage =
+        key_preimage(workflow_operation_namespace, instance_request_identifier, occurrence)?;
+    use sha2::Digest;
+    let mut digest = sha2::Sha256::new();
+    digest.update(preimage.as_bytes());
+    let held: String = digest.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
+    Ok(format!("{KEY_PREFIX}{held}{suffix}"))
+}
