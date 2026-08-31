@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/tests/model_context_protocol_schemas.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/schemas/**
 status: done
-merged_as: ""
+merged_as: "2231a0e643507cc05ccdb3fd4009d1f228c9f4d9"
 ---
 # Derive Operation Schemas
 
