@@ -1,0 +1,54 @@
+# The closed inventory of every integration target this gate runs.
+#
+# Ordered, and named once each. A target the gate does not run is evidence
+# nobody produced; a target it runs twice is evidence counted twice.
+
+format = "slingshot.finite-state-machine-test-targets/1"
+
+[[target]]
+name = "finite_state_machine_compatibility"
+task = "pinned-finite-state-machine-executable"
+
+[[target]]
+name = "finite_state_machine_process_harness"
+task = "finite-state-machine-process-harness"
+
+[[target]]
+name = "finite_state_machine_handler_validation"
+task = "validate-finite-state-machine-handlers"
+
+[[target]]
+name = "finite_state_machine_handler"
+task = "workflow-handler-operation-keys"
+
+[[target]]
+name = "finite_state_machine_success"
+task = "successful-workflow-command"
+
+[[target]]
+name = "finite_state_machine_failure"
+task = "failed-workflow-command"
+
+[[target]]
+name = "finite_state_machine_compensation"
+task = "explicit-compensating-command"
+
+[[target]]
+name = "finite_state_machine_artifact"
+task = "workflow-artifact-reference"
+
+[[target]]
+name = "finite_state_machine_retry_idempotency"
+task = "finite-state-machine-retry-idempotency"
+
+[[target]]
+name = "finite_state_machine_daemon_restart"
+task = "daemon-restart-reattachment"
+
+[[target]]
+name = "workflow_documentation"
+task = "workflow-integration-reference"
+
+[[target]]
+name = "finite_state_machine_compatibility_gate_contract"
+task = "pinned-finite-state-machine-compatibility-gate"
