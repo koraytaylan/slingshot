@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/commands/asset_query.rs
   - crates/slingshot-command-line/tests/asset_query_commands.rs
 status: done
-merged_as: ""
+merged_as: "b1331fe28b8b30196f76e8efaf2b68ca7982d057"
 ---
 # Expose Asset Query Commands
 
