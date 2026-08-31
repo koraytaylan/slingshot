@@ -13,7 +13,7 @@ touches:
   - "fuzz/corpus/agent_protocol_server_sent_event/**"
   - crates/slingshot-development/tests/agent_stream_fuzz_corpus.rs
 status: done
-merged_as: ""
+merged_as: "feb7a8fb2bcfbb123c6cdd9b7bd3565704deb246"
 ---
 # Agent Stream Fuzzing
 
