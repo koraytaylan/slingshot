@@ -1,0 +1,45 @@
+#!/bin/sh
+# Verify the cache a release is about to build from.
+#
+# Offline and bounded. It checks that the cache is the one prepared for this
+# lockfile, unchanged and within what a Cargo home may hold, and says nothing
+# about whether the bytes inside it were trustworthy when they were fetched -
+# that is a different question, and pretending otherwise would be the more
+# dangerous answer.
+#
+# It never fetches, repairs, installs, or falls back to an ambient cache. A
+# verifier that could repair what it was checking would report success about
+# something other than what it was given.
+
+set -eu
+
+CACHE_SET=''
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --cache-set)
+            [ "$#" -ge 2 ] || report_refusal 'the cache option names a directory'
+            CACHE_SET=$2
+            shift 2
+            ;;
+        *)
+            report_refusal "$1 is not an option this verifier takes"
+            ;;
+    esac
+done
+
+[ -n "$CACHE_SET" ] || report_refusal 'this verifier is given a cache explicitly and finds none'
+case "$CACHE_SET" in
+    /*) ;;
+    *) report_refusal "$CACHE_SET is not an absolute path" ;;
+esac
+[ -d "$CACHE_SET" ] || report_refusal "$CACHE_SET is not a directory"
+[ -f "$CACHE_SET/cache.json" ] || report_refusal 'the cache holds no manifest'
+
+cargo run --locked --quiet -p slingshot-development -- \
+    verify-locked-source-cache --cache-set "$CACHE_SET"

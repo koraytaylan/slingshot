@@ -1,0 +1,19 @@
+# What a release is allowed to build from.
+#
+# A release that resolved anything at build time would be a release nobody can
+# reproduce, and a cache nobody verified would be a release built from whatever
+# happened to be in it. So the inputs are named here, the cache is verified
+# against this before it is used, and the build runs frozen and offline.
+#
+# How large a cache may be is not written here. A cache is a Cargo home, and
+# what a Cargo home may be is declared once, in the compatibility manifest, and
+# checked by that plan's verifier. A second document naming the same limits is
+# a second document that can disagree with the first.
+
+format = "slingshot.release-input-cache/1"
+resolution = "frozen-offline"
+
+[requires]
+checksums = true
+locked_resolution = true
+registry_only = true

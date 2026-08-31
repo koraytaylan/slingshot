@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:slingshot:release:locked-source-cache",
+  "title": "One verified release input cache",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cache_sha256", "entries", "format", "lock_sha256", "resolution"],
+  "properties": {
+    "cache_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "entries": { "type": "integer", "minimum": 1 },
+    "format": { "const": "slingshot.release-input-cache-manifest/1" },
+    "lock_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "resolution": { "const": "frozen-offline" }
+  }
+}

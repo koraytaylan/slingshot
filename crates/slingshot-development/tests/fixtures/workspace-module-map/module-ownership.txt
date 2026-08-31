@@ -147,6 +147,7 @@ crates/slingshot-development/src/finite_state_machine_process_harness.rs|slingsh
 crates/slingshot-development/src/lib.rs|slingshot-development|tooling|crate-root|slingshot_development|workspace-module-map
 crates/slingshot-development/src/platform_runtime_contract.rs|slingshot-development|tooling|leaf|slingshot_development::platform_runtime_contract|workspace-module-map
 crates/slingshot-development/src/profile_authentication_harness.rs|slingshot-development|tooling|leaf|slingshot_development::profile_authentication_harness|profile-authentication-module-scaffold
+crates/slingshot-development/src/release_input_cache.rs|slingshot-development|tooling|leaf|slingshot_development::release_input_cache|release-input-cache
 crates/slingshot-development/src/rustsec_advisory_pin.rs|slingshot-development|tooling|leaf|slingshot_development::rustsec_advisory_pin|workspace-module-map
 crates/slingshot-development/src/slingshot_test_daemon.rs|slingshot-development|tooling|leaf|slingshot_development::slingshot_test_daemon|daemon-runtime-module-scaffold
 crates/slingshot-development/src/source_policy.rs|slingshot-development|tooling|leaf|slingshot_development::source_policy|workspace-module-map

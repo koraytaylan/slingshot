@@ -11,7 +11,7 @@ use std::process::ExitCode;
 
 use slingshot_development::{
     RepositoryCommandFailure, dependency_direction, finite_state_machine_compatibility,
-    rustsec_advisory_pin, source_policy,
+    release_input_cache, rustsec_advisory_pin, source_policy,
 };
 
 /// Number of leading process arguments that carry the executable path.
@@ -31,6 +31,18 @@ const RUSTSEC_PIN_COMMAND: &str = "rustsec-advisory-pin";
 
 /// Name of the command that proposes pin bytes for a reviewed candidate.
 const RUSTSEC_PIN_REVIEW_COMMAND: &str = "rustsec-pin-review";
+
+/// Name of the command that writes the manifest for a cache just fetched.
+const PREPARE_CACHE_COMMAND: &str = "prepare-locked-source-cache";
+
+/// Name of the command that verifies the cache a release builds from.
+const VERIFY_CACHE_COMMAND: &str = "verify-locked-source-cache";
+
+/// Option naming the cache that was just prepared.
+const PREPARE_CACHE_OPTION: &str = "--output-directory";
+
+/// Option naming the cache being verified.
+const VERIFY_CACHE_OPTION: &str = "--cache-set";
 
 /// How many arguments one named option and its value occupy.
 const OPTION_AND_VALUE: usize = 2;
@@ -65,6 +77,8 @@ fn dispatch(
         RUSTSEC_PIN_COMMAND => verify_advisory_pin(working_directory, output),
         RUSTSEC_PIN_REVIEW_COMMAND => review_advisory_pin(arguments, output),
         VERIFY_SEED_COMMAND => verify_cargo_home_seed(arguments, working_directory, output),
+        PREPARE_CACHE_COMMAND => prepare_locked_source_cache(arguments, working_directory, output),
+        VERIFY_CACHE_COMMAND => verify_locked_source_cache(arguments, working_directory, output),
         TEST_DAEMON_COMMAND => run_test_daemon(output),
         _ => Err(RepositoryCommandFailure::UnknownCommand(requested.clone())),
     }
@@ -213,6 +227,24 @@ fn named_directory(
     }
 }
 
+/// Reads the one authority for what a supplied Cargo home may be.
+fn cargo_home_limits(
+    working_directory: &Path,
+    program: &str,
+) -> Result<finite_state_machine_compatibility::SeedLimits, RepositoryCommandFailure> {
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let path = workspace_root.join(finite_state_machine_compatibility::MANIFEST_PATH);
+    let text = std::fs::read_to_string(&path).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
+    })?;
+    let pin = finite_state_machine_compatibility::FiniteStateMachineCompatibilityPin::parse(&text)
+        .map_err(|failure| RepositoryCommandFailure::ToolFailed {
+            program: program.to_owned(),
+            reason: failure.to_string(),
+        })?;
+    Ok(pin.cargo_home_seed)
+}
+
 /// Bounds one supplied Cargo home against the committed compatibility manifest.
 ///
 /// The manifest is the sole authority for every limit, so this reads it rather
@@ -223,19 +255,14 @@ fn verify_cargo_home_seed(
     output: &mut dyn Write,
 ) -> Result<(), RepositoryCommandFailure> {
     let seed = named_directory(arguments, VERIFY_SEED_OPTION, VERIFY_SEED_COMMAND)?;
-    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
-    let path = workspace_root.join(finite_state_machine_compatibility::MANIFEST_PATH);
-    let text = std::fs::read_to_string(&path).map_err(|failure| {
-        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
-    })?;
-    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
-        program: VERIFY_SEED_COMMAND.to_owned(),
-        reason,
-    };
-    let pin = finite_state_machine_compatibility::FiniteStateMachineCompatibilityPin::parse(&text)
-        .map_err(|failure| refuse(failure.to_string()))?;
-    let survey = finite_state_machine_compatibility::verify_seed(&seed, &pin.cargo_home_seed)
-        .map_err(|failure| refuse(failure.to_string()))?;
+    let limits = cargo_home_limits(working_directory, VERIFY_SEED_COMMAND)?;
+    let survey =
+        finite_state_machine_compatibility::verify_seed(&seed, &limits).map_err(|failure| {
+            RepositoryCommandFailure::ToolFailed {
+                program: VERIFY_SEED_COMMAND.to_owned(),
+                reason: failure.to_string(),
+            }
+        })?;
     writeln!(
         output,
         "this Cargo home holds {} in {}, {} altogether",
@@ -249,6 +276,68 @@ fn verify_cargo_home_seed(
 /// Returns one count worded with the noun that suits it.
 fn counted(count: u64, singular: &str, plural: &str) -> String {
     if count == 1 { format!("{count} {singular}") } else { format!("{count} {plural}") }
+}
+
+/// Reads what this repository declares a release may build from.
+fn release_input_declaration(
+    working_directory: &Path,
+    program: &str,
+) -> Result<(release_input_cache::CacheDeclaration, String), RepositoryCommandFailure> {
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let path = workspace_root.join(release_input_cache::DECLARATION_PATH);
+    let text = std::fs::read_to_string(&path).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
+    })?;
+    let refuse =
+        |failure: release_input_cache::CacheRefusal| RepositoryCommandFailure::ToolFailed {
+            program: program.to_owned(),
+            reason: failure.to_string(),
+        };
+    let declaration = release_input_cache::parse_declaration(&text).map_err(refuse)?;
+    let digest = release_input_cache::lockfile_digest(&workspace_root).map_err(refuse)?;
+    Ok((declaration, digest))
+}
+
+/// Writes the manifest describing the cache that was just fetched.
+fn prepare_locked_source_cache(
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let cache = named_directory(arguments, PREPARE_CACHE_OPTION, PREPARE_CACHE_COMMAND)?;
+    let (declaration, lock) = release_input_declaration(working_directory, PREPARE_CACHE_COMMAND)?;
+    let limits = cargo_home_limits(working_directory, PREPARE_CACHE_COMMAND)?;
+    let manifest =
+        release_input_cache::prepare(&cache, &declaration, &limits, &lock).map_err(|failure| {
+            RepositoryCommandFailure::ToolFailed {
+                program: PREPARE_CACHE_COMMAND.to_owned(),
+                reason: failure.to_string(),
+            }
+        })?;
+    let held = counted(manifest.entries, "entry", "entries");
+    writeln!(output, "this cache holds {held} a release may build from")
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Verifies the cache a release is about to build from.
+fn verify_locked_source_cache(
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let cache = named_directory(arguments, VERIFY_CACHE_OPTION, VERIFY_CACHE_COMMAND)?;
+    let (declaration, lock) = release_input_declaration(working_directory, VERIFY_CACHE_COMMAND)?;
+    let limits = cargo_home_limits(working_directory, VERIFY_CACHE_COMMAND)?;
+    let manifest =
+        release_input_cache::verified(&cache, &declaration, &limits, &lock).map_err(|failure| {
+            RepositoryCommandFailure::ToolFailed {
+                program: VERIFY_CACHE_COMMAND.to_owned(),
+                reason: failure.to_string(),
+            }
+        })?;
+    let held = counted(manifest.entries, "entry", "entries");
+    writeln!(output, "this cache is the one prepared for this lockfile and holds {held}")
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
 }
 
 fn main() -> ExitCode {
