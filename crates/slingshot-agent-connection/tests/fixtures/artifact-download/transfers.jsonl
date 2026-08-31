@@ -1,0 +1,6 @@
+{"digest": "expected", "end": "framed", "name": "framed-and-exact", "publishes": true, "received": 4096}
+{"digest": "expected", "end": "framed", "name": "truncated", "publishes": false, "received": 4095}
+{"digest": "expected", "end": "interrupted", "name": "interrupted", "publishes": false, "received": 4096}
+{"digest": "expected", "end": "undeclared-trailer", "name": "undeclared-trailer", "publishes": false, "received": 4096}
+{"digest": "expected", "end": "trailing-bytes", "name": "trailing-bytes", "publishes": false, "received": 4096}
+{"digest": "other", "end": "framed", "name": "wrong-digest", "publishes": false, "received": 4096}

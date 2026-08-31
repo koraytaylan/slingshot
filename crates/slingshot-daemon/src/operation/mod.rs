@@ -2,8 +2,9 @@
 //!
 //! The module map assigns this family the operation lifecycle, the scheduler,
 //! and the executor boundary the daemon composes. This commit declares the
-//! family root, its reconciliation, supervision, settlement, and remote-submission leaves.
+//! family root, its completion, reconciliation, supervision, settlement, and remote-submission leaves.
 
+pub mod artifact_completion;
 pub mod job_reconciliation;
 pub mod recovery_and_event_supervisor;
 pub mod remote_result_settlement;
