@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/daemon_process.rs
   - crates/slingshot-command-line/tests/daemon_process.rs
   - crates/slingshot-test-support/src/daemon_process.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Manage Daemon Processes
