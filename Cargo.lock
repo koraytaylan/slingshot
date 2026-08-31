@@ -2210,6 +2210,7 @@ dependencies = [
  "slingshot-daemon",
  "slingshot-domain",
  "slingshot-local-protocol",
+ "slingshot-storage",
  "slingshot-test-support",
  "sqlparser",
  "syn 3.0.4",
