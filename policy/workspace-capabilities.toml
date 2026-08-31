@@ -103,14 +103,19 @@ owners = ["slingshot-command-line", "slingshot-development"]
 
 [[capability]]
 name = "descriptor-relative-filesystem"
-purpose = "Open a descendant relative to a directory descriptor without following links and read its identity."
+purpose = "Open a descendant relative to a directory descriptor without following links, read its identity, hold a descriptor bound to one process instance, and open a pseudo-terminal."
 package = "rustix"
 version = "1.1.4"
 default-features = true
-features = ["fs", "process"]
+features = ["fs", "process", "pty"]
 targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
 kinds = ["normal"]
-owners = ["slingshot-command-line", "slingshot-configuration", "slingshot-daemon"]
+owners = [
+  "slingshot-command-line",
+  "slingshot-configuration",
+  "slingshot-daemon",
+  "slingshot-test-support",
+]
 
 [[capability]]
 name = "deterministic-gzip-compression"

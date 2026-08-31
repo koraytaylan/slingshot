@@ -4,9 +4,16 @@
 //! The workspace dependency contract lets this crate depend normally only on
 //! `slingshot-domain`, `slingshot-agent-protocol`, `slingshot-local-protocol`,
 //! and `slingshot-storage`, and forbids a product crate from reaching it
-//! through a normal or build dependency. This commit implements the reusable
-//! process, temporary-runtime, and supervision harnesses and declares the
-//! identity-management server leaf as documentation-only structure.
+//! through a normal or build dependency. The reusable process,
+//! temporary-runtime, and supervision harnesses are implemented here, and the
+//! identity-management server leaf is documentation-only structure.
+//!
+//! The process harness holds every child it starts by a handle bound to that
+//! one instance, taken at spawn and kept until the child is waited for. Signals
+//! go through it, cleanup goes through it, and a numeric process identifier is
+//! recorded only so output can be correlated. Children run under an environment
+//! the scenario builds rather than inherits, against pipes the harness drains
+//! or a pseudo-terminal it holds the controlling end of, and inside a deadline.
 
 pub mod daemon_process;
 pub mod fake_author;
