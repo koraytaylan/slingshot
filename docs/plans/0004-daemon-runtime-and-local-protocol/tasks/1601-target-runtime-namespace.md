@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-daemon/src/runtime_namespace.rs
   - crates/slingshot-daemon/tests/runtime_namespace.rs
   - "crates/slingshot-daemon/tests/fixtures/runtime_namespace/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Target Runtime Namespace
