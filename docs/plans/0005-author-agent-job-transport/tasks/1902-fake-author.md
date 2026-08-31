@@ -7,11 +7,17 @@ depends_on:
   - agent-store-and-logical-execution-contract
 gated: false
 touches:
-  - crates/slingshot-test-support/src/fake_author.rs
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
+  - crates/slingshot-test-support/src/fake_author/authority.rs
+  - crates/slingshot-test-support/src/fake_author/mod.rs
+  - crates/slingshot-test-support/src/fake_author/outbox.rs
+  - crates/slingshot-test-support/src/fake_author/recording.rs
+  - crates/slingshot-test-support/src/fake_author/script.rs
+  - crates/slingshot-test-support/src/fake_author/server.rs
   - crates/slingshot-test-support/src/lib.rs
   - crates/slingshot-test-support/tests/fixtures/fake-author/**
   - crates/slingshot-test-support/tests/fake_author.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Fake Author

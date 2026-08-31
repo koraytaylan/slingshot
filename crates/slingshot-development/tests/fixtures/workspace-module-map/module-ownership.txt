@@ -118,6 +118,12 @@ crates/slingshot-storage/src/persistent_capacity.rs|slingshot-storage|adapter|le
 crates/slingshot-storage/src/sqlite_statement_inventory.rs|slingshot-storage|adapter|leaf|slingshot_storage::sqlite_statement_inventory|daemon-runtime-module-scaffold
 crates/slingshot-storage/src/sqlite_vfs.rs|slingshot-storage|adapter|leaf|slingshot_storage::sqlite_vfs|daemon-runtime-module-scaffold
 crates/slingshot-test-support/src/daemon_process.rs|slingshot-test-support|support|leaf|slingshot_test_support::daemon_process|workspace-module-map
+crates/slingshot-test-support/src/fake_author/authority.rs|slingshot-test-support|support|leaf|slingshot_test_support::fake_author::authority|fake-author
+crates/slingshot-test-support/src/fake_author/mod.rs|slingshot-test-support|support|family-root|slingshot_test_support::fake_author|fake-author
+crates/slingshot-test-support/src/fake_author/outbox.rs|slingshot-test-support|support|leaf|slingshot_test_support::fake_author::outbox|fake-author
+crates/slingshot-test-support/src/fake_author/recording.rs|slingshot-test-support|support|leaf|slingshot_test_support::fake_author::recording|fake-author
+crates/slingshot-test-support/src/fake_author/script.rs|slingshot-test-support|support|leaf|slingshot_test_support::fake_author::script|fake-author
+crates/slingshot-test-support/src/fake_author/server.rs|slingshot-test-support|support|leaf|slingshot_test_support::fake_author::server|fake-author
 crates/slingshot-test-support/src/fake_operation_executor.rs|slingshot-test-support|support|leaf|slingshot_test_support::fake_operation_executor|daemon-runtime-module-scaffold
 crates/slingshot-test-support/src/finite_state_machine_executable.rs|slingshot-test-support|support|leaf|slingshot_test_support::finite_state_machine_executable|workspace-module-map
 crates/slingshot-test-support/src/identity_management_server.rs|slingshot-test-support|support|leaf|slingshot_test_support::identity_management_server|profile-authentication-module-scaffold
