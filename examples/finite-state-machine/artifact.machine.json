@@ -1,0 +1,21 @@
+{
+  "name": "artifact",
+  "initial": "start",
+  "states": {
+    "start": { "on": { "run": { "target": "packaging", "effect": "download_package" } } },
+    "packaging": {
+      "on": {
+        "packaged": { "target": "reading" },
+        "packaging_failed": { "target": "failed" }
+      }
+    },
+    "reading": {
+      "on": {
+        "read": { "target": "done" },
+        "read_failed": { "target": "failed" }
+      }
+    },
+    "done": { "type": "final" },
+    "failed": { "type": "final" }
+  }
+}
