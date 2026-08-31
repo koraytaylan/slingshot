@@ -12,7 +12,7 @@ gated: false
 touches:
   - crates/slingshot-daemon/src/local_server.rs
   - crates/slingshot-daemon/tests/local_server.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Daemon Local Server
