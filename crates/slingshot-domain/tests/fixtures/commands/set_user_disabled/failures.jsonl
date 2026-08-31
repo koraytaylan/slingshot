@@ -1,0 +1,5 @@
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"authorizable_not_found\"}","members":["authorizable_identifier","failure"],"note":"refused as authorizable not found","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"authorizable_kind_mismatch\"}","members":["authorizable_identifier","failure"],"note":"refused as authorizable kind mismatch","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"authorizable_access_denied\"}","members":["authorizable_identifier","failure"],"note":"refused as authorizable access denied","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"platform_control_rejected\"}","members":["authorizable_identifier","failure"],"note":"refused as platform control rejected","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"platform_control_outcome_unknown\"}","members":["authorizable_identifier","failure"],"note":"refused as platform control outcome unknown","proves_no_effect":false}

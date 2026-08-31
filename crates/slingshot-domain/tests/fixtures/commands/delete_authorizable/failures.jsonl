@@ -1,0 +1,6 @@
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"authorizable_not_found\"}","members":["authorizable_identifier","failure"],"note":"refused as authorizable not found","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"authorizable_kind_mismatch\"}","members":["authorizable_identifier","failure"],"note":"refused as authorizable kind mismatch","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"authorizable_access_denied\"}","members":["authorizable_identifier","failure"],"note":"refused as authorizable access denied","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"group_has_members\"}","members":["authorizable_identifier","failure"],"note":"refused as group has members","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"repository_commit_failed\"}","members":["authorizable_identifier","failure"],"note":"refused as repository commit failed","proves_no_effect":true}
+{"document":"{\"authorizable_identifier\":\"author\",\"failure\":\"mutation_outcome_unknown\"}","members":["authorizable_identifier","failure"],"note":"refused as mutation outcome unknown","proves_no_effect":false}

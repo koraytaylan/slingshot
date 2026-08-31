@@ -1,0 +1,3 @@
+{"accepted":true,"document":"{\"authorizable_identifier\":\"content-authors\"}","note":"the plainest group"}
+{"accepted":true,"document":"{\"authorizable_identifier\":\"content-authors\",\"intermediate_path\":\"slingshot\"}","note":"a group with a place"}
+{"accepted":false,"document":"{\"authorizable_identifier\":\"content-authors\",\"password\":\"hunter2\"}","note":"a password this command does not have"}
