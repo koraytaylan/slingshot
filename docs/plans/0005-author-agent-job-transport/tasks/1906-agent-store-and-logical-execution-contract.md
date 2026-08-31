@@ -7,6 +7,7 @@ depends_on:
   - continuation-key-lifecycle-contract
 gated: false
 touches:
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - crates/slingshot-domain/src/lib.rs
   - crates/slingshot-domain/src/logical_agent_operation.rs
   - crates/slingshot-domain/src/remote_job.rs
@@ -16,7 +17,7 @@ touches:
   - crates/slingshot-agent-protocol/tests/agent_store_and_logical_execution_contract.rs
   - crates/slingshot-agent-protocol/tests/fixtures/agent-store-and-logical-execution/**
   - schemas/agent-protocol/job/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Agent Store and Logical Execution Contract
