@@ -206,6 +206,7 @@ pub const EVERY_OPTION: &[&str] = &[
 /// spread across a parser.
 pub const LOCAL_LEAVES: &[&str] = &[
     "check-configuration",
+    "protocol-serve",
     "daemon-ping",
     "daemon-start",
     "daemon-status",
@@ -236,6 +237,14 @@ pub const HISTORICAL_LEAVES: &[&str] = &[
     "operation-result",
     "operation-status",
 ];
+
+/// The leaf that hands the standard streams to the protocol server.
+///
+/// It takes the target and nothing else. Every other option belongs to a
+/// command a caller writes; this leaf writes no command, and an option it
+/// silently ignored would be a caller believing something that is not
+/// happening for the rest of the process's life.
+pub const SERVE_LEAF: &str = "protocol-serve";
 
 /// The leaves that name the one operation they act on.
 ///
@@ -447,6 +456,11 @@ pub fn leaves_taking(option: &str) -> Vec<String> {
 fn observation_leaves_taking(option: &str) -> Option<Vec<String>> {
     let named = |leaves: &[&str]| leaves.iter().map(|leaf| (*leaf).to_owned()).collect();
     let leaves = match option {
+        PROFILE_OPTION | ENVIRONMENT_OPTION | RUNTIME_ROOT_OPTION => {
+            let mut every = every_leaf_that_reaches_somewhere();
+            every.push(SERVE_LEAF.to_owned());
+            every
+        }
         TARGET_DIGEST_OPTION => named(HISTORICAL_LEAVES),
         EXPECTED_REVISION_OPTION | EXPECTED_CATEGORY_OPTION => named(&["operation-restart"]),
         REVIEWED_DIGEST_OPTION => named(&["maintenance-apply"]),
@@ -496,7 +510,12 @@ fn command_leaves_taking(option: &str) -> Vec<String> {
         | MEDIA_FORMATS_OPTION
         | TAGS_OPTION
         | MINIMUM_BYTES_OPTION
-        | MAXIMUM_BYTES_OPTION => catalog_leaves(),
+        | MAXIMUM_BYTES_OPTION
+        | NAME_OPTION
+        | TITLE_OPTION
+        | RESOURCE_TYPE_OPTION
+        | COMPONENT_PARENT_OPTION
+        | PROPERTIES_OPTION => catalog_leaves(),
         _ => every_leaf_that_reaches_somewhere(),
     }
 }
@@ -514,7 +533,7 @@ fn catalog_leaves() -> Vec<String> {
 fn every_leaf_that_reaches_somewhere() -> Vec<String> {
     LOCAL_LEAVES
         .iter()
-        .filter(|leaf| !METADATA_ONLY_LEAVES.contains(leaf))
+        .filter(|leaf| !METADATA_ONLY_LEAVES.contains(leaf) && **leaf != SERVE_LEAF)
         .map(|leaf| (*leaf).to_owned())
         .chain(catalog_leaves())
         .collect()

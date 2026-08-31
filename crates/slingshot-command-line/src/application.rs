@@ -43,7 +43,7 @@ use crate::exit_classification;
 use crate::interrupt::{self, Phase, SignalOutcome};
 use crate::invocation::{
     EVERY_OPTION, Invocation, LOCAL_LEAVES, METADATA_ONLY_LEAVES, OPERATION_IDENTIFIER_OPTION,
-    OPERATION_NAMING_LEAVES, Selection, is_catalog_command,
+    OPERATION_NAMING_LEAVES, SERVE_LEAF, Selection, is_catalog_command,
 };
 use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
 use crate::operation_submission;
@@ -117,6 +117,8 @@ pub enum Service {
     OperationObservation,
     /// Listing operations, or previewing and applying maintenance.
     OperationMaintenance,
+    /// Handing the standard streams to the protocol server.
+    ModelContextProtocolServer,
 }
 
 impl Service {
@@ -127,7 +129,13 @@ impl Service {
     /// when somebody runs them.
     #[must_use]
     pub fn is_versioned(self) -> bool {
-        !matches!(self, Self::Metadata | Self::ConfigurationCheck | Self::DaemonLifecycle)
+        !matches!(
+            self,
+            Self::Metadata
+                | Self::ConfigurationCheck
+                | Self::DaemonLifecycle
+                | Self::ModelContextProtocolServer
+        )
     }
 }
 
@@ -166,6 +174,9 @@ pub fn service_for(invocation: &Invocation) -> Result<Service, DispatchRefusal> 
     }
     if leaf == "check-configuration" {
         return Ok(Service::ConfigurationCheck);
+    }
+    if leaf == SERVE_LEAF {
+        return Ok(Service::ModelContextProtocolServer);
     }
     if NAMESPACE_ONLY_LEAVES.contains(&leaf) || leaf == "daemon-start" {
         return Ok(Service::DaemonLifecycle);
@@ -469,6 +480,7 @@ impl CommandLineApplication<'_> {
             Service::OperationSubmission => self.submit(invocation),
             Service::OperationObservation => self.observe(invocation),
             Service::OperationMaintenance => self.maintain(invocation),
+            Service::ModelContextProtocolServer => Ok(served()),
         }
     }
 
@@ -856,6 +868,19 @@ fn stated(diagnostic: &ConfigurationDiagnostic) -> String {
 /// Returns the refusal one unreadable answer produces.
 fn unreadable(response: &OperationResponse) -> RunRefusal {
     RunRefusal::Local(format!("that daemon answered a status read with {response:?}"))
+}
+
+/// Returns what a run that handed its streams to the protocol server produced.
+///
+/// Nothing, on either stream. While that server runs it owns standard output,
+/// and a command-line rendering written beside its messages would corrupt every
+/// client parsing them.
+fn served() -> Completion {
+    Completion {
+        answer: Answer::Text(String::new()),
+        diagnostics: Vec::new(),
+        exit: exit_classification::SUCCESS,
+    }
 }
 
 /// Returns what this build answers out of itself.

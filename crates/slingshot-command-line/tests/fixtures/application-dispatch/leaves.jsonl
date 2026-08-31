@@ -1,6 +1,7 @@
 {"leaf": "help", "service": "metadata"}
 {"leaf": "version", "service": "metadata"}
 {"leaf": "check-configuration", "service": "configuration-check"}
+{"leaf": "protocol-serve", "service": "model-context-protocol-server"}
 {"leaf": "daemon-start", "service": "daemon-lifecycle"}
 {"leaf": "daemon-status", "service": "daemon-lifecycle"}
 {"leaf": "daemon-ping", "service": "daemon-lifecycle"}

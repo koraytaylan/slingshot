@@ -49,5 +49,6 @@
 {"name": "owned-operation-list-unserved", "arguments": ["--profile", "local", "--environment", "author", "operation-list"], "intent": "a daemon serving retained control alone says so rather than pretending", "kind": "owned"}
 {"name": "owned-load-content-unserved", "arguments": ["--profile", "local", "--environment", "author", "load_content_as_json", "--path", "/content/site/en", "--machine"], "intent": "a submission against the same daemon says the same thing", "kind": "owned"}
 {"name": "owned-stop", "arguments": ["--profile", "local", "--environment", "author", "daemon", "stop"], "intent": "a stop quotes the nonce the owner published", "kind": "owned"}
+{"name": "protocol-serve-reads-nothing", "arguments": ["--profile", "local", "--environment", "author", "protocol", "serve"], "intent": "a server handed no input answers nothing and finishes", "kind": "local"}
 {"name": "interrupted-before-receipt-human", "arguments": ["--profile", "local", "--environment", "author", "operation-list"], "intent": "a signal before the daemon answers publishes nothing and says how far it got", "kind": "interrupted"}
 {"name": "interrupted-before-receipt-machine", "arguments": ["--profile", "local", "--environment", "author", "operation-list", "--machine"], "intent": "the same interruption as one tagged object on standard output", "kind": "interrupted"}

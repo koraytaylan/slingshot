@@ -140,6 +140,7 @@ fn service_spelling(service: Service) -> &'static str {
         Service::OperationSubmission => "operation-submission",
         Service::OperationObservation => "operation-observation",
         Service::OperationMaintenance => "operation-maintenance",
+        Service::ModelContextProtocolServer => "model-context-protocol-server",
     }
 }
 

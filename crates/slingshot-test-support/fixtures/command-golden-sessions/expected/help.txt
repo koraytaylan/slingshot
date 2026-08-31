@@ -4,6 +4,7 @@ slingshot - one command line over one daemon
 
 commands:
   check-configuration
+  protocol-serve
   daemon-ping
   daemon-start
   daemon-status
