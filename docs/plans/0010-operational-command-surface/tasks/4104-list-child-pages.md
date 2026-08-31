@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/list_child_pages.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_child_pages/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # List Child Pages

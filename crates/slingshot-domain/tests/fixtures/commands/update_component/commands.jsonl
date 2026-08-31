@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"properties\":{\"text\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Hello\"}}}}","note":"one assigned property"}
+{"accepted":true,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"removed_property_names\":[\"text\"]}","note":"one removal"}
+{"accepted":true,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"properties\":{\"text\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Hello\"}}},\"removed_property_names\":[\"textIsRich\"]}","note":"both documents, disjoint"}
+{"accepted":false,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\"}","note":"a request that would change nothing"}
+{"accepted":false,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"removed_property_names\":[]}","note":"an empty removal list"}
+{"accepted":false,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"extra\":1,\"properties\":{\"text\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Hello\"}}}}","note":"a member this command does not have"}
