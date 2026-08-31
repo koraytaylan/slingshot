@@ -28,7 +28,10 @@ use crate::sqlite_statement_inventory::FORBIDDEN_CONSTRUCTS;
 ///
 /// Embedded rather than read from disk, so the schema a binary applies is the
 /// one it was built with and cannot be swapped underneath it.
-pub const MIGRATIONS: &[(u32, &str)] = &[(1, include_str!("../migrations/0001-operations.sql"))];
+pub const MIGRATIONS: &[(u32, &str)] = &[
+    (1, include_str!("../migrations/0001-operations.sql")),
+    (2, include_str!("../migrations/0002-agent-jobs.sql")),
+];
 
 /// Compile option that would make the temporary-storage pragma a dead letter.
 ///
