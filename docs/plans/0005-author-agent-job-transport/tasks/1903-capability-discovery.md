@@ -18,7 +18,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/capability-discovery/**
   - crates/slingshot-agent-connection/tests/capability_discovery.rs
 status: done
-merged_as: ""
+merged_as: "5ec44117c272981eb435b40f9b3296dbed16490e"
 ---
 # Capability Discovery
 
