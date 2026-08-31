@@ -510,6 +510,23 @@ impl ::core::fmt::Display for RepositoryPropertyPath {
     }
 }
 
+/// Requires one opaque identifier body to be addressable.
+///
+/// An opaque identifier is whatever an author minted, so the rule is narrow: it
+/// refuses only the two things that make a value unusable as an address rather
+/// than merely unusual - a control, which no transport agrees how to carry, and
+/// an edge space, which every renderer disagrees about keeping.
+pub(crate) fn accept_opaque_body(value: &str, role: &'static str) -> Result<(), PathFailure> {
+    let refuse = |field| PathFailure::at(role, field);
+    if value.starts_with(' ') || value.ends_with(' ') {
+        return Err(refuse("space"));
+    }
+    if value.chars().any(char::is_control) {
+        return Err(refuse("character"));
+    }
+    Ok(())
+}
+
 /// Requires one value to be nonempty, within `bound`, and already normalized.
 pub(crate) fn accept_within(
     value: &str,

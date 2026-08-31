@@ -2235,6 +2235,7 @@ dependencies = [
 name = "slingshot-domain"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "proptest",
  "secrecy",
  "serde",

@@ -44,7 +44,7 @@ default-features = true
 features = []
 targets = []
 kinds = ["normal"]
-owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-configuration", "slingshot-development"]
+owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-configuration", "slingshot-development", "slingshot-domain"]
 
 [[capability]]
 name = "byte-buffers"

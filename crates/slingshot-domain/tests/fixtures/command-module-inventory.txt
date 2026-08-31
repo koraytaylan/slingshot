@@ -24,11 +24,15 @@ find_pages_containing_phrase
 find_pages_using_components
 inspect_open_service_gateway_initiative_configuration
 load_content_as_javascript_object_notation
+operational_listing
 package_selection
+platform_service_identity
+process_identity
 property_value
 query_paths
 replicate_content
 repository_path
+resource_mutation
 result_window
 schema
 search_predicate
