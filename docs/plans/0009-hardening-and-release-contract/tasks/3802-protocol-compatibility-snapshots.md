@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-development/tests/protocol_compatibility.rs
   - "crates/slingshot-development/tests/fixtures/protocol-compatibility/**"
 status: done
-merged_as: ""
+merged_as: "f6810de44fce053ce5fe8a57c813d12ef9a3df4b"
 ---
 # Protocol Compatibility Snapshots
 
