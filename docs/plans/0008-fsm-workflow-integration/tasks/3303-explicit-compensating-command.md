@@ -11,7 +11,7 @@ touches:
   - examples/finite-state-machine/compensation.machine.json
   - crates/slingshot-development/tests/fixtures/finite-state-machine-compensation/**
   - crates/slingshot-development/tests/finite_state_machine_compensation.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Explicit Compensating Command
