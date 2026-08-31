@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-development/tests/local_operation_session.rs
   - "crates/slingshot-development/tests/fixtures/local-operation-session/**"
 status: done
-merged_as: ""
+merged_as: "42a4371569073a94bd4599618e6e6878117b2ad1"
 ---
 # Local Operation Golden Session
 
