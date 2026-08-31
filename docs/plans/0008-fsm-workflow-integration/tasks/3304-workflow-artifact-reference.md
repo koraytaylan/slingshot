@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/finite-state-machine-artifact/**
   - crates/slingshot-development/tests/finite_state_machine_artifact.rs
 status: done
-merged_as: ""
+merged_as: "10be073429b1b89d7cf1fc42150a9485c7946dae"
 ---
 # Workflow Artifact and Maintenance Result References
 
