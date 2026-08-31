@@ -20,16 +20,49 @@ pub const READINESS_SUFFIX: &str = ".readiness.json";
 /// File-name suffix of the temporary record an atomic publication writes first.
 pub const READINESS_TEMPORARY_SUFFIX: &str = ".readiness.pending";
 
+/// What a daemon publishes about the target it serves.
+///
+/// Digests and revisions rather than principals: a readiness record is
+/// readable by its own user and has no business carrying a credential. A
+/// client compares these before it sends anything, so it can tell an owner it
+/// wants from an owner it must not disturb.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublishedIdentity {
+    /// Opaque author-target identity digest this daemon serves.
+    pub author_target_identity_digest: String,
+    /// Digest of the runtime contract this daemon runs under.
+    pub daemon_runtime_contract_digest: String,
+    /// Retained control version this daemon speaks whatever else it refuses.
+    pub retained_control_version: u32,
+    /// Environment revision this daemon started from.
+    pub selected_environment_revision: String,
+    /// Operation protocol versions this daemon can serve, ascending.
+    pub supported_operation_versions: Vec<u64>,
+}
+
 /// What a live daemon publishes about itself.
+///
+/// The process identifier is here for an operator reading a diagnostic and for
+/// nothing else. No code looks it up, checks it, or signals it, because an
+/// identifier the operating system may reuse cannot establish that anything is
+/// alive - and a reused one names some unrelated program.
+///
+/// The identity is absent until startup has established a target. A daemon
+/// serving only retained control has genuinely not selected one, and saying so
+/// is better than publishing empty fields a reader might compare against.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReadinessRecord {
+    /// Display form of the endpoint the daemon listens on.
+    pub endpoint_display: String,
+    /// What this daemon serves, once startup has established it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<PublishedIdentity>,
     /// Process identifier of the daemon, as a diagnostic and never as authority.
     pub process_identifier: u32,
     /// Live readiness nonce, rendered in lowercase hexadecimal.
     pub readiness_nonce: String,
-    /// Display form of the endpoint the daemon listens on.
-    pub endpoint_display: String,
 }
 
 /// Returns the path of the readiness record of one runtime namespace.
