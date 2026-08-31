@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-development/tests/operation_and_job_properties.rs
   - "crates/slingshot-development/tests/fixtures/state-properties/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Operation And Job State Properties
