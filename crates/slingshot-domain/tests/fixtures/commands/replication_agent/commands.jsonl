@@ -1,0 +1,3 @@
+{"accepted":true,"document":"{}","note":"every agent"}
+{"accepted":true,"document":"{\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":25}}","note":"an explicit first page"}
+{"accepted":false,"document":"{\"transport_address\":\"https://publisher.example.test\"}","note":"a transport address this command does not take"}

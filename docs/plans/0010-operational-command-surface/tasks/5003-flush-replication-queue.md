@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/flush_replication_queue.rs
   - "crates/slingshot-domain/tests/fixtures/commands/flush_replication_queue/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Flush a Replication Queue

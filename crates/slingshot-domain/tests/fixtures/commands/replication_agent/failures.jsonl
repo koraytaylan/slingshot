@@ -1,0 +1,3 @@
+{"document":"{\"agent_identifier\":\"publish\",\"failure\":\"agent_not_found\"}","members":["agent_identifier","failure"],"note":"refused as agent not found","proves_no_effect":true}
+{"document":"{\"agent_identifier\":\"publish\",\"failure\":\"agent_access_denied\"}","members":["agent_identifier","failure"],"note":"refused as agent access denied","proves_no_effect":true}
+{"document":"{\"agent_identifier\":\"publish\",\"failure\":\"agent_inventory_failed\"}","members":["agent_identifier","failure"],"note":"refused as agent inventory failed","proves_no_effect":true}

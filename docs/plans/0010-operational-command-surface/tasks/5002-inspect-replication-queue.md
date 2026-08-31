@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/inspect_replication_queue.rs
   - "crates/slingshot-domain/tests/fixtures/commands/inspect_replication_queue/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Inspect a Replication Queue
