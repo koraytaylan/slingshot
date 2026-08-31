@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-test-support/src/observable_capture.rs
   - crates/slingshot-development/tests/credential_exposure_threats.rs
   - "crates/slingshot-development/tests/fixtures/credential-threats/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Credential Exposure Threat Suite
