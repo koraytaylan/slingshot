@@ -14,7 +14,7 @@ touches:
   - "fuzz/corpus/model_context_protocol_message/**"
   - crates/slingshot-development/tests/model_context_protocol_fuzz_corpus.rs
 status: done
-merged_as: ""
+merged_as: "a76500e1c2099f3e666c16c6b708d5ef71a2c9ad"
 ---
 # Model Context Protocol Fuzzing
 
