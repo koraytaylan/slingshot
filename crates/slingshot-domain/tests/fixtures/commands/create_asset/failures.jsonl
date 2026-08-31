@@ -1,0 +1,8 @@
+{"document":"{\"failure\":\"parent_not_found\",\"target_path\":\"/content/dam/example/logo.png\"}","members":["failure","target_path"],"note":"refused as parent not found","proves_no_effect":true}
+{"document":"{\"failure\":\"parent_access_denied\",\"target_path\":\"/content/dam/example/logo.png\"}","members":["failure","target_path"],"note":"refused as parent access denied","proves_no_effect":true}
+{"document":"{\"failure\":\"target_already_exists\",\"target_path\":\"/content/dam/example/logo.png\"}","members":["failure","target_path"],"note":"refused as target already exists","proves_no_effect":true}
+{"document":"{\"failure\":\"payload_rejected\",\"target_path\":\"/content/dam/example/logo.png\"}","members":["failure","target_path"],"note":"refused as payload rejected","proves_no_effect":true}
+{"document":"{\"failure\":\"payload_too_large\",\"target_path\":\"/content/dam/example/logo.png\"}","members":["failure","target_path"],"note":"refused as payload too large","proves_no_effect":true}
+{"document":"{\"failure\":\"media_type_unsupported\",\"target_path\":\"/content/dam/example/logo.png\"}","members":["failure","target_path"],"note":"refused as media type unsupported","proves_no_effect":true}
+{"document":"{\"failure\":\"repository_commit_failed\",\"target_path\":\"/content/dam/example/logo.png\"}","members":["failure","target_path"],"note":"refused as repository commit failed","proves_no_effect":true}
+{"document":"{\"failure\":\"mutation_outcome_unknown\",\"target_path\":\"/content/dam/example/logo.png\"}","members":["failure","target_path"],"note":"refused as mutation outcome unknown","proves_no_effect":false}

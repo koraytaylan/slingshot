@@ -1,0 +1,5 @@
+{"accepted":true,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"properties\":{\"dc:title\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Logo\"}}}}","note":"one assigned property"}
+{"accepted":true,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"removed_property_names\":[\"dc:title\"]}","note":"one removal"}
+{"accepted":true,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"properties\":{\"dc:title\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Logo\"}}},\"removed_property_names\":[\"dc:description\"]}","note":"both documents, disjoint"}
+{"accepted":false,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"removed_property_names\":[]}","note":"an empty removal list"}
+{"accepted":false,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"properties\":{\"dc:title\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Logo\"}}},\"extra\":1}","note":"a member this command does not have"}

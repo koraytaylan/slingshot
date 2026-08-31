@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"reference_policy\":\"refuse_when_referenced\"}","note":"a deletion that refuses while anything points at it"}
+{"accepted":true,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"reference_policy\":\"ignore_references\"}","note":"a deletion that removes it regardless"}
+{"accepted":false,"document":"{\"asset_path\":\"/content/dam/example/logo.png\"}","note":"no reference policy, which has no default"}
+{"accepted":false,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"reference_policy\":\"maybe\"}","note":"a reference policy nobody declared"}
