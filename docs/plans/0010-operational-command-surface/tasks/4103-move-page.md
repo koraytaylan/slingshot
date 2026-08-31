@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/move_page.rs
   - "crates/slingshot-domain/tests/fixtures/commands/move_page/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Move a Page

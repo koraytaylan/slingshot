@@ -106,10 +106,10 @@ impl ResourceMutationResult {
 /// What a deletion removed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DeletedResourceResult {
-    /// Address that is no longer there.
-    pub repository_path: RepositoryPath,
     /// How many nodes the deletion removed, the address itself included.
     pub removed_node_count: u64,
+    /// Address that is no longer there.
+    pub repository_path: RepositoryPath,
 }
 
 impl DeletedResourceResult {
@@ -124,7 +124,7 @@ impl DeletedResourceResult {
         removed_node_count: u64,
     ) -> Result<Self, MutationResultFailure> {
         require_within(removed_node_count, "maximum_deleted_nodes")?;
-        Ok(Self { repository_path, removed_node_count })
+        Ok(Self { removed_node_count, repository_path })
     }
 
     /// Requires this result to answer a request that determined `expected`.
@@ -145,12 +145,12 @@ impl DeletedResourceResult {
 /// What a move moved, and what it adjusted on the way.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MovedResourceResult {
-    /// Address the subtree left.
-    pub source_path: RepositoryPath,
-    /// Address the subtree arrived at.
-    pub destination_path: RepositoryPath,
     /// How many references the move rewrote.
     pub adjusted_reference_count: u64,
+    /// Address the subtree arrived at.
+    pub destination_path: RepositoryPath,
+    /// Address the subtree left.
+    pub source_path: RepositoryPath,
 }
 
 impl MovedResourceResult {
@@ -168,8 +168,8 @@ impl MovedResourceResult {
         adjusted_reference_count: u64,
     ) -> Result<Self, MutationResultFailure> {
         require_within(adjusted_reference_count, "maximum_adjusted_references")?;
-        require_outside(&source_path, &destination_path)?;
-        Ok(Self { source_path, destination_path, adjusted_reference_count })
+        require_destination_outside_source(&source_path, &destination_path)?;
+        Ok(Self { adjusted_reference_count, destination_path, source_path })
     }
 
     /// Requires this result to answer the move `source` to `destination`.
@@ -188,6 +188,52 @@ impl MovedResourceResult {
         } else {
             Err(MutationResultFailure::NotThisRequest)
         }
+    }
+}
+
+/// One deletion exactly as it is written on the wire.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeletedDocument {
+    /// Address that is no longer there.
+    repository_path: RepositoryPath,
+    /// How many nodes the deletion removed.
+    removed_node_count: u64,
+}
+
+impl<'de> Deserialize<'de> for DeletedResourceResult {
+    fn deserialize<Source: serde::Deserializer<'de>>(
+        deserializer: Source,
+    ) -> Result<Self, Source::Error> {
+        let document = DeletedDocument::deserialize(deserializer)?;
+        Self::new(document.repository_path, document.removed_node_count)
+            .map_err(Source::Error::custom)
+    }
+}
+
+/// One move exactly as it is written on the wire.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MovedDocument {
+    /// How many references the move rewrote.
+    adjusted_reference_count: u64,
+    /// Address the subtree arrived at.
+    destination_path: RepositoryPath,
+    /// Address the subtree left.
+    source_path: RepositoryPath,
+}
+
+impl<'de> Deserialize<'de> for MovedResourceResult {
+    fn deserialize<Source: serde::Deserializer<'de>>(
+        deserializer: Source,
+    ) -> Result<Self, Source::Error> {
+        let document = MovedDocument::deserialize(deserializer)?;
+        Self::new(
+            document.source_path,
+            document.destination_path,
+            document.adjusted_reference_count,
+        )
+        .map_err(Source::Error::custom)
     }
 }
 
@@ -308,7 +354,16 @@ fn require_within(count: u64, limit: &str) -> Result<(), MutationResultFailure> 
 }
 
 /// Requires a destination to lie outside the subtree it is moved from.
-fn require_outside(
+///
+/// Checked on the request as well as on the result, because a move into its own
+/// subtree is the one mistake whose consequence is a tree nobody can put back:
+/// the caller learns here rather than from what is left afterwards.
+///
+/// # Errors
+///
+/// Returns [`MutationResultFailure::DestinationInsideSource`] when the
+/// destination is the source or lies within it.
+pub fn require_destination_outside_source(
     source: &RepositoryPath,
     destination: &RepositoryPath,
 ) -> Result<(), MutationResultFailure> {

@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"adjust_references\":true,\"destination_path\":\"/content/example/en/annual-report\",\"source_path\":\"/content/example/en/report\"}","note":"a move that takes its references with it"}
+{"accepted":true,"document":"{\"adjust_references\":false,\"destination_path\":\"/content/archive/report\",\"source_path\":\"/content/example/en/report\"}","note":"a move that leaves its references pointing at nothing"}
+{"accepted":true,"document":"{\"adjust_references\":false,\"destination_path\":\"/content/example/en/reportage\",\"source_path\":\"/content/example/en/report\"}","note":"a destination whose name merely begins the same, which is not containment"}
+{"accepted":false,"document":"{\"destination_path\":\"/content/archive/report\",\"source_path\":\"/content/example/en/report\"}","note":"no reference decision, which has no default"}
+{"accepted":false,"document":"{\"adjust_references\":false,\"source_path\":\"/content/example/en/report\"}","note":"no destination"}
+{"accepted":false,"document":"{\"adjust_references\":false,\"destination_path\":\"/content/archive/report\",\"extra\":1,\"source_path\":\"/content/example/en/report\"}","note":"a member this command does not have"}

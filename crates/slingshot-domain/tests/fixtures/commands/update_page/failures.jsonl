@@ -1,0 +1,7 @@
+{"document":"{\"failure\":\"page_not_found\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"a page update refused as page not found","proves_no_effect":true}
+{"document":"{\"failure\":\"page_access_denied\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"a page update refused as page access denied","proves_no_effect":true}
+{"document":"{\"failure\":\"page_invalid\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"a page update refused as page invalid","proves_no_effect":true}
+{"document":"{\"failure\":\"property_rejected\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"a page update refused as property rejected","proves_no_effect":true}
+{"document":"{\"failure\":\"property_not_removable\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"a page update refused as property not removable","proves_no_effect":true}
+{"document":"{\"failure\":\"repository_commit_failed\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"a page update refused as repository commit failed","proves_no_effect":true}
+{"document":"{\"failure\":\"mutation_outcome_unknown\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"a page update refused as mutation outcome unknown","proves_no_effect":false}
