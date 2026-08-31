@@ -90,6 +90,33 @@ pub const INCLUDE_OPTION: &str = "--include";
 /// The option naming the subtrees a package removes, in order.
 pub const EXCLUDE_OPTION: &str = "--exclude";
 
+/// The option naming an exact primary node type a match must have.
+pub const NODE_TYPE_OPTION: &str = "--node-type";
+
+/// The option naming where in a result set to start.
+pub const OFFSET_OPTION: &str = "--offset";
+
+/// The option carrying an opaque continuation token.
+pub const CONTINUATION_TOKEN_OPTION: &str = "--continuation-token";
+
+/// The option carrying one canonical predicate object.
+pub const PROPERTY_PREDICATE_OPTION: &str = "--property-predicate";
+
+/// The option naming a template a page must record.
+pub const TEMPLATE_OPTION: &str = "--template";
+
+/// The option carrying exactly what to look for.
+pub const PHRASE_OPTION: &str = "--phrase";
+
+/// The option naming component resource types, separated by commas.
+pub const RESOURCE_TYPES_OPTION: &str = "--resource-types";
+
+/// The option choosing whether every named component must be used.
+pub const MATCH_ALL_OPTION: &str = "--match-all";
+
+/// The option naming which configuration to inspect.
+pub const PERSISTENT_IDENTIFIER_OPTION: &str = "--persistent-identifier";
+
 /// Every option this surface knows, in the order a reference lists them.
 pub const EVERY_OPTION: &[&str] = &[
     PROFILE_OPTION,
@@ -113,6 +140,15 @@ pub const EVERY_OPTION: &[&str] = &[
     ROOTS_OPTION,
     INCLUDE_OPTION,
     EXCLUDE_OPTION,
+    NODE_TYPE_OPTION,
+    OFFSET_OPTION,
+    CONTINUATION_TOKEN_OPTION,
+    PROPERTY_PREDICATE_OPTION,
+    TEMPLATE_OPTION,
+    PHRASE_OPTION,
+    RESOURCE_TYPES_OPTION,
+    MATCH_ALL_OPTION,
+    PERSISTENT_IDENTIFIER_OPTION,
 ];
 
 /// The leaves this surface offers that are not catalog commands.
@@ -334,11 +370,30 @@ pub fn leaves_taking(option: &str) -> Vec<String> {
         TARGET_DIGEST_OPTION => named(HISTORICAL_LEAVES),
         EXPECTED_REVISION_OPTION | EXPECTED_CATEGORY_OPTION => named(&["operation-restart"]),
         REVIEWED_DIGEST_OPTION => named(&["maintenance-apply"]),
-        LIMIT_OPTION | BEFORE_OPTION => named(&["maintenance-preview", "operation-list"]),
+        BEFORE_OPTION => named(&["maintenance-preview", "operation-list"]),
+        LIMIT_OPTION => {
+            let mut leaves = named(&["maintenance-preview", "operation-list"]);
+            leaves.extend(catalog_leaves());
+            leaves
+        }
         RESULT_IDENTIFIER_OPTION | EXPECTED_DIGEST_OPTION => named(&["maintenance-result"]),
         DESTINATION_OPTION => named(&["maintenance-result", "operation-artifact"]),
-        PATH_OPTION | DEPTH_OPTION | RECURSIVE_OPTION | PACKAGE_NAME_OPTION | ROOTS_OPTION
-        | INCLUDE_OPTION | EXCLUDE_OPTION => catalog_leaves(),
+        PATH_OPTION
+        | DEPTH_OPTION
+        | RECURSIVE_OPTION
+        | PACKAGE_NAME_OPTION
+        | ROOTS_OPTION
+        | INCLUDE_OPTION
+        | EXCLUDE_OPTION
+        | NODE_TYPE_OPTION
+        | OFFSET_OPTION
+        | CONTINUATION_TOKEN_OPTION
+        | PROPERTY_PREDICATE_OPTION
+        | TEMPLATE_OPTION
+        | PHRASE_OPTION
+        | RESOURCE_TYPES_OPTION
+        | MATCH_ALL_OPTION
+        | PERSISTENT_IDENTIFIER_OPTION => catalog_leaves(),
         _ => every_leaf_that_reaches_somewhere(),
     }
 }
@@ -389,8 +444,8 @@ fn absorb(
             invocation.output = Some(OutputForm::Machine);
             return Ok(0);
         }
-        RECURSIVE_OPTION => {
-            invocation.arguments.insert(RECURSIVE_OPTION.to_owned(), String::new());
+        RECURSIVE_OPTION | MATCH_ALL_OPTION => {
+            invocation.arguments.insert(option.to_owned(), String::new());
             return Ok(0);
         }
         DETACH_OPTION => {
