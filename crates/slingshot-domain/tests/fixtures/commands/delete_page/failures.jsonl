@@ -1,0 +1,7 @@
+{"document":"{\"failure\":\"target_not_found\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"refused as target not found","proves_no_effect":true}
+{"document":"{\"failure\":\"target_access_denied\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"refused as target access denied","proves_no_effect":true}
+{"document":"{\"failure\":\"target_not_a_page\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"refused as target not a page","proves_no_effect":true}
+{"document":"{\"failure\":\"target_is_referenced\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"refused as target is referenced","proves_no_effect":true}
+{"document":"{\"failure\":\"deletion_budget_exceeded\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"refused as deletion budget exceeded","proves_no_effect":true}
+{"document":"{\"failure\":\"repository_commit_failed\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"refused as repository commit failed","proves_no_effect":true}
+{"document":"{\"failure\":\"mutation_outcome_unknown\",\"page_path\":\"/content/example/en/report\"}","members":["failure","page_path"],"note":"refused as mutation outcome unknown","proves_no_effect":false}

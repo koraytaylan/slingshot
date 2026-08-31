@@ -1,0 +1,5 @@
+{"destination_path":"/content/example/en/report","note":"the destination is the source","usable":false}
+{"destination_path":"/content/example/en/report/child","note":"the destination is the source's own child","usable":false}
+{"destination_path":"/content/example/en/report/child/deeper","note":"the destination is deeper inside the source","usable":false}
+{"destination_path":"/content/example/en/reportage","note":"a sibling whose name begins the same","usable":true}
+{"destination_path":"/content/archive/report","note":"somewhere else entirely","usable":true}

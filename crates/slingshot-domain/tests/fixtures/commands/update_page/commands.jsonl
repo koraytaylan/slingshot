@@ -1,0 +1,11 @@
+{"accepted":true,"content_path":"/content/example/en/report/jcr:content","document":"{\"page_path\":\"/content/example/en/report\",\"title\":\"Annual Report\"}","note":"a title alone"}
+{"accepted":true,"content_path":"/content/example/en/report/jcr:content","document":"{\"page_path\":\"/content/example/en/report\",\"properties\":{\"dc:description\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"A report\"}}}}","note":"one assigned property"}
+{"accepted":true,"content_path":"/content/example/en/report/jcr:content","document":"{\"page_path\":\"/content/example/en/report\",\"removed_property_names\":[\"dc:description\"]}","note":"one removal"}
+{"accepted":true,"content_path":"/content/example/en/report/jcr:content","document":"{\"page_path\":\"/content/example/en/report\",\"properties\":{\"dc:description\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"A report\"}}},\"removed_property_names\":[\"jcr:description\"],\"title\":\"Annual Report\"}","note":"all three, with the two documents disjoint"}
+{"accepted":true,"content_path":"/report/jcr:content","document":"{\"page_path\":\"/report\",\"title\":\"Annual Report\"}","note":"a page directly under the repository root"}
+{"accepted":true,"content_path":"/content/example/en/report/jcr:content","document":"{\"page_path\":\"/content/example/en/report\",\"removed_property_names\":[\"dc:description\",\"jcr:description\"]}","note":"two removals, ascending"}
+{"accepted":false,"document":"{\"page_path\":\"/content/example/en/report\",\"removed_property_names\":[]}","note":"an empty removal list"}
+{"accepted":false,"document":"{\"page_path\":\"/content/example/en/report\",\"removed_property_names\":[\"jcr:description\",\"dc:description\"]}","note":"a descending removal list"}
+{"accepted":false,"document":"{\"page_path\":\"/content/example/en/report\",\"removed_property_names\":[\"dc:description\",\"dc:description\"]}","note":"a repeated removal"}
+{"accepted":false,"document":"{\"page_path\":\"content/example/en/report\",\"title\":\"Annual Report\"}","note":"a page address that is not absolute"}
+{"accepted":false,"document":"{\"extra\":1,\"page_path\":\"/content/example/en/report\",\"title\":\"Annual Report\"}","note":"a member this command does not have"}

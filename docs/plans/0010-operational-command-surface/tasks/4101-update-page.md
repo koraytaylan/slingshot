@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/update_page.rs
   - "crates/slingshot-domain/tests/fixtures/commands/update_page/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Update a Page
