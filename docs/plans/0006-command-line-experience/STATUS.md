@@ -6,7 +6,7 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Goal:** expose the complete Slingshot operation registry through a deterministic command surface with namespaced daemon startup, durable detachment, stable output, and process-level proof.
 - **Root cause:** operators and automation otherwise need to construct local protocol requests themselves, and long-running jobs become unsafe when command parsing, daemon lifecycle, stream routing, and interruption behavior are implicit.
 - **Approach:** build a side-effect-free command tree, authenticate daemon-runtime, author-agent-transport, and canonical-JSON/`1.0.0`/limits/schema provenance, validate raw bytes before decoded shape and typed conversion, externalize complete over-inline maintenance bytes under an operation-free target-qualified association/URI without truncation, authenticate caller digest and read-start facts through target-and-identifier metadata lookup, make operation-artifact or maintenance-result publication the success commit, centralize daemon observation and lossless structured-failure rendering, and pin compiled-process ownership with exhaustive golden sessions and secret scans.
-- **Progress:** 1/20 tasks done; 0 blocked; 0 dropped.
+- **Progress:** 2/20 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `95f1e298dbac69e2a37e48d338409fd7c1cf74d5`; mode `sequential`; final integration —.
 - **Exceptions:**
   - **2501 needed the registry it is specified to consult.** The task requires an
