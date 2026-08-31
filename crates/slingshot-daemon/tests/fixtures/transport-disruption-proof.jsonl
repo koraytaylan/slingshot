@@ -1,0 +1,11 @@
+{"cut": "none", "may_send_again": false, "name": "clean-submission", "outcome": "accepted", "physical_records": 1, "seed": 11}
+{"cut": "pre-byte", "may_send_again": true, "name": "connection-lost-before-any-byte", "outcome": "not-executed", "physical_records": 0, "seed": 12}
+{"cut": "post-byte", "may_send_again": false, "name": "connection-lost-after-the-request-head", "outcome": "unknown", "physical_records": 0, "seed": 13}
+{"cut": "informational", "may_send_again": false, "name": "informational-head-after-the-post", "outcome": "unknown", "physical_records": 1, "seed": 14}
+{"cut": "trailer-declared", "may_send_again": false, "name": "trailer-declared-after-the-post", "outcome": "unknown", "physical_records": 1, "seed": 15}
+{"cut": "framing", "may_send_again": false, "name": "ambiguous-framing-after-the-post", "outcome": "unknown", "physical_records": 2, "seed": 16}
+{"cut": "trailing-bytes", "may_send_again": false, "name": "trailing-bytes-after-the-post", "outcome": "unknown", "physical_records": 1, "seed": 17}
+{"cut": "unvalidated-status", "may_send_again": false, "name": "unvalidated-status-after-the-post", "outcome": "unknown", "physical_records": 0, "seed": 18}
+{"cut": "throttled", "may_send_again": true, "name": "throttled-after-the-post", "outcome": "retry-after", "physical_records": 0, "seed": 19}
+{"cut": "conflict", "may_send_again": false, "name": "conflict-after-the-post", "outcome": "conflict", "physical_records": 1, "seed": 20}
+{"cut": "none", "may_send_again": false, "name": "requeued-three-times", "outcome": "accepted", "physical_records": 3, "seed": 21}
