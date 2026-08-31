@@ -9,12 +9,13 @@ depends_on:
 gated: false
 touches:
   - crates/slingshot-domain/src/operation_executor.rs
+  - crates/slingshot-test-support/Cargo.toml
   - crates/slingshot-daemon/src/unavailable_operation_executor.rs
   - crates/slingshot-test-support/src/fake_operation_executor.rs
   - crates/slingshot-development/src/slingshot_test_daemon.rs
   - crates/slingshot-development/src/main.rs
   - crates/slingshot-development/tests/operation_executor_composition.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Operation Executor Boundary

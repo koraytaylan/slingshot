@@ -16,6 +16,7 @@ hyper-util.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+slingshot-domain.workspace = true
 slingshot-local-protocol.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
