@@ -5,6 +5,7 @@
 //! to the wire protocol crate. This commit declares the crate's
 //! module families as documentation-only roots.
 
+pub mod agent_job_repository;
 pub mod artifact_store;
 pub mod database;
 pub mod installation_state;

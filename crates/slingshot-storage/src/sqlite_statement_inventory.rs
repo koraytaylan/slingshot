@@ -42,6 +42,9 @@ const LISTING_ROWS: u64 = 256;
 /// One row a keyed lookup can return.
 const SINGLE_ROW: u64 = 1;
 
+/// Physical Sling jobs one logical submission may be carried by.
+const PHYSICAL_JOB_ROWS: u64 = 32;
+
 /// Every statement, in the order a reader would want to read them.
 pub const STATEMENTS: &[InventoriedStatement] = &[
     InventoriedStatement {
@@ -323,6 +326,251 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                WHERE author_target_identity_digest = ? AND source_fingerprint = ?",
         parameters: 2,
         maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "admit one agent submission",
+        text: "INSERT INTO agent_operation \
+               (agent_event_store_generation, agent_operation_identifier, applied_sequence, \
+                argument_schema_digest, attempt, author_agent_transport_contract_digest, \
+                author_target_identity_digest, canonical_submission, \
+                command_canonical_json_contract_digest, command_contract_limits_digest, \
+                command_semantic_contract_version, command_wire_name, \
+                daemon_subscription_identifier, job_state, operation_identifier, progress, \
+                recorded_at_unix_milliseconds, remaining_retention_milliseconds, \
+                request_start_unix_milliseconds, result_schema_digest, \
+                selected_environment_revision, snapshot_watermark, submitted_command_digest) \
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        parameters: 23,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read one agent submission inside its target partition",
+        // Every derivation input comes back, because a restart re-derives the
+        // identity from what this build has and compares it with what is here.
+        // A summary that dropped the contract columns would make that
+        // comparison impossible and the resumption dishonest.
+        text: "SELECT agent_event_store_generation, applied_sequence, argument_schema_digest, \
+                      attempt, author_agent_transport_contract_digest, canonical_submission, \
+                      command_canonical_json_contract_digest, command_contract_limits_digest, \
+                      command_semantic_contract_version, command_wire_name, \
+                      daemon_subscription_identifier, job_state, operation_identifier, progress, \
+                      recorded_at_unix_milliseconds, remaining_retention_milliseconds, \
+                      request_start_unix_milliseconds, result_schema_digest, \
+                      selected_environment_revision, snapshot_watermark, \
+                      submitted_command_digest, terminal_disposition \
+               FROM agent_operation \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "count the agent submissions one target holds",
+        text: "SELECT COUNT(*) FROM agent_operation WHERE author_target_identity_digest = ?",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "record one physical Sling job for one agent submission",
+        // Several physical records for one logical submission is ordinary, so a
+        // repeat is not an error. It records the same name again and changes
+        // nothing, which is what at-least-once delivery looks like when it is
+        // handled rather than merely survived.
+        text: "INSERT OR IGNORE INTO agent_physical_job \
+               (agent_operation_identifier, author_target_identity_digest, \
+                recorded_at_unix_milliseconds, sling_job_identifier) \
+               VALUES (?, ?, ?, ?)",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read one agent submission's physical Sling jobs in order",
+        text: "SELECT sling_job_identifier FROM agent_physical_job \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
+               ORDER BY sling_job_identifier",
+        parameters: 2,
+        maximum_rows: PHYSICAL_JOB_ROWS,
+    },
+    InventoriedStatement {
+        purpose: "fold one believed event into one agent submission",
+        // The applied sequence is in the predicate as well as the assignment,
+        // so two folds racing on one row cannot both succeed and neither can
+        // apply an event to a row that has already moved past it.
+        text: "UPDATE agent_operation \
+               SET applied_sequence = ?, attempt = ?, job_state = ?, progress = ? \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
+                 AND applied_sequence = ? AND terminal_disposition IS NULL",
+        parameters: 7,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "record one snapshot watermark on one agent submission",
+        // Never backwards. A snapshot that covered less than one already
+        // applied would make settled events look unsettled again.
+        text: "UPDATE agent_operation SET snapshot_watermark = ? \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
+                 AND snapshot_watermark <= ?",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "settle one agent submission",
+        text: "UPDATE agent_operation \
+               SET applied_sequence = ?, attempt = ?, job_state = ?, progress = ?, \
+                   remaining_retention_milliseconds = ?, terminal_disposition = ? \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
+                 AND terminal_disposition IS NULL",
+        parameters: 8,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "open one subscription ledger",
+        text: "INSERT INTO subscription_ledger \
+               (agent_event_store_generation, author_target_identity_digest, \
+                daemon_subscription_identifier, event_bytes, event_rows, \
+                recorded_at_unix_milliseconds, unresolved_incident_count) \
+               VALUES (?, ?, ?, 0, 0, ?, 0)",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read one subscription ledger",
+        text: "SELECT agent_event_store_generation, canonical_digest, compacted_below_cursor, \
+                      cursor, event_bytes, event_rows, high_water_cursor, \
+                      recorded_at_unix_milliseconds, unresolved_incident, \
+                      unresolved_incident_count \
+               FROM subscription_ledger \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "count the subscription ledgers one target holds",
+        text: "SELECT COUNT(*) FROM subscription_ledger WHERE author_target_identity_digest = ?",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "advance one subscription ledger to a later position",
+        // The predicate is the whole idempotency story. A position that is not
+        // strictly later changes nothing, so a replayed event and a stale one
+        // both leave the ledger where it was without the caller having to
+        // decide which it was looking at.
+        text: "UPDATE subscription_ledger \
+               SET canonical_digest = ?, cursor = ?, event_bytes = event_bytes + ?, \
+                   event_rows = event_rows + 1 \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
+                 AND (cursor IS NULL OR cursor < ?)",
+        parameters: 6,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "record one unresolved integrity incident on a subscription",
+        // One slot, and the counter moves only when the slot was empty.
+        // Repeated conflicts about one subscription are one disagreement being
+        // reported again, and charging capacity for each report would let a
+        // misbehaving agent exhaust it by repeating itself.
+        text: "UPDATE subscription_ledger \
+               SET unresolved_incident = COALESCE(unresolved_incident, ?), \
+                   unresolved_incident_count = \
+                       unresolved_incident_count + (unresolved_incident IS NULL) \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ?",
+        parameters: 3,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "install a captured high-water position on a subscription",
+        text: "UPDATE subscription_ledger \
+               SET agent_event_store_generation = ?, canonical_digest = ?, cursor = ?, \
+                   high_water_cursor = ?, unresolved_incident = NULL, \
+                   unresolved_incident_count = 0 \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ?",
+        parameters: 6,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "record one subscription event",
+        text: "INSERT INTO subscription_event \
+               (agent_operation_identifier, author_target_identity_digest, canonical_digest, \
+                cursor, daemon_subscription_identifier, disposition, event_bytes, job_sequence, \
+                recorded_at_unix_milliseconds) \
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        parameters: 9,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read one subscription event by its position",
+        text: "SELECT agent_operation_identifier, canonical_digest, disposition, event_bytes, \
+                      job_sequence, recorded_at_unix_milliseconds \
+               FROM subscription_event \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
+                 AND cursor = ?",
+        parameters: 3,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "measure one subscription's retained events",
+        text: "SELECT COUNT(*), COALESCE(SUM(event_bytes), 0) FROM subscription_event \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "compact one subscription's events below a position",
+        text: "DELETE FROM subscription_event \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
+                 AND cursor < ?",
+        parameters: 3,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "record one subscription's compaction floor",
+        text: "UPDATE subscription_ledger \
+               SET compacted_below_cursor = ?, event_bytes = ?, event_rows = ? \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ?",
+        parameters: 5,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "select the agent submissions one maintenance run would remove",
+        // Ended work only, and named in one fixed order so two previews of the
+        // same target under the same window digest alike.
+        text: "SELECT agent_operation_identifier, submitted_command_digest, \
+                      terminal_disposition \
+               FROM agent_operation \
+               WHERE author_target_identity_digest = ? AND terminal_disposition IS NOT NULL \
+                 AND recorded_at_unix_milliseconds < ? \
+               ORDER BY agent_operation_identifier LIMIT ?",
+        parameters: 3,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
+        purpose: "remove one ended agent submission",
+        text: "DELETE FROM agent_operation \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
+                 AND terminal_disposition IS NOT NULL",
+        parameters: 2,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "select the subscriptions no retained agent submission needs",
+        text: "SELECT daemon_subscription_identifier FROM subscription_ledger \
+               WHERE author_target_identity_digest = ? \
+                 AND daemon_subscription_identifier NOT IN ( \
+                     SELECT daemon_subscription_identifier FROM agent_operation \
+                     WHERE author_target_identity_digest = ?) \
+               ORDER BY daemon_subscription_identifier LIMIT ?",
+        parameters: 3,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
+        purpose: "retire one subscription no retained agent submission needs",
+        text: "DELETE FROM subscription_ledger \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
+                 AND daemon_subscription_identifier NOT IN ( \
+                     SELECT daemon_subscription_identifier FROM agent_operation \
+                     WHERE author_target_identity_digest = ?)",
+        parameters: 3,
+        maximum_rows: 0,
     },
 ];
 
