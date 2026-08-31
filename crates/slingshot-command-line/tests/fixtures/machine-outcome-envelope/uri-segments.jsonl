@@ -1,0 +1,5 @@
+{"encoded": "operation-one", "name": "ordinary", "segment": "operation-one"}
+{"encoded": "a%2Fb", "name": "separator", "segment": "a/b"}
+{"encoded": "a%3Fb%3Dc", "name": "query", "segment": "a?b=c"}
+{"encoded": "a%20b", "name": "space", "segment": "a b"}
+{"encoded": "a%252Fb", "name": "already-encoded", "segment": "a%2Fb"}
