@@ -7,6 +7,7 @@ depends_on:
   - author-agent-conformance
 gated: false
 touches:
+  - crates/slingshot-daemon/Cargo.toml
   - crates/slingshot-daemon/tests/fixtures/transport-disruption-proof.jsonl
   - crates/slingshot-daemon/tests/transport_disruption_proof.rs
 status: planned

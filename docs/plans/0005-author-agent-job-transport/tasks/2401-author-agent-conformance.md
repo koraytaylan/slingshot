@@ -9,6 +9,7 @@ depends_on:
   - artifact-download
 gated: false
 touches:
+  - crates/slingshot-daemon/Cargo.toml
   - crates/slingshot-daemon/tests/fixtures/author-agent-conformance/**
   - crates/slingshot-daemon/tests/author_agent_conformance.rs
 status: planned
