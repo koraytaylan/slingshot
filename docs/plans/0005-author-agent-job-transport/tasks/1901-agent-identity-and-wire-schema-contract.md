@@ -11,6 +11,10 @@ touches:
   - crates/slingshot-domain/src/agent_identity.rs
   - crates/slingshot-domain/src/selected_command_contract_identity.rs
   - crates/slingshot-domain/tests/agent_identity.rs
+  - crates/slingshot-agent-protocol/Cargo.toml
+  - crates/slingshot-development/tests/fixtures/workspace-capability-inventory/consumer-capabilities.toml
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
+  - policy/workspace-capabilities.toml
   - crates/slingshot-agent-protocol/src/identity.rs
   - crates/slingshot-agent-protocol/src/wire_contract.rs
   - crates/slingshot-agent-protocol/src/lib.rs
@@ -18,7 +22,7 @@ touches:
   - crates/slingshot-agent-protocol/tests/fixtures/identity-and-wire-schema/**
   - schemas/agent-protocol/identity/**
   - schemas/agent-protocol/common/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Agent Identity and Wire Schema Contract

@@ -5,4 +5,6 @@
 //! their wire representations. This commit declares the crate's module families as
 //! documentation-only roots.
 
+pub mod identity;
 pub mod remote_job;
+pub mod wire_contract;
