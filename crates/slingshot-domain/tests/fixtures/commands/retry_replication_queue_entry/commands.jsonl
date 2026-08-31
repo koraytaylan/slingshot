@@ -1,0 +1,3 @@
+{"accepted":true,"document":"{\"agent_identifier\":\"publish\",\"entry_identifier\":\"queue-entry-1\"}","note":"trying one entry again"}
+{"accepted":false,"document":"{\"agent_identifier\":\"publish\"}","note":"no entry"}
+{"accepted":false,"document":"{\"entry_identifier\":\"queue-entry-1\"}","note":"no agent"}
