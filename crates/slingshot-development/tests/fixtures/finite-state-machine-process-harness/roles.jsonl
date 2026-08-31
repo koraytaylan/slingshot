@@ -1,0 +1,4 @@
+# One row per process a scenario runs, and which variable supplies it.
+{"name": "executor", "variable": "SLINGSHOT_FINITE_STATE_MACHINE_EXECUTABLE", "why": "the pinned external executor"}
+{"name": "protocol-server", "variable": "SLINGSHOT_EXECUTABLE", "why": "this product, serving the protocol"}
+{"name": "daemon", "variable": "SLINGSHOT_EXECUTABLE", "why": "this product, owning the target"}
