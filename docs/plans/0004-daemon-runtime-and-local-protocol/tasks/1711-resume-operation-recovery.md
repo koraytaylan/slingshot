@@ -16,7 +16,7 @@ touches:
   - crates/slingshot-domain/src/operation.rs
   - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Resume Operation Recovery
