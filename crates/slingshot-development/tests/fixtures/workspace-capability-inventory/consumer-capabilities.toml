@@ -42,7 +42,7 @@ development = []
 [[consumer]]
 name = "slingshot_agent_protocol"
 package = "slingshot-agent-protocol"
-normal = ["typed-errors", "serialization", "javascript-object-notation", "schema-documents", "unique-identifiers", "base64-encoding", "byte-buffers"]
+normal = ["typed-errors", "serialization", "javascript-object-notation", "schema-documents", "unique-identifiers", "base64-encoding", "byte-buffers", "secure-hash-digests"]
 build = []
 development = ["property-tests"]
 
