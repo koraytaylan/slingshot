@@ -368,7 +368,15 @@ default-features = true
 features = []
 targets = []
 kinds = ["development"]
-owners = ["slingshot-agent-connection", "slingshot-agent-protocol", "slingshot-configuration", "slingshot-domain", "slingshot-local-protocol", "slingshot-storage"]
+owners = [
+  "slingshot-agent-connection",
+  "slingshot-agent-protocol",
+  "slingshot-configuration",
+  "slingshot-development",
+  "slingshot-domain",
+  "slingshot-local-protocol",
+  "slingshot-storage",
+]
 
 [[capability]]
 name = "random-values"

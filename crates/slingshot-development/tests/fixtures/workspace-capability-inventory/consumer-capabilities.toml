@@ -156,7 +156,7 @@ name = "slingshot_development"
 package = "slingshot-development"
 normal = ["typed-errors", "serialization", "javascript-object-notation", "toml-documents", "command-line-arguments", "secure-hash-digests", "hexadecimal-encoding", "temporary-files", "diagnostics", "base64-encoding"]
 build = []
-development = ["process-assertions", "process-predicates"]
+development = ["process-assertions", "process-predicates", "property-tests"]
 
 [[consumer]]
 name = "slingshot_development::source-policy"

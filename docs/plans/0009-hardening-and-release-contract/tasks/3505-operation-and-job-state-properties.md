@@ -7,10 +7,13 @@ depends_on:
   - model-context-protocol-fuzzing
 gated: false
 touches:
+  - crates/slingshot-development/Cargo.toml
   - crates/slingshot-development/tests/operation_and_job_properties.rs
+  - policy/workspace-capabilities.toml
+  - crates/slingshot-development/tests/fixtures/workspace-capability-inventory/consumer-capabilities.toml
   - "crates/slingshot-development/tests/fixtures/state-properties/**"
 status: done
-merged_as: ""
+merged_as: "a607d6ad80baac460917fc68989f16b1a5beb0db"
 ---
 # Operation And Job State Properties
 
