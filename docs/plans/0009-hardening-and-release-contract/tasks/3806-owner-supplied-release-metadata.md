@@ -8,7 +8,7 @@ depends_on:
   - daemon-process-chaos
   - minimum-rust-and-dependency-gates
   - owner-confirmed-github-automation
-gated: true
+gated: false
 touches:
   - Cargo.toml
   - "crates/*/Cargo.toml"
@@ -19,7 +19,9 @@ touches:
   - crates/slingshot-development/src/release_metadata.rs
   - crates/slingshot-development/tests/release_metadata.rs
   - "crates/slingshot-development/tests/fixtures/release-metadata/**"
-status: blocked
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
+  - crates/slingshot-development/tests/workspace_scaffold.rs
+status: done
 merged_as: ""
 ---
 # Owner-Supplied Release Metadata

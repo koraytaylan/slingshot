@@ -1,0 +1,9 @@
+# One change to the committed declaration per row, and its refusal.
+{"name": "an-empty-expression", "find": "expression = \"MIT OR Apache-2.0\"", "replace": "expression = \"\"", "refusal": "Absent"}
+{"name": "a-placeholder-expression", "find": "expression = \"MIT OR Apache-2.0\"", "replace": "expression = \"TBD\"", "refusal": "Placeholder"}
+{"name": "an-unlicensed-declaration", "find": "expression = \"MIT OR Apache-2.0\"", "replace": "expression = \"UNLICENSED\"", "refusal": "Placeholder"}
+{"name": "an-absolute-material-path", "find": "material = \"LICENSE\"", "replace": "material = \"/etc/LICENSE\"", "refusal": "MaterialPathUnsafe"}
+{"name": "a-parent-material-path", "find": "material = \"LICENSE\"", "replace": "material = \"../LICENSE\"", "refusal": "MaterialPathUnsafe"}
+{"name": "a-home-material-path", "find": "material = \"LICENSE\"", "replace": "material = \"~/LICENSE\"", "refusal": "MaterialPathUnsafe"}
+{"name": "an-empty-material", "find": "material = \"LICENSE\"", "replace": "material = \"\"", "refusal": "Absent"}
+{"name": "another-format", "find": "format = \"slingshot.release-metadata/1\"", "replace": "format = \"something.else/1\"", "refusal": "ForeignFormat"}
