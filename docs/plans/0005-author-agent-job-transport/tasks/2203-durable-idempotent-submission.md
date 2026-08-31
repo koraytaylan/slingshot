@@ -14,6 +14,7 @@ touches:
   - crates/slingshot-storage/src/operation/remote_submission.rs
   - crates/slingshot-storage/tests/migrations.rs
   - crates/slingshot-storage/src/operation/mod.rs
+  - crates/slingshot-daemon/Cargo.toml
   - crates/slingshot-daemon/src/operation/remote_submission.rs
   - crates/slingshot-daemon/src/operation/mod.rs
   - crates/slingshot-daemon/tests/fixtures/durable-idempotent-submission.jsonl
