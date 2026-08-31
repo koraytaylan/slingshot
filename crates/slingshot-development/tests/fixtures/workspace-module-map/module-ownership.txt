@@ -137,6 +137,7 @@ crates/slingshot-daemon/src/service.rs|slingshot-daemon|service|leaf|slingshot_d
 crates/slingshot-daemon/src/shutdown.rs|slingshot-daemon|service|leaf|slingshot_daemon::shutdown|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/startup.rs|slingshot-daemon|service|leaf|slingshot_daemon::startup|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/unavailable_operation_executor.rs|slingshot-daemon|service|leaf|slingshot_daemon::unavailable_operation_executor|daemon-runtime-module-scaffold
+crates/slingshot-development/src/coverage_fuzzing_tool.rs|slingshot-development|tooling|leaf|slingshot_development::coverage_fuzzing_tool|pinned-coverage-fuzzing-tool
 crates/slingshot-development/src/daemon_chaos_subject.rs|slingshot-development|tooling|leaf|slingshot_development::daemon_chaos_subject|workspace-module-map
 crates/slingshot-development/src/dependency_direction.rs|slingshot-development|tooling|leaf|slingshot_development::dependency_direction|workspace-module-map
 crates/slingshot-development/src/finite_state_machine_acknowledgement.rs|slingshot-development|tooling|leaf|slingshot_development::finite_state_machine_acknowledgement|successful-workflow-command

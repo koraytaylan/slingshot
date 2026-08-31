@@ -1,0 +1,8 @@
+# The one dated nightly every fuzz target is built with.
+#
+# Dated rather than floating: a coverage-guided run compares this build against
+# the last one, and a toolchain that moved underneath it would make the
+# comparison meaningless.
+[toolchain]
+channel = "nightly-2026-06-01"
+components = ["rust-src"]

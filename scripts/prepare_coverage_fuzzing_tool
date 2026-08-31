@@ -1,0 +1,48 @@
+#!/bin/sh
+# Build one coverage-fuzzing bundle from the pinned source.
+#
+# This is the one command in this repository that reaches the network, and it
+# says so. It takes one new empty output directory and the host row it is
+# building for, acquires exactly the pinned commit and its locked dependency
+# graph, builds twice from independent verified exports, and writes a bundle
+# whose manifest records what it did.
+
+set -eu
+
+OUTPUT=''
+HOST=''
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --output)
+            [ "$#" -ge 2 ] || report_refusal 'the output option names a directory'
+            OUTPUT=$2
+            shift 2
+            ;;
+        --host)
+            [ "$#" -ge 2 ] || report_refusal 'the host option names a supported row'
+            HOST=$2
+            shift 2
+            ;;
+        *)
+            report_refusal "$1 is not an option this command takes"
+            ;;
+    esac
+done
+
+[ -n "$OUTPUT" ] || report_refusal 'this command is given its output directory explicitly'
+[ -n "$HOST" ] || report_refusal 'this command is told which supported host row it builds for'
+case "$OUTPUT" in
+    /*) ;;
+    *) report_refusal "$OUTPUT is not an absolute path" ;;
+esac
+[ ! -e "$OUTPUT" ] || report_refusal "$OUTPUT already exists, and this command writes only into a new directory"
+
+printf 'this command reaches the network to acquire the pinned source\n'
+cargo run --locked --quiet -p slingshot-development -- prepare-coverage-fuzzing-tool \
+    --output "$OUTPUT" --host "$HOST"
