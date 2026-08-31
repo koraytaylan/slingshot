@@ -24,9 +24,10 @@
 //! change.
 
 use slingshot_configuration::profile_loader::{ConfigurationDiagnostic, LoadedProfiles, summarize};
+use slingshot_domain::profile::AdobeExperienceManagerDeployment;
 
 use crate::invocation::Selection;
-use crate::target_selection::{SelectionRefusal, select};
+use crate::target_selection::{SelectionRefusal, author_address, select, selected_deployment};
 
 /// What one configuration check found.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +73,10 @@ impl CheckReport {
 /// What a resolved selection derives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedFacts {
+    /// The nonsecret address the selected environment's author answers on.
+    pub author_target: String,
+    /// Which product the selected environment runs.
+    pub deployment: AdobeExperienceManagerDeployment,
     /// Which environment was selected.
     pub environment: String,
     /// Which profile was selected.
@@ -89,6 +94,8 @@ pub struct ResolvedFacts {
 pub fn check(loaded: &LoadedProfiles, selection: &Selection) -> CheckReport {
     match select(loaded, selection) {
         Ok(resolved) => CheckReport::Resolved(Box::new(ResolvedFacts {
+            author_target: author_address(&resolved, loaded),
+            deployment: selected_deployment(&resolved, loaded),
             environment: resolved.environment_name().as_text().to_owned(),
             profile: resolved.profile_name().as_text().to_owned(),
             warned_cleartext_transport: resolved.insecure_author_transport_warning().is_some(),

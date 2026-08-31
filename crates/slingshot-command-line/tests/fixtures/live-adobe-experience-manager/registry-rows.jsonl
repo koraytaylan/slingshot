@@ -1,0 +1,18 @@
+# The twelve rows, written here independently of the registry that produces them.
+#
+# Access and destructiveness decide whether a verification may run a command.
+# Idempotency is stated too, and stated only so the suite can prove it is never
+# consulted: two admissible rows are not intrinsically idempotent and neither is
+# any refused row, so that column separates nothing this harness decides.
+{"wire_name": "add_component", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "create_page", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "download_content_package", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": true}
+{"wire_name": "find_assets_by_metadata", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "find_assets_referenced_by_page", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "find_pages_by_template", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "find_pages_containing_phrase", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "find_pages_using_components", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "inspect_open_service_gateway_initiative_configuration", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "load_content_as_json", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": true}
+{"wire_name": "query_paths", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "replicate_content", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}

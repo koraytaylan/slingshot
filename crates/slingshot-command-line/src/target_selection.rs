@@ -25,7 +25,7 @@
 
 use slingshot_configuration::profile_loader::{ConfigurationDiagnostic, LoadedProfiles};
 use slingshot_configuration::profile_selection::{ProfileSelection, RequestedSelection, resolve};
-use slingshot_domain::profile::{EnvironmentName, ProfileName};
+use slingshot_domain::profile::{AdobeExperienceManagerDeployment, EnvironmentName, ProfileName};
 
 use crate::invocation::{METADATA_ONLY_LEAVES, Selection};
 
@@ -188,4 +188,24 @@ pub fn namespace_of_selection(selection: &ProfileSelection) -> NamespacePair {
         environment: selection.environment_name().as_text().to_owned(),
         profile: selection.profile_name().as_text().to_owned(),
     }
+}
+
+/// Returns the nonsecret address the selected environment's author answers on.
+///
+/// Derived from configuration that is already in hand. Nothing is fetched,
+/// resolved, or dialled to produce it, which is why it is safe to put in a
+/// report: rotating a credential at the same principal and address leaves it
+/// exactly as it was.
+#[must_use]
+pub fn author_address(selected: &ProfileSelection, loaded: &LoadedProfiles) -> String {
+    selected.environment_of(loaded).author_connection_target().as_text().to_owned()
+}
+
+/// Returns which product the selected environment runs.
+#[must_use]
+pub fn selected_deployment(
+    selected: &ProfileSelection,
+    loaded: &LoadedProfiles,
+) -> AdobeExperienceManagerDeployment {
+    selected.environment_of(loaded).deployment()
 }
