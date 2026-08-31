@@ -1,0 +1,4 @@
+{"bytes": 1, "delivery": "inline", "name": "empty"}
+{"bytes": 4000, "delivery": "inline", "name": "at-the-budget"}
+{"bytes": 4001, "delivery": "referenced", "name": "one-past-the-budget"}
+{"bytes": 524288, "delivery": "referenced", "name": "a-whole-manifest"}

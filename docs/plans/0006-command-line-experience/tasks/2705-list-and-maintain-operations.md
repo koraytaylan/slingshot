@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/src/operation_maintenance.rs
   - crates/slingshot-command-line/tests/operation_maintenance.rs
   - "crates/slingshot-command-line/tests/fixtures/operation-maintenance/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # List And Maintain Operations
