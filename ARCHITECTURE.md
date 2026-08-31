@@ -142,8 +142,9 @@ reading, resuming, maintenance, and stopping rules are set out in
 
 ## What is not here
 
-No Adobe Experience Manager operation, no profile document, no credential, no
-durable operation storage, no remote job submission, no artifact transfer, and
-no Model Context Protocol behavior. No aggregate proof across platform rows,
-and no release artifact: the packages are unpublished and carry no owner-
+No Adobe Experience Manager behavior. Sixty-four commands are published as
+contracts - what each is called, what it accepts, what it answers, and what it
+may refuse with - and the agent that carries any of them out is built
+separately and is not in this repository. No aggregate proof across platform
+rows, and no release artifact: the packages are unpublished and carry no owner-
 supplied legal or repository metadata.

@@ -4,7 +4,15 @@
     "replicate": {
       "effect": "replicate",
       "kind": "mcp",
-      "argv": ["/absolute/path/to/slingshot", "--profile", "local", "--environment", "author", "protocol", "serve"],
+      "argv": [
+        "/absolute/path/to/slingshot",
+        "--profile",
+        "local",
+        "--environment",
+        "author",
+        "protocol",
+        "serve"
+      ],
       "tool": "replicate_content",
       "arguments": {
         "path": "/content/site/en",
@@ -20,13 +28,24 @@
       "on_ok": "replicated",
       "on_failed": "replication_failed",
       "advances": [
-        { "payload": {}, "stamps": [] }
+        {
+          "payload": {},
+          "stamps": []
+        }
       ]
     },
     "preview_maintenance": {
       "effect": "preview_maintenance",
       "kind": "mcp",
-      "argv": ["/absolute/path/to/slingshot", "--profile", "local", "--environment", "author", "protocol", "serve"],
+      "argv": [
+        "/absolute/path/to/slingshot",
+        "--profile",
+        "local",
+        "--environment",
+        "author",
+        "protocol",
+        "serve"
+      ],
       "tool": "maintenance-preview",
       "arguments": {
         "author_target_identity_digest": "{{author_target_identity_digest}}"
@@ -41,7 +60,111 @@
       "on_ok": "previewed",
       "on_failed": "preview_failed",
       "advances": [
-        { "payload": {}, "stamps": [] }
+        {
+          "payload": {},
+          "stamps": []
+        }
+      ]
+    },
+    "update_page": {
+      "effect": "update_page",
+      "kind": "mcp",
+      "argv": [
+        "/absolute/path/to/slingshot",
+        "--profile",
+        "local",
+        "--environment",
+        "author",
+        "protocol",
+        "serve"
+      ],
+      "tool": "update_page",
+      "arguments": {
+        "page_path": "/content/site/en",
+        "title": "Reviewed",
+        "operation_key": "{{workflow_effect_operation_key}}"
+      },
+      "timeout_ms": 30000,
+      "retry": {
+        "attempts": 3,
+        "backoff_ms": 500,
+        "initial_delay_ms": 500,
+        "maximum_delay_ms": 5000
+      },
+      "on_ok": "page_updated",
+      "on_failed": "page_update_failed",
+      "advances": [
+        {
+          "payload": {},
+          "stamps": []
+        }
+      ]
+    },
+    "start_workflow": {
+      "effect": "start_workflow",
+      "kind": "mcp",
+      "argv": [
+        "/absolute/path/to/slingshot",
+        "--profile",
+        "local",
+        "--environment",
+        "author",
+        "protocol",
+        "serve"
+      ],
+      "tool": "start_workflow",
+      "arguments": {
+        "model_identifier": "/var/workflow/models/request-for-activation/jcr:content/model",
+        "payload_path": "/content/site/en",
+        "operation_key": "{{workflow_effect_operation_key}}"
+      },
+      "timeout_ms": 30000,
+      "retry": {
+        "attempts": 3,
+        "backoff_ms": 500,
+        "initial_delay_ms": 500,
+        "maximum_delay_ms": 5000
+      },
+      "on_ok": "workflow_started",
+      "on_failed": "workflow_start_failed",
+      "advances": [
+        {
+          "payload": {},
+          "stamps": []
+        }
+      ]
+    },
+    "flush_replication_queue": {
+      "effect": "flush_replication_queue",
+      "kind": "mcp",
+      "argv": [
+        "/absolute/path/to/slingshot",
+        "--profile",
+        "local",
+        "--environment",
+        "author",
+        "protocol",
+        "serve"
+      ],
+      "tool": "flush_replication_queue",
+      "arguments": {
+        "agent_identifier": "publish",
+        "operation_key": "{{workflow_effect_operation_key}}"
+      },
+      "timeout_ms": 30000,
+      "retry": {
+        "attempts": 3,
+        "backoff_ms": 500,
+        "initial_delay_ms": 500,
+        "maximum_delay_ms": 5000
+      },
+      "on_ok": "queue_flushed",
+      "on_failed": "queue_flush_failed",
+      "advances": [
+        {
+          "payload": {},
+          "stamps": []
+        }
       ]
     }
   }

@@ -119,6 +119,17 @@ are two different failures with two different causes, and neither can hide
 inside the other. There is no sixth identity member and no provenance folded
 into the five.
 
+## How much of it there is
+
+An agent implements every command the registry publishes, and how many that is
+belongs to the registry rather than to this document: `slingshot` renders the
+whole list into [COMMANDS.md](COMMANDS.md) from the same metadata it reads, so a
+row that exists in a build appears there. What is worth saying here is that the
+identity rule above applies to every one of them equally. A command that
+inspects a bundle is authenticated the same way as one that loads a page, and an
+agent that implements half the surface fails the other half's identity check
+rather than answering it approximately.
+
 ## What is not here
 
 No Java agent. This repository holds the client side of the conversation and the
