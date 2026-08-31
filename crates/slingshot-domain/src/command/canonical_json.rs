@@ -132,6 +132,12 @@ pub enum CanonicalFailure {
         /// Pointer of the array that is wrong.
         pointer: String,
     },
+    /// An array row does not carry the member its comparator orders by.
+    #[error("every row of the array at {pointer} carries the member it is ordered by")]
+    ArrayItemNotKeyed {
+        /// Pointer of the array holding it.
+        pointer: String,
+    },
     /// The inventory names a comparator this contract does not define.
     #[error("the array at {pointer} names a comparator this contract does not define")]
     ComparatorUnknown {
@@ -421,7 +427,9 @@ fn require_ascending_unique(
 ) -> Result<(), CanonicalFailure> {
     let mut previous: Option<String> = None;
     for item in items {
-        let written = write_canonical(&comparison_key(item, comparator))?;
+        let keyed = comparison_key(item, comparator)
+            .ok_or_else(|| CanonicalFailure::ArrayItemNotKeyed { pointer: pointer.to_owned() })?;
+        let written = write_canonical(&keyed)?;
         if let Some(earlier) = previous
             && earlier.as_bytes() >= written.as_bytes()
         {
@@ -438,8 +446,10 @@ fn require_ascending_unique(
 /// the same as ordering by whichever member happens to sort first in canonical
 /// bytes - a queue listing would order by its active job count rather than by
 /// its queue name, and a correctly ordered page would be refused. The pairs here
-/// are the same ones the committed contract states as each comparator's key, and
-/// an assertion compares the two.
+/// are the same ones the committed contract states as each comparator's key,
+/// and `command_schemas` compares the two: a comparator added to the contract
+/// and to `DECLARED_COMPARATORS` but forgotten here would silently order by the
+/// whole row again.
 pub const COMPARATOR_MEMBERS: &[(&str, &[&str])] = &[
     (REPOSITORY_PATH_COMPARATOR, &["repository_path"]),
     (AGENT_IDENTIFIER_COMPARATOR, &["agent_identifier"]),
@@ -463,14 +473,21 @@ pub const COMPARATOR_MEMBERS: &[(&str, &[&str])] = &[
 /// derived from those members and would make the order depend on data the caller
 /// never chose. One comparator names two members, because one deployment can
 /// hold two versions of one bundle and the pair is what makes a row unique.
-fn comparison_key(item: &serde_json::Value, comparator: &str) -> serde_json::Value {
+///
+/// Returns nothing when a row does not carry what it is ordered by, which is a
+/// malformed row rather than a row that sorts somewhere.
+fn comparison_key(item: &serde_json::Value, comparator: &str) -> Option<serde_json::Value> {
     let Some((_, members)) = COMPARATOR_MEMBERS.iter().find(|(named, _)| *named == comparator)
     else {
-        return item.clone();
+        return Some(item.clone());
     };
     let keyed: Vec<serde_json::Value> =
         members.iter().filter_map(|member| item.get(*member).cloned()).collect();
-    if keyed.len() == members.len() { serde_json::Value::Array(keyed) } else { item.clone() }
+    // A row missing the member its comparator names cannot be ordered by what
+    // the contract says orders it. Falling back to the whole row would give that
+    // row a key sorting after every well-formed one, so the same malformed
+    // document would be accepted or refused depending on where the row sat.
+    (keyed.len() == members.len()).then_some(serde_json::Value::Array(keyed))
 }
 
 /// Returns the digest of one canonical document, in lowercase hexadecimal.

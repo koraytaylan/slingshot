@@ -39,6 +39,9 @@ pub const ADD_COMPONENT: &str = "add_component";
 /// The spelling that names a page's content resource itself.
 pub const CONTENT_ROOT: &str = "content-root";
 
+/// Every command this family builds.
+const NAMES: &[&str] = &[CREATE_PAGE, ADD_COMPONENT];
+
 /// Returns the typed request one invocation describes.
 ///
 /// # Errors
@@ -47,6 +50,12 @@ pub const CONTENT_ROOT: &str = "content-root";
 /// checked before the property file is opened, so a caller who forgot it does
 /// not have their file read on the way to being told.
 pub fn build(invocation: &Invocation) -> Result<Command, RequestRefusal> {
+    // The verb is answered before anything else is asked, including the
+    // key rule: a family that refuses another family's command for any
+    // reason but "another command" stops the assembler on it.
+    if !NAMES.contains(&invocation.verb.as_str()) {
+        return Err(RequestRefusal::AnotherCommand { named: invocation.verb.clone() });
+    }
     require_key(invocation)?;
     match invocation.verb.as_str() {
         CREATE_PAGE => build_page(invocation),

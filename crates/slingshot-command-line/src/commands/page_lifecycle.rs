@@ -17,15 +17,14 @@ use slingshot_domain::command::update_page::UpdatePageCommand;
 
 use crate::commands::content::{RequestRefusal, require_key, required};
 use crate::commands::operational_values::{
-    flag, optional_text, path, reference_policy, removed_property_names, unusable,
+    flag, path, reference_policy, removed_property_names, title, unusable,
 };
 use crate::commands::page_mutation::properties;
 use crate::commands::path_query::window;
 use crate::invocation::{
     ADJUST_REFERENCES_OPTION, DESTINATION_PATH_OPTION, Invocation, PATH_OPTION, PLACEMENT_OPTION,
-    SIBLING_OPTION, TITLE_OPTION,
+    SIBLING_OPTION,
 };
-use slingshot_domain::command::find_pages_containing_phrase::PageTitle;
 
 /// The wire name of the page update.
 pub const UPDATE_PAGE: &str = "update_page";
@@ -166,11 +165,4 @@ fn reorder_component(invocation: &Invocation) -> Result<Command, RequestRefusal>
         component_path: path(invocation, PATH_OPTION)?,
         placement,
     }))
-}
-
-/// Returns the title one invocation records, when it records one.
-fn title(invocation: &Invocation) -> Result<Option<PageTitle>, RequestRefusal> {
-    optional_text(invocation, TITLE_OPTION)
-        .map(|stated| PageTitle::new(stated).map_err(|_| unusable(TITLE_OPTION)))
-        .transpose()
 }

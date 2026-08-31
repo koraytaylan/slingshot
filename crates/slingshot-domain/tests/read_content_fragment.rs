@@ -134,9 +134,13 @@ fn every_failure_document_carries_its_two_members_and_names_this_request() {
             document,
             "{note}: rewritten differently"
         );
-        // A missing variation belongs to the request that named one; every
-        // other category answers a request about the master just as well.
         assert_eq!(refusal.require_answers(&command(Some("mobile"))), Ok(()), "{note}");
+        // A missing variation belongs to the request that named one; every
+        // other category answers a request about the master just as well, and
+        // that half has to be asserted or a later tightening would lose it.
+        let master = refusal.require_answers(&command(None));
+        let sought = document.contains("variation_not_found");
+        assert_eq!(master.is_err(), sought, "{note}: the master request was answered wrongly");
     }
     let elsewhere = ReadContentFragmentRefusal {
         failure: ReadContentFragmentFailure::FragmentNotFound,

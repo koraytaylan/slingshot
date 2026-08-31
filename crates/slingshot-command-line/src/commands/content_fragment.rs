@@ -12,18 +12,16 @@ use slingshot_domain::command::content_fragment_element::{
 };
 use slingshot_domain::command::create_content_fragment::CreateContentFragmentCommand;
 use slingshot_domain::command::delete_content_fragment::DeleteContentFragmentCommand;
-use slingshot_domain::command::find_pages_containing_phrase::PageTitle;
 use slingshot_domain::command::read_content_fragment::ReadContentFragmentCommand;
 use slingshot_domain::command::repository_path::RepositoryName;
 use slingshot_domain::command::update_content_fragment::UpdateContentFragmentCommand;
 
 use crate::commands::content::{RequestRefusal, require_key, required};
 use crate::commands::operational_values::{
-    optional_document, optional_text, path, reference_policy, unusable,
+    optional_document, optional_text, path, reference_policy, title, unusable,
 };
 use crate::invocation::{
-    ELEMENTS_OPTION, Invocation, MODEL_OPTION, NAME_OPTION, PATH_OPTION, TITLE_OPTION,
-    VARIATION_OPTION,
+    ELEMENTS_OPTION, Invocation, MODEL_OPTION, NAME_OPTION, PATH_OPTION, VARIATION_OPTION,
 };
 
 /// The wire name of the fragment creation.
@@ -108,12 +106,5 @@ fn variation(
         .map(|stated| {
             ContentFragmentVariationName::parse(&stated).map_err(|_| unusable(VARIATION_OPTION))
         })
-        .transpose()
-}
-
-/// Returns the title one invocation records, when it records one.
-fn title(invocation: &Invocation) -> Result<Option<PageTitle>, RequestRefusal> {
-    optional_text(invocation, TITLE_OPTION)
-        .map(|stated| PageTitle::new(stated).map_err(|_| unusable(TITLE_OPTION)))
         .transpose()
 }

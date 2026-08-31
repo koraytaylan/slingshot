@@ -73,15 +73,24 @@ fn exactly_one_family_claims_each_command() {
     let mut disputed = Vec::new();
     for descriptor in CommandCatalog::published().descriptors() {
         let leaf = descriptor.wire_name.as_str();
-        let claiming: Vec<&str> = EVERY_FAMILY
-            .iter()
-            .filter(|(_, build)| {
-                !matches!(build(&invocation(leaf)), Err(RequestRefusal::AnotherCommand { .. }))
-            })
-            .map(|(named, _)| *named)
-            .collect();
-        if claiming.len() != 1 {
-            disputed.push(format!("{leaf} is claimed by {claiming:?}"));
+        // Both with a key and without one. A family that checks the key rule
+        // before answering the verb claims every write in the registry, and an
+        // assertion that always supplied a key could never see it.
+        for keyed in [true, false] {
+            let mut asked = invocation(leaf);
+            if !keyed {
+                asked.operation_key = None;
+            }
+            let claiming: Vec<&str> = EVERY_FAMILY
+                .iter()
+                .filter(|(_, build)| {
+                    !matches!(build(&asked), Err(RequestRefusal::AnotherCommand { .. }))
+                })
+                .map(|(named, _)| *named)
+                .collect();
+            if claiming.len() != 1 {
+                disputed.push(format!("{leaf} with a key {keyed} is claimed by {claiming:?}"));
+            }
         }
     }
     assert_eq!(
@@ -105,8 +114,8 @@ fn every_registry_command_is_reachable_as_a_leaf() {
 
 #[test]
 fn a_command_that_needs_nothing_is_built_from_nothing() {
-    // Six listings take no required argument at all. A refusal here would mean
-    // an option had been made required that the contract does not require.
+    // Seven listings take no required argument at all. A refusal here would
+    // mean an option had been made required that the contract does not require.
     for leaf in [
         "find_open_service_gateway_initiative_configurations",
         "list_open_service_gateway_initiative_bundles",

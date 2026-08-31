@@ -43,12 +43,21 @@ pub const FIND_BY_METADATA: &str = "find_assets_by_metadata";
 /// The wire name of the page-reference search.
 pub const FIND_REFERENCED_BY_PAGE: &str = "find_assets_referenced_by_page";
 
+/// Every command this family builds.
+const NAMES: &[&str] = &[FIND_BY_METADATA, FIND_REFERENCED_BY_PAGE];
+
 /// Returns the typed request one invocation describes.
 ///
 /// # Errors
 ///
 /// Returns [`RequestRefusal`] naming the first thing that is wrong.
 pub fn build(invocation: &Invocation) -> Result<Command, RequestRefusal> {
+    // The verb is answered before anything else is asked, including the
+    // key rule: a family that refuses another family's command for any
+    // reason but "another command" stops the assembler on it.
+    if !NAMES.contains(&invocation.verb.as_str()) {
+        return Err(RequestRefusal::AnotherCommand { named: invocation.verb.clone() });
+    }
     require_key(invocation)?;
     match invocation.verb.as_str() {
         FIND_BY_METADATA => build_metadata(invocation),
