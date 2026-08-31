@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/list_resource_mappings.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_resource_mappings/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # List Resource Mappings
