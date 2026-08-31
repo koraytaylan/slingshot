@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-development/src/test_daemon_faults.rs
   - crates/slingshot-development/tests/operation_restart_recovery.rs
 status: done
-merged_as: ""
+merged_as: "869561719f86555960fe639cd296c939f5216d90"
 ---
 # Operation Restart Recovery
 
