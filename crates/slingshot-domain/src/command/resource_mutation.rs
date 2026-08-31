@@ -34,7 +34,9 @@ use serde::{Deserialize, Serialize};
 use crate::command::command_identity::CommandContract;
 use crate::command::create_page::MutationProperties;
 use crate::command::operational_listing::{ListingResultFailure, require_ascending_distinct};
-use crate::command::repository_path::{PropertyName, RepositoryPath};
+use crate::command::repository_path::{
+    PathFailure, PropertyName, RepositoryPath, accept_within, address_value,
+};
 
 /// Characters standard Base64 spells its groups with.
 const BASE64_ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -47,6 +49,38 @@ const BASE64_GROUP: usize = 4;
 
 /// Padding characters a canonical encoding may end with.
 const MAXIMUM_PADDING: usize = 2;
+
+address_value!(
+    /// What kind of thing a run of bytes is.
+    ///
+    /// One value for every media type this family carries, so a payload going in
+    /// and a rendition coming out are held to the same bound and the same
+    /// refusals rather than to two that happen to agree today.
+    MediaType,
+    "media type"
+);
+
+impl MediaType {
+    /// Validates one media type.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathFailure`] when the media type is empty, longer than the
+    /// contract allows, not already in normalization form C, carries a control,
+    /// or has a leading or trailing ASCII space.
+    pub fn parse(media_type: &str) -> Result<Self, PathFailure> {
+        let bound = CommandContract::embedded().limit("maximum_inline_binary_media_type_bytes");
+        accept_within(media_type, bound, Self::role(), "bytes")?;
+        let refuse = |field| PathFailure::at(Self::role(), field);
+        if media_type.starts_with(' ') || media_type.ends_with(' ') {
+            return Err(refuse("space"));
+        }
+        if media_type.chars().any(char::is_control) {
+            return Err(refuse("character"));
+        }
+        Ok(Self::from_accepted(media_type))
+    }
+}
 
 /// Why a mutation value is not one this contract can carry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -253,7 +287,7 @@ pub enum ReferencePolicy {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct InlineBinaryPayload {
     /// The media type the caller says these bytes are.
-    media_type: String,
+    media_type: MediaType,
     /// The content, standard Base64 with canonical padding.
     encoded_content: String,
 }
@@ -274,13 +308,9 @@ impl InlineBinaryPayload {
     /// [`InlinePayloadFailure::DecodedTooLarge`] when the decoded form is over
     /// its bound.
     pub fn new(media_type: &str, encoded_content: &str) -> Result<Self, InlinePayloadFailure> {
+        let media_type =
+            MediaType::parse(media_type).map_err(|_| InlinePayloadFailure::MediaTypeRejected)?;
         let contract = CommandContract::embedded();
-        let media_bound = contract.limit("maximum_inline_binary_media_type_bytes");
-        if media_type.is_empty()
-            || u64::try_from(media_type.len()).unwrap_or(u64::MAX) > media_bound
-        {
-            return Err(InlinePayloadFailure::MediaTypeRejected);
-        }
         let encoded_bound = contract.limit("maximum_inline_binary_encoded_bytes");
         if u64::try_from(encoded_content.len()).unwrap_or(u64::MAX) > encoded_bound {
             return Err(InlinePayloadFailure::EncodedTooLarge);
@@ -293,12 +323,12 @@ impl InlineBinaryPayload {
         if u64::try_from(decoded.len()).unwrap_or(u64::MAX) > decoded_bound {
             return Err(InlinePayloadFailure::DecodedTooLarge);
         }
-        Ok(Self { media_type: media_type.to_owned(), encoded_content: encoded_content.to_owned() })
+        Ok(Self { media_type, encoded_content: encoded_content.to_owned() })
     }
 
     /// Returns the media type the caller stated.
     #[must_use]
-    pub fn media_type(&self) -> &str {
+    pub fn media_type(&self) -> &MediaType {
         &self.media_type
     }
 

@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"adjust_references\":true,\"destination_path\":\"/content/dam/archive/logo.png\",\"source_path\":\"/content/dam/example/logo.png\"}","note":"a move that takes its references with it"}
+{"accepted":true,"document":"{\"adjust_references\":false,\"destination_path\":\"/content/dam/archive/logo.png\",\"source_path\":\"/content/dam/example/logo.png\"}","note":"a move that leaves them pointing at nothing"}
+{"accepted":false,"document":"{\"destination_path\":\"/content/dam/archive/logo.png\",\"source_path\":\"/content/dam/example/logo.png\"}","note":"no reference decision, which has no default"}
+{"accepted":false,"document":"{\"adjust_references\":false,\"source_path\":\"/content/dam/example/logo.png\"}","note":"no destination"}
