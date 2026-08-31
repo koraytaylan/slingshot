@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-development/tests/protocol_compatibility.rs
   - "crates/slingshot-development/tests/fixtures/protocol-compatibility/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Protocol Compatibility Snapshots
