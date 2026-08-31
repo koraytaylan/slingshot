@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-command-line/src/commands/path_query.rs
   - crates/slingshot-command-line/src/predicate_arguments.rs
   - crates/slingshot-command-line/tests/configuration_and_page_query_commands.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Expose Configuration And Page Query Commands
