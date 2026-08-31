@@ -51,6 +51,20 @@ pub enum ConnectionFailure {
 /// Reason the local server could not bind or serve.
 #[derive(Debug, thiserror::Error)]
 pub enum ServerFailure {
+    /// A readiness stage was reached before the one that precedes it.
+    #[error("this daemon reached {reached} while {expected} was still outstanding")]
+    StageOutOfOrder {
+        /// The stage that was still outstanding.
+        expected: String,
+        /// The stage that was reached anyway.
+        reached: String,
+    },
+    /// The connection capacity the contract declares is already in use.
+    #[error("this daemon serves {capacity} connections at once, and all of them are in use")]
+    CapacityInUse {
+        /// How many it serves at once.
+        capacity: u32,
+    },
     /// The endpoint could not be bound.
     #[error("the endpoint {address} could not be bound: {reason}")]
     Unbindable {
@@ -163,6 +177,92 @@ impl LocalListener {
     /// server handles, so there is nothing to unlink.
     #[cfg(windows)]
     pub fn remove(&self) {}
+}
+
+/// The order a daemon must reach readiness in.
+///
+/// Written down as a value rather than left implicit in the order some function
+/// happens to call things, because the ordering is the guarantee. A client that
+/// can see readiness is entitled to assume every earlier stage held, and an
+/// implementation that quietly bound its endpoint one stage too early would
+/// still pass every test that only checked the stages individually.
+pub const READINESS_STAGES: &[&str] = &[
+    "ownership",
+    "selected environment snapshot",
+    "installation comparison",
+    "database migration",
+    "cross-partition audit",
+    "listener bound",
+    "hello answerable",
+    "readiness published",
+];
+
+/// How far towards readiness one daemon has got.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ReadinessProgress {
+    /// How many stages have completed, as an index into [`READINESS_STAGES`].
+    reached: usize,
+}
+
+impl ReadinessProgress {
+    /// Returns a daemon that has completed nothing.
+    #[must_use]
+    pub fn started() -> Self {
+        Self { reached: 0 }
+    }
+
+    /// Returns the next stage this daemon has to complete.
+    #[must_use]
+    pub fn next_stage(self) -> Option<&'static str> {
+        READINESS_STAGES.get(self.reached).copied()
+    }
+
+    /// Completes `stage`, or refuses because it is not the one that is next.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerFailure::StageOutOfOrder`] naming what was expected. A
+    /// stage skipped is a guarantee skipped, so this refuses rather than
+    /// tolerating the order and hoping.
+    pub fn complete(self, stage: &str) -> Result<Self, ServerFailure> {
+        match self.next_stage() {
+            Some(expected) if expected == stage => Ok(Self { reached: self.reached + 1 }),
+            expected => Err(ServerFailure::StageOutOfOrder {
+                expected: expected.unwrap_or("nothing further").to_owned(),
+                reached: stage.to_owned(),
+            }),
+        }
+    }
+
+    /// Returns whether the listener may bind yet.
+    #[must_use]
+    pub fn may_bind(self) -> bool {
+        self.reached >= binding_stage()
+    }
+
+    /// Returns whether readiness may be published yet.
+    ///
+    /// Everything before publication has to be done, including answering
+    /// hello: a readiness record naming an endpoint that cannot yet answer is
+    /// a record that lies for as long as the gap lasts.
+    #[must_use]
+    pub fn may_publish(self) -> bool {
+        self.reached + 1 >= READINESS_STAGES.len()
+    }
+
+    /// Returns whether this daemon is ready.
+    #[must_use]
+    pub fn is_ready(self) -> bool {
+        self.reached == READINESS_STAGES.len()
+    }
+}
+
+/// Returns the index of the stage at which a listener may bind.
+fn binding_stage() -> usize {
+    READINESS_STAGES
+        .iter()
+        .position(|stage| *stage == "listener bound")
+        .unwrap_or(READINESS_STAGES.len())
 }
 
 /// Creates one named-pipe server instance with remote clients rejected.
@@ -344,4 +444,71 @@ pub async fn serve(
         });
     }
     Ok(())
+}
+
+/// How many connections this daemon is serving at once.
+///
+/// A permit is held for as long as a connection is, and released when it ends
+/// however it ends. Capacity that leaked on an abrupt close would be capacity
+/// nobody could get back without restarting the daemon, which is the failure
+/// mode a bound is supposed to prevent rather than cause.
+#[derive(Debug)]
+pub struct ConnectionCapacity {
+    /// How many may be served at once.
+    capacity: u32,
+    /// How many are being served now.
+    in_use: std::sync::Arc<std::sync::atomic::AtomicU32>,
+}
+
+/// One connection's claim on the capacity, released when it is dropped.
+#[derive(Debug)]
+pub struct ConnectionPermit {
+    /// The counter to give the claim back to.
+    in_use: std::sync::Arc<std::sync::atomic::AtomicU32>,
+}
+
+impl ConnectionCapacity {
+    /// Returns the capacity the foundation contract declares.
+    #[must_use]
+    pub fn declared(contract: &FoundationContract) -> Self {
+        Self {
+            capacity: contract.server.connection_capacity,
+            in_use: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
+        }
+    }
+
+    /// Returns how many connections are being served now.
+    #[must_use]
+    pub fn in_use(&self) -> u32 {
+        self.in_use.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Claims capacity for one connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerFailure::CapacityInUse`], deterministically: a client
+    /// arriving at a full daemon is refused rather than queued, because a queue
+    /// with no bound is the same problem one layer along.
+    pub fn claim(&self) -> Result<ConnectionPermit, ServerFailure> {
+        let claimed = self
+            .in_use
+            .fetch_update(
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+                |held| (held < self.capacity).then_some(held + 1),
+            )
+            .is_ok();
+        if claimed {
+            Ok(ConnectionPermit { in_use: std::sync::Arc::clone(&self.in_use) })
+        } else {
+            Err(ServerFailure::CapacityInUse { capacity: self.capacity })
+        }
+    }
+}
+
+impl Drop for ConnectionPermit {
+    fn drop(&mut self) {
+        self.in_use.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
 }
