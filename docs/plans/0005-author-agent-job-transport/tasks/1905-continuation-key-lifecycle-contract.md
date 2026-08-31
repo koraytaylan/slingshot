@@ -8,12 +8,13 @@ depends_on:
 gated: false
 touches:
   - crates/slingshot-agent-protocol/src/continuation_token.rs
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - crates/slingshot-agent-protocol/src/continuation_key_authority.rs
   - crates/slingshot-agent-protocol/src/lib.rs
   - crates/slingshot-agent-protocol/tests/continuation_key_lifecycle_contract.rs
   - crates/slingshot-agent-protocol/tests/fixtures/continuation-key-lifecycle/**
   - schemas/agent-protocol/continuation/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Continuation Key Lifecycle Contract
