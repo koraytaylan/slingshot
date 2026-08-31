@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/resource_mutation.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/Cargo.toml
   - policy/workspace-capabilities.toml
   - crates/slingshot-domain/tests/resource_mutation.rs

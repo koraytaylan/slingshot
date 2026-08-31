@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/set_user_disabled.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/set_user_disabled.rs
   - "crates/slingshot-domain/tests/fixtures/commands/set_user_disabled/**"
 status: planned

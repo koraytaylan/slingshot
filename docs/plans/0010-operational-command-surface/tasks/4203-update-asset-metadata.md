@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/update_asset_metadata.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/update_asset_metadata.rs
   - "crates/slingshot-domain/tests/fixtures/commands/update_asset_metadata/**"
 status: planned

@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/platform_service_identity.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/platform_service_identity.rs
 status: planned
 merged_as: ""
