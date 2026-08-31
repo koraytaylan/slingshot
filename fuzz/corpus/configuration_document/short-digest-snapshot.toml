@@ -1,0 +1,5 @@
+format_version = 1
+
+[[sources]]
+reference = "profiles/local.toml"
+sha256 = "abcdef"

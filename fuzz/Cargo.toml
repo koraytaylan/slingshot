@@ -1,0 +1,29 @@
+# The fuzz workspace, deliberately separate from the product workspace.
+#
+# Its targets are built with a dated nightly and link a fuzzing runtime, so
+# building them is not part of the ordinary gate: a repository whose everyday
+# build depended on a nightly would be a repository that stopped building when
+# that nightly moved. Every seed here is nonetheless replayed through the
+# production parsers by an ordinary test, which does run in the gate.
+
+[package]
+name = "slingshot-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+slingshot-configuration = { path = "../crates/slingshot-configuration" }
+slingshot-domain = { path = "../crates/slingshot-domain" }
+slingshot-local-protocol = { path = "../crates/slingshot-local-protocol" }
+
+[[bin]]
+name = "configuration_document"
+path = "fuzz_targets/configuration_document.rs"
+test = false
+doc = false
+bench = false

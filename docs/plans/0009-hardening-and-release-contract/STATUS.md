@@ -10,6 +10,14 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 1/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3501 excludes the fuzz workspace from the ordinary build and commits no lockfile
+    for it.** Its targets need a dated nightly and a fuzzing runtime, so building them
+    in the everyday gate would make this repository stop building whenever that nightly
+    moved; and resolving `fuzz/Cargo.lock` needs a registry this environment cannot
+    reach. What runs on every change instead is the seed corpus replayed through the
+    production reader by an ordinary test, which is the part that rots silently when
+    nobody checks it. The root manifest gains one exclusion, which is how a fuzz
+    workspace is kept beside a product workspace.
   - **3506 cannot acquire or build the tool here, and says so where it matters.** This
     environment has no network, so the twice-built bundle cannot be produced and a
     recorded observation of one would be a fabrication. What is committed is everything
