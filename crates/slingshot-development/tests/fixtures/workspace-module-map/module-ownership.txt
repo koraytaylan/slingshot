@@ -203,6 +203,7 @@ crates/slingshot-test-support/src/fake_operation_executor.rs|slingshot-test-supp
 crates/slingshot-test-support/src/finite_state_machine_executable.rs|slingshot-test-support|support|leaf|slingshot_test_support::finite_state_machine_executable|workspace-module-map
 crates/slingshot-test-support/src/identity_management_server.rs|slingshot-test-support|support|leaf|slingshot_test_support::identity_management_server|profile-authentication-module-scaffold
 crates/slingshot-test-support/src/lib.rs|slingshot-test-support|support|crate-root|slingshot_test_support|workspace-module-map
+crates/slingshot-test-support/src/local_endpoint_attacker.rs|slingshot-test-support|support|leaf|slingshot_test_support::local_endpoint_attacker|local-endpoint-threat-suite
 crates/slingshot-test-support/src/network_fault_script.rs|slingshot-test-support|support|leaf|slingshot_test_support::network_fault_script|author-network-chaos
 crates/slingshot-test-support/src/observable_capture.rs|slingshot-test-support|support|leaf|slingshot_test_support::observable_capture|credential-exposure-threat-suite
 crates/slingshot-test-support/src/operation_fault_injection.rs|slingshot-test-support|support|leaf|slingshot_test_support::operation_fault_injection|daemon-runtime-module-scaffold
