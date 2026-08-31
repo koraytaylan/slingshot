@@ -1,0 +1,5 @@
+{"bytes": 1, "disposition": "inline", "name": "empty"}
+{"bytes": 2048, "disposition": "inline", "name": "at-the-machine-bound"}
+{"bytes": 2049, "disposition": "local-artifact", "name": "one-past-the-machine-bound"}
+{"bytes": 1048576, "disposition": "local-artifact", "name": "at-the-transport-bound"}
+{"bytes": 1048577, "disposition": "too-large", "name": "one-past-the-transport-bound"}

@@ -16,5 +16,6 @@ pub mod job_event_reducer;
 pub mod job_snapshot_reconciliation;
 pub mod request_authentication;
 pub mod server_sent_event_decoder;
+pub mod structured_job_result;
 pub mod subscription_event_fold;
 pub mod transport_policy;
