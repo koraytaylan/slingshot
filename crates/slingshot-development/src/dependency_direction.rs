@@ -65,8 +65,18 @@ const PERMITTED_PRODUCT_DEPENDENCIES: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        // The command line turns arguments into domain commands, so it names the
+        // domain like every other product crate. Without that edge it could
+        // offer the catalog's operations only by keeping a second copy of the
+        // catalog, and two lists of the same commands eventually disagree about
+        // which of them changes something.
         "slingshot-command-line",
-        &["slingshot-local-protocol", "slingshot-configuration", "slingshot-daemon"],
+        &[
+            "slingshot-domain",
+            "slingshot-local-protocol",
+            "slingshot-configuration",
+            "slingshot-daemon",
+        ],
     ),
 ];
 
