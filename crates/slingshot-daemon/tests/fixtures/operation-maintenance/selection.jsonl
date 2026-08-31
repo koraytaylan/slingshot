@@ -1,0 +1,5 @@
+{"cutoff":100,"nonterminal":3,"note":"nothing has ended, so nothing is proposed","removed":0,"terminal":0}
+{"cutoff":100,"nonterminal":0,"note":"work that ended before the cutoff is proposed","removed":3,"terminal":3}
+{"cutoff":2,"nonterminal":0,"note":"work that ended after the cutoff is left alone","removed":1,"terminal":3}
+{"cutoff":100,"nonterminal":4,"note":"unfinished work is never proposed, whatever else is","removed":2,"terminal":2}
+{"cutoff":0,"nonterminal":1,"note":"a cutoff before everything proposes nothing at all","removed":0,"terminal":4}
