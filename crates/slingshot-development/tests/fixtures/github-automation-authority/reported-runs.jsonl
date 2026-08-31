@@ -1,0 +1,9 @@
+# One row per hosted run, and whether this authority authorizes it.
+# The accepted row uses a reviewed repository identity; the committed
+# authority carries none yet and refuses every one of them.
+{"name": "the run the authority authorizes", "run": {"repository": "koraytaylan/slingshot", "repository_identifier": "424242", "repository_owner_identifier": "101099", "workflow_path": ".github/workflows/quality.yml@refs/heads/main", "runner_selector": "ubuntu-24.04"}, "refusal": null}
+{"name": "a fork under another account", "run": {"repository": "koraytaylan/slingshot", "repository_identifier": "999999", "repository_owner_identifier": "7", "workflow_path": ".github/workflows/quality.yml@refs/heads/main", "runner_selector": "ubuntu-24.04"}, "refusal": "RunUnauthorized"}
+{"name": "the same display name at another identity", "run": {"repository": "koraytaylan/slingshot", "repository_identifier": "999999", "repository_owner_identifier": "101099", "workflow_path": ".github/workflows/quality.yml@refs/heads/main", "runner_selector": "ubuntu-24.04"}, "refusal": "RunUnauthorized"}
+{"name": "a repository that was renamed", "run": {"repository": "koraytaylan/slingshot-renamed", "repository_identifier": "424242", "repository_owner_identifier": "101099", "workflow_path": ".github/workflows/quality.yml@refs/heads/main", "runner_selector": "ubuntu-24.04"}, "refusal": "RunUnauthorized"}
+{"name": "a workflow outside the declared root", "run": {"repository": "koraytaylan/slingshot", "repository_identifier": "424242", "repository_owner_identifier": "101099", "workflow_path": "elsewhere/quality.yml@refs/heads/main", "runner_selector": "ubuntu-24.04"}, "refusal": "RunUnauthorized"}
+{"name": "a runner nobody mapped", "run": {"repository": "koraytaylan/slingshot", "repository_identifier": "424242", "repository_owner_identifier": "101099", "workflow_path": ".github/workflows/quality.yml@refs/heads/main", "runner_selector": "self-hosted"}, "refusal": "RunUnauthorized"}

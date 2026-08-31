@@ -10,13 +10,6 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 19/24 tasks done; 5 blocked; 0 dropped.
 - **Integration:** `blocked`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Blocked:**
-  - **3807 owner-confirmed-github-automation** (`gated`). Waits for the owner to
-    confirm GitHub Actions as the automation provider, the canonical and immutable
-    repository identity, one exact available native environment for each abstract
-    Plan 0001 target row, one OCI-capable coordinator, one probed FSM-compatible row,
-    and one protected release environment with a required-owner-review policy for the
-    RustSec pin. None of that can be inferred: an unconfigured Git remote is not a
-    repository identity, and a runner nobody probed is not an environment.
   - **3806 owner-supplied-release-metadata** (`gated`). Waits for the owner to supply
     the exact license declaration and the complete `LICENSE` bytes, and for 3807's
     validated canonical repository address. A license is a legal statement; guessing

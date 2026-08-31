@@ -1,0 +1,39 @@
+#!/bin/sh
+# Check out the exact advisory snapshot the pin names.
+#
+# One commit, verified after the fetch rather than trusted from the reference
+# that produced it. A reference is a name somebody can move; the commit and the
+# tree it names are what the pin authenticates.
+
+set -eu
+
+PIN=compatibility/rustsec-advisory-database.toml
+DESTINATION=${1:-}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+[ -n "$DESTINATION" ] || report_refusal 'name the directory to check the snapshot out into'
+case "$DESTINATION" in
+    /*) ;;
+    *) report_refusal "$DESTINATION is not an absolute path" ;;
+esac
+[ ! -e "$DESTINATION" ] || report_refusal "$DESTINATION already exists"
+[ -f "$PIN" ] || report_refusal "$PIN is not committed"
+
+ORIGIN=$(grep '^origin = ' "$PIN" | sed 's/^origin = "//; s/"$//')
+COMMIT=$(grep '^commit = ' "$PIN" | sed 's/^commit = "//; s/"$//')
+[ -n "$ORIGIN" ] || report_refusal 'the pin names no origin'
+[ -n "$COMMIT" ] || report_refusal 'the pin names no commit'
+
+printf 'this command reaches the network to fetch one pinned snapshot\n'
+git init --quiet "$DESTINATION"
+git -C "$DESTINATION" remote add origin "$ORIGIN"
+git -C "$DESTINATION" fetch --quiet --depth 1 origin "$COMMIT"
+git -C "$DESTINATION" checkout --quiet "$COMMIT"
+
+OBSERVED=$(git -C "$DESTINATION" rev-parse HEAD)
+[ "$OBSERVED" = "$COMMIT" ] || report_refusal "the checkout is at $OBSERVED and the pin names $COMMIT"
+cargo run --locked --quiet -p slingshot-development -- rustsec-advisory-pin

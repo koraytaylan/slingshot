@@ -1,0 +1,39 @@
+#!/bin/sh
+# Check out the exact external source the compatibility manifest pins.
+#
+# The manifest is the sole authority for the repository and the commit, and the
+# checkout is verified against it after the fetch. Credentials are never
+# persisted: this reads one public commit and nothing about this repository
+# should be reachable from the tree it leaves behind.
+
+set -eu
+
+MANIFEST=compatibility/finite-state-machine.toml
+DESTINATION=${1:-}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+[ -n "$DESTINATION" ] || report_refusal 'name the directory to check the source out into'
+case "$DESTINATION" in
+    /*) ;;
+    *) report_refusal "$DESTINATION is not an absolute path" ;;
+esac
+[ ! -e "$DESTINATION" ] || report_refusal "$DESTINATION already exists"
+[ -f "$MANIFEST" ] || report_refusal "$MANIFEST is not committed"
+
+REPOSITORY=$(grep '^repository = ' "$MANIFEST" | sed 's/^repository = "//; s/"$//')
+COMMIT=$(grep '^commit = ' "$MANIFEST" | sed 's/^commit = "//; s/"$//')
+[ -n "$REPOSITORY" ] || report_refusal 'the manifest names no repository'
+[ -n "$COMMIT" ] || report_refusal 'the manifest names no commit'
+
+printf 'this command reaches the network to fetch one pinned commit\n'
+git init --quiet "$DESTINATION"
+git -C "$DESTINATION" remote add origin "$REPOSITORY"
+git -C "$DESTINATION" fetch --quiet --depth 1 origin "$COMMIT"
+git -C "$DESTINATION" checkout --quiet "$COMMIT"
+
+OBSERVED=$(git -C "$DESTINATION" rev-parse HEAD)
+[ "$OBSERVED" = "$COMMIT" ] || report_refusal "the checkout is at $OBSERVED and the manifest names $COMMIT"
