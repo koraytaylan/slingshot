@@ -18,6 +18,7 @@ pub mod github_automation_authority;
 pub mod platform_runtime_contract;
 pub mod profile_authentication_harness;
 pub mod release_input_cache;
+pub mod release_metadata;
 pub mod rustsec_advisory_pin;
 pub mod slingshot_test_daemon;
 pub mod script_policy;

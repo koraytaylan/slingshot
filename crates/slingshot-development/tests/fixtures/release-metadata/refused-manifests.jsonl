@@ -1,0 +1,5 @@
+# One workspace manifest per row, and the refusal it earns.
+{"name": "a-license-declared-two-ways", "manifest": "[workspace.package]\nlicense = \"MIT OR Apache-2.0\"\nlicense-file = \"LICENSE\"\npublish = false\n", "refusal": "CargoDeclaredTwice"}
+{"name": "a-license-cargo-does-not-declare", "manifest": "[workspace.package]\nlicense = \"MIT\"\npublish = false\n", "refusal": "CargoDrift"}
+{"name": "no-license-at-all", "manifest": "[workspace.package]\npublish = false\n", "refusal": "CargoDrift"}
+{"name": "a-publishable-workspace", "manifest": "[workspace.package]\nlicense = \"MIT OR Apache-2.0\"\npublish = true\n", "refusal": "PackagePublishable"}

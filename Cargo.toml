@@ -19,6 +19,8 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.98.0"
 publish = false
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/koraytaylan/slingshot"
 
 [workspace.dependencies]
 slingshot-agent-connection = { path = "crates/slingshot-agent-connection" }
