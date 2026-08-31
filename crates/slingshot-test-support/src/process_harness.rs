@@ -114,6 +114,8 @@ pub struct ProcessRequest {
     pub arguments: Vec<String>,
     /// Environment values set for this child alone.
     pub environment: BTreeMap<String, String>,
+    /// What the child reads on its standard input.
+    pub input: Vec<u8>,
     /// Whether the child starts from an empty environment.
     pub sealed: bool,
     /// What the child's three standard streams are connected to.
@@ -141,9 +143,21 @@ impl ProcessRequest {
         Self {
             arguments: arguments.iter().map(|argument| (*argument).to_owned()).collect(),
             environment: BTreeMap::new(),
+            input: Vec::new(),
             sealed: false,
             attachment: StreamAttachment::Redirected,
         }
+    }
+
+    /// Gives this child something to read on its standard input.
+    ///
+    /// Written in full and then closed, so a child that reads until the end of
+    /// its input sees exactly this and then stops. A child left with an open
+    /// input that never produces anything would wait for the deadline instead.
+    #[must_use]
+    pub fn reading(mut self, input: impl Into<Vec<u8>>) -> Self {
+        self.input = input.into();
+        self
     }
 
     /// Starts this child from an empty environment.
@@ -183,7 +197,8 @@ fn command_for(executable: &ExecutablePath, request: &ProcessRequest) -> Command
     for (name, value) in &request.environment {
         command.env(name, value);
     }
-    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let input = if request.input.is_empty() { Stdio::null() } else { Stdio::piped() };
+    command.stdin(input).stdout(Stdio::piped()).stderr(Stdio::piped());
     command
 }
 
@@ -683,6 +698,9 @@ impl ProcessHarness {
         deadline: Duration,
     ) -> Result<CapturedProcess, HarnessFailure> {
         let mut retained = self.start_retained(executable, request)?;
+        if !request.input.is_empty() {
+            write_and_close(&mut retained, &request.input)?;
+        }
         let output = retained.child.stdout.take().map(drain_on_thread);
         let errors = retained.child.stderr.take().map(drain_on_thread);
         let waited = retained.wait_within(deadline);
@@ -696,6 +714,18 @@ impl ProcessHarness {
             standard_error: joined(errors),
         })
     }
+}
+
+/// Writes one child's whole input and closes it.
+fn write_and_close(retained: &mut RetainedChild, input: &[u8]) -> Result<(), HarnessFailure> {
+    use std::io::Write;
+    let mut writing = retained
+        .child
+        .stdin
+        .take()
+        .ok_or_else(|| HarnessFailure::Unusable("this child reads nothing".to_owned()))?;
+    writing.write_all(input).map_err(unusable)?;
+    writing.flush().map_err(unusable)
 }
 
 /// Reads one stream to its end on a thread of its own.
