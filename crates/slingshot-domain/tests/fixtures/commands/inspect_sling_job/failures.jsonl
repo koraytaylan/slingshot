@@ -1,0 +1,3 @@
+{"document":"{\"failure\":\"job_not_found\",\"job_identifier\":\"2024/01/01/example-job-1\"}","members":["failure","job_identifier"],"note":"refused as job not found","proves_no_effect":true}
+{"document":"{\"failure\":\"job_inventory_failed\",\"job_identifier\":\"2024/01/01/example-job-1\"}","members":["failure","job_identifier"],"note":"refused as job inventory failed","proves_no_effect":true}
+{"document":"{\"failure\":\"result_budget_exceeded\",\"job_identifier\":\"2024/01/01/example-job-1\"}","members":["failure","job_identifier"],"note":"refused as result budget exceeded","proves_no_effect":true}
