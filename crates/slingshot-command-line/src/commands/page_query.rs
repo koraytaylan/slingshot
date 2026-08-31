@@ -47,6 +47,13 @@ pub const FIND_USING_COMPONENTS: &str = "find_pages_using_components";
 ///
 /// Returns [`RequestRefusal`] naming the first thing that is wrong.
 pub fn build(invocation: &Invocation) -> Result<Command, RequestRefusal> {
+    // The verb is answered before any option is read. A family that reads an
+    // option first turns "this is not my command" into "you forgot --path", and
+    // the assembler stops at the first refusal that is not `AnotherCommand` - so
+    // one family reading early would hide every family declared after it.
+    if !NAMES.contains(&invocation.verb.as_str()) {
+        return Err(RequestRefusal::AnotherCommand { named: invocation.verb.clone() });
+    }
     require_key(invocation)?;
     let root_path = RepositoryPath::parse(required(invocation, PATH_OPTION)?)
         .map_err(|_| RequestRefusal::ValueUnusable { named: PATH_OPTION.to_owned() })?;
@@ -81,6 +88,9 @@ pub fn build(invocation: &Invocation) -> Result<Command, RequestRefusal> {
         named => Err(RequestRefusal::AnotherCommand { named: named.to_owned() }),
     }
 }
+
+/// Every command this family builds.
+const NAMES: &[&str] = &[FIND_BY_TEMPLATE, FIND_CONTAINING_PHRASE, FIND_USING_COMPONENTS];
 
 /// Returns how many of the named components a page must use.
 fn match_mode(invocation: &Invocation) -> ComponentMatchMode {

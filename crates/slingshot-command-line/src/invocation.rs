@@ -790,7 +790,12 @@ fn absorb(
             invocation.output = Some(OutputForm::Machine);
             return Ok(0);
         }
-        RECURSIVE_OPTION | MATCH_ALL_OPTION | ENABLE_LIVE_AUTHOR_OPTION => {
+        RECURSIVE_OPTION
+        | MATCH_ALL_OPTION
+        | ENABLE_LIVE_AUTHOR_OPTION
+        | ADJUST_REFERENCES_OPTION
+        | INCLUDE_INDIRECT_OPTION
+        | INCLUDE_TRACE_OPTION => {
             invocation.arguments.insert(option.to_owned(), String::new());
             return Ok(0);
         }

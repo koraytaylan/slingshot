@@ -77,7 +77,7 @@ fn a_reason_belongs_to_a_disabling_and_to_nothing_else() {
     assert_eq!(command(true, Some("Left the company")).require_usable(), Ok(()));
     assert_eq!(
         command(false, Some("Left the company")).require_usable(),
-        Err(MutationResultFailure::NotThisRequest),
+        Err(MutationResultFailure::RequestContradictsItself),
         "a reason for an enabling was accepted"
     );
     assert_eq!(command(false, None).require_usable(), Ok(()));

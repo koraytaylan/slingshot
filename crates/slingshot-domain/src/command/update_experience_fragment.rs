@@ -16,7 +16,7 @@ use crate::command::find_pages_containing_phrase::PageTitle;
 use crate::command::repository_path::{PathFailure, RepositoryName, RepositoryPath};
 use crate::command::resource_mutation::{
     MutationResultFailure, PropertyMutationFailure, RemovedPropertyNames, ResourceMutationResult,
-    require_property_mutation,
+    require_property_mutation, require_title_not_redefined,
 };
 
 /// One request to change an experience fragment variation.
@@ -52,11 +52,13 @@ impl UpdateExperienceFragmentCommand {
     ///
     /// # Errors
     ///
-    /// Returns [`PropertyMutationFailure::BothAssignedAndRemoved`] when one
-    /// property is named in both documents, and
-    /// [`PropertyMutationFailure::ChangesNothing`] when the request would change
-    /// nothing at all.
+    /// Returns [`PropertyMutationFailure::TitleRedefined`] when the property
+    /// document carries the title property this command sets from its own field,
+    /// [`PropertyMutationFailure::BothAssignedAndRemoved`] when one property is
+    /// named in both documents, and [`PropertyMutationFailure::ChangesNothing`]
+    /// when the request would change nothing at all.
     pub fn require_usable(&self) -> Result<(), PropertyMutationFailure> {
+        require_title_not_redefined(self.properties.as_ref(), self.title.is_some())?;
         require_property_mutation(
             self.properties.as_ref(),
             self.removed_property_names.as_ref(),

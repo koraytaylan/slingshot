@@ -25,6 +25,7 @@ use crate::invocation::{
     ADJUST_REFERENCES_OPTION, DESTINATION_PATH_OPTION, Invocation, PATH_OPTION, PLACEMENT_OPTION,
     SIBLING_OPTION, TITLE_OPTION,
 };
+use slingshot_domain::command::find_pages_containing_phrase::PageTitle;
 
 /// The wire name of the page update.
 pub const UPDATE_PAGE: &str = "update_page";
@@ -107,7 +108,7 @@ fn update_page(invocation: &Invocation) -> Result<Command, RequestRefusal> {
         page_path: path(invocation, PATH_OPTION)?,
         properties: properties(invocation, &[])?,
         removed_property_names: removed_property_names(invocation)?,
-        title: optional_text(invocation, TITLE_OPTION),
+        title: title(invocation)?,
     }))
 }
 
@@ -148,6 +149,12 @@ fn update_component(invocation: &Invocation) -> Result<Command, RequestRefusal> 
 /// Returns the component reordering one invocation describes.
 fn reorder_component(invocation: &Invocation) -> Result<Command, RequestRefusal> {
     let placement = match required(invocation, PLACEMENT_OPTION)? {
+        // A sibling beside `last` is refused rather than dropped. The document
+        // form refuses it, and a command line that accepted it would leave a
+        // caller believing the component went in front of something.
+        PLACEMENT_LAST if invocation.arguments.contains_key(SIBLING_OPTION) => {
+            return Err(unusable(SIBLING_OPTION));
+        }
         PLACEMENT_LAST => ComponentPlacement::Last {},
         PLACEMENT_BEFORE => ComponentPlacement::Before {
             sibling_name: ComponentName::parse(required(invocation, SIBLING_OPTION)?)
@@ -159,4 +166,11 @@ fn reorder_component(invocation: &Invocation) -> Result<Command, RequestRefusal>
         component_path: path(invocation, PATH_OPTION)?,
         placement,
     }))
+}
+
+/// Returns the title one invocation records, when it records one.
+fn title(invocation: &Invocation) -> Result<Option<PageTitle>, RequestRefusal> {
+    optional_text(invocation, TITLE_OPTION)
+        .map(|stated| PageTitle::new(stated).map_err(|_| unusable(TITLE_OPTION)))
+        .transpose()
 }

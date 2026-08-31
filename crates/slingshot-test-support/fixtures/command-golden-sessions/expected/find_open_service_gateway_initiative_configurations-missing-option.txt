@@ -1,4 +1,4 @@
-exit: 2
+exit: 6
 standard output:
 standard error:
-slingshot: --path is required, and this invocation does not carry it
+slingshot: no daemon is listening on <runtime-root>/6ba2ed4731014451b86f37b0f452edfa5d7f3f044fd75a0d3301aca0049f2c1a.socket

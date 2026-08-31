@@ -58,6 +58,12 @@ address_value!(
     "request address"
 );
 
+address_value!(
+    /// The host a mapping emits its addresses relative to.
+    RequestAuthority,
+    "request authority"
+);
+
 impl ResourceMappingPattern {
     /// Validates one mapping pattern.
     ///
@@ -202,5 +208,30 @@ impl<'de> Deserialize<'de> for ResourceMappingEntry {
             document.status_code,
         )
         .map_err(Source::Error::custom)
+    }
+}
+
+impl RequestAuthority {
+    /// Validates one request authority.
+    ///
+    /// A host and an optional port, bounded by the repository name limit because
+    /// that is the bound the published schema declares for it. Nothing here
+    /// resolves the host or decides whether it exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathFailure`] when the authority is empty, longer than the
+    /// contract allows, not already in normalization form C, carries a control,
+    /// whitespace, or a separator.
+    pub fn parse(authority: &str) -> Result<Self, PathFailure> {
+        let bound = CommandContract::embedded().limit("maximum_repository_name_bytes");
+        accept_within(authority, bound, Self::role(), "bytes")?;
+        let refused = authority.chars().any(|character| {
+            character.is_control() || character.is_whitespace() || character == '/'
+        });
+        if refused {
+            return Err(PathFailure::at(Self::role(), "character"));
+        }
+        Ok(Self::from_accepted(authority))
     }
 }

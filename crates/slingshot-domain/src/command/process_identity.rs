@@ -142,17 +142,17 @@ pub enum WorkflowInstanceState {
     Completed,
     /// Advancing, or waiting on a work item.
     Running,
-    /// Held, and resumable.
-    Suspended,
     /// Neither advancing nor ended, which an author reports and does not repair.
     Stale,
+    /// Held, and resumable.
+    Suspended,
 }
 
 impl WorkflowInstanceState {
     /// Returns every state, in the order they are written.
     #[must_use]
     pub fn every() -> [Self; WORKFLOW_INSTANCE_STATE_COUNT] {
-        [Self::Aborted, Self::Completed, Self::Running, Self::Suspended, Self::Stale]
+        [Self::Aborted, Self::Completed, Self::Running, Self::Stale, Self::Suspended]
     }
 
     /// Reports whether an instance in this state has ended.

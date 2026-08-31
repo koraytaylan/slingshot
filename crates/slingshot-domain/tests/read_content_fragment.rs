@@ -134,7 +134,9 @@ fn every_failure_document_carries_its_two_members_and_names_this_request() {
             document,
             "{note}: rewritten differently"
         );
-        assert_eq!(refusal.require_answers(&command(None)), Ok(()), "{note}");
+        // A missing variation belongs to the request that named one; every
+        // other category answers a request about the master just as well.
+        assert_eq!(refusal.require_answers(&command(Some("mobile"))), Ok(()), "{note}");
     }
     let elsewhere = ReadContentFragmentRefusal {
         failure: ReadContentFragmentFailure::FragmentNotFound,
@@ -143,5 +145,14 @@ fn every_failure_document_carries_its_two_members_and_names_this_request() {
     assert_eq!(
         elsewhere.require_answers(&command(None)),
         Err(ContentFragmentFailure::NotThisRequest)
+    );
+    let missing = ReadContentFragmentRefusal {
+        failure: ReadContentFragmentFailure::VariationNotFound,
+        fragment_path: path(FRAGMENT),
+    };
+    assert_eq!(
+        missing.require_answers(&command(None)),
+        Err(ContentFragmentFailure::NotThisRequest),
+        "a request about the master was answered with a missing variation"
     );
 }

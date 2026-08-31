@@ -38,15 +38,26 @@ use crate::operation_maintenance::{MAXIMUM_PAGE_SIZE, MAXIMUM_PREVIEW_LIMIT};
 /// family already knows which commands it builds, and a second list beside it
 /// would be a second thing to keep in step.
 ///
+/// Every command is asked whether the request contradicts itself before it
+/// leaves, so a move into its own subtree, a mutation that changes nothing, or a
+/// group asked to contain itself is refused here rather than at the author.
+///
 /// # Errors
 ///
-/// Returns [`RequestRefusal`] naming the first thing that is wrong, or that no
-/// family builds this command.
+/// Returns [`RequestRefusal`] naming the first thing that is wrong, that the
+/// request contradicts itself, or that no family builds this command.
 pub fn build_command(invocation: &Invocation) -> Result<Command, RequestRefusal> {
     for build in EVERY_COMMAND_BUILDER {
         match build(invocation) {
             Err(RequestRefusal::AnotherCommand { .. }) => continue,
-            answered => return answered,
+            Ok(built) => {
+                built.require_usable().map_err(|why| RequestRefusal::RequestUnusable {
+                    named: why.wire_name.to_owned(),
+                    because: why.reason,
+                })?;
+                return Ok(built);
+            }
+            refused => return refused,
         }
     }
     Err(RequestRefusal::AnotherCommand { named: invocation.verb.clone() })

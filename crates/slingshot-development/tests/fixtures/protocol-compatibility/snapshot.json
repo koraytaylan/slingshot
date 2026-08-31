@@ -60,7 +60,7 @@
       "arguments_schema_sha256": "91a79e8c8d23d299723bf3ee451914114d772bec1f05514896b18eeb635e7ec8",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "c3a5f20ce601a8960fb90c20a6661d036f559c9cf4ba5533e3a63f3a750288d7",
+      "result_schema_sha256": "3de65f9000b42b7f99fe3a4c0e785d0991e186af3344236832ce8df239bf1604",
       "semantic_version": "1.0.0",
       "wire_name": "create_group"
     },
@@ -76,7 +76,7 @@
       "arguments_schema_sha256": "66b5b862f6e369548120c38121acbf20f1098b7a93c17f90c8a0e87223ffd2b4",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "8a84d2052150378b57072b6150f4edb3848513320eab2e2c1566387f68990c22",
+      "result_schema_sha256": "15dfde3300c0f2955656d68898f2b642d48784a4be133883d6ebf3009d4bc381",
       "semantic_version": "1.0.0",
       "wire_name": "create_user"
     },

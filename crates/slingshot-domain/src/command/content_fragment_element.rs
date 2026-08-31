@@ -42,6 +42,9 @@ pub enum ContentFragmentFailure {
     /// A result does not answer the command it claims to answer.
     #[error("a fragment result names the fragment and variation its command asked about")]
     NotThisRequest,
+    /// The request would change nothing.
+    #[error("a fragment update changes something")]
+    ChangesNothing,
 }
 
 address_value!(
