@@ -19,7 +19,7 @@ touches:
   - crates/slingshot-daemon/src/operation/mod.rs
   - crates/slingshot-daemon/tests/fixtures/durable-idempotent-submission.jsonl
   - crates/slingshot-daemon/tests/durable_idempotent_submission.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Durable Idempotent Submission
