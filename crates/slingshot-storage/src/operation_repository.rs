@@ -7,9 +7,8 @@
 //! that name is a conflict, and a conflict changes nothing.
 //!
 //! The partition is the opaque author-target digest, so one identifier against
-//! two targets is two operations - including two targets that differ only by
-//! the principal behind the same deployment. Replay cannot cross a partition,
-//! because the row it would replay is not the row the caller asked about.
+//! two targets is two operations, including two that differ only by the
+//! principal behind one deployment. Replay never crosses a partition.
 //!
 //! Every write is a compare-and-set folded through [`OperationRecord`], so a
 //! transition's legality is decided once, in the domain, rather than
@@ -46,8 +45,8 @@ const AUTHORITATIVE_REMOTE_SUCCESS_KIND: &str = "authoritative_remote_success";
 const ONE_ROW: usize = 1;
 /// Returns the text of the inventoried statement with `purpose`.
 ///
-/// Looked up rather than written here, so a statement not in the inventory
-/// cannot be reached from this module at all.
+/// Looked up rather than written here, so a statement outside the inventory
+/// cannot be reached from this module.
 fn statement(purpose: &str) -> &'static str {
     STATEMENTS
         .iter()
@@ -155,10 +154,10 @@ fn require_within(field: &'static str, limit: &str, text: &str) -> Result<(), Re
 /// Begins a transaction that will write.
 ///
 /// `IMMEDIATE` rather than the default. A deferred transaction starts as a
-/// reader and asks for the write lock when it first writes; two of them that
-/// both read and then both try to upgrade cannot both be granted, and SQLite
-/// refuses at once rather than waiting, because each holds the read lock the
-/// other needs. Taking the write lock up front makes contenders queue instead.
+/// reader and asks for the write lock when it first writes; two that both read
+/// and then both try to upgrade cannot both be granted, and SQLite refuses at
+/// once rather than waiting, because each holds the read lock the other needs.
+/// Taking the write lock up front makes contenders queue instead.
 fn write_transaction(
     connection: &rusqlite::Connection,
 ) -> Result<rusqlite::Transaction<'_>, RepositoryFailure> {
@@ -187,9 +186,8 @@ fn require_revision(
 /// One request to admit an operation.
 ///
 /// Everything here is written in the first-admission transaction, before a
-/// scheduler can see the row. The installation identifier is a snapshot rather
-/// than a reference: a row that survives a reinstall has to say which
-/// installation admitted it.
+/// scheduler can see the row. The installation identifier is a snapshot: a row
+/// surviving a reinstall has to say which installation admitted it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdmissionRequest {
     /// The opaque author-target identity, stored whole.
@@ -376,11 +374,9 @@ impl OperationRepository {
     ///
     /// One `synchronous = FULL` transaction reserves the arrival sequence,
     /// writes the row as `queued`, and commits; a caller is told it was
-    /// admitted only after that commit returns.
-    ///
-    /// A row already under that identifier is a replay when the selected
-    /// environment revision and the fingerprint both match, and a conflict
-    /// otherwise. A conflict writes nothing at all.
+    /// admitted only after that commit returns. A row already under that
+    /// identifier is a replay when the revision and fingerprint both match, and
+    /// otherwise a conflict, which writes nothing at all.
     ///
     /// # Errors
     ///
@@ -502,9 +498,6 @@ impl OperationRepository {
     }
 
     /// Reads one operation and its outstanding recovery in one transaction.
-    ///
-    /// Together, because a summary showing a state from one instant and a
-    /// recovery fact from another would describe no moment that ever existed.
     fn read_within(
         &self,
         transaction: &rusqlite::Transaction<'_>,
@@ -529,10 +522,6 @@ impl OperationRepository {
     }
 
     /// Reads one operation that has to be there.
-    ///
-    /// Every caller has already established it exists, so its absence means the
-    /// transaction is not seeing its own writes - a failure, not an empty
-    /// answer.
     fn read_required(
         &self,
         transaction: &rusqlite::Transaction<'_>,
@@ -645,8 +634,8 @@ impl OperationRepository {
     /// Folds one fact into an operation, under compare-and-set.
     ///
     /// A stale revision writes nothing and says so, which is how two writers
-    /// racing on one operation produce a winner rather than a row neither
-    /// described. A fold that changes nothing commits nothing.
+    /// racing on one operation produce a winner. A fold that changes nothing
+    /// commits nothing.
     ///
     /// # Errors
     ///
@@ -677,11 +666,9 @@ impl OperationRepository {
 
     /// Runs one compare-and-set write, whatever the write turns out to be.
     ///
-    /// Reading the row, holding the caller to the revision it last saw, and
-    /// reading back what was committed are the same for every write. `change`
-    /// decides only what the row becomes, and answers with nothing when it
-    /// becomes what it already was, which commits nothing and keeps the
-    /// revision.
+    /// Reading the row, holding the caller to its revision, and reading back
+    /// what committed are the same for every write. `change` decides only what
+    /// the row becomes, and answers with nothing when it becomes what it was.
     fn mutate(
         &self,
         author_target_identity_digest: &str,
@@ -725,8 +712,8 @@ impl OperationRepository {
 
     /// Returns the settlement instant a fold produces, when it settles one.
     ///
-    /// An operation settles once, so a fold that leaves an already terminal row
-    /// terminal keeps the instant it settled at.
+    /// An operation settles once, so a fold leaving a terminal row terminal
+    /// keeps the instant it settled at.
     fn settlement(
         stored: &OperationSummary,
         folded: &OperationRecord,
@@ -811,9 +798,8 @@ impl OperationRepository {
 
     /// Records where an operation's result went, under compare-and-set.
     ///
-    /// Settled separately from the lifecycle because it answers a different
-    /// question: reaching `Succeeded` says the work happened, this says where
-    /// what it produced can be found.
+    /// Separate from the lifecycle: reaching `Succeeded` says the work
+    /// happened, this says where what it produced can be found.
     ///
     /// # Errors
     ///
@@ -847,8 +833,8 @@ impl OperationRepository {
 
     /// Returns every operation in one partition, in the order it arrived.
     ///
-    /// Reopening reconstructs from this: nonterminal rows are the work still to
-    /// do, in their callers' order, and terminal rows come back too.
+    /// Nonterminal rows are the work still to do, in their callers' order, and
+    /// terminal rows come back too.
     ///
     /// # Errors
     ///
@@ -879,13 +865,12 @@ impl OperationRepository {
         transaction.commit()?;
         Ok(found)
     }
+
     /// Records one recovery-resume receipt, or replays the one already there.
     ///
-    /// The receipt is keyed by target and source fingerprint, so an identical
-    /// request finds its own committed proof whatever the operation has done
-    /// since. That is the point: whether a resume took effect cannot be
-    /// reconstructed from current state, because later progress, another
-    /// recovery cycle, and terminal settlement all look the same from outside.
+    /// Keyed by target and source fingerprint, so an identical request finds
+    /// its own committed proof whatever the operation has done since. Whether a
+    /// resume took effect cannot be reconstructed from current state.
     ///
     /// # Errors
     ///
