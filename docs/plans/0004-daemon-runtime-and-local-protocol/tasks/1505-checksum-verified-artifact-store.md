@@ -17,7 +17,7 @@ touches:
   - crates/slingshot-storage/tests/artifact_store/main.rs
   - crates/slingshot-storage/tests/artifact_store/verification.rs
 status: done
-merged_as: ""
+merged_as: "4e6c6c34f85ce59c25ac1bb366655a25b5e3edd7"
 ---
 # Checksum Verified Artifact Store
 
