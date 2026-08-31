@@ -172,6 +172,38 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
+        purpose: "count this namespace's retained operation rows",
+        text: "SELECT COUNT(*) FROM operation",
+        parameters: 0,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "count one target's maintenance-application receipts",
+        text: "SELECT COUNT(*) FROM maintenance_application_receipt \
+               WHERE author_target_identity_digest = ?",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "count one target's maintenance-result associations",
+        text: "SELECT COUNT(*) FROM maintenance_result_association \
+               WHERE author_target_identity_digest = ?",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "measure the bytes this namespace's committed content occupies",
+        text: "SELECT COALESCE(SUM(byte_length), 0) FROM artifact_blob",
+        parameters: 0,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "read one artifact blob's recorded length",
+        text: "SELECT byte_length FROM artifact_blob WHERE content_digest = ?",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
         purpose: "record one artifact's content, once per digest",
         text: "INSERT OR IGNORE INTO artifact_blob \
                (byte_length, content_digest, recorded_at_unix_milliseconds) \
