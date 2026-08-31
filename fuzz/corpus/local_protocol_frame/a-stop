@@ -1,0 +1,1 @@
+{"control_version":1,"request_identifier":"one","method":"daemon.stop","arguments":{"readiness_nonce":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
