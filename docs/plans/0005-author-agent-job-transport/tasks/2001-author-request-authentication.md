@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/request-authentication/**
   - crates/slingshot-agent-connection/tests/request_authentication.rs
 status: done
-merged_as: ""
+merged_as: "5771e71c6772f2c2feffd87ff315216261af2e7a"
 ---
 # Author Request Authentication
 
