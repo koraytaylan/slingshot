@@ -17,8 +17,10 @@ touches:
   - docs/DAEMON.md
   - docs/MODEL_CONTEXT_PROTOCOL.md
   - docs/WORKFLOWS.md
+  - policy/source-policy.toml
+  - crates/slingshot-development/src/source_policy.rs
   - crates/slingshot-development/tests/product_documentation.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Present State Product Documentation

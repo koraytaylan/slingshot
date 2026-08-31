@@ -10,6 +10,24 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 18/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3903 writes the ninth document and holds all nine to a contract; it does not
+    transcribe every clause its own step 4 lists.** `docs/AGENT_PROTOCOL.md` did not
+    exist and now does. What the suite proves about the set is falsifiable rather than
+    editorial: every documented invocation is parsed by the production parser, every
+    configuration example by the production profile, selection, and snapshot parsers,
+    every documented repository path and link resolves to something committed, every
+    transport bound is named rather than written out (and a test refuses a document
+    that spells one of those numbers), the security statements the plan's own Tests
+    section names are each where they belong, hermetic conformance and live evidence
+    are stated as separate kinds, and Plan 0008's material in `docs/WORKFLOWS.md` is
+    still there with the commit and repository it pins. The clauses about the GitHub
+    adapter, attestation eligibility, provenance versus package signing, and release
+    artifacts are not written, because the tasks that would make them true are behind
+    owner gates and prose describing them would be prose about something that does not
+    exist. Explaining the suppression rule meant naming `#[allow(...)]` in
+    `CONTRIBUTING.md`, which the rule refused; a code attribute written in prose acts
+    on nothing, so the marker list is now split into the code markers and the ones
+    aimed at this checker, which are refused wherever they are written.
   - **3902 split three files rather than raise a ceiling, and its footprint records
     it.** Its own steps say to split a violating file instead of raising a limit, and
     adding rules to a checker that already stood at 995 lines meant doing exactly that:
