@@ -5,6 +5,7 @@
 //! documentation-only roots.
 
 pub mod artifact_transfer;
+pub mod author_agent_operation_executor;
 pub mod diagnostics;
 pub mod local_server;
 pub mod operation;
