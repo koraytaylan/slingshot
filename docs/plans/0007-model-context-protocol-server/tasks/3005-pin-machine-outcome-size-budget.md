@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/size_budget.rs
   - crates/slingshot-command-line/tests/model_context_protocol_size_budget.rs
   - "crates/slingshot-test-support/fixtures/model-context-protocol/size-budget/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Pin Machine Outcome Size Budget
