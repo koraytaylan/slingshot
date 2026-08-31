@@ -17,7 +17,7 @@ touches:
   - crates/slingshot-development/tests/coverage_fuzzing_tool.rs
   - "crates/slingshot-development/tests/fixtures/coverage-fuzzing-tool/**"
 status: done
-merged_as: ""
+merged_as: "48ba05e71250a1b7c7483c9c03b5a4bdd5206778"
 ---
 # Pinned Coverage Fuzzing Tool
 
