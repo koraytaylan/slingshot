@@ -19,6 +19,7 @@ commands:
   operation-result
   operation-status
   operation-wait
+  verify-live-author
   version
 
 commands this daemon runs against an author:
@@ -78,4 +79,6 @@ options:
   --operation
   --artifact
   --runtime-root
+  --enable-live-author
+  --content-root
 standard error:

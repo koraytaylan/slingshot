@@ -70,6 +70,7 @@ crates/slingshot-command-line/src/human_renderer.rs|slingshot-command-line|entry
 crates/slingshot-command-line/src/interrupt.rs|slingshot-command-line|entry|leaf|slingshot_command_line::interrupt|command-line-module-scaffold
 crates/slingshot-command-line/src/invocation.rs|slingshot-command-line|entry|leaf|slingshot_command_line::invocation|command-line-module-scaffold
 crates/slingshot-command-line/src/lib.rs|slingshot-command-line|entry|crate-root|slingshot_command_line|workspace-module-map
+crates/slingshot-command-line/src/live_adobe_experience_manager.rs|slingshot-command-line|entry|leaf|slingshot_command_line::live_adobe_experience_manager|live-adobe-experience-manager-harness
 crates/slingshot-command-line/src/machine_outcome_envelope.rs|slingshot-command-line|entry|leaf|slingshot_command_line::machine_outcome_envelope|command-line-module-scaffold
 crates/slingshot-command-line/src/machine_readable_renderer.rs|slingshot-command-line|entry|leaf|slingshot_command_line::machine_readable_renderer|command-line-module-scaffold
 crates/slingshot-command-line/src/model_context_protocol/mod.rs|slingshot-command-line|entry|family-root|slingshot_command_line::model_context_protocol|workspace-module-map

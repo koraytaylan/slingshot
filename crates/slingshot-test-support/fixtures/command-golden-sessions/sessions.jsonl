@@ -6,6 +6,7 @@
 {"name": "option-without-value", "arguments": ["daemon", "ping", "--profile"], "intent": "an option that takes a value and got none says so", "kind": "local"}
 {"name": "repeated-option", "arguments": ["daemon", "ping", "--profile", "local", "--profile", "other"], "intent": "an option given twice is refused rather than collapsed", "kind": "local"}
 {"name": "option-on-the-wrong-leaf", "arguments": ["operation-list", "--detach"], "intent": "a listing detaches from nothing", "kind": "local"}
+{"name": "live-author-without-enablement", "arguments": ["verify-live-author", "--profile", "local", "--environment", "author"], "intent": "reaching somebody's real author needs saying so, and this says nothing", "kind": "local"}
 {"name": "incomplete-target", "arguments": ["daemon", "ping"], "intent": "half a target names no namespace", "kind": "local"}
 {"name": "ping-absent-human", "arguments": ["--profile", "local", "--environment", "author", "daemon", "ping"], "intent": "a probe against absence creates nothing", "kind": "local"}
 {"name": "ping-absent-machine", "arguments": ["--profile", "local", "--environment", "author", "daemon", "ping", "--machine"], "intent": "the same probe as one tagged object", "kind": "local"}

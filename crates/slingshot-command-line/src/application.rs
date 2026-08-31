@@ -42,8 +42,13 @@ use crate::daemon_request::{
 use crate::exit_classification;
 use crate::interrupt::{self, Phase, SignalOutcome};
 use crate::invocation::{
-    EVERY_OPTION, Invocation, LOCAL_LEAVES, METADATA_ONLY_LEAVES, OPERATION_IDENTIFIER_OPTION,
-    OPERATION_NAMING_LEAVES, SERVE_LEAF, Selection, is_catalog_command,
+    EVERY_OPTION, Invocation, LIVE_AUTHOR_LEAF, LOCAL_LEAVES, METADATA_ONLY_LEAVES,
+    OPERATION_IDENTIFIER_OPTION, OPERATION_NAMING_LEAVES, SERVE_LEAF, Selection,
+    is_catalog_command,
+};
+use crate::live_adobe_experience_manager::{
+    Enablement, NO_SELECTED_AUTHOR, SUBMITTED_COMMANDS, exercise_invocation, live_report,
+    require_admissible,
 };
 use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
 use crate::operation_submission;
@@ -119,6 +124,8 @@ pub enum Service {
     OperationMaintenance,
     /// Handing the standard streams to the protocol server.
     ModelContextProtocolServer,
+    /// Verifying the read path against a selected real author.
+    LiveAuthorVerification,
 }
 
 impl Service {
@@ -135,6 +142,7 @@ impl Service {
                 | Self::ConfigurationCheck
                 | Self::DaemonLifecycle
                 | Self::ModelContextProtocolServer
+                | Self::LiveAuthorVerification
         )
     }
 }
@@ -177,6 +185,9 @@ pub fn service_for(invocation: &Invocation) -> Result<Service, DispatchRefusal> 
     }
     if leaf == SERVE_LEAF {
         return Ok(Service::ModelContextProtocolServer);
+    }
+    if leaf == LIVE_AUTHOR_LEAF {
+        return Ok(Service::LiveAuthorVerification);
     }
     if NAMESPACE_ONLY_LEAVES.contains(&leaf) || leaf == "daemon-start" {
         return Ok(Service::DaemonLifecycle);
@@ -481,6 +492,7 @@ impl CommandLineApplication<'_> {
             Service::OperationObservation => self.observe(invocation),
             Service::OperationMaintenance => self.maintain(invocation),
             Service::ModelContextProtocolServer => Ok(served()),
+            Service::LiveAuthorVerification => self.verify_live_author(invocation),
         }
     }
 
@@ -689,6 +701,45 @@ impl CommandLineApplication<'_> {
 }
 
 impl CommandLineApplication<'_> {
+    /// Verifies the read path against the author the selection names.
+    ///
+    /// Enablement is decided before anything is read, so a caller who did not
+    /// ask for a live run reaches no configuration, no credential, no daemon,
+    /// and no network. Every command it then runs is checked against the
+    /// registry's own access columns before it is built, and each one goes
+    /// through the same path an operator's own invocation would - because a
+    /// verification that took a shortcut would be verifying the shortcut.
+    fn verify_live_author(&self, invocation: &Invocation) -> Result<Completion, RunRefusal> {
+        let enablement = Enablement::read(invocation)
+            .map_err(|refusal| RunRefusal::Usage(refusal.to_string()))?;
+        let report = self.configuration.check(&invocation.selection);
+        let CheckReport::Resolved(facts) = &report else {
+            return Ok(Completion {
+                answer: Answer::Refusal(NO_SELECTED_AUTHOR.to_owned()),
+                diagnostics: report.diagnostics().iter().map(stated).collect(),
+                exit: exit_classification::LOCAL_FAILURE,
+            });
+        };
+        let catalog = CommandCatalog::published();
+        let mut rendered = String::new();
+        let mut diagnostics = Vec::new();
+        let mut exit = exit_classification::SUCCESS;
+        for command in SUBMITTED_COMMANDS {
+            require_admissible(&catalog, command)
+                .map_err(|refusal| RunRefusal::Usage(refusal.to_string()))?;
+            let identifier = self.request_identifier();
+            let asked = exercise_invocation(command, &enablement, &identifier);
+            let completion = self.run(&asked);
+            let observed = live_report(command, &identifier, facts, completion.exit);
+            rendered.push_str(&observed.rendered());
+            diagnostics.extend(completion.diagnostics);
+            if completion.exit != exit_classification::SUCCESS {
+                exit = completion.exit;
+            }
+        }
+        Ok(Completion { answer: Answer::Text(rendered), diagnostics, exit })
+    }
+
     /// Submits one catalog command and reports what the daemon admitted.
     fn submit(&self, invocation: &Invocation) -> Result<Completion, RunRefusal> {
         let command =

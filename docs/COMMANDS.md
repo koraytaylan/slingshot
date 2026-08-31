@@ -49,6 +49,7 @@ These reach configuration, a daemon, or nothing at all.
 | `operation-result` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--operation`, `--runtime-root` |
 | `operation-status` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--operation`, `--runtime-root` |
 | `operation-wait` | `--profile`, `--environment`, `--machine`, `--operation`, `--runtime-root` |
+| `verify-live-author` | `--profile`, `--environment`, `--machine`, `--runtime-root`, `--enable-live-author`, `--content-root` |
 | `version` | none |
 
 <!-- end generated: local-leaves -->
@@ -225,7 +226,28 @@ slingshot --profile local --environment author maintenance-preview --limit 20
 
 # Stop the daemon that owns the target, quoting the nonce it published.
 slingshot --profile local --environment author daemon stop
+
+# Verify the read path against a real author, which happens only when asked.
+slingshot --profile local --environment author verify live-author --enable-live-author --content-root /content/site/en
 ```
+
+## Verifying against a real author
+
+`verify live-author` reaches the author the selection names and runs the read
+path against it. Nothing about it is implicit: without `--enable-live-author`
+the leaf is refused before a single byte of configuration is read, and the
+`--content-root` it is given has to name authored content rather than a
+directory on this machine.
+
+What it may run is the registry's own answer. A command is admissible when the
+registry calls it a read that replaces nothing, which is nine of the twelve
+rows; the three that write are refused before anything is dispatched. Whether
+running a command twice is running it once never enters into that decision -
+that column says whether a retry is safe, not whether a run may happen.
+
+One run of it is evidence about the author it ran against and about nothing
+else. It is not the release gate: the hermetic suite is, and the two kinds of
+evidence are reported separately rather than added together.
 
 ## What is not here
 

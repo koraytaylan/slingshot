@@ -66,6 +66,15 @@ pub const RESULT_IDENTIFIER_OPTION: &str = "--result-identifier";
 /// The option naming the digest a read expects.
 pub const EXPECTED_DIGEST_OPTION: &str = "--expected-digest";
 
+/// The option that enables reaching a real author, and the only thing that does.
+pub const ENABLE_LIVE_AUTHOR_OPTION: &str = "--enable-live-author";
+
+/// The option naming the repository content root a live verification stays under.
+pub const CONTENT_ROOT_OPTION: &str = "--content-root";
+
+/// The leaf that verifies the read path against a selected real author.
+pub const LIVE_AUTHOR_LEAF: &str = "verify-live-author";
+
 /// The option naming where a namespace's objects live.
 pub const RUNTIME_ROOT_OPTION: &str = "--runtime-root";
 
@@ -197,6 +206,8 @@ pub const EVERY_OPTION: &[&str] = &[
     OPERATION_IDENTIFIER_OPTION,
     ARTIFACT_OPTION,
     RUNTIME_ROOT_OPTION,
+    ENABLE_LIVE_AUTHOR_OPTION,
+    CONTENT_ROOT_OPTION,
 ];
 
 /// The leaves this surface offers that are not catalog commands.
@@ -221,6 +232,7 @@ pub const LOCAL_LEAVES: &[&str] = &[
     "operation-result",
     "operation-status",
     "operation-wait",
+    "verify-live-author",
     "version",
 ];
 
@@ -396,7 +408,14 @@ pub fn parse(arguments: &[String]) -> Result<Invocation, ParseRefusal> {
 /// match, and whether the run returns without waiting.
 #[must_use]
 pub fn takes_a_value(option: &str) -> bool {
-    !matches!(option, MACHINE_OUTPUT_OPTION | RECURSIVE_OPTION | MATCH_ALL_OPTION | DETACH_OPTION)
+    !matches!(
+        option,
+        MACHINE_OUTPUT_OPTION
+            | RECURSIVE_OPTION
+            | MATCH_ALL_OPTION
+            | DETACH_OPTION
+            | ENABLE_LIVE_AUTHOR_OPTION
+    )
 }
 
 /// Returns whether `leaf` names something this build offers.
@@ -449,7 +468,17 @@ fn require_option_permitted(leaf: &str, option: &str) -> Result<(), ParseRefusal
 /// two should be reading the same thing.
 #[must_use]
 pub fn leaves_taking(option: &str) -> Vec<String> {
-    observation_leaves_taking(option).unwrap_or_else(|| command_leaves_taking(option))
+    live_leaves_taking(option)
+        .or_else(|| observation_leaves_taking(option))
+        .unwrap_or_else(|| command_leaves_taking(option))
+}
+
+/// Returns which leaves take `option`, when the live leaf owns it alone.
+fn live_leaves_taking(option: &str) -> Option<Vec<String>> {
+    match option {
+        ENABLE_LIVE_AUTHOR_OPTION | CONTENT_ROOT_OPTION => Some(vec![LIVE_AUTHOR_LEAF.to_owned()]),
+        _ => None,
+    }
 }
 
 /// Returns which local leaves take `option`, when it is one of theirs.
@@ -566,7 +595,7 @@ fn absorb(
             invocation.output = Some(OutputForm::Machine);
             return Ok(0);
         }
-        RECURSIVE_OPTION | MATCH_ALL_OPTION => {
+        RECURSIVE_OPTION | MATCH_ALL_OPTION | ENABLE_LIVE_AUTHOR_OPTION => {
             invocation.arguments.insert(option.to_owned(), String::new());
             return Ok(0);
         }
@@ -613,6 +642,7 @@ pub fn required_options(leaf: &str) -> &'static [&'static str] {
     match leaf {
         "operation-restart" => &[EXPECTED_REVISION_OPTION, EXPECTED_CATEGORY_OPTION],
         "maintenance-apply" => &[REVIEWED_DIGEST_OPTION],
+        LIVE_AUTHOR_LEAF => &[ENABLE_LIVE_AUTHOR_OPTION, CONTENT_ROOT_OPTION],
         "maintenance-result" => {
             &[RESULT_IDENTIFIER_OPTION, EXPECTED_DIGEST_OPTION, DESTINATION_OPTION]
         }
