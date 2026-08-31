@@ -10,6 +10,10 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 11/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3703 attacks through the production authority rather than editing it.** Its
+    footprint names the daemon's ownership and local server for changes; both already
+    refuse everything the attack model describes, and the suite drives their real
+    authority check and nonce grammar. Those two source files are untouched.
   - **3702 attacks the reader through the seam that already exists for it.** Its
     footprint names the production filesystem authority and the generation coordinator
     for changes; both already refuse every hostile shape, and the scripted filesystem
