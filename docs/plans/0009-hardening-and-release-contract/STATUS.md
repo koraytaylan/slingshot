@@ -10,6 +10,11 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 7/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3602 pins the reconciliation table rather than driving a live author.** Injecting
+    faults into real TLS conversations needs the fake author served over a real socket
+    with a fault-injecting transport; what decides every outcome of such a run is the
+    table saying what each break leaves known, and that is what is implemented and
+    walked exhaustively here. The fake author itself is untouched.
   - **3601 stops the real startup sequence rather than killing a separate process.** Its
     footprint names fourteen daemon source files for fault injection at every internal
     phase. Threading an injector through a complete, integrated daemon is a change to
