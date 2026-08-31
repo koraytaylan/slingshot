@@ -12,6 +12,8 @@ pub mod capability_discovery;
 pub mod command_submission;
 pub mod event_stream_heartbeat;
 pub mod event_stream_reconnection;
+pub mod job_event_reducer;
 pub mod request_authentication;
 pub mod server_sent_event_decoder;
+pub mod subscription_event_fold;
 pub mod transport_policy;

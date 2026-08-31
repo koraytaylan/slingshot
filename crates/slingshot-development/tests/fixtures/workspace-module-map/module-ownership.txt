@@ -27,9 +27,11 @@ crates/slingshot-agent-connection/src/capability_discovery.rs|slingshot-agent-co
 crates/slingshot-agent-connection/src/command_submission.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::command_submission|authenticated-command-submission
 crates/slingshot-agent-connection/src/event_stream_heartbeat.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::event_stream_heartbeat|event-stream-heartbeat
 crates/slingshot-agent-connection/src/event_stream_reconnection.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::event_stream_reconnection|event-stream-reconnection
+crates/slingshot-agent-connection/src/job_event_reducer.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::job_event_reducer|job-event-reducer
 crates/slingshot-agent-connection/src/lib.rs|slingshot-agent-connection|adapter|crate-root|slingshot_agent_connection|workspace-module-map
 crates/slingshot-agent-connection/src/request_authentication.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::request_authentication|author-request-authentication
 crates/slingshot-agent-connection/src/server_sent_event_decoder.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::server_sent_event_decoder|bounded-server-sent-event-decoder
+crates/slingshot-agent-connection/src/subscription_event_fold.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::subscription_event_fold|job-event-reducer
 crates/slingshot-agent-connection/src/transport_policy.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::transport_policy|profile-authentication-module-scaffold
 crates/slingshot-agent-protocol/src/continuation_key_authority.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::continuation_key_authority|continuation-key-lifecycle-contract
 crates/slingshot-agent-protocol/src/continuation_token.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::continuation_token|continuation-key-lifecycle-contract
