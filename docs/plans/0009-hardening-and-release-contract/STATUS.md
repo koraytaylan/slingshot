@@ -164,7 +164,7 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     committed under that belief named a cargo-fuzz commit that does not exist - a pin
     that looks authoritative and can never be satisfied is worse than no pin - and the
     two subcommands its scripts invoke were never wired into the executable, so neither
-    script could ever have run. All three are fixed in `%%FIXOID%%`: the pin names the
+    script could ever have run. All three are fixed in `8ec0262`: the pin names the
     real commit for the version it declares, the preparation half is written, and the
     tool is now acquired, built twice into identical bytes, bundled, verified, and run.
     `fuzz/Cargo.lock` is resolved and committed. The bundle itself is not committed,
