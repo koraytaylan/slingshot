@@ -27,7 +27,9 @@ use crate::model_context_protocol::active_request_registry::{
 use crate::model_context_protocol::current_stateless_revision::{
     self, INVALID_REQUEST_ERROR, PARSE_ERROR, Refusal,
 };
-use crate::model_context_protocol::legacy_initialized_revision::{LegacySession, Lifecycle};
+use crate::model_context_protocol::legacy_initialized_revision::{
+    LegacySession, Lifecycle, undecorated,
+};
 use crate::model_context_protocol::progress_and_cancellation::ProgressRegistry;
 use crate::model_context_protocol::protocol_diagnostics::ProtocolDiagnosticSink;
 use crate::model_context_protocol::standard_stream_transport::{
@@ -170,22 +172,25 @@ impl ServerApplication {
     }
 
     /// Returns what one request is answered with.
+    ///
+    /// A session that finished the older era's handshake is served in that era,
+    /// whatever a request says about revisions - its clients send nothing about
+    /// them after initializing, and refusing those requests would refuse every
+    /// client the handshake exists for. A session that never initialized is
+    /// stateless, and every request says which revision it speaks.
     fn answer(&mut self, method: &str, parameters: &Value) -> Result<Value, Refusal> {
         if method == "initialize" {
             return Ok(self.legacy.initialize(requested_revision(parameters)));
         }
+        if self.legacy.lifecycle() == Lifecycle::Ready {
+            self.legacy
+                .require_actionable(method)
+                .map_err(|refusal| Refusal::MethodUnavailable { named: refusal.to_string() })?;
+            return Ok(undecorated(payload_for(method)));
+        }
         let revision = requested_revision(parameters);
         current_stateless_revision::require_answerable(method, revision)?;
-        let payload = match method {
-            "server/discover" => current_stateless_revision::discovery(),
-            "ping" => json!({}),
-            "tools/list" => json!({ "tools": [] }),
-            "tools/call" => json!({ "content": [] }),
-            "resources/list" => json!({ "resources": [] }),
-            "resources/templates/list" => json!({ "resourceTemplates": [] }),
-            _ => json!({ "contents": [] }),
-        };
-        Ok(current_stateless_revision::decorated(method, payload))
+        Ok(current_stateless_revision::decorated(method, payload_for(method)))
     }
 
     /// Ends everything, once, and says what was detached.
@@ -197,6 +202,19 @@ impl ServerApplication {
         let detached = self.progress.detach_all();
         self.active.release_all();
         detached
+    }
+}
+
+/// Returns the semantic payload one method answers with.
+fn payload_for(method: &str) -> Value {
+    match method {
+        "server/discover" => current_stateless_revision::discovery(),
+        "ping" => json!({}),
+        "tools/list" => json!({ "tools": [] }),
+        "tools/call" => json!({ "content": [] }),
+        "resources/list" => json!({ "resources": [] }),
+        "resources/templates/list" => json!({ "resourceTemplates": [] }),
+        _ => json!({ "contents": [] }),
     }
 }
 

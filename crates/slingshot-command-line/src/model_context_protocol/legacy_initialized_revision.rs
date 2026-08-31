@@ -55,14 +55,16 @@ pub enum Lifecycle {
 }
 
 /// Why one legacy message is not acted on.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum LegacyRefusal {
     /// The session has not finished its handshake.
+    #[error("{named} waits until this session says it is initialized")]
     NotInitialized {
         /// What was asked for too early.
         named: String,
     },
     /// The request names something this server does not offer.
+    #[error("this server offers no {named}")]
     MethodUnavailable {
         /// Exactly what it asked for.
         named: String,

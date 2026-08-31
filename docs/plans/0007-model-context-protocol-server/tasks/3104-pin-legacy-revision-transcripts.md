@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/tests/legacy_revision_transcripts.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/legacy-revision/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Pin Legacy Revision Transcripts

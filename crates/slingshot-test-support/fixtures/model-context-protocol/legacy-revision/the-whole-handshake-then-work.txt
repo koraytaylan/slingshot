@@ -1,0 +1,2 @@
+{"id":"one","result":{"capabilities":{"resources":{},"tools":{}},"protocolVersion":"2025-06-18","serverInfo":{"name":"slingshot","version":"0.1.0"}}}
+{"id":"two","result":{"tools":[]}}
