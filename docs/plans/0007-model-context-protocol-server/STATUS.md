@@ -9,6 +9,16 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 6/16 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `1a592249115df391edac4d8f84fcb52262a3d36e`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3003 decides everything a read depends on and reaches no daemon to perform one.**
+    The task's read sequence is a conversation with Plan 0004's maintenance metadata and
+    read services, which this build's daemon does not serve over the wire; a scenario
+    that claimed to have performed one would be describing an exchange that did not
+    happen. What is implemented and proved is every decision the sequence turns on: how
+    an address is parsed back into the parts it names, that a maintenance identifier can
+    carry no operation or slot, what must be equal between the lookup and the read, the
+    single ownership transfer that may occur between them and in which direction, the
+    bounded listing page, and what no resource may ever carry. The exchange itself is
+    the application entry's to make once the daemon answers it.
   - **3002 projects and pins schemas rather than committing golden copies of them.**
     The task asks for committed schema goldens for all twelve command tools. A schema
     is projected from the registry, so committing its bytes would commit a second copy
