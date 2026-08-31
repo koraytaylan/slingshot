@@ -8,12 +8,12 @@ depends_on:
   - daemon-process-chaos
 gated: false
 touches:
-  - crates/slingshot-test-support/src/fake_author.rs
+  - crates/slingshot-test-support/src/fake_author/mod.rs
   - crates/slingshot-test-support/src/lib.rs
   - crates/slingshot-test-support/src/network_fault_script.rs
   - crates/slingshot-development/tests/author_network_chaos.rs
 status: done
-merged_as: ""
+merged_as: "8ffaefbbf14a5eccb0e637f7c1b466b3583a7261"
 ---
 # Author Network Chaos
 
