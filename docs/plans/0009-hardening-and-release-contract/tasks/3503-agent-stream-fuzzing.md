@@ -12,7 +12,7 @@ touches:
   - fuzz/fuzz_targets/agent_protocol_server_sent_event.rs
   - "fuzz/corpus/agent_protocol_server_sent_event/**"
   - crates/slingshot-development/tests/agent_stream_fuzz_corpus.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Agent Stream Fuzzing

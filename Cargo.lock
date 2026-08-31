@@ -2212,6 +2212,7 @@ dependencies = [
  "serde_yaml_ng",
  "sha2",
  "slingshot-agent-connection",
+ "slingshot-agent-protocol",
  "slingshot-command-line",
  "slingshot-configuration",
  "slingshot-daemon",

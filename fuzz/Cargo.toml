@@ -19,11 +19,20 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 slingshot-configuration = { path = "../crates/slingshot-configuration" }
 slingshot-domain = { path = "../crates/slingshot-domain" }
+slingshot-agent-connection = { path = "../crates/slingshot-agent-connection" }
+slingshot-agent-protocol = { path = "../crates/slingshot-agent-protocol" }
 slingshot-local-protocol = { path = "../crates/slingshot-local-protocol" }
 
 [[bin]]
 name = "configuration_document"
 path = "fuzz_targets/configuration_document.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "agent_protocol_server_sent_event"
+path = "fuzz_targets/agent_protocol_server_sent_event.rs"
 test = false
 doc = false
 bench = false
