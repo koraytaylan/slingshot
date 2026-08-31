@@ -1,0 +1,4 @@
+# Values that must never appear on any stream this server owns.
+{"name": "operation-key", "value": "s3ntinel-operation-key-4f19ac", "why": "a key a caller supplied"}
+{"name": "bearer-token", "value": "s3ntinel-bearer-token-71bd0e", "why": "an access token a request carries"}
+{"name": "credential-path", "value": "/s3ntinel/credentials/service.json", "why": "where a credential document was read from"}
