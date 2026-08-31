@@ -11,7 +11,7 @@ touches:
   - fuzz/fuzz_targets/local_protocol_frame.rs
   - "fuzz/corpus/local_protocol_frame/**"
   - crates/slingshot-development/tests/local_protocol_fuzz_corpus.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Local Protocol Fuzzing
