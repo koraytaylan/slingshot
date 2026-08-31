@@ -50,9 +50,11 @@ use crate::explicit_daemon_start::{self, TargetRuntime};
 use crate::human_renderer;
 use crate::invocation::{
     self, ENVIRONMENT_OPTION, Invocation, OutputForm, PROFILE_OPTION, RUNTIME_ROOT_OPTION,
-    Selection,
+    SERVE_LEAF, Selection,
 };
 use crate::machine_readable_renderer;
+use crate::model_context_protocol::application::{Served, ServerApplication};
+use crate::model_context_protocol::standard_stream_transport::OutputFailure;
 use crate::target_selection::NamespacePair;
 
 /// Exit status of a command that finished.
@@ -68,7 +70,7 @@ pub const EXIT_RUNTIME_UNUSABLE: u8 = 7;
 pub const EXIT_ALREADY_OWNED: u8 = 8;
 
 /// What the daemon's own entry is called once its words are joined.
-const SERVE_LEAF: &str = "daemon-serve";
+const DAEMON_SERVE_LEAF: &str = "daemon-serve";
 
 /// How many words a leaf may be spelled with.
 const MAXIMUM_LEAF_WORDS: usize = 2;
@@ -172,7 +174,7 @@ pub fn run(
     diagnostics: &mut dyn Write,
 ) -> i32 {
     let named = normalized(arguments);
-    if named.first().is_some_and(|leaf| leaf == SERVE_LEAF) {
+    if named.first().is_some_and(|leaf| leaf == DAEMON_SERVE_LEAF) {
         return serve(&named[1..], diagnostics);
     }
     let invocation = match invocation::parse(&named) {
@@ -182,6 +184,9 @@ pub fn run(
             return exit_classification::USAGE;
         }
     };
+    if invocation.verb == SERVE_LEAF {
+        return serve_protocol(&mut std::io::stdin().lock(), output, diagnostics);
+    }
     let completion = complete(&invocation, executable);
     write_completion(&completion, invocation.output, output, diagnostics)
 }
@@ -273,6 +278,42 @@ fn write_completion(
 /// Writes one diagnostic where diagnostics go.
 fn write_diagnostic(diagnostics: &mut dyn Write, message: &str) {
     writeln!(diagnostics, "{DIAGNOSTIC_PREFIX}{message}").unwrap_or_default();
+}
+
+/// Hands the standard streams to the protocol server until input ends.
+///
+/// One reader, one writer, and nothing else written to standard output for as
+/// long as this runs. A line that produces an answer is written whole; a line
+/// that produces nothing is a notification, and silence is the correct answer
+/// to one.
+fn serve_protocol(
+    input: &mut dyn std::io::BufRead,
+    output: &mut dyn Write,
+    diagnostics: &mut dyn Write,
+) -> i32 {
+    let mut server = ServerApplication::new();
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match input.read_line(&mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        match server.serve_line(line.trim_end().as_bytes()) {
+            Served::Answered(answer) => {
+                if writeln!(output, "{answer}").is_err() {
+                    break;
+                }
+            }
+            Served::Silent => {}
+            Served::Finished => break,
+        }
+    }
+    let detached = server.finish(OutputFailure::SinkFailed);
+    if !detached.is_empty() {
+        write_diagnostic(diagnostics, &format!("{} waiters detached", detached.len()));
+    }
+    exit_classification::SUCCESS
 }
 
 /// Serves one namespace as the child a start created.

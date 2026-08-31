@@ -33,24 +33,30 @@ These reach configuration, a daemon, or nothing at all.
 
 | Leaf | Options it takes |
 |---|---|
-| `check-configuration` | `--profile`, `--environment`, `--machine`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--runtime-root` |
-| `daemon-ping` | `--profile`, `--environment`, `--machine`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--runtime-root` |
-| `daemon-start` | `--profile`, `--environment`, `--machine`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--runtime-root` |
-| `daemon-status` | `--profile`, `--environment`, `--machine`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--runtime-root` |
-| `daemon-stop` | `--profile`, `--environment`, `--machine`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--runtime-root` |
+| `check-configuration` | `--profile`, `--environment`, `--machine`, `--runtime-root` |
+| `protocol-serve` | `--profile`, `--environment`, `--runtime-root` |
+| `daemon-ping` | `--profile`, `--environment`, `--machine`, `--runtime-root` |
+| `daemon-start` | `--profile`, `--environment`, `--machine`, `--runtime-root` |
+| `daemon-status` | `--profile`, `--environment`, `--machine`, `--runtime-root` |
+| `daemon-stop` | `--profile`, `--environment`, `--machine`, `--runtime-root` |
 | `help` | none |
-| `maintenance-apply` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--reviewed-digest`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--runtime-root` |
-| `maintenance-preview` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--limit`, `--before`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--runtime-root` |
-| `maintenance-result` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--result-identifier`, `--expected-digest`, `--destination`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--runtime-root` |
-| `operation-artifact` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--expected-digest`, `--destination`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--operation`, `--artifact`, `--runtime-root` |
-| `operation-list` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--limit`, `--before`, `--continuation-token`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--runtime-root` |
-| `operation-restart` | `--profile`, `--environment`, `--machine`, `--expected-revision`, `--expected-category`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--operation`, `--runtime-root` |
-| `operation-result` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--operation`, `--runtime-root` |
-| `operation-status` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--operation`, `--runtime-root` |
-| `operation-wait` | `--profile`, `--environment`, `--machine`, `--name`, `--title`, `--resource-type`, `--content-parent`, `--properties`, `--operation`, `--runtime-root` |
+| `maintenance-apply` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--reviewed-digest`, `--runtime-root` |
+| `maintenance-preview` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--limit`, `--before`, `--runtime-root` |
+| `maintenance-result` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--result-identifier`, `--expected-digest`, `--destination`, `--runtime-root` |
+| `operation-artifact` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--expected-digest`, `--destination`, `--operation`, `--artifact`, `--runtime-root` |
+| `operation-list` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--limit`, `--before`, `--continuation-token`, `--runtime-root` |
+| `operation-restart` | `--profile`, `--environment`, `--machine`, `--expected-revision`, `--expected-category`, `--operation`, `--runtime-root` |
+| `operation-result` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--operation`, `--runtime-root` |
+| `operation-status` | `--profile`, `--environment`, `--machine`, `--author-target-digest`, `--operation`, `--runtime-root` |
+| `operation-wait` | `--profile`, `--environment`, `--machine`, `--operation`, `--runtime-root` |
 | `version` | none |
 
 <!-- end generated: local-leaves -->
+
+One leaf is not a command at all. `protocol-serve` hands the standard streams
+to the Model Context Protocol server and holds them until its input ends, so it
+takes the target and nothing else: while it runs, this executable writes
+protocol messages and nothing a person would read.
 
 ## Commands the registry publishes
 
