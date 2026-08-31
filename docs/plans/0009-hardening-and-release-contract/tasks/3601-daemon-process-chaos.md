@@ -27,7 +27,7 @@ touches:
   - crates/slingshot-development/src/daemon_chaos_subject.rs
   - crates/slingshot-development/src/main.rs
   - crates/slingshot-development/tests/daemon_process_chaos.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Daemon Process Chaos

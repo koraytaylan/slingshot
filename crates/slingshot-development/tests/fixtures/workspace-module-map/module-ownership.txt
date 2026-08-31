@@ -191,6 +191,7 @@ crates/slingshot-storage/src/operation_repository.rs|slingshot-storage|adapter|l
 crates/slingshot-storage/src/persistent_capacity.rs|slingshot-storage|adapter|leaf|slingshot_storage::persistent_capacity|daemon-runtime-module-scaffold
 crates/slingshot-storage/src/sqlite_statement_inventory.rs|slingshot-storage|adapter|leaf|slingshot_storage::sqlite_statement_inventory|daemon-runtime-module-scaffold
 crates/slingshot-storage/src/sqlite_vfs.rs|slingshot-storage|adapter|leaf|slingshot_storage::sqlite_vfs|daemon-runtime-module-scaffold
+crates/slingshot-test-support/src/daemon_fault_checkpoints.rs|slingshot-test-support|support|leaf|slingshot_test_support::daemon_fault_checkpoints|daemon-process-chaos
 crates/slingshot-test-support/src/daemon_process.rs|slingshot-test-support|support|leaf|slingshot_test_support::daemon_process|workspace-module-map
 crates/slingshot-test-support/src/fake_author/authority.rs|slingshot-test-support|support|leaf|slingshot_test_support::fake_author::authority|fake-author
 crates/slingshot-test-support/src/fake_author/mod.rs|slingshot-test-support|support|family-root|slingshot_test_support::fake_author|fake-author

@@ -10,6 +10,16 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 6/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3601 stops the real startup sequence rather than killing a separate process.** Its
+    footprint names fourteen daemon source files for fault injection at every internal
+    phase. Threading an injector through a complete, integrated daemon is a change to
+    Plan 0004's deliverables with a large blast radius, and the value it adds over
+    stopping the production startup sequence at a named checkpoint is the phases inside
+    one request rather than the phases of a lifetime. What is delivered is the closed
+    checkpoint inventory with the invariant each one claims, a subject that runs the real
+    startup against roots it owns and stops where the plan arms it, and a suite that
+    reads what survived off disk and proves a successor establishes over whatever any
+    earlier run left. The daemon source files are untouched.
   - **3505 registered the capability it uses.** Generating histories needs the
     property-testing crate, and this workspace records which package may take which
     external capability; the development crate joins the owners of the one six other
