@@ -61,18 +61,29 @@ report_stage 'the compatibility manifest'
 cargo test --locked -p slingshot-development --test "$FIRST_TARGET"
 
 report_stage 'the pinned executable'
-CARGO_HOME_ARGUMENT=''
+FINITE_STATE_MACHINE_TARGET=$(mktemp -d)
 if [ -n "$SEED" ]; then
     [ -d "$SEED" ] || report_refusal "$SEED is not a directory"
-    CARGO_HOME_ARGUMENT='--frozen --offline'
-    printf 'a seed was supplied, so dependency acquisition is frozen and offline\n'
+    case "$SEED" in
+        /*) ;;
+        *) report_refusal "$SEED is not an absolute path" ;;
+    esac
+    # A seed is an arbitrary directory somebody hands this gate. It is bounded
+    # against the manifest's own limits before it becomes a Cargo home, and it
+    # then *is* the Cargo home: a seed that were only inspected and then ignored
+    # would prove nothing about the build that followed.
+    cargo run --locked --quiet -p slingshot-development -- \
+        verify-cargo-home-seed --cargo-home-seed "$SEED" \
+        || report_refusal 'the supplied Cargo home is not one this gate may build from'
+    printf 'a seed was supplied, so it is the Cargo home and acquisition is frozen and offline\n'
+    ( cd "$SOURCE" && CARGO_HOME="$SEED" cargo build --locked --frozen --offline \
+        --target-dir "$FINITE_STATE_MACHINE_TARGET" ) \
+        || report_refusal 'the pinned source did not build from the supplied Cargo home'
 else
     printf 'no seed was supplied, so dependency acquisition may use the network\n'
+    ( cd "$SOURCE" && cargo build --locked --target-dir "$FINITE_STATE_MACHINE_TARGET" ) \
+        || report_refusal 'the pinned source did not build'
 fi
-FINITE_STATE_MACHINE_TARGET=$(mktemp -d)
-# shellcheck disable=SC2086
-( cd "$SOURCE" && cargo build --locked $CARGO_HOME_ARGUMENT --target-dir "$FINITE_STATE_MACHINE_TARGET" ) \
-    || report_refusal 'the pinned source did not build'
 EXECUTABLE="$FINITE_STATE_MACHINE_TARGET/debug/fsm-cli"
 [ -x "$EXECUTABLE" ] || report_refusal 'the build produced no executable where one was expected'
 

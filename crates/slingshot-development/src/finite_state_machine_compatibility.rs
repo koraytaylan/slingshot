@@ -282,3 +282,234 @@ fn require_segment(segment: &str) -> Result<(), PinRefusal> {
         .all(|held| held.is_ascii_alphanumeric() || held == '-' || held == '_' || held == '.');
     if admitted { Ok(()) } else { Err(refused()) }
 }
+
+/// What a supplied Cargo home turned out to hold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SeedSurvey {
+    /// How many bytes its files hold altogether.
+    pub aggregate_file_bytes: u64,
+    /// How many directories it holds, including the root.
+    pub directories: u64,
+    /// How many files it holds.
+    pub files: u64,
+}
+
+/// Why a supplied Cargo home is refused.
+///
+/// The order these are declared in is the order they are decided in, and one
+/// path that breaks several rules earns the first of them. Anything else would
+/// make the diagnostic depend on which check happened to run first.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum SeedRefusal {
+    /// The seed could not be walked.
+    #[error("a seed is a directory this build can walk, and this one is not: {0}")]
+    Unwalkable(String),
+    /// Something in the seed is neither an ordinary file nor a directory.
+    #[error("{0} is neither an ordinary file nor a directory")]
+    NotOrdinary(String),
+    /// One path component is longer than a component may be.
+    #[error("a path component holds at most {limit} bytes, and one in {path} holds {held}")]
+    ComponentTooLong {
+        /// How many bytes it holds.
+        held: u64,
+        /// How many it may hold.
+        limit: u64,
+        /// Which path it is in.
+        path: String,
+    },
+    /// One relative path is longer than a path may be.
+    #[error("a relative path holds at most {limit} bytes, and {path} holds {held}")]
+    PathTooLong {
+        /// How many bytes it holds.
+        held: u64,
+        /// How many it may hold.
+        limit: u64,
+        /// Which path it is.
+        path: String,
+    },
+    /// The tree goes deeper than it may.
+    #[error("a seed goes at most {limit} deep, and {path} is at {held}")]
+    TooDeep {
+        /// How deep it is.
+        held: u64,
+        /// How deep it may be.
+        limit: u64,
+        /// Which path it is.
+        path: String,
+    },
+    /// One file holds more than a file may.
+    #[error("a file holds at most {limit} bytes, and {path} holds {held}")]
+    FileTooLarge {
+        /// How many bytes it holds.
+        held: u64,
+        /// How many it may hold.
+        limit: u64,
+        /// Which file it is.
+        path: String,
+    },
+    /// The tree holds more files than it may.
+    #[error("a seed holds at most {limit} files, and this holds {held}")]
+    TooManyFiles {
+        /// How many it holds.
+        held: u64,
+        /// How many it may hold.
+        limit: u64,
+    },
+    /// The tree holds more directories than it may.
+    #[error("a seed holds at most {limit} directories, and this holds {held}")]
+    TooManyDirectories {
+        /// How many it holds.
+        held: u64,
+        /// How many it may hold.
+        limit: u64,
+    },
+    /// The tree's files hold more bytes together than they may.
+    #[error("a seed's files hold at most {limit} bytes together, and these hold {held}")]
+    TooLargeAltogether {
+        /// How many they hold.
+        held: u64,
+        /// How many they may hold.
+        limit: u64,
+    },
+}
+
+/// How deep the root of a seed is.
+const ROOT_DEPTH: u64 = 0;
+
+/// Requires one supplied Cargo home to be inside every declared limit.
+///
+/// The tree is walked in sorted order, so the same seed earns the same
+/// diagnostic on every machine that walks it. Counts are decided as they are
+/// reached rather than after the walk, because a seed with more files than a
+/// seed may have is refused without reading all of them.
+///
+/// What this establishes is that the seed is a bounded tree of ordinary files.
+/// It says nothing about whether the bytes in it are the ones somebody meant to
+/// supply, which is what the digests recorded beside a seed are for.
+///
+/// # Errors
+///
+/// Returns the first [`SeedRefusal`] the seed earns, in the order the variants
+/// are declared in.
+pub fn verify_seed(seed: &std::path::Path, limits: &SeedLimits) -> Result<SeedSurvey, SeedRefusal> {
+    let mut survey = SeedSurvey { aggregate_file_bytes: 0, directories: 0, files: 0 };
+    require_directory_counted(&mut survey, limits)?;
+    walk_seed(seed, seed, ROOT_DEPTH, limits, &mut survey)?;
+    Ok(survey)
+}
+
+/// Counts one more directory and requires the count to still be permitted.
+fn require_directory_counted(
+    survey: &mut SeedSurvey,
+    limits: &SeedLimits,
+) -> Result<(), SeedRefusal> {
+    survey.directories += 1;
+    if survey.directories > limits.maximum_directories {
+        return Err(SeedRefusal::TooManyDirectories {
+            held: survey.directories,
+            limit: limits.maximum_directories,
+        });
+    }
+    Ok(())
+}
+
+/// Walks one directory of a seed, in sorted order.
+fn walk_seed(
+    seed: &std::path::Path,
+    directory: &std::path::Path,
+    depth: u64,
+    limits: &SeedLimits,
+    survey: &mut SeedSurvey,
+) -> Result<(), SeedRefusal> {
+    let listing = std::fs::read_dir(directory)
+        .map_err(|failure| SeedRefusal::Unwalkable(failure.to_string()))?;
+    let mut held = Vec::new();
+    for entry in listing {
+        let entry = entry.map_err(|failure| SeedRefusal::Unwalkable(failure.to_string()))?;
+        held.push(entry.path());
+    }
+    held.sort();
+    for path in held {
+        let named = path.strip_prefix(seed).unwrap_or(&path).display().to_string();
+        let kind = std::fs::symlink_metadata(&path)
+            .map_err(|failure| SeedRefusal::Unwalkable(failure.to_string()))?
+            .file_type();
+        if !kind.is_dir() && !kind.is_file() {
+            return Err(SeedRefusal::NotOrdinary(named));
+        }
+        require_path_permitted(&path, &named, depth, limits)?;
+        if kind.is_dir() {
+            require_directory_counted(survey, limits)?;
+            walk_seed(seed, &path, depth + 1, limits, survey)?;
+            continue;
+        }
+        require_file_counted(&path, &named, limits, survey)?;
+    }
+    Ok(())
+}
+
+/// Requires one entry's name, path, and depth to be permitted.
+fn require_path_permitted(
+    path: &std::path::Path,
+    named: &str,
+    depth: u64,
+    limits: &SeedLimits,
+) -> Result<(), SeedRefusal> {
+    let component =
+        path.file_name().map(|held| held.as_encoded_bytes().len() as u64).unwrap_or_default();
+    if component > limits.maximum_component_utf8_bytes {
+        return Err(SeedRefusal::ComponentTooLong {
+            held: component,
+            limit: limits.maximum_component_utf8_bytes,
+            path: named.to_owned(),
+        });
+    }
+    let relative = named.len() as u64;
+    if relative > limits.maximum_relative_path_utf8_bytes {
+        return Err(SeedRefusal::PathTooLong {
+            held: relative,
+            limit: limits.maximum_relative_path_utf8_bytes,
+            path: named.to_owned(),
+        });
+    }
+    let reached = depth + 1;
+    if reached > limits.maximum_depth {
+        return Err(SeedRefusal::TooDeep {
+            held: reached,
+            limit: limits.maximum_depth,
+            path: named.to_owned(),
+        });
+    }
+    Ok(())
+}
+
+/// Counts one more file and requires its size and the totals to be permitted.
+fn require_file_counted(
+    path: &std::path::Path,
+    named: &str,
+    limits: &SeedLimits,
+    survey: &mut SeedSurvey,
+) -> Result<(), SeedRefusal> {
+    let bytes = std::fs::symlink_metadata(path)
+        .map_err(|failure| SeedRefusal::Unwalkable(failure.to_string()))?
+        .len();
+    if bytes > limits.maximum_file_bytes {
+        return Err(SeedRefusal::FileTooLarge {
+            held: bytes,
+            limit: limits.maximum_file_bytes,
+            path: named.to_owned(),
+        });
+    }
+    survey.files += 1;
+    if survey.files > limits.maximum_files {
+        return Err(SeedRefusal::TooManyFiles { held: survey.files, limit: limits.maximum_files });
+    }
+    survey.aggregate_file_bytes = survey.aggregate_file_bytes.saturating_add(bytes);
+    if survey.aggregate_file_bytes > limits.maximum_aggregate_file_bytes {
+        return Err(SeedRefusal::TooLargeAltogether {
+            held: survey.aggregate_file_bytes,
+            limit: limits.maximum_aggregate_file_bytes,
+        });
+    }
+    Ok(())
+}
