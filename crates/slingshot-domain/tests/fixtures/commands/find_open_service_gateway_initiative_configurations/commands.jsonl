@@ -1,0 +1,5 @@
+{"accepted":true,"document":"{}","note":"every configuration"}
+{"accepted":true,"document":"{\"persistent_identifier_prefix\":\"com.example\"}","note":"one prefix"}
+{"accepted":true,"document":"{\"persistent_identifier_prefix\":\"com.example\",\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":50}}","note":"a prefix and a page"}
+{"accepted":false,"document":"{\"persistent_identifier_prefix\":\"\"}","note":"an empty prefix"}
+{"accepted":false,"document":"{\"extra\":1}","note":"a member this command does not have"}

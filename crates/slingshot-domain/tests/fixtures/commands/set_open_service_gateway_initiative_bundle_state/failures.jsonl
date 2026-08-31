@@ -1,0 +1,4 @@
+{"document":"{\"failure\":\"bundle_not_found\",\"symbolic_name\":\"com.example.bundle\"}","members":["failure","symbolic_name"],"note":"refused as bundle not found","proves_no_effect":true}
+{"document":"{\"failure\":\"bundle_transition_refused\",\"symbolic_name\":\"com.example.bundle\"}","members":["failure","symbolic_name"],"note":"refused as bundle transition refused","proves_no_effect":true}
+{"document":"{\"failure\":\"platform_control_rejected\",\"symbolic_name\":\"com.example.bundle\"}","members":["failure","symbolic_name"],"note":"refused as platform control rejected","proves_no_effect":true}
+{"document":"{\"failure\":\"platform_control_outcome_unknown\",\"symbolic_name\":\"com.example.bundle\"}","members":["failure","symbolic_name"],"note":"refused as platform control outcome unknown","proves_no_effect":false}
