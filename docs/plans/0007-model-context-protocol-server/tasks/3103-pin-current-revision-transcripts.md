@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/tests/current_revision_transcripts.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/current-revision/**
 status: done
-merged_as: ""
+merged_as: "280c8fe18a75809151f3ac1adf688969d91e2336"
 ---
 # Pin Current Revision Transcripts
 
