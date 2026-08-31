@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-development/tests/credential_exposure_threats.rs
   - "crates/slingshot-development/tests/fixtures/credential-threats/**"
 status: done
-merged_as: ""
+merged_as: "0d23601a2d9940f83889722e8a9dce910d6c3949"
 ---
 # Credential Exposure Threat Suite
 
