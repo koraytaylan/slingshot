@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-development/tests/storage_fault_chaos.rs
   - "crates/slingshot-development/tests/fixtures/storage-faults/**"
 status: done
-merged_as: ""
+merged_as: "38f13d1e9ace276d4f66bd77e5befbfe39626465"
 ---
 # Storage Fault Chaos
 
