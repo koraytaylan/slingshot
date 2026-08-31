@@ -1,0 +1,14 @@
+# Every command the workflow documentation shows, and what checks it here.
+#
+# A document that shows a command nothing runs is a document that stops being
+# true without anybody noticing.
+
+cargo test -p slingshot-development --test finite_state_machine_compatibility|the pin and its digests
+cargo test -p slingshot-development --test finite_state_machine_handler|the operation-key contract
+cargo test -p slingshot-development --test finite_state_machine_handler_validation|what a handler must say
+cargo test -p slingshot-development --test finite_state_machine_success|what a success journals
+cargo test -p slingshot-development --test finite_state_machine_failure|what a failure entitles
+cargo test -p slingshot-development --test finite_state_machine_compensation|what undoing requires
+cargo test -p slingshot-development --test finite_state_machine_artifact|where an answer goes
+cargo test -p slingshot-development --test finite_state_machine_retry_idempotency|what a retry attaches to
+cargo test -p slingshot-development --test finite_state_machine_daemon_restart|what a restart leaves alone
