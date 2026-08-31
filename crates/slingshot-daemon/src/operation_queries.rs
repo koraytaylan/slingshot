@@ -19,7 +19,8 @@
 //! destroy the record of work that actually happened.
 
 use slingshot_domain::operation::{
-    OperationLifecycleState, RecoveryFact, TerminalFailure, terminal_pairing_is_legal,
+    OperationLifecycleState, OperationListing, RecoveryFact, TerminalFailure,
+    terminal_pairing_is_legal,
 };
 use slingshot_storage::operation_repository::{
     OperationRepository, OperationSummary, RepositoryFailure, ResultDisposition,
@@ -171,4 +172,59 @@ fn required(
     repository.read(author_target_identity_digest, operation_identifier)?.ok_or_else(|| {
         QueryFailure::NoSuchOperation { identifier: operation_identifier.to_owned() }
     })
+}
+
+/// A sequence above every sequence, for a page that starts at the newest row.
+pub const NEWEST_FIRST: u64 = u64::MAX;
+
+/// Where the next page of a listing resumes.
+///
+/// The arrival sequence rather than a timestamp, because a timestamp is not a
+/// position: two operations can share one and a clock can move. A sequence a
+/// row was given when it was admitted never changes, so a boundary named by it
+/// stays where it was however much work arrives afterwards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PageCursor {
+    /// The sequence the next page starts below.
+    pub before_enqueue_sequence: u64,
+}
+
+/// One page of a target's operations, and where the next one resumes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperationPage {
+    /// Where the next page resumes, when there is one.
+    pub next: Option<PageCursor>,
+    /// The rows, newest first.
+    pub rows: Vec<OperationListing>,
+}
+
+/// Returns one page of `author_target_identity_digest`'s operations.
+///
+/// A next cursor is offered only when the page filled, so a caller stops when
+/// it gets a short page rather than making one more request to discover there
+/// is nothing left.
+///
+/// # Errors
+///
+/// Returns [`QueryFailure::Repository`] when the database refuses or a stored
+/// value does not decode.
+pub fn list(
+    repository: &OperationRepository,
+    author_target_identity_digest: &str,
+    cursor: PageCursor,
+    page_size: u64,
+) -> Result<OperationPage, QueryFailure> {
+    let rows = slingshot_storage::operation::listing::list(
+        repository.database(),
+        author_target_identity_digest,
+        cursor.before_enqueue_sequence,
+        page_size,
+    )?;
+    let full = u64::try_from(rows.len()).unwrap_or_default() == page_size;
+    let next = full
+        .then(|| {
+            rows.last().map(|row| PageCursor { before_enqueue_sequence: row.enqueue_sequence })
+        })
+        .flatten();
+    Ok(OperationPage { next, rows })
 }

@@ -12,9 +12,11 @@ touches:
   - "crates/slingshot-daemon/tests/fixtures/list-operations/**"
   - crates/slingshot-daemon/src/operation_queries.rs
   - crates/slingshot-daemon/tests/list_operations.rs
+  - crates/slingshot-storage/src/operation/listing.rs
+  - crates/slingshot-storage/src/operation/mod.rs
   - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # List Operations

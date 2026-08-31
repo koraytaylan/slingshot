@@ -120,7 +120,12 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
     },
     InventoriedStatement {
         purpose: "list one target's operations, newest first",
-        text: "SELECT operation_identifier, lifecycle_state, enqueue_sequence \
+        // Ordered by the stable arrival sequence rather than by a timestamp, so
+        // a cursor names a position that cannot move. No command payload is
+        // read: a listing says what happened to work, not what the work was.
+        text: "SELECT enqueue_sequence, lifecycle_state, operation_identifier, \
+                      operation_revision, caller_identity, workflow_correlation_identifier, \
+                      terminal_failure_kind, settled_at_unix_milliseconds \
                FROM operation \
                WHERE author_target_identity_digest = ? AND enqueue_sequence < ? \
                ORDER BY enqueue_sequence DESC, operation_identifier \
