@@ -133,7 +133,7 @@ development = []
 [[consumer]]
 name = "slingshot_test_support"
 package = "slingshot-test-support"
-normal = ["typed-errors", "temporary-files", "asynchronous-runtime", "serialization", "javascript-object-notation", "byte-buffers", "random-values"]
+normal = ["typed-errors", "temporary-files", "asynchronous-runtime", "serialization", "javascript-object-notation", "byte-buffers", "random-values", "descriptor-relative-filesystem"]
 build = []
 development = []
 

@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-test-support/src/process_harness.rs
   - crates/slingshot-test-support/tests/process_harness.rs
   - "crates/slingshot-test-support/tests/fixtures/process-harness/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Build Command Process Harness
