@@ -1,0 +1,15 @@
+{"operation_identifier": "operation-one", "outcome": "operation_receipt", "replayed": false, "revision": 1}
+{"operation_identifier": "operation-one", "outcome": "operation_receipt", "replayed": true, "revision": 4}
+{"outcome": "operation_status", "revision": 2, "state": "running"}
+{"outcome": "operation_result", "result": {"paths": []}}
+{"disposition": "authoritative_non_execution", "failure": {"category": "parent_not_orderable", "parent_path": "/content/site"}, "kind": "rejected", "outcome": "operation_terminal_error"}
+{"category": "ambiguous_submission", "evidence": "submission_unknown", "outcome": "operation_recovery_required", "revision": 3}
+{"category": "ambiguous_submission", "outcome": "operation_resume_receipt", "replayed": false}
+{"continuation_token": null, "operations": ["operation-one"], "outcome": "operation_list_page"}
+{"outcome": "maintenance_preview", "released_operation_rows": 3, "reviewed_digest": "abc"}
+{"environment": "production", "outcome": "configuration_report", "profile": "alpha-site", "resolved": true}
+{"action": "status", "outcome": "daemon_control", "state": "serving"}
+{"interruption": {"phase": "pre_receipt", "retry_identifier": "retry-one"}, "outcome": "local_application_error"}
+{"interruption": {"operation_identifier": "operation-one", "phase": "post_receipt", "revision": 1}, "outcome": "local_application_error"}
+{"interruption": {"artifact_identifier": "artifact-one", "operation_identifier": "operation-one", "phase": "artifact_transfer"}, "outcome": "local_application_error"}
+{"interruption": {"author_target_identity_digest": "target-one", "maintenance_result_identifier": "result-one", "phase": "maintenance_result_transfer"}, "outcome": "local_application_error"}
