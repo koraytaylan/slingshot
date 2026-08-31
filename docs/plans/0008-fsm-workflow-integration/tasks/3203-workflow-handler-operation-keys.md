@@ -11,7 +11,7 @@ touches:
   - examples/finite-state-machine/operation-key.machine.json
   - crates/slingshot-development/tests/fixtures/finite-state-machine-handler/**
   - crates/slingshot-development/tests/finite_state_machine_handler.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Workflow Handler Operation Keys
