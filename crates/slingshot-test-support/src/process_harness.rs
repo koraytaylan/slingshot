@@ -581,6 +581,21 @@ impl RetainedChild {
         self.wait_within(deadline)
     }
 
+    /// Takes this child's output stream, so nobody is reading it any more.
+    ///
+    /// Dropping what comes back closes the read end, which is what a client
+    /// going away looks like from inside the child: its next write fails.
+    #[must_use]
+    pub fn take_output(&mut self) -> Option<std::process::ChildStdout> {
+        self.child.stdout.take()
+    }
+
+    /// Takes this child's diagnostic stream, so nobody is reading that either.
+    #[must_use]
+    pub fn take_diagnostics(&mut self) -> Option<std::process::ChildStderr> {
+        self.child.stderr.take()
+    }
+
     /// Waits for this child inside `deadline`, draining both streams as it goes.
     ///
     /// The streams are read on their own threads for as long as the child runs,
@@ -662,7 +677,11 @@ impl ProcessHarness {
         let child = command.spawn().map_err(unusable)?;
         let identifier = child.id();
         let instance = retain_instance(&child)?;
-        Ok(RetainedChild { child, instance, controller, identifier, reaped: false })
+        let mut retained = RetainedChild { child, instance, controller, identifier, reaped: false };
+        if !request.input.is_empty() {
+            write_and_close(&mut retained, &request.input)?;
+        }
+        Ok(retained)
     }
 
     /// Points one command's three streams at a fresh pseudo-terminal.
@@ -698,9 +717,6 @@ impl ProcessHarness {
         deadline: Duration,
     ) -> Result<CapturedProcess, HarnessFailure> {
         let mut retained = self.start_retained(executable, request)?;
-        if !request.input.is_empty() {
-            write_and_close(&mut retained, &request.input)?;
-        }
         let output = retained.child.stdout.take().map(drain_on_thread);
         let errors = retained.child.stderr.take().map(drain_on_thread);
         let waited = retained.wait_within(deadline);

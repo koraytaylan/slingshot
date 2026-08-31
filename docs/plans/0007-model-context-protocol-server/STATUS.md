@@ -9,6 +9,15 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 14/16 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `1a592249115df391edac4d8f84fcb52262a3d36e`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3105 proves the boundaries a process has and not the ones a daemon would add.**
+    Scripted daemon endpoints, forced reconnects, and maintenance read linearization
+    need a daemon serving versioned operations. What is proved at the process level is
+    everything this server owns: input ending, a reader of its output going away, a
+    reader of its diagnostics going away, a server waiting on an open input ended
+    through its retained handle, every answer arriving as one whole line, and no
+    sentinel reaching either stream however it was smuggled in. The harness also learned
+    to hand a retained child its input at spawn, without which every retained
+    conversation waited for a deadline instead of finishing.
   - **3104 found the composition serving an initialized session in the wrong era.**
     Replaying the sequence an executor really sends showed the server decorating a
     legacy session's results with the current era's members, because the era was decided
