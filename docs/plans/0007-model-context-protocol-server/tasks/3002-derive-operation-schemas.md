@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/schema_projection.rs
   - crates/slingshot-command-line/tests/model_context_protocol_schemas.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/schemas/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Derive Operation Schemas
