@@ -2280,6 +2280,7 @@ dependencies = [
  "rand 0.10.2",
  "serde",
  "serde_json",
+ "slingshot-domain",
  "slingshot-local-protocol",
  "tempfile",
  "thiserror",
