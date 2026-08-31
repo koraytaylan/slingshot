@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-configuration/src/configuration_generation.rs
   - crates/slingshot-configuration/src/testing/credential_filesystem.rs
   - crates/slingshot-development/tests/credential_filesystem_threats.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Credential Filesystem Threat Suite
