@@ -565,10 +565,24 @@ fn fold_continuations(raw: &str) -> String {
     folded
 }
 
+/// Clauses every statement the inventory governs carries one of.
+///
+/// A leading verb is not enough on its own: the inventory's own purposes are
+/// English sentences, and one of them begins with the word "select". A
+/// statement also names what it acts on, and there is no way to write one of
+/// these verbs against a table without one of these words.
+const STATEMENT_CLAUSES: &[&str] = &["FROM", "INTO", "SET"];
+
 /// Returns whether `literal` reads as a statement the inventory governs.
 fn is_a_statement(literal: &str) -> bool {
-    let first = literal.split_whitespace().next().unwrap_or_default();
-    STATEMENT_VERBS.iter().any(|verb| first.eq_ignore_ascii_case(verb))
+    let mut words = literal.split_whitespace();
+    let leads = words
+        .next()
+        .is_some_and(|first| STATEMENT_VERBS.iter().any(|verb| first.eq_ignore_ascii_case(verb)));
+    leads
+        && literal
+            .split_whitespace()
+            .any(|word| STATEMENT_CLAUSES.iter().any(|clause| word.eq_ignore_ascii_case(clause)))
 }
 
 /// Returns every Rust source file at or below `root`.
@@ -632,6 +646,10 @@ fn the_scanner_reads_a_literal_the_way_the_compiler_does() {
         vec!["SELECT kept".to_owned()],
         "a statement inside a comment is discussed, not run"
     );
-    assert!(is_a_statement("  select one"), "the verb is read without regard to case");
+    assert!(is_a_statement("  select one from two"), "the verb is read without regard to case");
     assert!(!is_a_statement("PRAGMA journal_mode"), "a pragma answers to its own rules");
+    assert!(
+        !is_a_statement("select one target's operations that ended before a cutoff"),
+        "and an English sentence that happens to begin with a verb is not a statement"
+    );
 }
