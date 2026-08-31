@@ -26,6 +26,7 @@
 //! its endpoint or credentials would make the daemon's identity a function of
 //! whoever started it, which is exactly the property this refuses to have.
 
+use crate::author_agent_operation_executor::{AuthorAgentOperationExecutor, AuthorPorts};
 use slingshot_storage::database::{DatabaseFailure, OperationDatabase, RequiredSettings};
 use slingshot_storage::installation_state::InstallationStateFailure;
 use slingshot_storage::sqlite_statement_inventory::statement_text;
@@ -193,6 +194,30 @@ fn require_no_foreign_work(
         return Ok(());
     }
     Err(StartupRefusal::ForeignWorkOutstanding { count: foreign.len(), partitions: foreign })
+}
+
+/// Returns the executor a product build installs, once the audit has passed.
+///
+/// Installed rather than chosen. No setting selects an executor, so there is no
+/// way for a deployment to end up running the one that runs nothing: that one
+/// is reachable only through an explicit constructor in the test-support crate,
+/// which no product crate depends on.
+///
+/// The audit runs first and the executor is created after it, so durable work
+/// belonging to another target or revision refuses before anything exists to
+/// run it and therefore before the daemon binds or reports ready.
+///
+/// # Errors
+///
+/// Returns [`StartupRefusal::ForeignWorkOutstanding`] or
+/// [`StartupRefusal::InvariantUnavailable`].
+pub fn install_executor<'ports>(
+    database: &OperationDatabase,
+    target: &SelectedTarget,
+    ports: &'ports dyn AuthorPorts,
+) -> Result<AuthorAgentOperationExecutor<'ports>, StartupRefusal> {
+    require_no_foreign_work(database, target)?;
+    Ok(AuthorAgentOperationExecutor::over(ports))
 }
 
 /// Returns every partition holding work that has not ended.

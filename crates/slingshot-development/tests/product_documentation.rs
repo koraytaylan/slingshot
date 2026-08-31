@@ -203,8 +203,12 @@ fn the_daemon_document_describes_the_present_rather_than_a_plan() {
         );
     }
     assert!(
-        daemon.contains("composes no operation executor"),
-        "and says plainly that a product build runs nothing, rather than implying it will"
+        daemon.contains("installs the author-backed operation executor"),
+        "and names the executor a product build actually runs work through"
+    );
+    assert!(
+        daemon.contains("installed rather than chosen"),
+        "and says why no deployment can end up running the one that runs nothing"
     );
     assert!(
         daemon.contains("neither an ending nor"),

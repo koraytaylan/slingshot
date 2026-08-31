@@ -1,12 +1,15 @@
 //! Which executor each binary composes, and what every outcome can be.
 //!
 //! Two claims, and the first is about the shape of the workspace rather than
-//! about any code path. The product binary composes an executor that runs
-//! nothing, and no product crate has an edge to test support or to this crate,
-//! so the fake is unreachable from anything a user runs. The second is that
-//! every outcome the boundary permits is reachable from a script, including the
-//! ones a real system produces rarely and at the worst moment.
+//! about any code path. Startup installs the author-backed executor, no setting
+//! selects one, and no product crate has an edge to test support or to this
+//! crate - so the fake is unreachable from anything a user runs, and the
+//! executor that refuses everything is reachable only where it is asked for by
+//! name. The second is that every outcome the boundary permits is reachable
+//! from a script, including the ones a real system produces rarely and at the
+//! worst moment.
 
+use slingshot_daemon::author_agent_operation_executor::AuthorAgentOperationExecutor;
 use slingshot_daemon::unavailable_operation_executor::{
     UNAVAILABLE_DETAIL, UnavailableOperationExecutor,
 };
@@ -58,7 +61,7 @@ fn composed() -> TestDaemonComposition {
 }
 
 #[test]
-fn the_product_executor_runs_nothing_and_says_so_truthfully() {
+fn the_executor_that_refuses_everything_says_so_truthfully_where_it_is_asked_for() {
     let outcome = UnavailableOperationExecutor::outcome();
     let OperationExecutorOutcome::TerminalFailure { failure } = &outcome else {
         panic!("the product executor ends every operation: {outcome:?}");
@@ -78,6 +81,11 @@ fn the_product_executor_runs_nothing_and_says_so_truthfully() {
     assert_eq!(failure.metadata.as_deref(), Some(UNAVAILABLE_DETAIL));
     assert!(outcome.is_terminal(), "it ends the operation");
     assert!(!outcome.publishes_a_result(), "and publishes nothing");
+    assert_eq!(
+        AuthorAgentOperationExecutor::NAME,
+        "author-agent",
+        "while the executor startup installs is the one that reaches the author"
+    );
 }
 
 #[test]

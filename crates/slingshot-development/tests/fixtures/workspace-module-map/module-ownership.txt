@@ -65,6 +65,7 @@ crates/slingshot-configuration/src/profile_selection.rs|slingshot-configuration|
 crates/slingshot-configuration/src/testing/credential_filesystem.rs|slingshot-configuration|contract|leaf|slingshot_configuration::testing::credential_filesystem|profile-authentication-module-scaffold
 crates/slingshot-configuration/src/testing/mod.rs|slingshot-configuration|contract|family-root|slingshot_configuration::testing|workspace-module-map
 crates/slingshot-daemon/src/artifact_transfer.rs|slingshot-daemon|service|leaf|slingshot_daemon::artifact_transfer|daemon-runtime-module-scaffold
+crates/slingshot-daemon/src/author_agent_operation_executor.rs|slingshot-daemon|service|leaf|slingshot_daemon::author_agent_operation_executor|author-agent-operation-executor
 crates/slingshot-daemon/src/diagnostics.rs|slingshot-daemon|service|leaf|slingshot_daemon::diagnostics|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/lib.rs|slingshot-daemon|service|crate-root|slingshot_daemon|workspace-module-map
 crates/slingshot-daemon/src/local_server.rs|slingshot-daemon|service|leaf|slingshot_daemon::local_server|workspace-module-map
