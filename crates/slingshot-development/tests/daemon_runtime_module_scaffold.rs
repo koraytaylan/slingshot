@@ -105,21 +105,35 @@ fn every_new_leaf_exists_is_declared_once_and_matches_its_fixture_entry() {
         if matches!(text(&row, "kind"), "adopted_root" | "adopted_entry") {
             continue;
         }
-        let leaf = std::path::Path::new(path)
-            .file_stem()
-            .expect("a leaf name")
-            .to_string_lossy()
-            .into_owned();
+        let leaf = module_name(path);
         let declared =
             declarations.lines().filter(|line| line.trim() == format!("pub mod {leaf};")).count();
         assert_eq!(declared, 1, "{path} is declared {declared} times in its crate root");
     }
 }
 
+/// Returns the name one leaf is declared under in its parent.
+///
+/// A file names itself, and a `mod.rs` is named by the directory holding it: a
+/// family that grew children is declared exactly as it was when it had none, so
+/// growing one is not a change its parent has to notice.
+fn module_name(path: &str) -> String {
+    let held = std::path::Path::new(path);
+    let stem = held.file_stem().expect("a leaf name").to_string_lossy().into_owned();
+    if stem != "mod" {
+        return stem;
+    }
+    held.parent()
+        .and_then(std::path::Path::file_name)
+        .expect("a family directory")
+        .to_string_lossy()
+        .into_owned()
+}
+
 #[test]
 fn the_fixture_the_declarations_and_the_footprints_describe_one_set() {
     let scaffold = paths_of("scaffold_leaf");
-    assert_eq!(scaffold.len(), 34, "this plan creates thirty-four library leaves");
+    assert_eq!(scaffold.len(), 36, "this plan creates thirty-six library leaves");
 
     let recorded = footprints();
     let owned: BTreeSet<String> = recorded
