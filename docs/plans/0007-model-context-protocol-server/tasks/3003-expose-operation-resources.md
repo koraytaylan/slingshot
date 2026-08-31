@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/resource_catalog.rs
   - crates/slingshot-command-line/tests/model_context_protocol_resources.rs
 status: done
-merged_as: ""
+merged_as: "464545460e82fdf55c49b466d327787bfe846172"
 ---
 # Expose Operation Resources
 
