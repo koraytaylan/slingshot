@@ -24,7 +24,7 @@ touches:
   - crates/slingshot-development/src/release_artifacts.rs
   - crates/slingshot-development/tests/release_artifact_contract.rs
   - "crates/slingshot-development/tests/fixtures/release-artifacts/**"
-status: planned
+status: blocked
 merged_as: ""
 ---
 # Release Artifact Contract

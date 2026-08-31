@@ -25,7 +25,7 @@ touches:
   - crates/slingshot-development/src/release_acceptance.rs
   - crates/slingshot-development/tests/release_acceptance.rs
   - "crates/slingshot-development/tests/fixtures/release-acceptance/**"
-status: planned
+status: blocked
 merged_as: ""
 ---
 # Release Acceptance Matrix

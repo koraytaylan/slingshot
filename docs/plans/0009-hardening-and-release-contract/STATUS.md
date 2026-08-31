@@ -1,14 +1,38 @@
-# Plan 0009 — Hardening and Release Contract — 🚧 In progress
+# Plan 0009 — Hardening and Release Contract — ⏸ Blocked on owner decisions
 
 The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file. Task-level truth lives in [tasks/](tasks/) frontmatter; Makina's integration coordinator updates both layers.
 
-- **Status:** 🚧 In progress.
+- **Status:** ⏸ Blocked on owner decisions. Every task that this repository can decide is landed; five wait on choices only the repository owner can make.
 
 - **Goal:** establish a reproducible release contract whose parsers, exact command provenance/canonical forms, retained control plane, durable recovery state, credentials, compatibility surfaces, supported-platform adapters, documentation, and packaged binaries withstand the named generative, failure, and threat suites.
 - **Root cause:** focused feature tests do not by themselves prove daemon and agent restart recovery, safe cursor reset, hostile-input bounds, absence of credential or configuration-secret exposure, minimum-compiler and platform compatibility, retained data/control compatibility, or agreement between product documentation and release artifacts.
 - **Approach:** add pinned fuzzing, chaos/threat/compatibility gates that authenticate Plan 0002's exact two-per-file/two-whole-generation attempts, source/aggregate bounds, parser-independent role inventory and S2 order, source-reference-free inclusive diagnostics, temporary-sensitive versus long-lived-secret lifecycles, exact HTTP/1.1-or-HTTP/2-only assertion/exchange head/compression/body/token/framing refusal with no migration/`Alt-Svc`/automatic decompression, route-typed immutable `VerifiedIdentityManagementTrustPolicyIdentity` platform roots and `VerifiedAuthorTrustPolicyIdentity` platform-plus-selected-additional roots from one committed snapshot, and hostile additional/private author-CA interception refusal alongside both canonical daemon-runtime and author-agent-transport manifests/digests; independently prove Plan 0005's all-route HTTP/1.1-or-HTTP/2-only, raw-and-encoded-head/informational/final/trailer/framing/exact-end/post-byte-certainty policy; reject drift in the five-field command identity and separate canonical-contract/role-schema provenance; and exhaust universal 431-byte continuation-authority readiness, request-start retention, distinct DNS/TCP and TLS phases, logical-outbox/fenced-effect, exact SQLite no-spill/closed-SQL/restrictive-VFS arithmetic and checkpoint/backpressure, same-handle operation-artifact resume, operation-free `maintenance_result_access` identifier/association/metadata/read/retention lifecycle with authenticated expected-digest lookup and no operation/workflow identity, canonical request, exact SemVer/OSGi, closed failure, and CLI/Model Context Protocol/fake-agent cases. Then use owner automation to authenticate every mapped native row's real safe provider API and actual enumerated effective fields separately from the same compiled adapter's deterministic permit/distrust/purpose/external-constraint/unevaluable/equal-duplicate/conflicting-same-DER matrix, reject certificate-only reduction or trust-store mutation, prove Windows remote-pipe rejection, require a protected same-release RustSec owner-review record, prepare exact offline row/coordinator caches plus the bounded Plan 0008 seed, authenticate native archives/security and the single FSM row, and aggregate them in network-none acceptance.
-- **Progress:** 19/24 tasks done; 0 blocked; 0 dropped.
-- **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
+- **Progress:** 19/24 tasks done; 5 blocked; 0 dropped.
+- **Integration:** `blocked`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
+- **Blocked:**
+  - **3807 owner-confirmed-github-automation** (`gated`). Waits for the owner to
+    confirm GitHub Actions as the automation provider, the canonical and immutable
+    repository identity, one exact available native environment for each abstract
+    Plan 0001 target row, one OCI-capable coordinator, one probed FSM-compatible row,
+    and one protected release environment with a required-owner-review policy for the
+    RustSec pin. None of that can be inferred: an unconfigured Git remote is not a
+    repository identity, and a runner nobody probed is not an environment.
+  - **3806 owner-supplied-release-metadata** (`gated`). Waits for the owner to supply
+    the exact license declaration and the complete `LICENSE` bytes, and for 3807's
+    validated canonical repository address. A license is a legal statement; guessing
+    one would be inventing the owner's words.
+  - **3805 owner-confirmed-native-evidence-trust** (`gated`). Waits for the owner to
+    confirm GitHub Artifact Attestations as the native-evidence authority and to
+    approve the exact issuer, workflow identity, runner classes, statement and
+    provenance versions, verifier version, and reviewed trusted-root snapshot.
+    Internal checksums prove consistency and never prove where a build happened.
+  - **3804 release-artifact-contract.** Depends on all three gates. Without the
+    attestation authority there is nothing to authenticate an archive against, and
+    without the release metadata there is no license material to package.
+  - **3904 release-acceptance-matrix.** Depends on all three gates and on 3804. It
+    aggregates evidence that the blocked tasks produce; running it against evidence
+    that does not exist would produce a report about nothing.
+
 - **Exceptions:**
   - **3903 writes the ninth document and holds all nine to a contract; it does not
     transcribe every clause its own step 4 lists.** `docs/AGENT_PROTOCOL.md` did not
