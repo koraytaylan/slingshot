@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/terminate_workflow_instance.rs
   - "crates/slingshot-domain/tests/fixtures/commands/terminate_workflow_instance/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Terminate a Workflow Instance

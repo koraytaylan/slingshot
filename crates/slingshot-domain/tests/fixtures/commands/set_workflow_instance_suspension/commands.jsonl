@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"instance_identifier\":\"/var/workflow/instances/server0/2024-01-01/request-for-activation_1\",\"requested_state\":\"suspended\"}","note":"holding one"}
+{"accepted":true,"document":"{\"instance_identifier\":\"/var/workflow/instances/server0/2024-01-01/request-for-activation_1\",\"requested_state\":\"running\"}","note":"letting it go again"}
+{"accepted":false,"document":"{\"instance_identifier\":\"/var/workflow/instances/server0/2024-01-01/request-for-activation_1\"}","note":"no requested state, which has no default"}
+{"accepted":false,"document":"{\"instance_identifier\":\"/var/workflow/instances/server0/2024-01-01/request-for-activation_1\",\"requested_state\":\"aborted\"}","note":"a requested state this command does not offer"}

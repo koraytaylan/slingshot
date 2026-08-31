@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"states\":[\"running\"]}","note":"what is running"}
+{"accepted":true,"document":"{\"states\":[\"aborted\",\"completed\"]}","note":"what is archived"}
+{"accepted":true,"document":"{\"model_identifier\":\"/var/workflow/models/request-for-activation/jcr:content/model\",\"payload_prefix\":\"/content/example\",\"states\":[\"running\",\"suspended\"]}","note":"one model under one anchor"}
+{"accepted":false,"document":"{}","note":"no state set, which has no default"}
+{"accepted":false,"document":"{\"states\":[]}","note":"an empty state set"}
+{"accepted":false,"document":"{\"states\":[\"running\",\"aborted\"]}","note":"a descending state set"}

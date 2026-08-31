@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"model_identifier\":\"/var/workflow/models/request-for-activation/jcr:content/model\",\"payload_path\":\"/content/example/en/report\"}","note":"the plainest start"}
+{"accepted":true,"document":"{\"comment\":\"Ready for review\",\"metadata\":{\"absoluteTime\":\"0\"},\"model_identifier\":\"/var/workflow/models/request-for-activation/jcr:content/model\",\"payload_path\":\"/content/example/en/report\",\"title\":\"Report activation\"}","note":"a start carrying everything it may"}
+{"accepted":false,"document":"{\"payload_path\":\"/content/example/en/report\"}","note":"no model"}
+{"accepted":false,"document":"{\"model_identifier\":\"/var/workflow/models/request-for-activation/jcr:content/model\"}","note":"no payload"}
+{"accepted":false,"document":"{\"metadata\":{\" spaced\":\"0\"},\"model_identifier\":\"/var/workflow/models/request-for-activation/jcr:content/model\",\"payload_path\":\"/content/example/en/report\"}","note":"a metadata key with a leading space"}
+{"accepted":false,"document":"{\"model_identifier\":\"/var/workflow/models/request-for-activation/jcr:content/model\",\"payload_path\":\"/content/example/en/report\",\"extra\":1}","note":"a member this command does not have"}

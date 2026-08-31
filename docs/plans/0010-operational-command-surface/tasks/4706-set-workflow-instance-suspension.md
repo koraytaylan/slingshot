@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/set_workflow_instance_suspension.rs
   - "crates/slingshot-domain/tests/fixtures/commands/set_workflow_instance_suspension/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Set a Workflow Instance Suspension

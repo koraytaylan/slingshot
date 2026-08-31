@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/start_workflow.rs
   - "crates/slingshot-domain/tests/fixtures/commands/start_workflow/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Start a Workflow
