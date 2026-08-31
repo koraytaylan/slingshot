@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/commands/page_mutation.rs
   - crates/slingshot-command-line/src/property_document.rs
   - crates/slingshot-command-line/tests/page_mutation_commands.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Expose Page Mutation Commands
