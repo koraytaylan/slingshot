@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/event-stream-reconnection.jsonl
   - crates/slingshot-agent-connection/tests/event_stream_reconnection.rs
 status: done
-merged_as: ""
+merged_as: "e1b9f938cb2843fc83fb2f22d474a7bb1ce349e1"
 ---
 # Event Stream Reconnection
 
