@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/inspect_replication_queue.rs
   - "crates/slingshot-domain/tests/fixtures/commands/inspect_replication_queue/**"
 status: done
-merged_as: ""
+merged_as: "defddc2954214669c5af76eb3f2f147dece6268c"
 ---
 # Inspect a Replication Queue
 

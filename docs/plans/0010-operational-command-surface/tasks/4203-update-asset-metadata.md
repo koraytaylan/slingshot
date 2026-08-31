@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/update_asset_metadata.rs
   - "crates/slingshot-domain/tests/fixtures/commands/update_asset_metadata/**"
 status: done
-merged_as: ""
+merged_as: "cef06b2be13779e36f2cb62f0ed61e4168ca9dfa"
 ---
 # Update Asset Metadata
 

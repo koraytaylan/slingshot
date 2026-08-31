@@ -24,7 +24,7 @@ touches:
   - crates/slingshot-command-line/src/live_adobe_experience_manager.rs
   - crates/slingshot-command-line/tests/command_line_operational_surface.rs
 status: done
-merged_as: ""
+merged_as: "027611437479306e2e6ba052ae770b621debcfc2"
 ---
 # Command-Line Surface
 

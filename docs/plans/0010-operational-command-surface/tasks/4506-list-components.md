@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/list_open_service_gateway_initiative_components.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_open_service_gateway_initiative_components/**"
 status: done
-merged_as: ""
+merged_as: "6a823953ac8e4e7cf5a603243fec21ffc0a53361"
 ---
 # List Declarative Service Components
 

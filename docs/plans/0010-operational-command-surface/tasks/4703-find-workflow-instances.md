@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/find_workflow_instances.rs
   - "crates/slingshot-domain/tests/fixtures/commands/find_workflow_instances/**"
 status: done
-merged_as: ""
+merged_as: "e71740fdc51e0a18c337831b46347358209836f2"
 ---
 # Find Workflow Instances
 

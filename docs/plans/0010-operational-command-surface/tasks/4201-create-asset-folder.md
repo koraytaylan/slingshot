@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/create_asset_folder.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_asset_folder/**"
 status: done
-merged_as: ""
+merged_as: "cef06b2be13779e36f2cb62f0ed61e4168ca9dfa"
 ---
 # Create an Asset Folder
 

@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/move_page.rs
   - "crates/slingshot-domain/tests/fixtures/commands/move_page/**"
 status: done
-merged_as: ""
+merged_as: "3fd7ff8550d67147d796fa3e9e752eab340cf192"
 ---
 # Move a Page
 

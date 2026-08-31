@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/group_membership.rs
   - "crates/slingshot-domain/tests/fixtures/commands/group_membership/**"
 status: done
-merged_as: ""
+merged_as: "a73a0b157a88358ff0b1aa98aff3ea0fee48c32e"
 ---
 # Add and Remove a Group Member
 

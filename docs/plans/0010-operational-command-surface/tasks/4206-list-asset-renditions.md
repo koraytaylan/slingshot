@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/list_asset_renditions.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_asset_renditions/**"
 status: done
-merged_as: ""
+merged_as: "cef06b2be13779e36f2cb62f0ed61e4168ca9dfa"
 ---
 # List Asset Renditions
 

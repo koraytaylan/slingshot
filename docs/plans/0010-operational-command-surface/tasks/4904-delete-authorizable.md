@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/delete_authorizable.rs
   - "crates/slingshot-domain/tests/fixtures/commands/delete_authorizable/**"
 status: done
-merged_as: ""
+merged_as: "a73a0b157a88358ff0b1aa98aff3ea0fee48c32e"
 ---
 # Delete an Authorizable
 

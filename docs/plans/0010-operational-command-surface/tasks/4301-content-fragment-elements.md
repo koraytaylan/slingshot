@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/content_fragment_element.rs
   - "crates/slingshot-domain/tests/fixtures/commands/content_fragment_element/**"
 status: done
-merged_as: ""
+merged_as: "37b2e8e9db8503286b3ba6df14ef0aeeb0015c67"
 ---
 # Content Fragment Element Values
 

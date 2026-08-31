@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-domain/tests/create_authorizable.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_authorizable/**"
 status: done
-merged_as: ""
+merged_as: "a73a0b157a88358ff0b1aa98aff3ea0fee48c32e"
 ---
 # Create a User or a Group
 

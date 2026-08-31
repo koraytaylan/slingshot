@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/find_open_service_gateway_initiative_configurations.rs
   - "crates/slingshot-domain/tests/fixtures/commands/find_open_service_gateway_initiative_configurations/**"
 status: done
-merged_as: ""
+merged_as: "6a823953ac8e4e7cf5a603243fec21ffc0a53361"
 ---
 # Find Configurations
 
