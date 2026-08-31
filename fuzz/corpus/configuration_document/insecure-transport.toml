@@ -1,0 +1,9 @@
+format_version = 1
+name = "local"
+
+[environments.author]
+deployment = "adobe_experience_manager_6_5"
+author = { base_address = "http://author.example.invalid" }
+publisher = { base_address = "https://publish.example.invalid" }
+authentication = { method = "basic", user_name = "someone", password = "held" }
+allow_insecure_author_transport = true

@@ -13,7 +13,7 @@ touches:
   - "fuzz/corpus/configuration_document/**"
   - scripts/run_fuzz_target
   - crates/slingshot-development/tests/configuration_fuzz_corpus.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Configuration Parser Fuzzing
