@@ -256,6 +256,22 @@ One leaf reads them all. Ten families needing the same handful of shapes off a c
 
 `docs/COMMANDS.md` renders its registry table from the registry, so it grows to sixty-four rows and its generated block is checked by the test that already checks it. `docs/MODEL_CONTEXT_PROTOCOL.md` records the tool count and the option keys the same way. The protocol compatibility snapshot in `slingshot-development` records the published registry and is refreshed to the sixty-four-row set; a snapshot refresh that removed or altered an existing row would be a compatibility break and the snapshot assertion is what says so. The finite-state-machine handler template names commands it dispatches and gains the new names it can dispatch.
 
+## Where a self-contradictory request is caught
+
+`Command::require_usable` is the one question a boundary asks about a request
+that has parsed: a move into its own subtree, a mutation that changes nothing, a
+group asked to contain itself, a component asked to precede itself, a reason
+given for an enabling, a title written twice. The command line asks it for every
+command it builds, so those requests are refused before anything is submitted.
+
+The daemon does not ask it, and that is the boundary rather than a gap: what the
+daemon receives is a canonical command as bytes with a fingerprint derived from
+them, and it forwards those bytes without parsing them into a typed command. A
+daemon that parsed them to re-check would be a second reading of the same
+document, which is the thing the fingerprint exists to make unnecessary. The
+author is the last check, and every one of these commands allows the failure
+category that says the author refused it.
+
 ## What this plan does not decide
 
 Whether an author implements a command correctly. Whether a deployment's replication agents, workflow models, or job topics exist. What a rendition should be named, what a fragment model should contain, or which properties a profile should hold. Those are the author's answers and the operator's decisions, and a contract that pretended to make them would be wrong in a different deployment.
