@@ -249,6 +249,63 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
+        purpose: "record one maintenance-application receipt",
+        text: "INSERT INTO maintenance_application_receipt \
+               (application_receipt_identifier, author_target_identity_digest, \
+                recorded_at_unix_milliseconds, reviewed_manifest_digest) \
+               VALUES (?, ?, ?, ?)",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "select one target's operations that ended before a cutoff",
+        // Terminal only, and never a nonterminal row under any criteria. Work
+        // that has not ended is work somebody may still be waiting on, and no
+        // amount of age makes it safe to remove.
+        text: "SELECT operation_identifier, operation_revision, settled_at_unix_milliseconds \
+               FROM operation \
+               WHERE author_target_identity_digest = ? \
+                 AND lifecycle_state IN ('succeeded', 'failed') \
+                 AND settled_at_unix_milliseconds IS NOT NULL \
+                 AND settled_at_unix_milliseconds < ? \
+               ORDER BY settled_at_unix_milliseconds, operation_identifier \
+               LIMIT ?",
+        parameters: 3,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
+        purpose: "remove one terminal operation and everything hanging off it",
+        // The children go with it through the schema's own cascades rather than
+        // through a list this statement has to keep in step with the schema.
+        text: "DELETE FROM operation \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ? \
+                 AND lifecycle_state IN ('succeeded', 'failed')",
+        parameters: 2,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "count what still references one artifact's content",
+        text: "SELECT (SELECT COUNT(*) FROM artifact_association WHERE content_digest = ?) \
+                      + (SELECT COUNT(*) FROM maintenance_result_association \
+                         WHERE content_digest = ?)",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "remove one artifact's content, once nothing references it",
+        text: "DELETE FROM artifact_blob WHERE content_digest = ?",
+        parameters: 1,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read one target's maintenance-application receipt",
+        text: "SELECT recorded_at_unix_milliseconds, reviewed_manifest_digest \
+               FROM maintenance_application_receipt \
+               WHERE author_target_identity_digest = ? AND application_receipt_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
         purpose: "read one maintenance result by target and identifier alone",
         text: "SELECT association_revision, byte_length, content_digest, kind, media_type, \
                       owning_application_receipt_identifier, reviewed_source_digest \
