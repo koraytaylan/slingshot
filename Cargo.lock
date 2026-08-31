@@ -2078,6 +2078,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "slingshot-agent-protocol",
  "slingshot-configuration",
  "slingshot-domain",
  "slingshot-test-support",

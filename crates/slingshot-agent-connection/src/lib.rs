@@ -7,4 +7,5 @@
 
 pub mod authentication;
 pub mod author_hypertext_transfer_protocol_policy;
+pub mod capability_discovery;
 pub mod transport_policy;

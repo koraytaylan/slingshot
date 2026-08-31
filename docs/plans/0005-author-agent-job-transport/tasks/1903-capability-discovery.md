@@ -11,11 +11,13 @@ depends_on:
   - fake-author
 gated: false
 touches:
+  - crates/slingshot-agent-connection/Cargo.toml
   - crates/slingshot-agent-connection/src/capability_discovery.rs
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - crates/slingshot-agent-connection/src/lib.rs
   - crates/slingshot-agent-connection/tests/fixtures/capability-discovery/**
   - crates/slingshot-agent-connection/tests/capability_discovery.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Capability Discovery
