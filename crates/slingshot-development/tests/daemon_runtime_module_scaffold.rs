@@ -340,6 +340,7 @@ fn the_adopted_roots_and_behavioral_leaves_are_classified_and_not_recreated() {
         "crates/slingshot-command-line/src/daemon_connection.rs",
         "crates/slingshot-daemon/src/local_server.rs",
         "crates/slingshot-daemon/src/ownership.rs",
+        "crates/slingshot-daemon/src/platform_runtime/readiness.rs",
         "crates/slingshot-daemon/src/runtime_namespace.rs",
         "crates/slingshot-local-protocol/src/framing.rs",
     ]

@@ -9,8 +9,11 @@ depends_on:
 gated: false
 touches:
   - crates/slingshot-daemon/src/ownership.rs
+  - crates/slingshot-daemon/src/platform_runtime/readiness.rs
   - crates/slingshot-daemon/tests/ownership.rs
-status: planned
+  - crates/slingshot-daemon/tests/runtime_ownership.rs
+  - crates/slingshot-development/tests/platform_runtime_contract.rs
+status: done
 merged_as: ""
 ---
 # Single Daemon Ownership
