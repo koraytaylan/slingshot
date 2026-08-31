@@ -1,1 +1,1 @@
-slingshot: both --profile and --environment name the target this command addresses
+slingshot: a target is a profile and an environment, and this names one of them

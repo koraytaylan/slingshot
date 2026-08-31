@@ -10,6 +10,7 @@ use slingshot_daemon::platform_runtime::endpoint::EndpointAddress;
 use slingshot_local_protocol::envelope::{ControlRequest, ControlResponse, ResponseOutcome};
 use slingshot_local_protocol::foundation_contract::FoundationContract;
 use slingshot_local_protocol::framing;
+use slingshot_local_protocol::message::{OperationEnvelope, OperationResponse};
 use slingshot_local_protocol::ping::{PING_METHOD, PingResult};
 
 /// Reason a request could not be exchanged with a daemon.
@@ -127,6 +128,38 @@ pub async fn ping(
             "the response carried neither result nor error".to_owned(),
         )),
     }
+}
+
+/// Exchanges one versioned operation with the daemon that owns an endpoint.
+///
+/// The same framing as retained control, and a different payload: a versioned
+/// envelope carries the target, the revision, and the contract this client was
+/// built against, so the daemon can refuse a caller it does not agree with
+/// before it acts rather than after.
+///
+/// # Errors
+///
+/// Returns [`ExchangeFailure::Absent`] when no process is listening, and the
+/// other variants when the connection or the answer cannot be used.
+pub async fn exchange_operation(
+    contract: &FoundationContract,
+    address: &EndpointAddress,
+    envelope: &OperationEnvelope,
+) -> Result<OperationResponse, ExchangeFailure> {
+    let mut stream = open(address).await?;
+    let payload = serde_json::to_vec(envelope)
+        .map_err(|failure| ExchangeFailure::Unreadable(failure.to_string()))?;
+    let frame = framing::render(&contract.framing, &payload)
+        .map_err(|failure| ExchangeFailure::Unreadable(failure.to_string()))?;
+    local_server::write_frame(&mut stream, contract, &frame)
+        .await
+        .map_err(|failure| ExchangeFailure::Transport(failure.to_string()))?;
+    let response = local_server::read_frame(&mut stream, contract, true)
+        .await
+        .map_err(|failure: ConnectionFailure| ExchangeFailure::Transport(failure.to_string()))?
+        .ok_or_else(|| ExchangeFailure::Absent(address.display()))?;
+    serde_json::from_slice(&response)
+        .map_err(|failure| ExchangeFailure::Unreadable(failure.to_string()))
 }
 
 /// What a client expects the daemon owning its target to be serving.

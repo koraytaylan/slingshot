@@ -15,6 +15,7 @@ pub mod artifact_staging_metadata;
 pub mod command_line;
 pub mod commands;
 pub mod configuration_check;
+pub mod daemon_answer;
 pub mod daemon_connection;
 pub mod daemon_entry;
 pub mod daemon_process;
