@@ -1,0 +1,4 @@
+{"chosen": 8000, "eligible_at": 1700000008000, "name": "unchanged-clock", "now": 1700000000000, "resumed": 8000}
+{"chosen": 8000, "eligible_at": 1700000008000, "name": "partway-through", "now": 1700000005000, "resumed": 3000}
+{"chosen": 8000, "eligible_at": 1700000008000, "name": "forward-jump", "now": 1700000068000, "resumed": 0}
+{"chosen": 8000, "eligible_at": 1700000008000, "name": "backward-jump", "now": 1699999108000, "resumed": 8000}

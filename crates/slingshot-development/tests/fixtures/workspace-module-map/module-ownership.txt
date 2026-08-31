@@ -68,6 +68,7 @@ crates/slingshot-daemon/src/lib.rs|slingshot-daemon|service|crate-root|slingshot
 crates/slingshot-daemon/src/local_server.rs|slingshot-daemon|service|leaf|slingshot_daemon::local_server|workspace-module-map
 crates/slingshot-daemon/src/operation/mod.rs|slingshot-daemon|service|family-root|slingshot_daemon::operation|workspace-module-map
 crates/slingshot-daemon/src/operation/job_reconciliation.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation::job_reconciliation|job-snapshot-reconciliation
+crates/slingshot-daemon/src/operation/recovery_and_event_supervisor.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation::recovery_and_event_supervisor|recovery-and-event-supervisor
 crates/slingshot-daemon/src/operation/remote_submission.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation::remote_submission|durable-idempotent-submission
 crates/slingshot-daemon/src/operation_maintenance.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_maintenance|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/operation_queries.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_queries|daemon-runtime-module-scaffold
