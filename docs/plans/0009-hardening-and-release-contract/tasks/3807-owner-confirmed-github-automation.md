@@ -18,7 +18,7 @@ touches:
   - crates/slingshot-development/tests/github_automation_authority.rs
   - crates/slingshot-development/tests/github_workflow_contract.rs
   - "crates/slingshot-development/tests/fixtures/github-automation-authority/**"
-status: planned
+status: blocked
 merged_as: ""
 ---
 # Owner-Confirmed GitHub Automation

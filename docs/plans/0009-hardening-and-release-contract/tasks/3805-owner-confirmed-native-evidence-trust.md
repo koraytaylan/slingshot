@@ -20,7 +20,7 @@ touches:
   - crates/slingshot-development/src/release_attestation_policy.rs
   - crates/slingshot-development/tests/release_attestation_policy.rs
   - "crates/slingshot-development/tests/fixtures/release-attestation-policy/**"
-status: planned
+status: blocked
 merged_as: ""
 ---
 # Owner-Confirmed Native Evidence Trust
