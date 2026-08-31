@@ -24,6 +24,7 @@ crates/slingshot-agent-connection/src/authentication/token_assertion.rs|slingsho
 crates/slingshot-agent-connection/src/author_cross_site_request_forgery_protection.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::author_cross_site_request_forgery_protection|author-cross-site-request-forgery-protection
 crates/slingshot-agent-connection/src/author_hypertext_transfer_protocol_policy.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::author_hypertext_transfer_protocol_policy|author-hypertext-transfer-protocol-policy
 crates/slingshot-agent-connection/src/capability_discovery.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::capability_discovery|capability-discovery
+crates/slingshot-agent-connection/src/command_submission.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::command_submission|authenticated-command-submission
 crates/slingshot-agent-connection/src/lib.rs|slingshot-agent-connection|adapter|crate-root|slingshot_agent_connection|workspace-module-map
 crates/slingshot-agent-connection/src/request_authentication.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::request_authentication|author-request-authentication
 crates/slingshot-agent-connection/src/transport_policy.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::transport_policy|profile-authentication-module-scaffold

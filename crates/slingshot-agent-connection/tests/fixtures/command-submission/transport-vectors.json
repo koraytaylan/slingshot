@@ -1,0 +1,19 @@
+{
+  "purpose": "Each vector is one defect in a response that arrived after the request bytes were written, and the single closed cause it must resolve to. None of them may be read as an answer, because a message this daemon cannot frame carries no answer whatever it happens to say.",
+  "vectors": [
+    { "defect": "informational-head", "cause": "informational-head" },
+    { "defect": "alternative-service-offered", "cause": "protocol-version" },
+    { "defect": "unsupported-protocol-version", "cause": "protocol-version" },
+    { "defect": "redirect-offered", "cause": "protocol-version" },
+    { "defect": "trailers-declared", "cause": "trailers-declared" },
+    { "defect": "trailer-section-present", "cause": "trailer-section" },
+    { "defect": "ambiguous-framing", "cause": "framing" },
+    { "defect": "trailing-bytes", "cause": "trailing-bytes" },
+    { "defect": "unexpected-content-coding", "cause": "media" },
+    { "defect": "wrong-media-type", "cause": "media" },
+    { "defect": "oversized-body", "cause": "body" },
+    { "defect": "unknown-field", "cause": "unknown-field" },
+    { "defect": "unvalidated-status", "cause": "unvalidated-status" },
+    { "defect": "absent-body", "cause": "body" }
+  ]
+}

@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-agent-connection/src/lib.rs
   - crates/slingshot-agent-connection/tests/fixtures/command-submission/**
   - crates/slingshot-agent-connection/tests/command_submission.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Authenticated Command Submission

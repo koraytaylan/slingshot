@@ -1,0 +1,25 @@
+{
+  "purpose": "Every status this build acts on, and the one class it falls in. A status absent from this table is unvalidated, which leaves a submission unknown rather than guessing what a server meant.",
+  "expectations": [
+    { "status": 200, "class": "answered" },
+    { "status": 201, "class": "answered" },
+    { "status": 202, "class": "answered" },
+    { "status": 400, "class": "rejected" },
+    { "status": 403, "class": "rejected" },
+    { "status": 422, "class": "rejected" },
+    { "status": 409, "class": "conflict" },
+    { "status": 408, "class": "retryable" },
+    { "status": 429, "class": "retryable" },
+    { "status": 500, "class": "retryable" },
+    { "status": 502, "class": "retryable" },
+    { "status": 503, "class": "retryable" },
+    { "status": 504, "class": "retryable" },
+    { "status": 100, "class": "unvalidated" },
+    { "status": 204, "class": "unvalidated" },
+    { "status": 301, "class": "unvalidated" },
+    { "status": 401, "class": "unvalidated" },
+    { "status": 404, "class": "unvalidated" },
+    { "status": 418, "class": "unvalidated" },
+    { "status": 501, "class": "unvalidated" }
+  ]
+}
