@@ -1,0 +1,114 @@
+#!/bin/sh
+# Prepare the cache a release builds from.
+#
+# This is the one command in a release that reaches the network, and it says so
+# when it runs. Everything a release needs is fetched here against the committed
+# lockfile and nothing is resolved afterwards: a release that resolved at build
+# time would draw different bytes on different days from the same commit.
+#
+# It refuses rather than skips. Every input is named explicitly, every path is
+# absolute, and the output directory must not already exist, because a cache
+# prepared on top of whatever was already there is a cache of unknown origin.
+
+set -eu
+
+AUTHORITY=support/github-automation-authority.toml
+FINITE_STATE_MACHINE_SOURCE=''
+RUSTSEC_ADVISORY_DATABASE=''
+RUSTSEC_OWNER_REVIEW_RECORD=''
+COVERAGE_FUZZING_TOOL_BUNDLE=''
+OUTPUT_DIRECTORY=''
+
+report_stage() {
+    printf '\n== %s ==\n' "$1"
+}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+require_value() {
+    [ "$2" -ge 2 ] || report_refusal "$1 names a path"
+}
+
+require_absolute_directory() {
+    case "$1" in
+        /*) ;;
+        *) report_refusal "$1 is not an absolute path" ;;
+    esac
+    [ -d "$1" ] || report_refusal "$1 is not a directory"
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --finite-state-machine-source)
+            require_value "$1" "$#"
+            FINITE_STATE_MACHINE_SOURCE=$2
+            shift 2
+            ;;
+        --rustsec-advisory-database)
+            require_value "$1" "$#"
+            RUSTSEC_ADVISORY_DATABASE=$2
+            shift 2
+            ;;
+        --rustsec-owner-review-record)
+            require_value "$1" "$#"
+            RUSTSEC_OWNER_REVIEW_RECORD=$2
+            shift 2
+            ;;
+        --coverage-fuzzing-tool-bundle)
+            require_value "$1" "$#"
+            COVERAGE_FUZZING_TOOL_BUNDLE=$2
+            shift 2
+            ;;
+        --output-directory)
+            require_value "$1" "$#"
+            OUTPUT_DIRECTORY=$2
+            shift 2
+            ;;
+        *)
+            report_refusal "$1 is not an option this command takes"
+            ;;
+    esac
+done
+
+[ -n "$FINITE_STATE_MACHINE_SOURCE" ] || report_refusal 'name the verified pinned source'
+[ -n "$RUSTSEC_ADVISORY_DATABASE" ] || report_refusal 'name the verified advisory database'
+[ -n "$RUSTSEC_OWNER_REVIEW_RECORD" ] || report_refusal 'name the same-run owner review record'
+[ -n "$COVERAGE_FUZZING_TOOL_BUNDLE" ] || report_refusal 'name the verified coverage bundle'
+[ -n "$OUTPUT_DIRECTORY" ] || report_refusal 'name the directory to prepare into'
+
+require_absolute_directory "$FINITE_STATE_MACHINE_SOURCE"
+require_absolute_directory "$RUSTSEC_ADVISORY_DATABASE"
+require_absolute_directory "$COVERAGE_FUZZING_TOOL_BUNDLE"
+case "$RUSTSEC_OWNER_REVIEW_RECORD" in
+    /*) ;;
+    *) report_refusal "$RUSTSEC_OWNER_REVIEW_RECORD is not an absolute path" ;;
+esac
+[ -f "$RUSTSEC_OWNER_REVIEW_RECORD" ] || report_refusal "$RUSTSEC_OWNER_REVIEW_RECORD is not a file"
+case "$OUTPUT_DIRECTORY" in
+    /*) ;;
+    *) report_refusal "$OUTPUT_DIRECTORY is not an absolute path" ;;
+esac
+[ ! -e "$OUTPUT_DIRECTORY" ] || report_refusal "$OUTPUT_DIRECTORY already exists"
+[ -f Cargo.lock ] || report_refusal 'there is no committed lockfile to prepare against'
+
+report_stage 'the review record this run was approved by'
+# A record is evidence only against an authority that says whose approval counts
+# and which protected environment it has to come from. That authority is one
+# committed document, and until it is committed there is nothing to check a
+# record against - so this refuses rather than admitting an unauthenticated one.
+[ -f "$AUTHORITY" ] || report_refusal "$AUTHORITY is not committed, so no review record can be authenticated"
+
+report_stage 'the declared inputs'
+printf 'this command reaches the network to fetch what the lockfile names\n'
+mkdir -p "$OUTPUT_DIRECTORY"
+CARGO_HOME="$OUTPUT_DIRECTORY" cargo fetch --locked \
+    || report_refusal 'the declared inputs could not be fetched'
+
+report_stage 'the manifest'
+cargo run --locked --quiet -p slingshot-development -- \
+    prepare-locked-source-cache --output-directory "$OUTPUT_DIRECTORY"
+
+printf '\n== the cache is prepared ==\n'

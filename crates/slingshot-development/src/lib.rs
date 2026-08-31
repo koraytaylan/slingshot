@@ -16,6 +16,7 @@ pub mod finite_state_machine_handler_validation;
 pub mod finite_state_machine_process_harness;
 pub mod platform_runtime_contract;
 pub mod profile_authentication_harness;
+pub mod release_input_cache;
 pub mod rustsec_advisory_pin;
 pub mod slingshot_test_daemon;
 pub mod source_policy;
