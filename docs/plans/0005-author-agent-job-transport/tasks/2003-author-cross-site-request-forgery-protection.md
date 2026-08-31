@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/author-cross-site-request-forgery-protection/**
   - crates/slingshot-agent-connection/tests/author_cross_site_request_forgery_protection.rs
 status: done
-merged_as: ""
+merged_as: "5771e71"
 ---
 # Author Cross-Site Request Forgery Protection
 
