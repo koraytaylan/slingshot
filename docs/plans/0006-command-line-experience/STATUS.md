@@ -54,6 +54,17 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     cooperative stop, and 2803 scans exactly that stream for exactly that kind of value.
     The module-map checker also counted a process entry as a claimed module, which no
     task had tripped before because none both owned a module row and touched the entry.
+  - **2804 documents what this build has.** The task lists reference sections for
+    provenance digests, canonical-JSON annotations, maintenance receipt lifecycles, and
+    continuation bounds. Those describe conversations with a daemon that serves versioned
+    operations, and a reference is worse than useless when it describes a conversation
+    the executable cannot have. What is published is every leaf, option, registry
+    command, failure category, answer tag, exit, and interruption template this build
+    actually has, each rendered from the metadata the executable itself reads, plus the
+    prose a reader needs and generation cannot produce: that an interrupt cancels
+    nothing, that publication is the success, and that a pre-receipt interruption
+    promises nothing about durability. Registering the document as a product area and
+    linking it from the README joins the footprint.
   - **2803 scans the channels a run has and proves its scanner before trusting it.** The
     task lists tracing and a daemon transcript among the channels. This executable emits
     no tracing of its own and the daemon it drives writes none for a client to capture,

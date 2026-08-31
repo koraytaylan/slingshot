@@ -30,6 +30,9 @@ authorizes a cooperative stop and therefore stays in the runtime state its
 daemon owns. `--runtime-root` places the target's runtime objects somewhere
 other than this user's own runtime directory.
 
+[docs/COMMANDS.md](docs/COMMANDS.md) is the reference for every leaf, option,
+answer, failure category, and exit this executable has.
+
 ## Crates
 
 | Crate | Responsibility |
