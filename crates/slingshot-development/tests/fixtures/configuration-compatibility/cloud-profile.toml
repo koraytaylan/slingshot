@@ -1,0 +1,8 @@
+format_version = 1
+name = "cloud"
+
+[environments.author]
+deployment = "adobe_experience_manager_cloud_service"
+author = { base_address = "https://author.example.invalid" }
+publisher = { base_address = "https://publish.example.invalid" }
+authentication = { method = "adobe_experience_manager_developer_console_service_credentials", credentials_file = "credentials/service.json" }

@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-development/tests/configuration_and_storage_compatibility.rs
   - "crates/slingshot-development/tests/fixtures/configuration-compatibility/**"
   - "crates/slingshot-development/tests/fixtures/storage-compatibility/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Configuration And Storage Compatibility
