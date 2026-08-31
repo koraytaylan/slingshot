@@ -10,6 +10,7 @@
 pub mod daemon_chaos_subject;
 pub mod dependency_direction;
 pub mod finite_state_machine_compatibility;
+pub mod finite_state_machine_process_harness;
 pub mod platform_runtime_contract;
 pub mod profile_authentication_harness;
 pub mod rustsec_advisory_pin;
