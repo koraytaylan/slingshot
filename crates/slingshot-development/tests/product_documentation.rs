@@ -14,6 +14,24 @@ use slingshot_development::supported_platform_matrix::{self, SupportedPlatformMa
 /// The three root documents.
 const ROOT_DOCUMENTS: &[&str] = &["README.md", "CONTRIBUTING.md", "ARCHITECTURE.md"];
 
+/// Documents below the repository root that describe one product area.
+const AREA_DOCUMENTS: &[&str] = &["docs/CONFIGURATION.md", "docs/DAEMON.md"];
+
+/// Headings the daemon document must carry.
+const DAEMON_HEADINGS: &[&str] = &[
+    "# The daemon",
+    "## One target, one daemon, one owner",
+    "## Two roots",
+    "## Reaching readiness",
+    "## What execution does in this build",
+    "## Facts an operation can be in",
+    "## Waiting, listing, and reading",
+    "## Resuming and maintaining",
+    "## Stopping",
+    "## Diagnostics",
+    "## What is not here",
+];
+
 /// Headings the README must carry.
 const README_HEADINGS: &[&str] = &[
     "# Slingshot",
@@ -150,6 +168,48 @@ fn every_document_carries_its_headings_and_links_to_files_that_exist() {
     for linked in ["CONTRIBUTING.md", "ARCHITECTURE.md"] {
         assert!(readme.contains(&format!("]({linked})")), "the README does not link to {linked}");
     }
+}
+
+#[test]
+fn every_area_document_carries_its_headings_and_makes_no_claim_it_cannot_prove() {
+    for relative in AREA_DOCUMENTS {
+        let document = read_repository_file(relative);
+        assert!(!document.trim().is_empty(), "{relative} is empty");
+        for claim in REFUSED_CLAIMS {
+            assert!(
+                !document.to_lowercase().contains(claim),
+                "{relative} claims {claim:?}, and no evidence for that exists"
+            );
+        }
+    }
+
+    let daemon = read_repository_file("docs/DAEMON.md");
+    for heading in DAEMON_HEADINGS {
+        assert!(daemon.contains(heading), "docs/DAEMON.md is missing {heading:?}");
+    }
+    assert!(
+        daemon.contains("## What is not here"),
+        "a document that never says what is absent reads as a document about a finished thing"
+    );
+}
+
+#[test]
+fn the_daemon_document_describes_the_present_rather_than_a_plan() {
+    let daemon = read_repository_file("docs/DAEMON.md");
+    for planning in ["TODO", "FIXME", "will be", "for now", "coming soon", "not yet implemented"] {
+        assert!(
+            !daemon.contains(planning),
+            "docs/DAEMON.md carries planning language: {planning:?}"
+        );
+    }
+    assert!(
+        daemon.contains("composes no operation executor"),
+        "and says plainly that a product build runs nothing, rather than implying it will"
+    );
+    assert!(
+        daemon.contains("neither an ending nor"),
+        "and states the distinction the whole recovery vocabulary exists to keep"
+    );
 }
 
 #[test]

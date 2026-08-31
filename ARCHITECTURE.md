@@ -134,6 +134,12 @@ complete, historically framed, or narrating adjacent code is recorded as a
 review checklist in `policy/documentation-rules.toml`, and an assertion proves
 the checker does not pretend otherwise.
 
+## The daemon in detail
+
+The ownership, startup ordering, operation facts, waiting, listing, artifact
+reading, resuming, maintenance, and stopping rules are set out in
+[docs/DAEMON.md](docs/DAEMON.md).
+
 ## What is not here
 
 No Adobe Experience Manager operation, no profile document, no credential, no
