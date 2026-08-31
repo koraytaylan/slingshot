@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-test-support/src/operation_fault_injection.rs
   - crates/slingshot-development/src/test_daemon_faults.rs
   - crates/slingshot-development/tests/operation_restart_recovery.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Operation Restart Recovery
