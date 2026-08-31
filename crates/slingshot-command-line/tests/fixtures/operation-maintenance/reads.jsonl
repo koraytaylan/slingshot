@@ -1,0 +1,5 @@
+{"digest_matches": true, "identifier_matches": true, "name": "everything-agrees", "outcome": "permitted", "readable": true, "target_matches": true}
+{"digest_matches": true, "identifier_matches": true, "name": "superseded", "outcome": "no-longer-readable", "readable": false, "target_matches": true}
+{"digest_matches": true, "identifier_matches": true, "name": "another-target", "outcome": "no-longer-readable", "readable": true, "target_matches": false}
+{"digest_matches": true, "identifier_matches": false, "name": "another-identifier", "outcome": "no-longer-readable", "readable": true, "target_matches": true}
+{"digest_matches": false, "identifier_matches": true, "name": "a-digest-the-caller-did-not-expect", "outcome": "digest-mismatched", "readable": true, "target_matches": true}

@@ -1,0 +1,5 @@
+{"historical": false, "includes_unsettled": true, "limit": 50, "name": "one-page-of-current-work", "outcome": "permitted"}
+{"historical": false, "includes_unsettled": true, "limit": 200, "name": "a-page-at-the-bound", "outcome": "permitted"}
+{"historical": false, "includes_unsettled": false, "limit": 201, "name": "a-page-past-the-bound", "outcome": "page-too-large"}
+{"historical": true, "includes_unsettled": false, "limit": 50, "name": "settled-history", "outcome": "permitted"}
+{"historical": true, "includes_unsettled": true, "limit": 50, "name": "history-with-running-work", "outcome": "history-not-settled"}
