@@ -13,6 +13,12 @@ authorizable_identity
 cancel_sling_job
 canonical_json
 catalog
+classification
+classification_administration
+classification_authoring
+classification_foundation
+classification_platform
+classification_process
 command_identity
 component_resource_type
 content_fragment_element
@@ -70,9 +76,14 @@ repository_path
 resource_mapping_entry
 resource_mutation
 resource_resolution
+result_context
 result_window
 retry_replication_queue_entry
 schema
+schema_administration
+schema_authoring
+schema_platform
+schema_process
 search_predicate
 set_open_service_gateway_initiative_bundle_state
 set_user_disabled

@@ -24,17 +24,69 @@ commands:
 
 commands this daemon runs against an author:
   add_component - Add a component
+  add_group_member - Add a group member
+  cancel_sling_job - Cancel a Sling job
+  create_asset - Create an asset
+  create_asset_folder - Create an asset folder
+  create_content_fragment - Create a content fragment
+  create_experience_fragment - Create an experience fragment
+  create_group - Create a group
   create_page - Create a page
+  create_user - Create a user
+  delete_asset - Delete an asset
+  delete_authorizable - Delete an authorizable
+  delete_component - Delete a component
+  delete_content_fragment - Delete a content fragment
+  delete_experience_fragment - Delete an experience fragment
+  delete_open_service_gateway_initiative_configuration - Delete a configuration
+  delete_page - Delete a page
   download_content_package - Download a content package
   find_assets_by_metadata - Find assets by metadata
   find_assets_referenced_by_page - Find assets referenced by a page
+  find_open_service_gateway_initiative_configurations - Find configurations
   find_pages_by_template - Find pages by template
   find_pages_containing_phrase - Find pages containing a phrase
   find_pages_using_components - Find pages using components
+  find_sling_jobs - Find Sling jobs
+  find_workflow_instances - Find workflow instances
+  flush_replication_queue - Flush a replication queue
   inspect_open_service_gateway_initiative_configuration - Inspect a configuration
+  inspect_replication_agent - Inspect a replication agent
+  inspect_replication_queue - Inspect a replication queue
+  inspect_sling_job - Inspect a Sling job
+  inspect_workflow_instance - Inspect a workflow instance
+  list_asset_renditions - List asset renditions
+  list_child_pages - List child pages
+  list_group_members - List group members
+  list_open_service_gateway_initiative_bundles - List bundles
+  list_open_service_gateway_initiative_components - List components
+  list_replication_agents - List replication agents
+  list_resource_mappings - List resource mappings
+  list_sling_job_queues - List Sling job queues
+  list_workflow_models - List workflow models
   load_content_as_json - Load content as JSON
+  map_resource_path - Map a resource path
+  move_asset - Move an asset
+  move_page - Move a page
   query_paths - Query paths
+  read_content_fragment - Read a content fragment
+  remove_group_member - Remove a group member
+  reorder_component - Reorder a component
   replicate_content - Replicate content
+  resolve_resource_path - Resolve a resource path
+  retry_replication_queue_entry - Retry a replication queue entry
+  set_open_service_gateway_initiative_bundle_state - Set a bundle state
+  set_user_disabled - Disable or enable a user
+  set_workflow_instance_suspension - Suspend or resume a workflow instance
+  start_workflow - Start a workflow
+  terminate_workflow_instance - Terminate a workflow instance
+  update_asset_metadata - Update asset metadata
+  update_component - Update a component
+  update_content_fragment - Update a content fragment
+  update_experience_fragment - Update an experience fragment
+  update_open_service_gateway_initiative_configuration - Update a configuration
+  update_page - Update a page
+  update_user_profile - Update a user profile
 
 options:
   --profile
@@ -76,6 +128,44 @@ options:
   --resource-type
   --content-parent
   --properties
+  --destination-path
+  --adjust-references
+  --reference-policy
+  --removed-properties
+  --placement
+  --sibling
+  --media-type
+  --payload
+  --elements
+  --variation
+  --model
+  --payload-path
+  --comment
+  --metadata
+  --states
+  --prefix
+  --instance
+  --suspension
+  --job
+  --topic
+  --authorizable
+  --member
+  --group
+  --expected-kind
+  --intermediate-path
+  --disabled
+  --reason
+  --include-indirect
+  --agent
+  --entry
+  --expected-entry-count
+  --symbolic-name
+  --transition
+  --assignments
+  --removed-keys
+  --request-address
+  --request-authority
+  --include-trace
   --operation
   --artifact
   --runtime-root

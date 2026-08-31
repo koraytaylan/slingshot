@@ -162,6 +162,120 @@ pub const COMPONENT_PARENT_OPTION: &str = "--content-parent";
 /// The option naming the document of properties a mutation applies.
 pub const PROPERTIES_OPTION: &str = "--properties";
 
+/// The option naming where a move puts its subject.
+pub const DESTINATION_PATH_OPTION: &str = "--destination-path";
+
+/// The option saying that references follow a move.
+pub const ADJUST_REFERENCES_OPTION: &str = "--adjust-references";
+
+/// The option saying what a deletion does about references to its subject.
+pub const REFERENCE_POLICY_OPTION: &str = "--reference-policy";
+
+/// The option naming the properties a mutation removes.
+pub const REMOVED_PROPERTIES_OPTION: &str = "--removed-properties";
+
+/// The option saying where a reordering puts its subject.
+pub const PLACEMENT_OPTION: &str = "--placement";
+
+/// The option naming the sibling a reordering goes in front of.
+pub const SIBLING_OPTION: &str = "--sibling";
+
+/// The option naming what kind of thing an inline payload is.
+pub const MEDIA_TYPE_OPTION: &str = "--media-type";
+
+/// The option carrying an inline payload's encoded bytes.
+pub const PAYLOAD_OPTION: &str = "--payload";
+
+/// The option carrying the element document a fragment command writes.
+pub const ELEMENTS_OPTION: &str = "--elements";
+
+/// The option naming which variation a fragment command reads or writes.
+pub const VARIATION_OPTION: &str = "--variation";
+
+/// The option naming a content fragment model or a workflow model.
+pub const MODEL_OPTION: &str = "--model";
+
+/// The option naming the content a workflow runs on.
+pub const PAYLOAD_PATH_OPTION: &str = "--payload-path";
+
+/// The option carrying the note a workflow start records.
+pub const COMMENT_OPTION: &str = "--comment";
+
+/// The option carrying the metadata a workflow model reads.
+pub const METADATA_OPTION: &str = "--metadata";
+
+/// The option naming which states a listing reports.
+pub const STATES_OPTION: &str = "--states";
+
+/// The option naming the prefix a listing filters by.
+pub const PREFIX_OPTION: &str = "--prefix";
+
+/// The option naming which workflow instance a command acts on.
+pub const INSTANCE_OPTION: &str = "--instance";
+
+/// The option saying whether a workflow instance is held or released.
+pub const SUSPENSION_OPTION: &str = "--suspension";
+
+/// The option naming which Sling job a command acts on.
+pub const JOB_OPTION: &str = "--job";
+
+/// The option naming which Sling job topic a listing reports.
+pub const TOPIC_OPTION: &str = "--topic";
+
+/// The option naming which user or group a command acts on.
+pub const AUTHORIZABLE_OPTION: &str = "--authorizable";
+
+/// The option naming which authorizable a membership change moves.
+pub const MEMBER_OPTION: &str = "--member";
+
+/// The option naming which group a membership change or listing is about.
+pub const GROUP_OPTION: &str = "--group";
+
+/// The option saying which kind a removal means to remove.
+pub const EXPECTED_KIND_OPTION: &str = "--expected-kind";
+
+/// The option saying where under the authorizable root a creation goes.
+pub const INTERMEDIATE_PATH_OPTION: &str = "--intermediate-path";
+
+/// The option saying whether a user is disabled afterwards.
+pub const DISABLED_OPTION: &str = "--disabled";
+
+/// The option carrying why a user was disabled.
+pub const REASON_OPTION: &str = "--reason";
+
+/// The option saying that a membership listing reports indirect members too.
+pub const INCLUDE_INDIRECT_OPTION: &str = "--include-indirect";
+
+/// The option naming which replication agent a command acts on.
+pub const AGENT_OPTION: &str = "--agent";
+
+/// The option naming which replication queue entry a command acts on.
+pub const ENTRY_OPTION: &str = "--entry";
+
+/// The option stating how many entries a flush expects to find.
+pub const EXPECTED_ENTRY_COUNT_OPTION: &str = "--expected-entry-count";
+
+/// The option naming which bundle a command acts on.
+pub const SYMBOLIC_NAME_OPTION: &str = "--symbolic-name";
+
+/// The option saying what a bundle is asked to do.
+pub const TRANSITION_OPTION: &str = "--transition";
+
+/// The option carrying the values a configuration update assigns.
+pub const ASSIGNMENTS_OPTION: &str = "--assignments";
+
+/// The option naming the keys a configuration update removes.
+pub const REMOVED_KEYS_OPTION: &str = "--removed-keys";
+
+/// The option carrying the address a resolution asks about.
+pub const REQUEST_ADDRESS_OPTION: &str = "--request-address";
+
+/// The option naming the authority a mapping is relative to.
+pub const REQUEST_AUTHORITY_OPTION: &str = "--request-authority";
+
+/// The option saying that a resolution reports the entries that decided it.
+pub const INCLUDE_TRACE_OPTION: &str = "--include-trace";
+
 /// Every option this surface knows, in the order a reference lists them.
 pub const EVERY_OPTION: &[&str] = &[
     PROFILE_OPTION,
@@ -203,6 +317,44 @@ pub const EVERY_OPTION: &[&str] = &[
     RESOURCE_TYPE_OPTION,
     COMPONENT_PARENT_OPTION,
     PROPERTIES_OPTION,
+    DESTINATION_PATH_OPTION,
+    ADJUST_REFERENCES_OPTION,
+    REFERENCE_POLICY_OPTION,
+    REMOVED_PROPERTIES_OPTION,
+    PLACEMENT_OPTION,
+    SIBLING_OPTION,
+    MEDIA_TYPE_OPTION,
+    PAYLOAD_OPTION,
+    ELEMENTS_OPTION,
+    VARIATION_OPTION,
+    MODEL_OPTION,
+    PAYLOAD_PATH_OPTION,
+    COMMENT_OPTION,
+    METADATA_OPTION,
+    STATES_OPTION,
+    PREFIX_OPTION,
+    INSTANCE_OPTION,
+    SUSPENSION_OPTION,
+    JOB_OPTION,
+    TOPIC_OPTION,
+    AUTHORIZABLE_OPTION,
+    MEMBER_OPTION,
+    GROUP_OPTION,
+    EXPECTED_KIND_OPTION,
+    INTERMEDIATE_PATH_OPTION,
+    DISABLED_OPTION,
+    REASON_OPTION,
+    INCLUDE_INDIRECT_OPTION,
+    AGENT_OPTION,
+    ENTRY_OPTION,
+    EXPECTED_ENTRY_COUNT_OPTION,
+    SYMBOLIC_NAME_OPTION,
+    TRANSITION_OPTION,
+    ASSIGNMENTS_OPTION,
+    REMOVED_KEYS_OPTION,
+    REQUEST_ADDRESS_OPTION,
+    REQUEST_AUTHORITY_OPTION,
+    INCLUDE_TRACE_OPTION,
     OPERATION_IDENTIFIER_OPTION,
     ARTIFACT_OPTION,
     RUNTIME_ROOT_OPTION,
@@ -403,9 +555,11 @@ pub fn parse(arguments: &[String]) -> Result<Invocation, ParseRefusal> {
 
 /// Returns whether `option` is followed by a value.
 ///
-/// Four are not, and each of them is a decision rather than a value: how the
+/// Eight are not, and each of them is a decision rather than a value: how the
 /// outcome is written, whether a walk descends, whether every predicate must
-/// match, and whether the run returns without waiting.
+/// match, whether the run returns without waiting, whether a real author may be
+/// reached, whether references follow a move, whether a membership listing
+/// reaches through other groups, and whether a resolution reports its trace.
 #[must_use]
 pub fn takes_a_value(option: &str) -> bool {
     !matches!(
@@ -415,6 +569,9 @@ pub fn takes_a_value(option: &str) -> bool {
             | MATCH_ALL_OPTION
             | DETACH_OPTION
             | ENABLE_LIVE_AUTHOR_OPTION
+            | ADJUST_REFERENCES_OPTION
+            | INCLUDE_INDIRECT_OPTION
+            | INCLUDE_TRACE_OPTION
     )
 }
 
@@ -544,7 +701,45 @@ fn command_leaves_taking(option: &str) -> Vec<String> {
         | TITLE_OPTION
         | RESOURCE_TYPE_OPTION
         | COMPONENT_PARENT_OPTION
-        | PROPERTIES_OPTION => catalog_leaves(),
+        | PROPERTIES_OPTION
+        | DESTINATION_PATH_OPTION
+        | ADJUST_REFERENCES_OPTION
+        | REFERENCE_POLICY_OPTION
+        | REMOVED_PROPERTIES_OPTION
+        | PLACEMENT_OPTION
+        | SIBLING_OPTION
+        | MEDIA_TYPE_OPTION
+        | PAYLOAD_OPTION
+        | ELEMENTS_OPTION
+        | VARIATION_OPTION
+        | MODEL_OPTION
+        | PAYLOAD_PATH_OPTION
+        | COMMENT_OPTION
+        | METADATA_OPTION
+        | STATES_OPTION
+        | PREFIX_OPTION
+        | INSTANCE_OPTION
+        | SUSPENSION_OPTION
+        | JOB_OPTION
+        | TOPIC_OPTION
+        | AUTHORIZABLE_OPTION
+        | MEMBER_OPTION
+        | GROUP_OPTION
+        | EXPECTED_KIND_OPTION
+        | INTERMEDIATE_PATH_OPTION
+        | DISABLED_OPTION
+        | REASON_OPTION
+        | INCLUDE_INDIRECT_OPTION
+        | AGENT_OPTION
+        | ENTRY_OPTION
+        | EXPECTED_ENTRY_COUNT_OPTION
+        | SYMBOLIC_NAME_OPTION
+        | TRANSITION_OPTION
+        | ASSIGNMENTS_OPTION
+        | REMOVED_KEYS_OPTION
+        | REQUEST_ADDRESS_OPTION
+        | REQUEST_AUTHORITY_OPTION
+        | INCLUDE_TRACE_OPTION => catalog_leaves(),
         _ => every_leaf_that_reaches_somewhere(),
     }
 }

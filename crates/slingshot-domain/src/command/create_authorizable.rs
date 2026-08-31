@@ -146,3 +146,53 @@ impl CreateAuthorizableResult {
         }
     }
 }
+
+/// What creating a user produced.
+///
+/// A wrapper rather than the shared result itself, because the registry pairs
+/// exactly one result type with exactly one command: a single type shared by
+/// both creations could not say which of the two a result answers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct CreateUserResult {
+    /// The authorizable that was created.
+    pub created: CreateAuthorizableResult,
+}
+
+/// What creating a group produced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct CreateGroupResult {
+    /// The authorizable that was created.
+    pub created: CreateAuthorizableResult,
+}
+
+impl CreateUserResult {
+    /// Requires this result to answer `command`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MutationResultFailure::NotThisRequest`] when it names another
+    /// request's authorizable, or reports a group.
+    pub fn require_answers(
+        &self,
+        command: &CreateUserCommand,
+    ) -> Result<(), MutationResultFailure> {
+        self.created.require_answers(&command.authorizable_identifier, AuthorizableKind::User)
+    }
+}
+
+impl CreateGroupResult {
+    /// Requires this result to answer `command`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MutationResultFailure::NotThisRequest`] when it names another
+    /// request's authorizable, or reports a user.
+    pub fn require_answers(
+        &self,
+        command: &CreateGroupCommand,
+    ) -> Result<(), MutationResultFailure> {
+        self.created.require_answers(&command.authorizable_identifier, AuthorizableKind::Group)
+    }
+}

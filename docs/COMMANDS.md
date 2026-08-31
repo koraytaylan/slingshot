@@ -73,17 +73,69 @@ it did.
 | Command | What it does | Access | Operation key | Result bound |
 |---|---|---|---|---|
 | `add_component` | Add a component | Write | required | 16384 bytes |
+| `add_group_member` | Add a group member | Write | required | 16384 bytes |
+| `cancel_sling_job` | Cancel a Sling job | Write | required | 16384 bytes |
+| `create_asset` | Create an asset | Write | required | 16384 bytes |
+| `create_asset_folder` | Create an asset folder | Write | required | 16384 bytes |
+| `create_content_fragment` | Create a content fragment | Write | required | 16384 bytes |
+| `create_experience_fragment` | Create an experience fragment | Write | required | 16384 bytes |
+| `create_group` | Create a group | Write | required | 16384 bytes |
 | `create_page` | Create a page | Write | required | 16384 bytes |
+| `create_user` | Create a user | Write | required | 16384 bytes |
+| `delete_asset` | Delete an asset | Write | required | 16384 bytes |
+| `delete_authorizable` | Delete an authorizable | Write | required | 16384 bytes |
+| `delete_component` | Delete a component | Write | required | 16384 bytes |
+| `delete_content_fragment` | Delete a content fragment | Write | required | 16384 bytes |
+| `delete_experience_fragment` | Delete an experience fragment | Write | required | 16384 bytes |
+| `delete_open_service_gateway_initiative_configuration` | Delete a configuration | Write | required | 16384 bytes |
+| `delete_page` | Delete a page | Write | required | 16384 bytes |
 | `download_content_package` | Download a content package | Read | required | 1048576 bytes |
 | `find_assets_by_metadata` | Find assets by metadata | Read | refused | 1048576 bytes |
 | `find_assets_referenced_by_page` | Find assets referenced by a page | Read | refused | 1048576 bytes |
+| `find_open_service_gateway_initiative_configurations` | Find configurations | Read | refused | 1048576 bytes |
 | `find_pages_by_template` | Find pages by template | Read | refused | 1048576 bytes |
 | `find_pages_containing_phrase` | Find pages containing a phrase | Read | refused | 1048576 bytes |
 | `find_pages_using_components` | Find pages using components | Read | refused | 1048576 bytes |
+| `find_sling_jobs` | Find Sling jobs | Read | refused | 1048576 bytes |
+| `find_workflow_instances` | Find workflow instances | Read | refused | 1048576 bytes |
+| `flush_replication_queue` | Flush a replication queue | Write | required | 16384 bytes |
 | `inspect_open_service_gateway_initiative_configuration` | Inspect a configuration | Read | refused | 1048576 bytes |
+| `inspect_replication_agent` | Inspect a replication agent | Read | refused | 262144 bytes |
+| `inspect_replication_queue` | Inspect a replication queue | Read | refused | 1048576 bytes |
+| `inspect_sling_job` | Inspect a Sling job | Read | refused | 262144 bytes |
+| `inspect_workflow_instance` | Inspect a workflow instance | Read | refused | 262144 bytes |
+| `list_asset_renditions` | List asset renditions | Read | refused | 1048576 bytes |
+| `list_child_pages` | List child pages | Read | refused | 1048576 bytes |
+| `list_group_members` | List group members | Read | refused | 1048576 bytes |
+| `list_open_service_gateway_initiative_bundles` | List bundles | Read | refused | 1048576 bytes |
+| `list_open_service_gateway_initiative_components` | List components | Read | refused | 1048576 bytes |
+| `list_replication_agents` | List replication agents | Read | refused | 1048576 bytes |
+| `list_resource_mappings` | List resource mappings | Read | refused | 1048576 bytes |
+| `list_sling_job_queues` | List Sling job queues | Read | refused | 1048576 bytes |
+| `list_workflow_models` | List workflow models | Read | refused | 1048576 bytes |
 | `load_content_as_json` | Load content as JSON | Read | required | 1048576 bytes |
+| `map_resource_path` | Map a resource path | Read | refused | 262144 bytes |
+| `move_asset` | Move an asset | Write | required | 16384 bytes |
+| `move_page` | Move a page | Write | required | 16384 bytes |
 | `query_paths` | Query paths | Read | refused | 1048576 bytes |
+| `read_content_fragment` | Read a content fragment | Read | refused | 262144 bytes |
+| `remove_group_member` | Remove a group member | Write | required | 16384 bytes |
+| `reorder_component` | Reorder a component | Write | required | 16384 bytes |
 | `replicate_content` | Replicate content | Write | required | 16384 bytes |
+| `resolve_resource_path` | Resolve a resource path | Read | refused | 262144 bytes |
+| `retry_replication_queue_entry` | Retry a replication queue entry | Write | required | 16384 bytes |
+| `set_open_service_gateway_initiative_bundle_state` | Set a bundle state | Write | required | 16384 bytes |
+| `set_user_disabled` | Disable or enable a user | Write | required | 16384 bytes |
+| `set_workflow_instance_suspension` | Suspend or resume a workflow instance | Write | required | 16384 bytes |
+| `start_workflow` | Start a workflow | Write | required | 16384 bytes |
+| `terminate_workflow_instance` | Terminate a workflow instance | Write | required | 16384 bytes |
+| `update_asset_metadata` | Update asset metadata | Write | required | 16384 bytes |
+| `update_component` | Update a component | Write | required | 16384 bytes |
+| `update_content_fragment` | Update a content fragment | Write | required | 16384 bytes |
+| `update_experience_fragment` | Update an experience fragment | Write | required | 16384 bytes |
+| `update_open_service_gateway_initiative_configuration` | Update a configuration | Write | required | 16384 bytes |
+| `update_page` | Update a page | Write | required | 16384 bytes |
+| `update_user_profile` | Update a user profile | Write | required | 16384 bytes |
 
 <!-- end generated: registry-commands -->
 
@@ -127,17 +179,69 @@ behaviour.
 | Command | Failure categories it registers |
 |---|---|
 | `add_component` | `page_not_found`, `page_invalid`, `parent_not_found`, `parent_access_denied`, `parent_not_orderable`, `target_already_exists`, `property_rejected`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `add_group_member` | `group_not_found`, `member_not_found`, `authorizable_kind_mismatch`, `authorizable_access_denied`, `membership_cycle_refused`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `cancel_sling_job` | `job_not_found`, `job_not_cancellable`, `platform_control_rejected`, `platform_control_outcome_unknown` |
+| `create_asset` | `parent_not_found`, `parent_access_denied`, `target_already_exists`, `payload_rejected`, `payload_too_large`, `media_type_unsupported`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `create_asset_folder` | `parent_not_found`, `parent_access_denied`, `target_already_exists`, `property_rejected`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `create_content_fragment` | `parent_not_found`, `parent_access_denied`, `target_already_exists`, `model_not_found`, `model_invalid`, `element_unknown`, `element_value_rejected`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `create_experience_fragment` | `parent_not_found`, `parent_access_denied`, `target_already_exists`, `template_not_found`, `template_invalid`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `create_group` | `authorizable_already_exists`, `identifier_rejected`, `intermediate_path_rejected`, `property_rejected`, `authorizable_access_denied`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `create_page` | `target_already_exists`, `parent_not_found`, `parent_access_denied`, `template_not_found`, `template_invalid`, `property_rejected`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `create_user` | `authorizable_already_exists`, `identifier_rejected`, `intermediate_path_rejected`, `property_rejected`, `authorizable_access_denied`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `delete_asset` | `asset_not_found`, `asset_access_denied`, `asset_invalid`, `asset_is_referenced`, `deletion_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `delete_authorizable` | `authorizable_not_found`, `authorizable_kind_mismatch`, `authorizable_access_denied`, `group_has_members`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `delete_component` | `component_not_found`, `component_access_denied`, `component_invalid`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `delete_content_fragment` | `fragment_not_found`, `fragment_access_denied`, `fragment_invalid`, `fragment_is_referenced`, `deletion_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `delete_experience_fragment` | `fragment_not_found`, `fragment_access_denied`, `fragment_invalid`, `fragment_is_referenced`, `deletion_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `delete_open_service_gateway_initiative_configuration` | `configuration_lookup_failed`, `configuration_lookup_mismatch`, `configuration_lookup_ambiguous`, `platform_control_rejected`, `platform_control_outcome_unknown` |
+| `delete_page` | `target_not_found`, `target_access_denied`, `target_not_a_page`, `target_is_referenced`, `deletion_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `download_content_package` | `pattern_rejected`, `filevault_profile_unsupported`, `filevault_filter_unrepresentable`, `root_not_found`, `root_access_denied`, `repository_read_failed`, `filevault_package_failed`, `staging_cleanup_failed`, `artifact_publication_failed`, `artifact_publication_outcome_unknown`, `evaluation_budget_exceeded` |
 | `find_assets_by_metadata` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
 | `find_assets_referenced_by_page` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `page_not_found`, `page_access_denied`, `page_invalid` |
+| `find_open_service_gateway_initiative_configurations` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `configuration_lookup_failed`, `configuration_lookup_budget_exceeded` |
 | `find_pages_by_template` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
 | `find_pages_containing_phrase` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
 | `find_pages_using_components` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
+| `find_sling_jobs` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `job_inventory_failed` |
+| `find_workflow_instances` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `workflow_inventory_failed` |
+| `flush_replication_queue` | `agent_not_found`, `agent_access_denied`, `queue_expectation_mismatch`, `platform_control_rejected`, `platform_control_outcome_unknown` |
 | `inspect_open_service_gateway_initiative_configuration` | `configuration_lookup_failed`, `configuration_lookup_mismatch`, `configuration_lookup_ambiguous`, `configuration_lookup_budget_exceeded`, `configuration_value_unsupported`, `configuration_value_malformed`, `configuration_value_budget_exceeded`, `configuration_result_budget_exceeded` |
+| `inspect_replication_agent` | `agent_not_found`, `agent_access_denied`, `agent_inventory_failed` |
+| `inspect_replication_queue` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `agent_not_found`, `agent_access_denied`, `queue_inventory_failed` |
+| `inspect_sling_job` | `job_not_found`, `job_inventory_failed`, `result_budget_exceeded` |
+| `inspect_workflow_instance` | `instance_not_found`, `instance_access_denied`, `workflow_inventory_failed`, `result_budget_exceeded` |
+| `list_asset_renditions` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `asset_not_found`, `asset_access_denied`, `asset_invalid` |
+| `list_child_pages` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
+| `list_group_members` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `group_not_found`, `authorizable_kind_mismatch`, `authorizable_access_denied` |
+| `list_open_service_gateway_initiative_bundles` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `bundle_inventory_failed` |
+| `list_open_service_gateway_initiative_components` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `component_inventory_failed` |
+| `list_replication_agents` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `agent_inventory_failed` |
+| `list_resource_mappings` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `mapping_inventory_failed` |
+| `list_sling_job_queues` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `job_inventory_failed` |
+| `list_workflow_models` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `workflow_inventory_failed` |
 | `load_content_as_json` | `not_found`, `access_denied`, `unsupported_repository_value`, `load_budget_exceeded` |
+| `map_resource_path` | `resolution_failed`, `resolution_budget_exceeded` |
+| `move_asset` | `source_not_found`, `source_access_denied`, `destination_parent_not_found`, `destination_already_exists`, `destination_inside_source`, `reference_adjustment_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `move_page` | `source_not_found`, `source_access_denied`, `destination_parent_not_found`, `destination_already_exists`, `destination_inside_source`, `reference_adjustment_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `query_paths` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
+| `read_content_fragment` | `fragment_not_found`, `fragment_access_denied`, `fragment_invalid`, `variation_not_found`, `result_budget_exceeded` |
+| `remove_group_member` | `group_not_found`, `member_not_found`, `authorizable_kind_mismatch`, `authorizable_access_denied`, `membership_cycle_refused`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `reorder_component` | `component_not_found`, `component_access_denied`, `parent_not_orderable`, `sibling_not_found`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `replicate_content` | `source_not_found`, `source_access_denied`, `candidate_limit_exceeded`, `traversal_budget_exceeded`, `admission_rejected`, `admission_budget_exceeded`, `admission_outcome_unknown` |
+| `resolve_resource_path` | `resolution_failed`, `resolution_budget_exceeded`, `request_address_rejected` |
+| `retry_replication_queue_entry` | `agent_not_found`, `agent_access_denied`, `entry_not_found`, `platform_control_rejected`, `platform_control_outcome_unknown` |
+| `set_open_service_gateway_initiative_bundle_state` | `bundle_not_found`, `bundle_transition_refused`, `platform_control_rejected`, `platform_control_outcome_unknown` |
+| `set_user_disabled` | `authorizable_not_found`, `authorizable_kind_mismatch`, `authorizable_access_denied`, `platform_control_rejected`, `platform_control_outcome_unknown` |
+| `set_workflow_instance_suspension` | `instance_not_found`, `instance_access_denied`, `instance_not_suspendable`, `platform_control_rejected`, `platform_control_outcome_unknown` |
+| `start_workflow` | `model_not_found`, `model_invalid`, `payload_not_found`, `payload_access_denied`, `metadata_rejected`, `platform_control_rejected`, `platform_control_outcome_unknown` |
+| `terminate_workflow_instance` | `instance_not_found`, `instance_access_denied`, `instance_not_terminable`, `platform_control_rejected`, `platform_control_outcome_unknown` |
+| `update_asset_metadata` | `asset_not_found`, `asset_access_denied`, `asset_invalid`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `update_component` | `component_not_found`, `component_access_denied`, `component_invalid`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `update_content_fragment` | `fragment_not_found`, `fragment_access_denied`, `fragment_invalid`, `variation_not_found`, `element_unknown`, `element_value_rejected`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `update_experience_fragment` | `variation_not_found`, `variation_access_denied`, `variation_invalid`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `update_open_service_gateway_initiative_configuration` | `configuration_lookup_failed`, `configuration_lookup_mismatch`, `configuration_lookup_ambiguous`, `configuration_value_unsupported`, `configuration_value_malformed`, `platform_control_rejected`, `platform_control_outcome_unknown` |
+| `update_page` | `page_not_found`, `page_access_denied`, `page_invalid`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, `mutation_outcome_unknown` |
+| `update_user_profile` | `authorizable_not_found`, `authorizable_kind_mismatch`, `authorizable_access_denied`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, `mutation_outcome_unknown` |
 
 <!-- end generated: failure-categories -->
 

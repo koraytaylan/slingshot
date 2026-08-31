@@ -20,8 +20,9 @@ use slingshot_local_protocol::message::OperationRequest;
 use crate::application::RunRefusal;
 use crate::commands::content::RequestRefusal;
 use crate::commands::{
-    asset_query, configuration, content, package, page_mutation, page_query, path_query,
-    replication,
+    asset_lifecycle, asset_query, authorizable, configuration, content, content_fragment,
+    experience_fragment, package, page_lifecycle, page_mutation, page_query, path_query,
+    platform_configuration, replication, replication_queue, resource_mapping, sling_job, workflow,
 };
 use crate::invocation::{
     ARTIFACT_OPTION, CONTINUATION_TOKEN_OPTION, EXPECTED_CATEGORY_OPTION, EXPECTED_DIGEST_OPTION,
@@ -56,14 +57,24 @@ type CommandBuilder = fn(&Invocation) -> Result<Command, RequestRefusal>;
 
 /// Every family that turns an invocation into a typed command.
 const EVERY_COMMAND_BUILDER: &[CommandBuilder] = &[
+    asset_lifecycle::build,
     asset_query::build,
+    authorizable::build,
     configuration::build,
     content::build,
+    content_fragment::build,
+    experience_fragment::build,
     package::build,
+    page_lifecycle::build,
     page_mutation::build,
     page_query::build,
     path_query::build,
+    platform_configuration::build,
     replication::build,
+    replication_queue::build,
+    resource_mapping::build,
+    sling_job::build,
+    workflow::build,
 ];
 
 /// Returns the value of one option a leaf cannot act without.

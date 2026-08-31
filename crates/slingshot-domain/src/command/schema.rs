@@ -22,6 +22,7 @@ use serde_json::{Value, json};
 
 use crate::command::canonical_json::{canonical_digest, write_canonical};
 use crate::command::command_identity::{CommandContract, INITIAL_COMMAND_VERSION};
+use crate::command::inspect_open_service_gateway_initiative_configuration::DECLARED_SCALAR_TYPES;
 
 /// Dialect every schema declares.
 pub const SCHEMA_DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
@@ -41,17 +42,69 @@ pub const SCHEMA_IDENTIFIER_PREFIX: &str = "urn:slingshot:command";
 /// Every command wire name, in the order the catalog returns them.
 pub const COMMAND_WIRE_NAMES: &[&str] = &[
     "add_component",
+    "add_group_member",
+    "cancel_sling_job",
+    "create_asset",
+    "create_asset_folder",
+    "create_content_fragment",
+    "create_experience_fragment",
+    "create_group",
     "create_page",
+    "create_user",
+    "delete_asset",
+    "delete_authorizable",
+    "delete_component",
+    "delete_content_fragment",
+    "delete_experience_fragment",
+    "delete_open_service_gateway_initiative_configuration",
+    "delete_page",
     "download_content_package",
     "find_assets_by_metadata",
     "find_assets_referenced_by_page",
+    "find_open_service_gateway_initiative_configurations",
     "find_pages_by_template",
     "find_pages_containing_phrase",
     "find_pages_using_components",
+    "find_sling_jobs",
+    "find_workflow_instances",
+    "flush_replication_queue",
     "inspect_open_service_gateway_initiative_configuration",
+    "inspect_replication_agent",
+    "inspect_replication_queue",
+    "inspect_sling_job",
+    "inspect_workflow_instance",
+    "list_asset_renditions",
+    "list_child_pages",
+    "list_group_members",
+    "list_open_service_gateway_initiative_bundles",
+    "list_open_service_gateway_initiative_components",
+    "list_replication_agents",
+    "list_resource_mappings",
+    "list_sling_job_queues",
+    "list_workflow_models",
     "load_content_as_json",
+    "map_resource_path",
+    "move_asset",
+    "move_page",
     "query_paths",
+    "read_content_fragment",
+    "remove_group_member",
+    "reorder_component",
     "replicate_content",
+    "resolve_resource_path",
+    "retry_replication_queue_entry",
+    "set_open_service_gateway_initiative_bundle_state",
+    "set_user_disabled",
+    "set_workflow_instance_suspension",
+    "start_workflow",
+    "terminate_workflow_instance",
+    "update_asset_metadata",
+    "update_component",
+    "update_content_fragment",
+    "update_experience_fragment",
+    "update_open_service_gateway_initiative_configuration",
+    "update_page",
+    "update_user_profile",
 ];
 
 /// Which side of one command a schema describes.
@@ -96,12 +149,12 @@ pub fn schema_file_name(wire_name: &str, role: SchemaRole) -> String {
 }
 
 /// Returns a bounded string schema.
-fn bounded_string(maximum: u64) -> Value {
+pub(crate) fn bounded_string(maximum: u64) -> Value {
     json!({"type": "string", "maxLength": maximum})
 }
 
 /// Returns a nonempty bounded string schema.
-fn nonempty_string(maximum: u64) -> Value {
+pub(crate) fn nonempty_string(maximum: u64) -> Value {
     json!({"type": "string", "minLength": 1, "maxLength": maximum})
 }
 
@@ -111,7 +164,7 @@ fn nonempty_string(maximum: u64) -> Value {
 /// refused punctuation, the sibling index, the normalization form - is not
 /// schema-expressible without a pattern nobody could read, so the typed
 /// constructor owns it and the schema says so by saying less.
-fn repository_path(limits: &CommandContract) -> Value {
+pub(crate) fn repository_path(limits: &CommandContract) -> Value {
     json!({
         "type": "string",
         "pattern": "^/",
@@ -134,7 +187,7 @@ fn relative_path(limits: &CommandContract) -> Value {
 ///
 /// Two closed alternatives with a literal discriminator, which is exactly the
 /// kind of thing a standard validator does well.
-fn result_window(limits: &CommandContract) -> Value {
+pub(crate) fn result_window(limits: &CommandContract) -> Value {
     json!({
         "oneOf": [
             {
@@ -192,7 +245,7 @@ fn property_scalar(limits: &CommandContract) -> Value {
 }
 
 /// Returns the schema one property value satisfies.
-fn property_value(limits: &CommandContract) -> Value {
+pub(crate) fn property_value(limits: &CommandContract) -> Value {
     json!({
         "oneOf": [
             {
@@ -273,7 +326,7 @@ fn artifact_descriptor(limits: &CommandContract) -> Value {
 }
 
 /// Returns the schema one page of discovery matches satisfies.
-fn discovery_page(limits: &CommandContract, match_schema: Value) -> Value {
+pub(crate) fn discovery_page(limits: &CommandContract, match_schema: Value) -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
@@ -291,7 +344,7 @@ fn discovery_page(limits: &CommandContract, match_schema: Value) -> Value {
 }
 
 /// Returns the schema one page match satisfies.
-fn page_match(limits: &CommandContract) -> Value {
+pub(crate) fn page_match(limits: &CommandContract) -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
@@ -322,6 +375,174 @@ fn discovery_arguments(limits: &CommandContract, extra: Value, required: Value) 
     })
 }
 
+/// Returns one bounded nonnegative count.
+pub(crate) fn count() -> Value {
+    json!({"type": "integer", "minimum": 0})
+}
+
+/// Returns the schema one closed spelling set satisfies.
+pub(crate) fn closed(spellings: &[&str]) -> Value {
+    json!({"enum": spellings})
+}
+
+/// Returns the schema one page of text-keyed rows satisfies.
+///
+/// The listing counterpart of `discovery_page`: same window, same token, rows
+/// keyed by something other than a repository path.
+pub(crate) fn listing_page(limits: &CommandContract, row: Value) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["matches"],
+        "properties": {
+            "matches": {
+                "type": "array",
+                "maxItems": limits.limit("maximum_result_limit"),
+                "items": row,
+            },
+            "next_continuation_token":
+                nonempty_string(limits.limit("maximum_continuation_token_bytes")),
+        },
+    })
+}
+
+/// Returns the schema a removal list satisfies.
+pub(crate) fn removed_property_names(limits: &CommandContract) -> Value {
+    json!({
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "maxItems": limits.limit("maximum_removed_property_names"),
+        "items": nonempty_string(limits.limit("maximum_property_name_bytes")),
+    })
+}
+
+/// Returns the schema the shared mutation result satisfies.
+pub(crate) fn mutation_result(limits: &CommandContract) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repository_path"],
+        "properties": {"repository_path": repository_path(limits)},
+    })
+}
+
+/// Returns the schema the shared deletion result satisfies.
+pub(crate) fn deleted_result(limits: &CommandContract) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["removed_node_count", "repository_path"],
+        "properties": {
+            "removed_node_count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": limits.limit("maximum_deleted_nodes"),
+            },
+            "repository_path": repository_path(limits),
+        },
+    })
+}
+
+/// Returns the schema the shared move result satisfies.
+pub(crate) fn moved_result(limits: &CommandContract) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["adjusted_reference_count", "destination_path", "source_path"],
+        "properties": {
+            "adjusted_reference_count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": limits.limit("maximum_adjusted_references"),
+            },
+            "destination_path": repository_path(limits),
+            "source_path": repository_path(limits),
+        },
+    })
+}
+
+/// Returns the schema one inline binary payload satisfies.
+pub(crate) fn inline_binary_payload(limits: &CommandContract) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["encoded_content", "media_type"],
+        "properties": {
+            "encoded_content": {
+                "type": "string",
+                "maxLength": limits.limit("maximum_inline_binary_encoded_bytes"),
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+            },
+            "media_type": nonempty_string(limits.limit("maximum_inline_binary_media_type_bytes")),
+        },
+    })
+}
+
+/// Returns the schema one configuration value satisfies.
+///
+/// The class and the carrier are both stated, because writing a value back needs
+/// to know whether the framework wants a primitive array, a wrapper array, or a
+/// collection - three different things to construct from the same items.
+pub(crate) fn configuration_value(limits: &CommandContract) -> Value {
+    let item = {
+        let text = bounded_string(limits.limit("maximum_configuration_scalar_string_bytes"));
+        json!({"anyOf": [text, {"type": "boolean"}]})
+    };
+    json!({
+        "oneOf": [
+            {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["cardinality", "type", "value"],
+                "properties": {
+                    "cardinality": {"const": "scalar"},
+                    "type": {"enum": DECLARED_SCALAR_TYPES},
+                    "value": item,
+                },
+            },
+            {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["cardinality", "type", "values"],
+                "properties": {
+                    "cardinality":
+                        {"enum": ["primitive_array", "scalar_array", "collection"]},
+                    "type": {"enum": DECLARED_SCALAR_TYPES},
+                    "values": {
+                        "type": "array",
+                        "maxItems": limits.limit("maximum_configuration_sequence_items"),
+                        "items": item,
+                    },
+                },
+            },
+        ],
+    })
+}
+
+/// Returns the schema one content fragment element document satisfies.
+///
+/// Each element holds either one bounded text value or a bounded ordered list of
+/// them, and neither form is a rewriting of the other.
+pub(crate) fn content_fragment_elements(limits: &CommandContract) -> Value {
+    let value = bounded_string(limits.limit("maximum_property_string_bytes"));
+    json!({
+        "type": "object",
+        "maxProperties": limits.limit("maximum_content_fragment_elements"),
+        "additionalProperties": {
+            "oneOf": [
+                value,
+                {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": limits.limit("maximum_content_fragment_element_values"),
+                    "items": bounded_string(limits.limit("maximum_property_string_bytes")),
+                },
+            ],
+        },
+    })
+}
+
 /// Returns both role schemas for one command.
 ///
 /// # Panics
@@ -335,7 +556,11 @@ pub fn command_schema(wire_name: &str, role: SchemaRole) -> Value {
         .or_else(|| asset_search_body(wire_name, role, limits))
         .or_else(|| inspection_body(wire_name, role, limits))
         .or_else(|| action_body(wire_name, role, limits))
-        .unwrap_or_else(|| panic!("this plan declares no command named {wire_name}"));
+        .or_else(|| crate::command::schema_authoring::body(wire_name, role, limits))
+        .or_else(|| crate::command::schema_platform::body(wire_name, role, limits))
+        .or_else(|| crate::command::schema_process::body(wire_name, role, limits))
+        .or_else(|| crate::command::schema_administration::body(wire_name, role, limits))
+        .unwrap_or_else(|| panic!("this registry declares no command named {wire_name}"));
     root(wire_name, role, body)
 }
 
@@ -588,7 +813,7 @@ fn action_body(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> O
 }
 
 /// Returns the schema one mutation property map satisfies.
-fn mutation_properties(limits: &CommandContract) -> Value {
+pub(crate) fn mutation_properties(limits: &CommandContract) -> Value {
     json!({
         "type": "object",
         "maxProperties": limits.limit("maximum_mutation_properties"),

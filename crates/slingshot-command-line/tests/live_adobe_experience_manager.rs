@@ -9,7 +9,7 @@
 //! list kept here, and that the column deciding retries is never read as the
 //! column deciding access.
 //!
-//! The twelve rows are restated in a fixture written independently of the
+//! Every row is restated in a fixture written independently of the
 //! registry. That is the point: two descriptions that were produced from one
 //! source would agree no matter what either said.
 
@@ -53,13 +53,13 @@ const ENVIRONMENT: &str = "author";
 const ROOT: &str = "/content/site/en";
 
 /// How many commands the registry holds.
-const REGISTRY_ROWS: usize = 12;
+const REGISTRY_ROWS: usize = 64;
 
 /// How many of them a verification may run.
-const ADMISSIBLE_ROWS: usize = 9;
+const ADMISSIBLE_ROWS: usize = 28;
 
 /// How many of them it refuses.
-const REFUSED_ROWS: usize = 3;
+const REFUSED_ROWS: usize = 36;
 
 /// How many claims a conformance trace makes.
 const CONFORMANCE_CLAIMS: usize = 9;
@@ -240,10 +240,10 @@ fn a_root_outside_the_content_tree_is_refused_however_ordinary_it_looks() {
 // ------------------------------------------------------- read-only by the row
 
 #[test]
-fn the_twelve_rows_are_exactly_what_an_independent_reading_of_them_says() {
+fn every_row_is_exactly_what_an_independent_reading_of_it_says() {
     let catalog = CommandCatalog::published();
     let declared = fixture_rows("registry-rows.jsonl");
-    assert_eq!(declared.len(), REGISTRY_ROWS, "the registry holds twelve rows");
+    assert_eq!(declared.len(), REGISTRY_ROWS, "the registry holds sixty-four rows");
     assert_eq!(catalog.descriptors().len(), REGISTRY_ROWS);
     for row in declared {
         let wire_name = row["wire_name"].as_str().expect("a name");
@@ -273,7 +273,7 @@ fn the_twelve_rows_are_exactly_what_an_independent_reading_of_them_says() {
 }
 
 #[test]
-fn nine_rows_are_admissible_and_the_three_writes_are_refused_before_any_dispatch() {
+fn every_read_is_admissible_and_every_write_is_refused_before_any_dispatch() {
     let catalog = CommandCatalog::published();
     assert_eq!(admissible(&catalog).len(), ADMISSIBLE_ROWS);
     let refused_rows = refused(&catalog);
@@ -578,7 +578,7 @@ fn facts(deployment: AdobeExperienceManagerDeployment) -> ResolvedFacts {
 }
 
 #[test]
-fn a_report_says_the_nine_things_it_is_for_and_nothing_else() {
+fn a_report_says_the_things_it_is_for_and_nothing_else() {
     let held = live_report(
         "query_paths",
         KEY,

@@ -43,7 +43,7 @@ fn every_command_appears_once_in_ascending_order() {
     let catalog = CommandCatalog::published();
     let names: Vec<&str> =
         catalog.descriptors().iter().map(|descriptor| descriptor.wire_name.as_str()).collect();
-    assert_eq!(names.len(), 12, "twelve commands, and no thirteenth");
+    assert_eq!(names.len(), 64, "sixty-four commands, and no sixty-fifth");
     let mut sorted = names.clone();
     sorted.sort_unstable();
     sorted.dedup();
@@ -70,11 +70,53 @@ fn every_enum_variant_maps_to_exactly_one_descriptor_and_back() {
 }
 
 #[test]
-fn the_twelve_classification_rows_are_exactly_what_the_architecture_says() {
+fn every_classification_row_is_exactly_what_the_architecture_says() {
     let catalog = CommandCatalog::published();
     let expected: &[(&str, AccessClassification, DestructiveClassification, bool)] = &[
         (
             "add_component",
+            AccessClassification::Write,
+            DestructiveClassification::NonDestructive,
+            false,
+        ),
+        (
+            "add_group_member",
+            AccessClassification::Write,
+            DestructiveClassification::NonDestructive,
+            false,
+        ),
+        (
+            "cancel_sling_job",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "create_asset",
+            AccessClassification::Write,
+            DestructiveClassification::NonDestructive,
+            false,
+        ),
+        (
+            "create_asset_folder",
+            AccessClassification::Write,
+            DestructiveClassification::NonDestructive,
+            false,
+        ),
+        (
+            "create_content_fragment",
+            AccessClassification::Write,
+            DestructiveClassification::NonDestructive,
+            false,
+        ),
+        (
+            "create_experience_fragment",
+            AccessClassification::Write,
+            DestructiveClassification::NonDestructive,
+            false,
+        ),
+        (
+            "create_group",
             AccessClassification::Write,
             DestructiveClassification::NonDestructive,
             false,
@@ -85,6 +127,49 @@ fn the_twelve_classification_rows_are_exactly_what_the_architecture_says() {
             DestructiveClassification::NonDestructive,
             false,
         ),
+        (
+            "create_user",
+            AccessClassification::Write,
+            DestructiveClassification::NonDestructive,
+            false,
+        ),
+        (
+            "delete_asset",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "delete_authorizable",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "delete_component",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "delete_content_fragment",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "delete_experience_fragment",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "delete_open_service_gateway_initiative_configuration",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        ("delete_page", AccessClassification::Write, DestructiveClassification::Destructive, false),
         (
             "download_content_package",
             AccessClassification::Read,
@@ -99,6 +184,12 @@ fn the_twelve_classification_rows_are_exactly_what_the_architecture_says() {
         ),
         (
             "find_assets_referenced_by_page",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "find_open_service_gateway_initiative_configurations",
             AccessClassification::Read,
             DestructiveClassification::NonDestructive,
             true,
@@ -122,7 +213,103 @@ fn the_twelve_classification_rows_are_exactly_what_the_architecture_says() {
             true,
         ),
         (
+            "find_sling_jobs",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "find_workflow_instances",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "flush_replication_queue",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
             "inspect_open_service_gateway_initiative_configuration",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "inspect_replication_agent",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "inspect_replication_queue",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "inspect_sling_job",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "inspect_workflow_instance",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_asset_renditions",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_child_pages",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_group_members",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_open_service_gateway_initiative_bundles",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_open_service_gateway_initiative_components",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_replication_agents",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_resource_mappings",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_sling_job_queues",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_workflow_models",
             AccessClassification::Read,
             DestructiveClassification::NonDestructive,
             true,
@@ -134,13 +321,118 @@ fn the_twelve_classification_rows_are_exactly_what_the_architecture_says() {
             false,
         ),
         (
+            "map_resource_path",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        ("move_asset", AccessClassification::Write, DestructiveClassification::Destructive, false),
+        ("move_page", AccessClassification::Write, DestructiveClassification::Destructive, false),
+        (
             "query_paths",
             AccessClassification::Read,
             DestructiveClassification::NonDestructive,
             true,
         ),
         (
+            "read_content_fragment",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "remove_group_member",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "reorder_component",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
             "replicate_content",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "resolve_resource_path",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "retry_replication_queue_entry",
+            AccessClassification::Write,
+            DestructiveClassification::NonDestructive,
+            false,
+        ),
+        (
+            "set_open_service_gateway_initiative_bundle_state",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "set_user_disabled",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "set_workflow_instance_suspension",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "start_workflow",
+            AccessClassification::Write,
+            DestructiveClassification::NonDestructive,
+            false,
+        ),
+        (
+            "terminate_workflow_instance",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "update_asset_metadata",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "update_component",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "update_content_fragment",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "update_experience_fragment",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        (
+            "update_open_service_gateway_initiative_configuration",
+            AccessClassification::Write,
+            DestructiveClassification::Destructive,
+            false,
+        ),
+        ("update_page", AccessClassification::Write, DestructiveClassification::Destructive, false),
+        (
+            "update_user_profile",
             AccessClassification::Write,
             DestructiveClassification::Destructive,
             false,
@@ -158,7 +450,10 @@ fn the_twelve_classification_rows_are_exactly_what_the_architecture_says() {
         .iter()
         .filter(|descriptor| descriptor.destructive == DestructiveClassification::Destructive)
         .count();
-    assert_eq!(destructive, 1, "replication is the only row that can replace visible content");
+    assert_eq!(
+        destructive, 25,
+        "every row that can replace or end something already in effect, and no other"
+    );
 }
 
 #[test]
@@ -169,8 +464,12 @@ fn every_hint_derives_from_its_own_column_and_no_other() {
         .iter()
         .filter(|descriptor| descriptor.intrinsic_idempotency.idempotent_hint())
         .count();
-    assert_eq!(idempotent, 7, "seven idempotent commands");
-    assert_eq!(catalog.descriptors().len() - idempotent, 5, "and five that are not");
+    assert_eq!(idempotent, 26, "every read is idempotent except the two that publish an artifact");
+    assert_eq!(
+        catalog.descriptors().len() - idempotent,
+        38,
+        "and every write carries an operation key, with those two beside them"
+    );
     for descriptor in catalog.descriptors() {
         assert_eq!(
             descriptor.access.read_only_hint(),
@@ -203,7 +502,7 @@ fn every_hint_derives_from_its_own_column_and_no_other() {
 }
 
 #[test]
-fn two_commands_declare_a_slot_and_the_other_ten_forbid_one() {
+fn two_commands_declare_a_slot_and_every_other_one_forbids_one() {
     let catalog = CommandCatalog::published();
     let declaring: Vec<&str> = catalog
         .descriptors()
@@ -437,7 +736,7 @@ fn a_substitution_with_no_distinguishing_fact_is_deferred_rather_than_claimed() 
 fn the_committed_catalog_names_every_command_and_no_other() {
     let catalog: Value = serde_json::from_str(COMMITTED).expect("the fixture is one value");
     let rows = catalog.as_array().expect("a list of descriptors");
-    assert_eq!(rows.len(), 12);
+    assert_eq!(rows.len(), 64);
     let names: Vec<&str> = rows.iter().map(|row| text(row, "wire_name")).collect();
     assert_eq!(names, COMMAND_WIRE_NAMES);
 }

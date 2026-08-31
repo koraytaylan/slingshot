@@ -1,4 +1,4 @@
-# The twelve rows, written here independently of the registry that produces them.
+# The sixty-four rows, written here independently of the registry that produces them.
 #
 # Access and destructiveness decide whether a verification may run a command.
 # Idempotency is stated too, and stated only so the suite can prove it is never
@@ -16,3 +16,55 @@
 {"wire_name": "load_content_as_json", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": true}
 {"wire_name": "query_paths", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
 {"wire_name": "replicate_content", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "add_group_member", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "cancel_sling_job", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "create_asset", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "create_asset_folder", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "create_content_fragment", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "create_experience_fragment", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "create_group", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "create_user", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "delete_asset", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "delete_authorizable", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "delete_component", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "delete_content_fragment", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "delete_experience_fragment", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "delete_open_service_gateway_initiative_configuration", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "delete_page", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "find_open_service_gateway_initiative_configurations", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "find_sling_jobs", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "find_workflow_instances", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "flush_replication_queue", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "inspect_replication_agent", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "inspect_replication_queue", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "inspect_sling_job", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "inspect_workflow_instance", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "list_asset_renditions", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "list_child_pages", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "list_group_members", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "list_open_service_gateway_initiative_bundles", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "list_open_service_gateway_initiative_components", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "list_replication_agents", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "list_resource_mappings", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "list_sling_job_queues", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "list_workflow_models", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "map_resource_path", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "move_asset", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "move_page", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "read_content_fragment", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "remove_group_member", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "reorder_component", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "resolve_resource_path", "access": "read", "destructive": "non_destructive", "intrinsically_idempotent": true, "admissible": true}
+{"wire_name": "retry_replication_queue_entry", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "set_open_service_gateway_initiative_bundle_state", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "set_user_disabled", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "set_workflow_instance_suspension", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "start_workflow", "access": "write", "destructive": "non_destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "terminate_workflow_instance", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "update_asset_metadata", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "update_component", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "update_content_fragment", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "update_experience_fragment", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "update_open_service_gateway_initiative_configuration", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "update_page", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}
+{"wire_name": "update_user_profile", "access": "write", "destructive": "destructive", "intrinsically_idempotent": false, "admissible": false}

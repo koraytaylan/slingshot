@@ -19,7 +19,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/command_catalog.rs
   - crates/slingshot-domain/tests/fixtures/commands/catalog.json
-status: planned
+status: done
 merged_as: ""
 ---
 # Command Registry Rows

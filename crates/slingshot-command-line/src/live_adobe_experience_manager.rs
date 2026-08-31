@@ -13,9 +13,9 @@
 //! Which commands a verification may run is not a list somebody maintains here.
 //! It is the registry's own access and destructive columns, read row by row: a
 //! command is admissible when the registry calls it a read that replaces
-//! nothing, and refused otherwise. Nine of the twelve rows qualify and three do
-//! not, and if a thirteenth row appears the answer follows from the row rather
-//! than from anybody remembering to come back here.
+//! nothing, and refused otherwise. Twenty-eight of the sixty-four rows qualify
+//! and thirty-six do not, and when a sixty-fifth row appears the answer follows
+//! from the row rather than from anybody remembering to come back here.
 //!
 //! Idempotency is never consulted. It is the column that decides whether a
 //! retry is safe, not whether a run may happen at all, and reading it as an
@@ -78,11 +78,10 @@ pub const OPTIONAL_EXERCISES: &[&str] = &["verified_artifact", "configuration_in
 
 /// The commands a verification submits, in order.
 ///
-/// Three of the nine admissible commands, chosen because between them they
-/// cover a load, a rooted path query, and one page query - which is every shape
-/// of read the transport has. Submitting all nine would prove the same three
-/// things about the transport nine times and take nine times as long against
-/// somebody's real author.
+/// Three of the admissible commands, chosen because between them they cover a
+/// load, a rooted path query, and one page query - which is every shape of read
+/// the transport has. Submitting every admissible row would prove those same
+/// three things twenty-eight times over, against somebody's real author.
 pub const SUBMITTED_COMMANDS: &[&str] =
     &["load_content_as_json", "query_paths", "find_pages_containing_phrase"];
 

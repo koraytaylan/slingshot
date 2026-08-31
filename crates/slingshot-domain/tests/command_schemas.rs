@@ -41,7 +41,7 @@ fn committed(name: &str) -> String {
 
 #[test]
 fn every_command_has_one_committed_schema_in_each_role() {
-    assert_eq!(COMMAND_WIRE_NAMES.len(), 12, "twelve commands, and no thirteenth");
+    assert_eq!(COMMAND_WIRE_NAMES.len(), 64, "sixty-four commands, and no sixty-fifth");
     let mut seen = std::collections::BTreeSet::new();
     for wire_name in COMMAND_WIRE_NAMES {
         assert!(seen.insert(*wire_name), "{wire_name} is named twice");
