@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"include_trace\":false,\"repository_path\":\"/content/example/en/report\"}","note":"mapping a resource"}
+{"accepted":true,"document":"{\"include_trace\":true,\"repository_path\":\"/content/example/en/report\",\"request_authority\":\"example.test\"}","note":"mapping a resource for one authority, with a trace"}
+{"accepted":false,"document":"{\"repository_path\":\"/content/example/en/report\"}","note":"no trace decision, which has no default"}
+{"accepted":false,"document":"{\"include_trace\":false,\"repository_path\":\"content/example\"}","note":"a resource address that is not absolute"}

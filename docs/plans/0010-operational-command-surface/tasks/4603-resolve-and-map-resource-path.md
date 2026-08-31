@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/resource_resolution.rs
   - "crates/slingshot-domain/tests/fixtures/commands/resource_resolution/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Resolve and Map a Resource Path

@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{}","note":"every entry"}
+{"accepted":true,"document":"{\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":50}}","note":"an explicit first page"}
+{"accepted":false,"document":"{\"pattern\":\"example.test\"}","note":"a filter this command deliberately does not take"}
+{"accepted":false,"document":"{\"extra\":1}","note":"a member this command does not have"}
