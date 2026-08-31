@@ -23,7 +23,7 @@ touches:
   - crates/slingshot-daemon/tests/operation_maintenance.rs
   - "crates/slingshot-daemon/tests/fixtures/operation-maintenance/**"
 status: done
-merged_as: ""
+merged_as: "8b046dde4f9a9b96ccc70c3f4a6848a09670767a"
 ---
 # Agent Job Storage
 
