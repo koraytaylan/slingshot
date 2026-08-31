@@ -117,6 +117,18 @@ pub const MATCH_ALL_OPTION: &str = "--match-all";
 /// The option naming which configuration to inspect.
 pub const PERSISTENT_IDENTIFIER_OPTION: &str = "--persistent-identifier";
 
+/// The option naming the media formats an asset may be in.
+pub const MEDIA_FORMATS_OPTION: &str = "--media-formats";
+
+/// The option naming the tags an asset must carry.
+pub const TAGS_OPTION: &str = "--tags";
+
+/// The option naming the smallest original rendition an asset may have.
+pub const MINIMUM_BYTES_OPTION: &str = "--minimum-bytes";
+
+/// The option naming the largest original rendition an asset may have.
+pub const MAXIMUM_BYTES_OPTION: &str = "--maximum-bytes";
+
 /// Every option this surface knows, in the order a reference lists them.
 pub const EVERY_OPTION: &[&str] = &[
     PROFILE_OPTION,
@@ -149,6 +161,10 @@ pub const EVERY_OPTION: &[&str] = &[
     RESOURCE_TYPES_OPTION,
     MATCH_ALL_OPTION,
     PERSISTENT_IDENTIFIER_OPTION,
+    MEDIA_FORMATS_OPTION,
+    TAGS_OPTION,
+    MINIMUM_BYTES_OPTION,
+    MAXIMUM_BYTES_OPTION,
 ];
 
 /// The leaves this surface offers that are not catalog commands.
@@ -393,7 +409,11 @@ pub fn leaves_taking(option: &str) -> Vec<String> {
         | PHRASE_OPTION
         | RESOURCE_TYPES_OPTION
         | MATCH_ALL_OPTION
-        | PERSISTENT_IDENTIFIER_OPTION => catalog_leaves(),
+        | PERSISTENT_IDENTIFIER_OPTION
+        | MEDIA_FORMATS_OPTION
+        | TAGS_OPTION
+        | MINIMUM_BYTES_OPTION
+        | MAXIMUM_BYTES_OPTION => catalog_leaves(),
         _ => every_leaf_that_reaches_somewhere(),
     }
 }

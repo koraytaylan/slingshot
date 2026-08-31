@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/src/commands/asset_query.rs
   - crates/slingshot-command-line/tests/asset_query_commands.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Expose Asset Query Commands
