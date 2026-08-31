@@ -1,0 +1,12 @@
+# Every property these generated cases establish, and why it matters.
+#
+# Written down so a property that stops being checked is a row nothing proves
+# rather than a test nobody misses.
+
+an-operation-never-goes-backwards|a state that could be re-entered would make a duplicate fact indistinguishable from a regression
+an-operation-never-leaves-a-terminal-state|an ending that could be reopened is not an ending
+an-operation-reaches-an-ending-from-anywhere|every state can fail, because every state can be interrupted by something outside it
+a-job-never-returns-to-queued|work that was running and is queued again would be work counted twice
+a-job-terminal-state-is-its-own-only-successor|the same reason an operation's ending is final
+a-job-sequence-only-moves-forward|an event applied twice must be recognizable as the same event
+a-job-attempt-and-progress-never-decrease|a later observation that knew less would overwrite what was known
