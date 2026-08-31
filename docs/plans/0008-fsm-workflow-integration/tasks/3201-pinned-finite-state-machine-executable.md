@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-test-support/src/finite_state_machine_executable.rs
   - crates/slingshot-test-support/src/lib.rs
 status: done
-merged_as: ""
+merged_as: "15faf1f7897592512907e28602f54a410b970bbf"
 ---
 # Pinned FSM Executable
 
