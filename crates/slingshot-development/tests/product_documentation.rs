@@ -15,7 +15,12 @@ use slingshot_development::supported_platform_matrix::{self, SupportedPlatformMa
 const ROOT_DOCUMENTS: &[&str] = &["README.md", "CONTRIBUTING.md", "ARCHITECTURE.md"];
 
 /// Documents below the repository root that describe one product area.
-const AREA_DOCUMENTS: &[&str] = &["docs/COMMANDS.md", "docs/CONFIGURATION.md", "docs/DAEMON.md"];
+const AREA_DOCUMENTS: &[&str] = &[
+    "docs/COMMANDS.md",
+    "docs/CONFIGURATION.md",
+    "docs/DAEMON.md",
+    "docs/MODEL_CONTEXT_PROTOCOL.md",
+];
 
 /// Headings the daemon document must carry.
 const DAEMON_HEADINGS: &[&str] = &[
