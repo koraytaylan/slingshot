@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/cancel_sling_job.rs
   - "crates/slingshot-domain/tests/fixtures/commands/cancel_sling_job/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Cancel a Sling Job

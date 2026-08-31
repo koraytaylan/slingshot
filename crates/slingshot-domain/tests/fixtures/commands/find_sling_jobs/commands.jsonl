@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"states\":[\"error\"]}","note":"the ones that failed"}
+{"accepted":true,"document":"{\"states\":[\"active\",\"queued\"],\"topic\":\"com/example/jobs/reindex\"}","note":"what one topic is doing now"}
+{"accepted":false,"document":"{}","note":"no state set, which has no default"}
+{"accepted":false,"document":"{\"states\":[]}","note":"an empty state set"}
+{"accepted":false,"document":"{\"states\":[\"queued\",\"error\"]}","note":"a descending state set"}
+{"accepted":false,"document":"{\"states\":[\"error\"],\"topic\":\"/com/example\"}","note":"a topic with a leading separator"}
