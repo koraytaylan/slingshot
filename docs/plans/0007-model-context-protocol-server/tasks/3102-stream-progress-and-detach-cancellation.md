@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/src/model_context_protocol/progress_and_cancellation.rs
   - crates/slingshot-command-line/tests/model_context_protocol_progress.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Stream Progress And Detach Cancellation
