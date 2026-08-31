@@ -1,0 +1,11 @@
+{"note":"an authorization header value","redacted":true,"text":"connecting with Authorization: Bearer eyJhbGciOi.secret.value"}
+{"note":"a client secret in a query","redacted":true,"text":"exchange failed for client_secret=p-8Kq2ZmXn against the console"}
+{"note":"a password property","redacted":true,"text":"profile carries password=hunter2 for the basic method"}
+{"note":"an access token","redacted":true,"text":"the access_token=ya29.A0ARrdaM expired mid-request"}
+{"note":"a private key block","redacted":true,"text":"-----BEGIN PRIVATE KEY-----MIIEvQIBADAN-----END PRIVATE KEY-----"}
+{"note":"a signed assertion","redacted":true,"text":"assertion=eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJhIn0.c2ln was rejected"}
+{"note":"an absolute filesystem source path","redacted":true,"text":"reading /home/someone/.config/slingshot/profiles.toml failed"}
+{"note":"a Windows filesystem source path","redacted":true,"text":"reading C:\\\\Users\\\\someone\\\\.config\\\\slingshot failed"}
+{"note":"an ordinary operational sentence with nothing to hide","redacted":false,"text":"operation operation-1 reached running after 2 attempts"}
+{"note":"a digest, which is not a secret and stays legible","redacted":false,"text":"target 1d1d1d1d1d1d1d1d refused a stale revision"}
+{"note":"a bounded refusal naming a limit","redacted":false,"text":"this namespace holds 10000 operation rows and may hold 10000"}
