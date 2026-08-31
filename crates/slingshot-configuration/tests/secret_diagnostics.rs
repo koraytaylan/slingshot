@@ -144,10 +144,19 @@ fn rendered_error(failure: &EnvironmentFailure) -> String {
 }
 
 /// Returns everything an installed subscriber writes for one failure.
+///
+/// Without the timestamp, and that omission is the point rather than tidiness.
+/// The scan looks for short enumerable sentinels, and a wall-clock timestamp
+/// carries four consecutive zeros several times an hour - so a subscriber that
+/// wrote one would fail this test at those moments and pass at every other,
+/// which is a test that reports the time of day rather than the behaviour.
+/// What is under test is what the daemon writes about a secret, and a
+/// timestamp is not that.
 fn traced_error(failure: &EnvironmentFailure) -> String {
     let buffer = Arc::new(Mutex::new(Vec::new()));
     let subscriber = tracing_subscriber::fmt()
         .with_writer(CapturedOutput(Arc::clone(&buffer)))
+        .without_time()
         .with_ansi(false)
         .with_level(true)
         .with_target(true)
