@@ -60,16 +60,20 @@ impl ReadContentFragmentRefusal {
     /// # Errors
     ///
     /// Returns [`ContentFragmentFailure::NotThisRequest`] when it names another
-    /// request's fragment.
+    /// request's fragment, and when it reports a missing variation for a request
+    /// that named none - a request about the master is a request about a
+    /// variation that is always there.
     pub fn require_answers(
         &self,
         command: &ReadContentFragmentCommand,
     ) -> Result<(), ContentFragmentFailure> {
-        if self.fragment_path == command.fragment_path {
-            Ok(())
-        } else {
-            Err(ContentFragmentFailure::NotThisRequest)
+        let sought = matches!(self.failure, ReadContentFragmentFailure::VariationNotFound);
+        if self.fragment_path != command.fragment_path
+            || (sought && command.variation_name.is_none())
+        {
+            return Err(ContentFragmentFailure::NotThisRequest);
         }
+        Ok(())
     }
 }
 

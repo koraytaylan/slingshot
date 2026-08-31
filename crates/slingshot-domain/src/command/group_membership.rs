@@ -192,5 +192,5 @@ fn require_distinct(
     group: &AuthorizableIdentifier,
     member: &AuthorizableIdentifier,
 ) -> Result<(), MutationResultFailure> {
-    if group == member { Err(MutationResultFailure::NotThisRequest) } else { Ok(()) }
+    if group == member { Err(MutationResultFailure::RequestContradictsItself) } else { Ok(()) }
 }

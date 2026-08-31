@@ -79,7 +79,7 @@ fn group_1(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
             ],
             "properties": {
                 "authorizable_identifier": nonempty_string(limits.limit("maximum_authorizable_identifier_bytes")),
-                "kind": closed(&["group", "user"]),
+                "kind": json!({"const": "group"}),
                 "repository_path": repository_path(limits),
             },
         }),
@@ -105,7 +105,7 @@ fn group_1(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
             ],
             "properties": {
                 "authorizable_identifier": nonempty_string(limits.limit("maximum_authorizable_identifier_bytes")),
-                "kind": closed(&["group", "user"]),
+                "kind": json!({"const": "user"}),
                 "repository_path": repository_path(limits),
             },
         }),

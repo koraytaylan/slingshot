@@ -90,15 +90,18 @@ fn a_mismatch_belongs_only_to_a_request_that_stated_an_expectation() {
 }
 
 #[test]
-fn a_flush_cannot_remove_more_than_the_request_expected() {
-    let answered = FlushReplicationQueueResult {
-        agent_identifier: agent(AGENT),
-        removed_entry_count: EXPECTED + 1,
-    };
-    assert_eq!(
-        answered.require_answers(&command(Some(EXPECTED))),
-        Err(MutationResultFailure::NotThisRequest)
-    );
+fn a_flush_removes_what_the_request_expected_or_it_is_another_request() {
+    for removed in [EXPECTED + 1, EXPECTED - 1] {
+        let answered = FlushReplicationQueueResult {
+            agent_identifier: agent(AGENT),
+            removed_entry_count: removed,
+        };
+        assert_eq!(
+            answered.require_answers(&command(Some(EXPECTED))),
+            Err(MutationResultFailure::NotThisRequest),
+            "removing {removed} answered a request that expected {EXPECTED}"
+        );
+    }
     let exact = FlushReplicationQueueResult {
         agent_identifier: agent(AGENT),
         removed_entry_count: EXPECTED,

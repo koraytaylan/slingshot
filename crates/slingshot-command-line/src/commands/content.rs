@@ -49,6 +49,14 @@ pub enum RequestRefusal {
         /// Which option carried it.
         named: String,
     },
+    /// The request asks its command for two things that cannot both be true.
+    #[error("{named} refuses this request: {because}")]
+    RequestUnusable {
+        /// Which command.
+        named: String,
+        /// What it refuses about it, in the command's own words.
+        because: String,
+    },
     /// The command changes what is charged and no key was supplied.
     #[error("{named} needs the caller key that makes a repeat the same request")]
     OperationKeyRequired {

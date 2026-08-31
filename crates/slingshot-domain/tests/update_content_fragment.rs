@@ -89,7 +89,7 @@ fn a_request_that_would_change_nothing_is_refused() {
         let note = text(&row, "note");
         let parsed: UpdateContentFragmentCommand = serde_json::from_str(text(&row, "document"))
             .unwrap_or_else(|failure| panic!("{note}: the document did not parse: {failure}"));
-        assert_eq!(parsed.require_usable(), Err(ContentFragmentFailure::NotThisRequest), "{note}");
+        assert_eq!(parsed.require_usable(), Err(ContentFragmentFailure::ChangesNothing), "{note}");
     }
 }
 

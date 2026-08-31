@@ -1,4 +1,4 @@
 exit: 2
 standard output:
 standard error:
-slingshot: --path is required, and this invocation does not carry it
+slingshot: --instance is required, and this invocation does not carry it

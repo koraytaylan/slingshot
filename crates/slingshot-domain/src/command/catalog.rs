@@ -365,6 +365,84 @@ macro_rules! command_family {
     };
 }
 
+/// Why a request is not one this contract will carry.
+///
+/// Fourteen commands can be handed two arguments that contradict each other: a
+/// move into its own subtree, a component asked to precede itself, an update
+/// that changes nothing, a group asked to contain itself. Each of them says so
+/// in its own type, and this is the one place a caller can ask the question
+/// without knowing which of the sixty-four it is holding - so a boundary that
+/// builds commands checks it once rather than fourteen times, or not at all.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{wire_name} refuses this request: {reason}")]
+pub struct RequestNotUsable {
+    /// The command that refuses it.
+    pub wire_name: &'static str,
+    /// What it refuses about it, in the command's own words.
+    pub reason: String,
+}
+
+impl Command {
+    /// Requires this request to be one its command will carry.
+    ///
+    /// A request that fails here is refused before anything is submitted. It is
+    /// not the same question as whether a result answers a request, and neither
+    /// substitutes for the other.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RequestNotUsable`] naming the command and what it refuses.
+    pub fn require_usable(&self) -> Result<(), RequestNotUsable> {
+        self.property_mutation_usable()?;
+        self.pairwise_usable()
+    }
+
+    /// Requires the commands that carry two property documents to be usable.
+    fn property_mutation_usable(&self) -> Result<(), RequestNotUsable> {
+        let refused = |reason: &dyn ::core::fmt::Display| RequestNotUsable {
+            wire_name: self.wire_name(),
+            reason: reason.to_string(),
+        };
+        match self {
+            Self::UpdatePage(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::UpdateComponent(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::UpdateAssetMetadata(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::UpdateExperienceFragment(asked) => {
+                asked.require_usable().map_err(|why| refused(&why))
+            }
+            Self::UpdateUserProfile(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::UpdateContentFragment(asked) => {
+                asked.require_usable().map_err(|why| refused(&why))
+            }
+            Self::UpdateOpenServiceGatewayInitiativeConfiguration(asked) => {
+                asked.require_usable().map_err(|why| refused(&why))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Requires the commands whose two arguments can contradict to be usable.
+    fn pairwise_usable(&self) -> Result<(), RequestNotUsable> {
+        let refused = |reason: &dyn ::core::fmt::Display| RequestNotUsable {
+            wire_name: self.wire_name(),
+            reason: reason.to_string(),
+        };
+        match self {
+            Self::MovePage(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::MoveAsset(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::ReorderComponent(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::AddGroupMember(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::RemoveGroupMember(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::SetUserDisabled(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::StartWorkflow(asked) => asked.require_usable().map_err(|why| refused(&why)),
+            Self::FlushReplicationQueue(asked) => {
+                asked.require_usable().map_err(|why| refused(&why))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
 /// Why a result does not answer the command it was offered for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ResultContextFailure {

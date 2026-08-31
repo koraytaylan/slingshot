@@ -344,8 +344,9 @@ the leaf is refused before a single byte of configuration is read, and the
 directory on this machine.
 
 What it may run is the registry's own answer. A command is admissible when the
-registry calls it a read that replaces nothing, which is nine of the twelve
-rows; the three that write are refused before anything is dispatched. Whether
+registry calls it a read that replaces nothing, which is twenty-eight of the
+sixty-four rows; the thirty-six that write are refused before anything is
+dispatched. Whether
 running a command twice is running it once never enters into that decision -
 that column says whether a retry is safe, not whether a run may happen.
 

@@ -39,6 +39,9 @@ pub enum ConfigurationUpdateFailure {
     /// The request would change nothing.
     #[error("a configuration update changes something")]
     ChangesNothing,
+    /// Two keys in one document are the same key.
+    #[error("two keys in one document have different spellings and one identity")]
+    DuplicateKeyIdentity,
     /// A result does not answer the command it claims to answer.
     #[error("a configuration result names the configuration its command asked about")]
     NotThisRequest,
@@ -73,6 +76,7 @@ impl ConfigurationAssignments {
         {
             return Err(ConfigurationUpdateFailure::TooManyKeys);
         }
+        require_distinct_identities(values.keys())?;
         Ok(Self { values })
     }
 
@@ -125,7 +129,10 @@ impl RemovedConfigurationKeys {
     ) -> Result<Self, ConfigurationUpdateFailure> {
         let bound = CommandContract::embedded().limit("maximum_inspected_configuration_properties");
         match require_ascending_distinct(&keys, bound) {
-            Ok(()) => Ok(Self { keys }),
+            Ok(()) => {
+                require_distinct_identities(keys.iter())?;
+                Ok(Self { keys })
+            }
             Err(ListingResultFailure::TooManyRequested) => {
                 Err(ConfigurationUpdateFailure::TooManyKeys)
             }
@@ -140,9 +147,15 @@ impl RemovedConfigurationKeys {
     }
 
     /// Reports whether this list removes `key`.
+    ///
+    /// By folded identity rather than by spelling, because Configuration Admin
+    /// treats `Host` and `host` as one property. Comparing the spellings would
+    /// let one request assign a value and remove it, which is the pair this
+    /// contract exists to refuse.
     #[must_use]
     pub fn removes(&self, key: &OpenServiceGatewayInitiativeConfigurationPropertyKey) -> bool {
-        self.keys.contains(key)
+        let identity = key.folded_identity();
+        self.keys.iter().any(|removed| removed.folded_identity() == identity)
     }
 }
 
@@ -286,4 +299,22 @@ impl UpdateOpenServiceGatewayInitiativeConfigurationResult {
             Err(ConfigurationUpdateFailure::NotThisRequest)
         }
     }
+}
+
+/// Requires no two keys in one document to be the same key.
+///
+/// Configuration Admin treats a property name case-insensitively, so `Host` and
+/// `host` are one key written twice. A document carrying both would assign or
+/// remove one property under two names, and which of the two won would be the
+/// author's accident rather than the caller's request.
+fn require_distinct_identities<'key>(
+    keys: impl IntoIterator<Item = &'key OpenServiceGatewayInitiativeConfigurationPropertyKey>,
+) -> Result<(), ConfigurationUpdateFailure> {
+    let mut seen = std::collections::BTreeSet::new();
+    for key in keys {
+        if !seen.insert(key.folded_identity()) {
+            return Err(ConfigurationUpdateFailure::DuplicateKeyIdentity);
+        }
+    }
+    Ok(())
 }

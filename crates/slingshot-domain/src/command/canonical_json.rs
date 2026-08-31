@@ -421,7 +421,7 @@ fn require_ascending_unique(
 ) -> Result<(), CanonicalFailure> {
     let mut previous: Option<String> = None;
     for item in items {
-        let written = write_canonical(comparison_key(item, comparator))?;
+        let written = write_canonical(&comparison_key(item, comparator))?;
         if let Some(earlier) = previous
             && earlier.as_bytes() >= written.as_bytes()
         {
@@ -432,20 +432,45 @@ fn require_ascending_unique(
     Ok(())
 }
 
+/// The member each object comparator orders by, in declaration order.
+///
+/// A comparator that named no member would order by the whole object, which is
+/// the same as ordering by whichever member happens to sort first in canonical
+/// bytes - a queue listing would order by its active job count rather than by
+/// its queue name, and a correctly ordered page would be refused. The pairs here
+/// are the same ones the committed contract states as each comparator's key, and
+/// an assertion compares the two.
+pub const COMPARATOR_MEMBERS: &[(&str, &[&str])] = &[
+    (REPOSITORY_PATH_COMPARATOR, &["repository_path"]),
+    (AGENT_IDENTIFIER_COMPARATOR, &["agent_identifier"]),
+    (AUTHORIZABLE_IDENTIFIER_COMPARATOR, &["authorizable_identifier"]),
+    (ENTRY_IDENTIFIER_COMPARATOR, &["entry_identifier"]),
+    (ENTRY_PATH_COMPARATOR, &["entry_path"]),
+    (INSTANCE_IDENTIFIER_COMPARATOR, &["instance_identifier"]),
+    (JOB_IDENTIFIER_COMPARATOR, &["job_identifier"]),
+    (MODEL_IDENTIFIER_COMPARATOR, &["model_identifier"]),
+    (NAME_COMPARATOR, &["name"]),
+    (PERSISTENT_IDENTIFIER_COMPARATOR, &["persistent_identifier"]),
+    (QUEUE_NAME_COMPARATOR, &["queue_name"]),
+    (SYMBOLIC_NAME_COMPARATOR, &["symbolic_name", "version"]),
+    (WORK_ITEM_IDENTIFIER_COMPARATOR, &["work_item_identifier"]),
+];
+
 /// Returns the part of one item its comparator orders by.
 ///
-/// A set of strings orders by the string. A set of objects that carry a
-/// repository path orders by that path alone, because the rest of the object is
-/// derived from it and would make the order depend on data the caller never
-/// chose.
-fn comparison_key<'item>(
-    item: &'item serde_json::Value,
-    comparator: &str,
-) -> &'item serde_json::Value {
-    if comparator == REPOSITORY_PATH_COMPARATOR {
-        return item.get("repository_path").unwrap_or(item);
-    }
-    item
+/// A set of strings orders by the string. A set of objects orders by the members
+/// its comparator names and by nothing else, because the rest of the object is
+/// derived from those members and would make the order depend on data the caller
+/// never chose. One comparator names two members, because one deployment can
+/// hold two versions of one bundle and the pair is what makes a row unique.
+fn comparison_key(item: &serde_json::Value, comparator: &str) -> serde_json::Value {
+    let Some((_, members)) = COMPARATOR_MEMBERS.iter().find(|(named, _)| *named == comparator)
+    else {
+        return item.clone();
+    };
+    let keyed: Vec<serde_json::Value> =
+        members.iter().filter_map(|member| item.get(*member).cloned()).collect();
+    if keyed.len() == members.len() { serde_json::Value::Array(keyed) } else { item.clone() }
 }
 
 /// Returns the digest of one canonical document, in lowercase hexadecimal.

@@ -94,6 +94,14 @@ pub enum MutationResultFailure {
     /// A move reports a destination inside its own source.
     #[error("a move reports a destination outside the subtree it moves")]
     DestinationInsideSource,
+    /// One request asks for two things that cannot both be true of it.
+    ///
+    /// A request-shape refusal rather than a result one: it is returned before
+    /// anything is submitted, by the commands whose two arguments can
+    /// contradict each other - a component asked to precede itself, a group
+    /// asked to contain itself, a reason given for an enabling.
+    #[error("a request does not contradict itself")]
+    RequestContradictsItself,
 }
 
 /// Why an inline payload is not one this contract can carry.
@@ -438,6 +446,9 @@ pub enum PropertyMutationFailure {
     /// The request would change nothing.
     #[error("a mutation changes something")]
     ChangesNothing,
+    /// A property document redefines the title the command sets itself.
+    #[error("a property document does not redefine the title the command sets")]
+    TitleRedefined,
 }
 
 /// Properties one mutation removes.
@@ -522,4 +533,28 @@ pub fn require_property_mutation(
     } else {
         Err(PropertyMutationFailure::ChangesNothing)
     }
+}
+
+/// Requires a property document to leave the command's own title alone.
+///
+/// A command that carries a title field and a property document can be handed
+/// the title twice, and there is no order between them a caller could rely on.
+/// `create_page` refuses that pair; so does every command that inherited the
+/// shape from it.
+///
+/// # Errors
+///
+/// Returns [`PropertyMutationFailure::TitleRedefined`] when the document carries
+/// the title property while the command also sets one.
+pub fn require_title_not_redefined(
+    properties: Option<&MutationProperties>,
+    sets_a_title: bool,
+) -> Result<(), PropertyMutationFailure> {
+    let redefined = properties.is_some_and(|assigned| {
+        assigned.values().contains_key(crate::command::create_page::PAGE_TITLE_PROPERTY)
+    });
+    if redefined && sets_a_title {
+        return Err(PropertyMutationFailure::TitleRedefined);
+    }
+    Ok(())
 }
