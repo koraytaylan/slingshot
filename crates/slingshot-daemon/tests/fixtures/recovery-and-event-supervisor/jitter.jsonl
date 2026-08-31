@@ -1,0 +1,7 @@
+{"attempt": 1, "ceiling": 250, "delay": 0, "sample": 0}
+{"attempt": 1, "ceiling": 250, "delay": 250, "sample": 250}
+{"attempt": 2, "ceiling": 500, "delay": 499, "sample": 499}
+{"attempt": 3, "ceiling": 1000, "delay": 1000, "sample": 1000}
+{"attempt": 4, "ceiling": 2000, "delay": 339, "sample": 12345}
+{"attempt": 8, "ceiling": 30000, "delay": 9966, "sample": 999999}
+{"attempt": 9, "ceiling": 30000, "delay": 0, "sample": 30001}

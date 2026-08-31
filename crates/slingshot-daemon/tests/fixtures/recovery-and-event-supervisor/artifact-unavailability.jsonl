@@ -1,0 +1,5 @@
+{"disposition": "result-unavailable", "unavailability": "identified-missing-beyond-grace"}
+{"disposition": "result-unavailable", "unavailability": "identified-retention-expired"}
+{"disposition": "recovery-required", "unavailability": "bare"}
+{"disposition": "recovery-required", "unavailability": "malformed"}
+{"disposition": "recovery-required", "unavailability": "mismatched"}

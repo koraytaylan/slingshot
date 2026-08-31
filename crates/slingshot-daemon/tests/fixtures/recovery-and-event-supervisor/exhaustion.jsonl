@@ -1,0 +1,3 @@
+{"certainty": "confirmed-not-executed", "exhaustion": "authoritative-non-execution"}
+{"certainty": "remote-outcome-unknown", "exhaustion": "recovery-required"}
+{"certainty": "authoritative-remote-success", "exhaustion": "recovery-required"}

@@ -1,0 +1,5 @@
+{"category": "admission_outcome_unknown", "disposition": "recovery-required", "note": "the agent's own record is ambiguous, and more attempts do not settle it"}
+{"category": "artifact_publication_outcome_unknown", "disposition": "recovery-required", "note": "the agent's own record is ambiguous, and more attempts do not settle it"}
+{"category": "mutation_outcome_unknown", "disposition": "recovery-required", "note": "the agent's own record is ambiguous, and more attempts do not settle it"}
+{"category": "admission_budget_exceeded", "disposition": "remote-failed", "note": "the request was taken and then refused, so partial effects are possible"}
+{"category": "admission_rejected", "disposition": "remote-failed", "note": "the request was taken and then refused, so partial effects are possible"}
