@@ -209,4 +209,5 @@ crates/slingshot-test-support/src/platform_runtime/mod.rs|slingshot-test-support
 crates/slingshot-test-support/src/process_barrier.rs|slingshot-test-support|support|leaf|slingshot_test_support::process_barrier|daemon-runtime-module-scaffold
 crates/slingshot-test-support/src/process_harness.rs|slingshot-test-support|support|leaf|slingshot_test_support::process_harness|workspace-module-map
 crates/slingshot-test-support/src/runtime_harness.rs|slingshot-test-support|support|leaf|slingshot_test_support::runtime_harness|workspace-module-map
+crates/slingshot-test-support/src/storage_faults.rs|slingshot-test-support|support|leaf|slingshot_test_support::storage_faults|storage-fault-chaos
 crates/slingshot-test-support/src/supervised_child.rs|slingshot-test-support|support|leaf|slingshot_test_support::supervised_child|workspace-module-map
