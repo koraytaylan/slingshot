@@ -9,6 +9,17 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 2/16 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `1a592249115df391edac4d8f84fcb52262a3d36e`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **2902 has no way to retrieve the official artifact, and does not pretend otherwise.**
+    The task requires the complete unmodified official revision document, its source
+    location, its retrieval identity, and its digest, used as the oracle every request
+    and response is validated against. This environment has no network access, and a
+    hand-written file presented as that document would be a forgery - worse than an
+    absent one, because every later test would cite it as authority. What is committed
+    is this build's own declaration of the shapes it serves, digest-pinned, recomputed
+    before use, and named for what it is in a `PROVENANCE.md` beside it. The mechanism
+    is real and running; the authority is this build's own until the artifact is
+    retrieved, at which point it replaces the declaration and the same tests validate
+    against it.
   - **2901 reads the wire bounds it was going to restate.** The task asks for named
     line and depth limits, and the workspace already has exactly one source for both:
     the foundation contract's framing limits, which the repository's own checker
