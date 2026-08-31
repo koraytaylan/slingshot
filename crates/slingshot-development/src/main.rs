@@ -10,9 +10,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use slingshot_development::{
-    RepositoryCommandFailure, dependency_direction, finite_state_machine_compatibility,
-    github_automation_authority, release_acceptance, release_artifacts, release_input_cache,
-    rustsec_advisory_pin, source_policy, supported_platform_matrix,
+    RepositoryCommandFailure, coverage_fuzzing_tool, dependency_direction,
+    finite_state_machine_compatibility, github_automation_authority, release_acceptance,
+    release_artifacts, release_input_cache, rustsec_advisory_pin, source_policy,
+    supported_platform_matrix,
 };
 
 /// Number of leading process arguments that carry the executable path.
@@ -32,6 +33,12 @@ const RUSTSEC_PIN_COMMAND: &str = "rustsec-advisory-pin";
 
 /// Name of the command that proposes pin bytes for a reviewed candidate.
 const RUSTSEC_PIN_REVIEW_COMMAND: &str = "rustsec-pin-review";
+
+/// Name of the command that verifies the pinned coverage-fuzzing bundle.
+const VERIFY_FUZZING_TOOL_COMMAND: &str = "verify-coverage-fuzzing-tool";
+
+/// Name of the command that acquires and builds the pinned coverage tool.
+const PREPARE_FUZZING_TOOL_COMMAND: &str = "prepare-coverage-fuzzing-tool";
 
 /// Name of the command that validates the acceptance isolation contract.
 const CONTAINER_COMMAND: &str = "release-acceptance-container";
@@ -101,8 +108,35 @@ fn dispatch(
     let requested = arguments.first().ok_or(RepositoryCommandFailure::MissingCommand)?;
     match inspection_command(requested, arguments, working_directory, output) {
         Some(outcome) => outcome,
-        None => release_command(requested, arguments, working_directory, output),
+        None => match provider_command(requested, arguments, working_directory, output) {
+            Some(outcome) => outcome,
+            None => release_command(requested, arguments, working_directory, output),
+        },
     }
+}
+
+/// Runs one command that adapts this repository to a provider, when it is one.
+fn provider_command(
+    requested: &str,
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Option<Result<(), RepositoryCommandFailure>> {
+    let outcome = match requested {
+        AUTHORITY_COMMAND => check_automation_authority(working_directory, output),
+        REPOSITORY_REVIEW_COMMAND => {
+            review_repository_identity(arguments, working_directory, output)
+        }
+        CONTAINER_COMMAND => check_acceptance_container(working_directory, output),
+        VERIFY_FUZZING_TOOL_COMMAND => {
+            verify_coverage_fuzzing_tool(arguments, working_directory, output)
+        }
+        PREPARE_FUZZING_TOOL_COMMAND => {
+            prepare_coverage_fuzzing_tool(arguments, working_directory, output)
+        }
+        _ => return None,
+    };
+    Some(outcome)
 }
 
 /// Runs one command that inspects this repository, when the name is one.
@@ -133,15 +167,10 @@ fn release_command(
     output: &mut dyn Write,
 ) -> Result<(), RepositoryCommandFailure> {
     match requested {
-        AUTHORITY_COMMAND => check_automation_authority(working_directory, output),
-        REPOSITORY_REVIEW_COMMAND => {
-            review_repository_identity(arguments, working_directory, output)
-        }
         PREPARE_CACHE_COMMAND => prepare_locked_source_cache(arguments, working_directory, output),
         VERIFY_CACHE_COMMAND => verify_locked_source_cache(arguments, working_directory, output),
         PACKAGE_COMMAND => package_release_artifacts(arguments, working_directory, output),
         VERIFY_ARTIFACTS_COMMAND => verify_release_artifacts(arguments, working_directory, output),
-        CONTAINER_COMMAND => check_acceptance_container(working_directory, output),
         VERIFY_ACCEPTANCE_COMMAND => verify_release_acceptance(arguments, output),
         _ => Err(RepositoryCommandFailure::UnknownCommand(requested.to_owned())),
     }
@@ -718,6 +747,82 @@ fn verify_release_acceptance(
     release_acceptance::require_complete(&manifest)
         .map_err(|failure| refuse(failure.to_string()))?;
     writeln!(output, "every one of the {} gates held", manifest.gates.len())
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Reads the one authority for which coverage-fuzzing tool this repository uses.
+fn coverage_fuzzing_pin(
+    working_directory: &Path,
+    program: &str,
+) -> Result<coverage_fuzzing_tool::CoverageFuzzingPin, RepositoryCommandFailure> {
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let path = workspace_root.join(coverage_fuzzing_tool::PIN_PATH);
+    let text = std::fs::read_to_string(&path).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
+    })?;
+    coverage_fuzzing_tool::parse_pin(&text).map_err(|failure| {
+        RepositoryCommandFailure::ToolFailed {
+            program: program.to_owned(),
+            reason: failure.to_string(),
+        }
+    })
+}
+
+/// Verifies one prepared coverage-fuzzing bundle and names the tool inside it.
+fn verify_coverage_fuzzing_tool(
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let bundle = named_directory(arguments, "--bundle", VERIFY_FUZZING_TOOL_COMMAND)?;
+    let pin = coverage_fuzzing_pin(working_directory, VERIFY_FUZZING_TOOL_COMMAND)?;
+    let host = current_host();
+    let executable = coverage_fuzzing_tool::verified(&bundle, &pin, &host).map_err(|failure| {
+        RepositoryCommandFailure::ToolFailed {
+            program: VERIFY_FUZZING_TOOL_COMMAND.to_owned(),
+            reason: failure.to_string(),
+        }
+    })?;
+    writeln!(output, "{}", executable.display())
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Returns the host row this machine is.
+fn current_host() -> String {
+    format!(
+        "{}-{}",
+        std::env::consts::ARCH,
+        if cfg!(target_os = "linux") {
+            "unknown-linux-gnu"
+        } else if cfg!(target_os = "macos") {
+            "apple-darwin"
+        } else {
+            "pc-windows-msvc"
+        }
+    )
+}
+
+/// Acquires the pinned coverage tool, builds it twice, and bundles it.
+///
+/// This is the one command in this repository that fetches somebody else's
+/// source, and the fetch is verified against the pin afterwards rather than
+/// trusted from the reference that produced it.
+fn prepare_coverage_fuzzing_tool(
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let destination = named_directory(arguments, "--output", PREPARE_FUZZING_TOOL_COMMAND)?;
+    let host = named_value(arguments, "--host", PREPARE_FUZZING_TOOL_COMMAND)?;
+    let pin = coverage_fuzzing_pin(working_directory, PREPARE_FUZZING_TOOL_COMMAND)?;
+    let manifest =
+        coverage_fuzzing_tool::prepare(&destination, &pin, &host).map_err(|failure| {
+            RepositoryCommandFailure::ToolFailed {
+                program: PREPARE_FUZZING_TOOL_COMMAND.to_owned(),
+                reason: failure.to_string(),
+            }
+        })?;
+    writeln!(output, "{} built twice to {}", pin.package, manifest.binary_sha256)
         .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
 }
 

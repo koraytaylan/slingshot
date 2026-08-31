@@ -86,7 +86,7 @@ fn the_dated_nightly_the_pin_names_is_the_one_the_fuzz_workspace_uses() {
 #[test]
 fn a_shortened_commit_is_not_a_commit() {
     let committed = read_repository_file(PIN_PATH);
-    let shortened = committed.replace("0c1c9d7c3f3b0dbd77e7d7e2ba1bd12a5ad19cfc", "0c1c9d7");
+    let shortened = committed.replace("1b34938413a104856042376b285c8d1c1e11b098", "1b34938");
     assert_eq!(
         parse_pin(&shortened),
         Err(BundleRefusal::NotThePinnedTool("the commit".to_owned())),
