@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-command-line/tests/model_context_protocol_application.rs
   - "crates/slingshot-command-line/tests/fixtures/model-context-protocol/application/**"
 status: done
-merged_as: ""
+merged_as: "478ce34ad1e310715d8f0be2099ee52a04af4b53"
 ---
 # Model Context Protocol Application Entry
 
