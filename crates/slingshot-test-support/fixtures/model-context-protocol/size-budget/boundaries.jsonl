@@ -1,0 +1,6 @@
+# One row per byte boundary, and where an answer of that size is carried.
+{"name": "one-byte-under-the-bound", "bytes": 3999, "carriage": "inline"}
+{"name": "exactly-the-bound", "bytes": 4000, "carriage": "inline"}
+{"name": "one-byte-over-the-bound", "bytes": 4001, "carriage": "externalized"}
+{"name": "a-complete-maintenance-manifest", "bytes": 1048576, "carriage": "externalized"}
+{"name": "an-empty-answer", "bytes": 0, "carriage": "inline"}
