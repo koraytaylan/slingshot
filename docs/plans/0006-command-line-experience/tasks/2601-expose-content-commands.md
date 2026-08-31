@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/commands/content.rs
   - crates/slingshot-command-line/tests/content_commands.rs
 status: done
-merged_as: ""
+merged_as: "ebc7636025dce5be2e354d616be069865d71878f"
 ---
 # Expose Content Commands
 
