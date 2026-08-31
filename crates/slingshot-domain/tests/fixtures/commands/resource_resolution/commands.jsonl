@@ -1,0 +1,5 @@
+{"accepted":true,"document":"{\"include_trace\":false,\"request_address\":\"https://example.test/en/report.html\"}","note":"resolving an absolute address"}
+{"accepted":true,"document":"{\"include_trace\":true,\"request_address\":\"/en/report.html\"}","note":"resolving a rooted address with a trace"}
+{"accepted":false,"document":"{\"request_address\":\"/en/report.html\"}","note":"no trace decision, which has no default"}
+{"accepted":false,"document":"{\"include_trace\":false,\"request_address\":\"en/report.html\"}","note":"an address that is neither rooted nor schemed"}
+{"accepted":false,"document":"{\"include_trace\":false,\"request_address\":\"https://example.test/en report.html\"}","note":"an address carrying whitespace"}
