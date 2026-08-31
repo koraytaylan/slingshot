@@ -95,3 +95,26 @@ jobs:
         with:
           name: release-${{ matrix.triple }}
           path: ${{ runner.temp }}/release
+  release-acceptance:
+    name: the acceptance matrix
+    needs: release-binary-provenance
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: ${{ runner.temp }}/evidence
+      - name: check out the pinned external source
+        run: scripts/checkout_pinned_finite_state_machine "$RUNNER_TEMP/finite-state-machine"
+      - name: check out the exact pinned advisory snapshot
+        run: scripts/checkout_pinned_advisory_database "$RUNNER_TEMP/advisory-db"
+      - name: decide whether this revision is releasable
+        run: scripts/release_acceptance --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine" --rustsec-advisory-database "$RUNNER_TEMP/advisory-db" --rustsec-owner-review-record "$RUNNER_TEMP/evidence/rustsec-owner-review-record/review-record.json" --locked-source-cache "$RUNNER_TEMP/cache" --platform-evidence-directory "$RUNNER_TEMP/evidence" --output-directory "$RUNNER_TEMP/acceptance"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-acceptance
+          path: ${{ runner.temp }}/acceptance

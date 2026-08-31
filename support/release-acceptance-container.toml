@@ -1,0 +1,68 @@
+# The isolation one acceptance run happens inside.
+#
+# Cargo's offline mode is not isolation. It is a flag one program honours, and
+# every other descendant of an acceptance run - a build script, a test, a tool a
+# test spawns - is free to open a socket, read a host path, or write into an
+# input. So acceptance runs inside a container that denies those things to
+# everything in it, and every flag that makes the denial real is written here
+# rather than assumed from a default.
+#
+# The coordinator row is copied from the validated automation authority. A
+# different row, runtime, image, or weakened flag re-enters the owner gate.
+
+format = "slingshot.release-acceptance-container/1"
+
+[coordinator]
+# Copied from support/github-automation-authority.toml after it validates.
+triple = "x86_64-unknown-linux-gnu"
+runner-selector = "ubuntu-24.04"
+
+[runtime]
+# Rootless and daemonless: there is no engine socket to reach, and the run has
+# no more authority than the account that started it.
+name = "podman"
+version = "5.7.0"
+rootless = true
+daemonless = true
+
+[image]
+# One immutable reference. The digest is what is loaded; the tag beside it is
+# there so a reader knows what the digest was when it was chosen.
+reference = "docker.io/library/rust:1.98.0-slim-bookworm"
+digest = "sha256:1469a27c125cb5a3aebfa4f4e4665d935b02fb72cc093b2c974b3d740e43f157"
+local-oci-layout-member = "coordinator-image"
+pull = false
+
+[isolation]
+# Every one of these is a denial. A default that happened to be safe today is
+# not a contract, so each is stated and each is checked.
+network = "none"
+user = "1000:1000"
+read-only-root = true
+no-new-privileges = true
+drop-capabilities = ["ALL"]
+add-capabilities = []
+host-namespaces = []
+host-devices = []
+host-engine-socket = false
+privileged = false
+
+[environment]
+# Nothing is inherited. The allowlist is what the run has, and a variable that
+# is not here does not exist inside.
+allowed = ["HOME", "PATH", "SLINGSHOT_ACCEPTANCE_OUTPUT", "TMPDIR"]
+
+[mounts]
+# Inputs are read-only and remounting is denied, so a descendant that tried to
+# change one would fail rather than succeed quietly. Exactly one writable root
+# leaves the container, and the temporary filesystems are bounded.
+read-only = [
+    "slingshot-source",
+    "finite-state-machine-source",
+    "rustsec-advisory-database",
+    "rustsec-owner-review-record",
+    "locked-source-cache",
+    "platform-evidence",
+]
+writable-output-root = "acceptance-output"
+temporary-filesystem-bytes = 2147483648

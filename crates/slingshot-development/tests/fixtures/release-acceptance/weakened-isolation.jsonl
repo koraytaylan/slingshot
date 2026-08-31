@@ -1,0 +1,15 @@
+# One weakening of the committed isolation per row, and its refusal.
+{"name": "a-network", "find": "network = \"none\"", "replace": "network = \"host\"", "refusal": "IsolationWeakened"}
+{"name": "a-privileged-run", "find": "privileged = false", "replace": "privileged = true", "refusal": "IsolationWeakened"}
+{"name": "privileges-that-can-be-gained", "find": "no-new-privileges = true", "replace": "no-new-privileges = false", "refusal": "IsolationWeakened"}
+{"name": "a-writable-root", "find": "read-only-root = true", "replace": "read-only-root = false", "refusal": "IsolationWeakened"}
+{"name": "an-engine-socket", "find": "host-engine-socket = false", "replace": "host-engine-socket = true", "refusal": "IsolationWeakened"}
+{"name": "a-host-namespace", "find": "host-namespaces = []", "replace": "host-namespaces = [\"net\"]", "refusal": "IsolationWeakened"}
+{"name": "a-host-device", "find": "host-devices = []", "replace": "host-devices = [\"/dev/kvm\"]", "refusal": "IsolationWeakened"}
+{"name": "a-capability-added-back", "find": "add-capabilities = []", "replace": "add-capabilities = [\"NET_ADMIN\"]", "refusal": "IsolationWeakened"}
+{"name": "a-partial-capability-drop", "find": "drop-capabilities = [\"ALL\"]", "replace": "drop-capabilities = [\"NET_RAW\"]", "refusal": "IsolationWeakened"}
+{"name": "a-daemon-runtime", "find": "daemonless = true", "replace": "daemonless = false", "refusal": "IsolationWeakened"}
+{"name": "a-privileged-runtime", "find": "rootless = true", "replace": "rootless = false", "refusal": "IsolationWeakened"}
+{"name": "an-image-that-is-fetched", "find": "pull = false", "replace": "pull = true", "refusal": "IsolationWeakened"}
+{"name": "an-image-named-rather-than-pinned", "find": "digest = \"sha256:1469a27c125cb5a3aebfa4f4e4665d935b02fb72cc093b2c974b3d740e43f157\"", "replace": "digest = \"latest\"", "refusal": "IsolationWeakened"}
+{"name": "another-format", "find": "format = \"slingshot.release-acceptance-container/1\"", "replace": "format = \"something.else/1\"", "refusal": "ForeignFormat"}

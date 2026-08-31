@@ -25,7 +25,10 @@ touches:
   - crates/slingshot-development/src/release_acceptance.rs
   - crates/slingshot-development/tests/release_acceptance.rs
   - "crates/slingshot-development/tests/fixtures/release-acceptance/**"
-status: blocked
+  - scripts/run_acceptance_gates
+  - crates/slingshot-development/tests/github_workflow_contract.rs
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
+status: done
 merged_as: ""
 ---
 # Release Acceptance Matrix
