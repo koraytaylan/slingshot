@@ -11,7 +11,7 @@ gated: false
 touches:
   - crates/slingshot-test-support/src/process_barrier.rs
   - crates/slingshot-development/tests/concurrent_daemon_clients.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Concurrent Client Process Suite
