@@ -32,6 +32,12 @@ const ABSENT: &str = include_str!("fixtures/migrations/absent-columns.jsonl");
 /// Constraint vectors this test reads.
 const CONSTRAINTS: &str = include_str!("fixtures/migrations/constraints.jsonl");
 
+/// The schema version this binary migrates to.
+const CURRENT_SCHEMA_VERSION: u32 = 2;
+
+/// A schema version no binary in this workspace applies.
+const NEWER_SCHEMA_VERSION: u32 = 99;
+
 /// Bytes one page occupies, from the runtime contract.
 const PAGE_BYTES: u64 = 4096;
 
@@ -71,7 +77,7 @@ fn migrated() -> OperationDatabase {
 #[test]
 fn an_empty_database_migrates_to_the_schema_the_fixture_describes() {
     let database = migrated();
-    assert_eq!(database.schema_version().expect("a version"), 1);
+    assert_eq!(database.schema_version().expect("a version"), CURRENT_SCHEMA_VERSION);
     let mut statement = database
         .connection()
         .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name")
@@ -111,11 +117,15 @@ fn reopening_a_current_database_changes_nothing() {
     let root = tempfile::tempdir().expect("a temporary directory");
     let path = root.path().join("operations.sqlite3");
     let first = OperationDatabase::open(&path, settings()).expect("a migrated database");
-    assert_eq!(first.schema_version().expect("a version"), 1);
+    assert_eq!(first.schema_version().expect("a version"), CURRENT_SCHEMA_VERSION);
     drop(first);
 
     let second = OperationDatabase::open(&path, settings()).expect("reopened");
-    assert_eq!(second.schema_version().expect("a version"), 1, "no migration ran again");
+    assert_eq!(
+        second.schema_version().expect("a version"),
+        CURRENT_SCHEMA_VERSION,
+        "no migration ran again"
+    );
 }
 
 #[test]
@@ -129,7 +139,13 @@ fn a_schema_newer_than_this_binary_is_refused_without_being_touched() {
     let before = std::fs::metadata(&path).expect("metadata").len();
     let outcome = OperationDatabase::open(&path, settings());
     assert!(
-        matches!(outcome, Err(DatabaseFailure::SchemaTooNew { observed: 99, supported: 1 })),
+        matches!(
+            outcome,
+            Err(DatabaseFailure::SchemaTooNew {
+                observed: NEWER_SCHEMA_VERSION,
+                supported: CURRENT_SCHEMA_VERSION
+            })
+        ),
         "answered {outcome:?}"
     );
     assert_eq!(
