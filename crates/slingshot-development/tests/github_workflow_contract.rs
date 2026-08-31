@@ -19,8 +19,20 @@ use serde_yaml_ng::Value;
 use slingshot_development::github_automation_authority::{AUTHORITY_PATH, parse_authority};
 
 /// The workflows this repository publishes.
-const WORKFLOWS: &[&str] =
-    &[".github/workflows/quality.yml", ".github/workflows/platform-runtime.yml"];
+const WORKFLOWS: &[&str] = &[
+    ".github/workflows/quality.yml",
+    ".github/workflows/platform-runtime.yml",
+    ".github/workflows/release.yml",
+];
+
+/// The one job that may hold a permission beyond reading content.
+const ATTESTATION_JOB: &str = "release-binary-provenance";
+
+/// The permissions that job alone may add.
+const ATTESTATION_PERMISSIONS: &[&str] = &["attestations", "id-token"];
+
+/// What a job holding one of those permissions writes.
+const WRITE_PERMISSION: &str = "write";
 
 /// How many characters a full commit is written in.
 const FULL_COMMIT_CHARACTERS: usize = 40;
@@ -143,11 +155,19 @@ fn every_job_says_which_permissions_it_holds_and_holds_no_more() {
                 .unwrap_or_else(|| panic!("{relative}/{name} declares no permissions of its own"));
             for (held, value) in permissions {
                 let held = held.as_str().unwrap_or_default();
+                if held == "contents" {
+                    assert_eq!(value.as_str(), Some(READ_CONTENT), "{relative}/{name}");
+                    continue;
+                }
                 assert_eq!(
-                    (held, value.as_str()),
-                    ("contents", Some(READ_CONTENT)),
-                    "{relative}/{name} holds {held}, which no ordinary job needs"
+                    name, ATTESTATION_JOB,
+                    "{relative}/{name} holds {held}, and one job alone may"
                 );
+                assert!(
+                    ATTESTATION_PERMISSIONS.contains(&held),
+                    "{relative}/{name} holds {held}, which is not one of the two"
+                );
+                assert_eq!(value.as_str(), Some(WRITE_PERMISSION), "{relative}/{name}/{held}");
             }
         }
     }
@@ -263,6 +283,66 @@ fn the_native_matrix_is_exactly_the_rows_the_authority_maps() {
         Some(false),
         "one row failing hides nothing about the others"
     );
+}
+
+#[test]
+fn exactly_one_job_attests_and_it_does_so_over_named_files() {
+    let document = workflow(".github/workflows/release.yml");
+    let attesting: Vec<String> = jobs(&document)
+        .into_iter()
+        .filter(|(_, job)| {
+            steps(job).iter().any(|step| {
+                step["uses"].as_str().is_some_and(|uses| uses.starts_with("actions/attest@"))
+            })
+        })
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(attesting, vec![ATTESTATION_JOB.to_owned()], "one job attests, and one only");
+    let named = jobs(&document);
+    let (_, job) = named.iter().find(|(name, _)| name == ATTESTATION_JOB).expect("it is there");
+    let attest = steps(job)
+        .into_iter()
+        .find(|step| step["uses"].as_str().is_some_and(|uses| uses.starts_with("actions/attest@")))
+        .expect("the step is there");
+    assert!(attest["with"]["subject-path"].as_str().is_some(), "it names the files it attests");
+    assert_eq!(
+        attest["with"]["predicate-type"].as_str(),
+        Some("https://slsa.dev/provenance/v1"),
+        "and the provenance version the policy names"
+    );
+    for discovery in ["subject-digest", "subject-checksums", "push-to-registry"] {
+        assert!(
+            attest["with"][discovery].is_null(),
+            "automatic discovery would attest whatever happened to be there: {discovery}"
+        );
+    }
+}
+
+#[test]
+fn the_release_reviews_the_advisory_pin_in_a_protected_environment_first() {
+    let document = workflow(".github/workflows/release.yml");
+    let named = jobs(&document);
+    let (_, review) =
+        named.iter().find(|(name, _)| name == "rustsec-owner-review").expect("the review job");
+    assert_eq!(
+        review["environment"].as_str(),
+        Some("release-rustsec-review"),
+        "the review runs where approval is required"
+    );
+    let (_, provenance) =
+        named.iter().find(|(name, _)| name == ATTESTATION_JOB).expect("the build job");
+    assert_eq!(
+        provenance["needs"].as_str(),
+        Some("rustsec-owner-review"),
+        "and every build waits for it"
+    );
+    let recorded = read_repository_file("scripts/record_rustsec_owner_review");
+    for authored in ["date +", "$(date", "\"timestamp\"", "\"fresh\""] {
+        assert!(
+            !recorded.contains(authored),
+            "a record carrying {authored} would be recording a claim rather than a fact"
+        );
+    }
 }
 
 #[test]

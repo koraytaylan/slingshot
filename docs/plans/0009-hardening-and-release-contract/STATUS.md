@@ -10,9 +10,6 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 22/24 tasks done; 5 blocked; 0 dropped.
 - **Integration:** `blocked`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Blocked:**
-  - **3804 release-artifact-contract.** Depends on all three gates. Without the
-    attestation authority there is nothing to authenticate an archive against, and
-    without the release metadata there is no license material to package.
   - **3904 release-acceptance-matrix.** Depends on all three gates and on 3804. It
     aggregates evidence that the blocked tasks produce; running it against evidence
     that does not exist would produce a report about nothing.

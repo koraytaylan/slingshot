@@ -1,0 +1,39 @@
+#!/bin/sh
+# Record the review this release run was approved by.
+#
+# Every value comes from the provider. There is deliberately no author-chosen
+# time and no reusable freshness flag: a Git author picks those freely, so a
+# record carrying one would be recording a claim rather than a fact, and a
+# record that could be reused would authorize a run nobody reviewed.
+
+set -eu
+
+DESTINATION=${1:-}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+[ -n "$DESTINATION" ] || report_refusal 'name the file to write the record to'
+[ ! -e "$DESTINATION" ] || report_refusal "$DESTINATION already exists"
+[ -n "${SLINGSHOT_REVIEW_SOURCE_COMMIT:-}" ] || report_refusal 'the provider named no source commit'
+[ -n "${SLINGSHOT_REVIEW_RUN:-}" ] || report_refusal 'the provider named no run'
+[ -n "${SLINGSHOT_REVIEW_ATTEMPT:-}" ] || report_refusal 'the provider named no attempt'
+
+PIN=compatibility/rustsec-advisory-database.toml
+AUTHORITY=support/github-automation-authority.toml
+[ -f "$PIN" ] || report_refusal "$PIN is not committed"
+[ -f "$AUTHORITY" ] || report_refusal "$AUTHORITY is not committed"
+
+SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')
+ADVISORY_COMMIT=$(grep '^commit = ' "$PIN" | sed 's/^commit = "//; s/"$//')
+ADVISORY_TREE=$(grep '^tree = ' "$PIN" | sed 's/^tree = "//; s/"$//')
+ENVIRONMENT=$(grep '^environment = ' "$AUTHORITY" | sed 's/^environment = "//; s/"$//')
+POLICY_DIGEST=$(sha256sum "$AUTHORITY" | cut -d' ' -f1)
+
+printf '{"format":"slingshot.rustsec-owner-review-record/1",' > "$DESTINATION"
+printf '"advisory_commit":"%s","advisory_tree":"%s",' "$ADVISORY_COMMIT" "$ADVISORY_TREE" >> "$DESTINATION"
+printf '"environment":"%s","reviewer_policy_sha256":"%s",' "$ENVIRONMENT" "$POLICY_DIGEST" >> "$DESTINATION"
+printf '"source_commit":"%s","source_tree":"%s",' "$SLINGSHOT_REVIEW_SOURCE_COMMIT" "$SOURCE_TREE" >> "$DESTINATION"
+printf '"run":"%s","attempt":"%s"}\n' "$SLINGSHOT_REVIEW_RUN" "$SLINGSHOT_REVIEW_ATTEMPT" >> "$DESTINATION"
