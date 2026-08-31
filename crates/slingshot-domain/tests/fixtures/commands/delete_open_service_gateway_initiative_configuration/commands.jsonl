@@ -1,0 +1,3 @@
+{"accepted":true,"document":"{\"persistent_identifier\":\"com.example.service.Configuration\"}","note":"the plainest removal"}
+{"accepted":false,"document":"{}","note":"no configuration at all"}
+{"accepted":false,"document":"{\"persistent_identifier\":\"com.example.service.Configuration\",\"extra\":1}","note":"a member this command does not have"}

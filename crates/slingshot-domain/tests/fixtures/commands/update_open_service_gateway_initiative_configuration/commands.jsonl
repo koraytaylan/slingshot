@@ -1,0 +1,5 @@
+{"accepted":true,"document":"{\"assignments\":{\"host\":{\"type\":\"string\",\"cardinality\":\"scalar\",\"value\":\"example.test\"}},\"persistent_identifier\":\"com.example.service.Configuration\"}","note":"one assigned value"}
+{"accepted":true,"document":"{\"persistent_identifier\":\"com.example.service.Configuration\",\"removed_property_keys\":[\"host\"]}","note":"one removal"}
+{"accepted":false,"document":"{\"persistent_identifier\":\"com.example.service.Configuration\",\"removed_property_keys\":[]}","note":"an empty removal list"}
+{"accepted":false,"document":"{\"persistent_identifier\":\"com.example.service.Configuration\",\"removed_property_keys\":[\"port\",\"host\"]}","note":"a descending removal list"}
+{"accepted":false,"document":"{\"persistent_identifier\":\"com.example.service.Configuration\",\"extra\":1}","note":"a member this command does not have"}
