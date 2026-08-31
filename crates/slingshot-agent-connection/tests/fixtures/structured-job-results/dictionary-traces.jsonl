@@ -1,0 +1,9 @@
+{"name": "the-only-legal-order", "refusal": null, "steps": [{"keys": ["ordinary", "secret", "unknown"], "step": "inventory"}, {"step": "planned"}, {"key": "ordinary", "step": "read"}]}
+{"name": "no-inventory-first", "refusal": "inventory-not-first", "steps": [{"step": "planned"}]}
+{"name": "read-before-planning", "refusal": "value-read-before-planning", "steps": [{"keys": ["ordinary"], "step": "inventory"}, {"key": "ordinary", "step": "read"}]}
+{"name": "read-a-password", "refusal": "forbidden-value-read", "steps": [{"keys": ["secret"], "step": "inventory"}, {"step": "planned"}, {"key": "secret", "step": "read"}]}
+{"name": "read-an-unclassified-value", "refusal": "forbidden-value-read", "steps": [{"keys": ["unknown"], "step": "inventory"}, {"step": "planned"}, {"key": "unknown", "step": "read"}]}
+{"name": "read-twice", "refusal": "repeated-value-read", "steps": [{"keys": ["ordinary"], "step": "inventory"}, {"step": "planned"}, {"key": "ordinary", "step": "read"}, {"key": "ordinary", "step": "read"}]}
+{"name": "read-something-uninventoried", "refusal": "key-not-inventoried", "steps": [{"keys": ["ordinary"], "step": "inventory"}, {"step": "planned"}, {"key": "elsewhere", "step": "read"}]}
+{"name": "an-inventory-that-repeats-itself", "refusal": "duplicate-inventory-key", "steps": [{"keys": ["ordinary", "ordinary"], "step": "inventory"}, {"step": "planned"}]}
+{"name": "a-second-inventory", "refusal": "inventory-not-first", "steps": [{"keys": ["ordinary"], "step": "inventory"}, {"step": "planned"}, {"keys": ["ordinary"], "step": "inventory"}]}

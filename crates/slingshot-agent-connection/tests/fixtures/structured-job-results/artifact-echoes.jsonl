@@ -1,0 +1,9 @@
+{"accepted": true, "command": "load_content_as_json", "inline_bytes": 262144, "name": "load-inline-at-the-bound", "slots": []}
+{"accepted": false, "command": "load_content_as_json", "inline_bytes": 262145, "name": "load-inline-one-past-the-bound", "slots": []}
+{"accepted": true, "command": "load_content_as_json", "inline_bytes": 262145, "name": "load-artifact-past-the-bound", "slots": ["loaded_content_json"]}
+{"accepted": false, "command": "load_content_as_json", "inline_bytes": 64, "name": "load-both-forms", "slots": ["loaded_content_json"]}
+{"accepted": true, "command": "download_content_package", "inline_bytes": 64, "name": "package-with-its-artifact", "slots": ["content_package"]}
+{"accepted": false, "command": "download_content_package", "inline_bytes": 64, "name": "package-without-its-artifact", "slots": []}
+{"accepted": false, "command": "download_content_package", "inline_bytes": 64, "name": "package-duplicated", "slots": ["content_package", "content_package"]}
+{"accepted": false, "command": "query_paths", "inline_bytes": 64, "name": "query-with-an-artifact", "slots": ["content_package"]}
+{"accepted": true, "command": "query_paths", "inline_bytes": 64, "name": "query-with-nothing", "slots": []}
