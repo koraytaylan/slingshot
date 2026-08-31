@@ -15,8 +15,11 @@ touches:
   - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/src/persistent_capacity.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
-  - crates/slingshot-storage/tests/persistent_capacity.rs
-status: planned
+  - crates/slingshot-storage/tests/persistent_capacity/accounting.rs
+  - crates/slingshot-storage/tests/persistent_capacity/arithmetic.rs
+  - crates/slingshot-storage/tests/persistent_capacity/fixtures.rs
+  - crates/slingshot-storage/tests/persistent_capacity/main.rs
+status: done
 merged_as: ""
 ---
 # Persistent Capacity Accounting

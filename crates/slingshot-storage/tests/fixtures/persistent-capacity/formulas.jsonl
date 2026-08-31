@@ -1,0 +1,11 @@
+{"name":"maximum_sqlite_database_bytes","note":"one page multiplied by every page the database may reach","operands":{"page_bytes":4096,"pages":262144},"value":1073741824}
+{"name":"maximum_sqlite_write_transaction_bytes","note":"one page multiplied by the pages one transaction may change","operands":{"page_bytes":4096,"pages":4096},"value":16777216}
+{"name":"maximum_sqlite_write_transaction_write_ahead_log_bytes","note":"each changed page appends one framed page, header and all","operands":{"frame_header_bytes":24,"page_bytes":4096,"pages":4096},"value":16875520}
+{"name":"maximum_sqlite_write_ahead_log_bytes","note":"one file header plus every framed page, not a page count times a page","operands":{"frame_header_bytes":24,"frames":16384,"header_bytes":32,"page_bytes":4096},"value":67502112}
+{"name":"sqlite_write_backpressure_bytes","note":"the length past which one more maximum transaction would cross the cap","operands":{"log_bytes":67502112,"transaction_log_bytes":16875520},"value":50626592}
+{"name":"maximum_sqlite_physical_bytes","note":"every whitelisted object at its own maximum, together","operands":{"database_bytes":1073741824,"log_bytes":67502112,"shared_memory_bytes":262144},"value":1141506080}
+{"name":"maximum_sqlite_replacement_physical_bytes","note":"a rebuild holds two databases at once, plus the same sidecars","operands":{"copies":2,"database_bytes":1073741824,"log_bytes":67502112,"shared_memory_bytes":262144},"value":2215247904}
+{"name":"persistent_filesystem_safety_reserve_bytes","note":"the reserve equals a whole replacement, so one cannot eat artifact capacity","operands":{"replacement_bytes":2215247904},"value":2215247904}
+{"name":"maximum_total_diagnostic_bytes","note":"one file's maximum multiplied by the files retained","operands":{"file_bytes":1048576,"files":4},"value":4194304}
+{"name":"maximum_terminal_maintenance_result_associations_per_target","note":"one current preview plus a preview and an application for every retained receipt","operands":{"current_preview":1,"documents_per_receipt":2,"receipts":128},"value":257}
+{"name":"maximum_individual_artifact_bytes","note":"the largest thing any command may produce, so no declared slot is unstorable","operands":{"canonical_structured_result_bytes":1048576,"loaded_content_artifact_bytes":16777216,"package_output_bytes":536870912},"value":536870912}

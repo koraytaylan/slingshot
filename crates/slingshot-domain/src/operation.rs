@@ -267,6 +267,40 @@ pub enum LifecycleFailure {
     DispositionNotAdmitted,
 }
 
+/// One durable proof that a recovery resume was already applied.
+///
+/// A domain value rather than a storage one, because what it records is a fact
+/// about an operation: which revision a resume made eligible, against which
+/// environment revision, for which source. Storage persists it; it does not
+/// define it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryResumeReceipt {
+    /// The revision the resume committed.
+    pub applied_operation_revision: u64,
+    /// The operation it resumed.
+    pub operation_identifier: String,
+    /// When it was recorded.
+    pub recorded_at_unix_milliseconds: u64,
+    /// The environment revision it was recorded against.
+    pub selected_environment_revision: String,
+    /// The source it is keyed by.
+    pub source_fingerprint: String,
+}
+
+/// Where one operation's result went.
+///
+/// Recorded separately from the lifecycle because it answers a different
+/// question: reaching [`OperationLifecycleState::Succeeded`] says the work
+/// happened, and this says where what it produced can be found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResultDisposition {
+    /// Small enough to travel in the response itself.
+    Inline,
+    /// Kept as a content-addressed artifact.
+    Artifact,
+}
+
 /// What one operation is, as of one revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationRecord {
