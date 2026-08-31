@@ -10,8 +10,13 @@ touches:
   - "crates/slingshot-storage/tests/fixtures/artifacts/**"
   - crates/slingshot-storage/src/artifact_store.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
-  - crates/slingshot-storage/tests/artifact_store.rs
-status: planned
+  - crates/slingshot-storage/tests/artifact_store/association.rs
+  - crates/slingshot-storage/tests/artifact_store/fixtures.rs
+  - crates/slingshot-storage/tests/artifact_store/identity.rs
+  - crates/slingshot-storage/tests/artifact_store/installation.rs
+  - crates/slingshot-storage/tests/artifact_store/main.rs
+  - crates/slingshot-storage/tests/artifact_store/verification.rs
+status: done
 merged_as: ""
 ---
 # Checksum Verified Artifact Store

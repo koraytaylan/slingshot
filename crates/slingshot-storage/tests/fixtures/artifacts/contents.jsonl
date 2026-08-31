@@ -1,0 +1,9 @@
+{"byte_length":0,"content_digest":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","file":"empty.bin","name":"empty","note":"nothing at all, which is still content and still addressed"}
+{"byte_length":1,"content_digest":"ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb","file":"one-octet.bin","name":"one-octet","note":"the smallest nonempty artifact"}
+{"byte_length":1,"content_digest":"ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb","file":"duplicate-of-one-octet.bin","name":"duplicate-of-one-octet","note":"identical bytes under another name become one artifact"}
+{"byte_length":65535,"content_digest":"5f1bf999bcba5e05d4c34a13710d2e4bff005877874dcce49ac87af61076231e","file":"below-transfer.bin","name":"below-transfer","note":"one byte below the size of a single transfer"}
+{"byte_length":65536,"content_digest":"7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2","file":"exact-transfer.bin","name":"exact-transfer","note":"exactly one transfer, so the loop ends on a boundary"}
+{"byte_length":65537,"content_digest":"2deb0bd2129a9d3aed91e3cff58b3993752be549642890a3e853ec1065f9b617","file":"above-transfer.bin","name":"above-transfer","note":"one byte above, so a second transfer runs"}
+{"byte_length":2048,"content_digest":"10fc3c51a152e90e5b90319b601d92ccf37290ef53c35ff92507687d8a911a08","file":"exact-inline.bin","name":"exact-inline","note":"the largest result that travels inside a response"}
+{"byte_length":2049,"content_digest":"4a744d9ada0850917dbaa9fb90bdc69e5919eae247bdc0179839fd4e70088f4f","file":"above-inline.bin","name":"above-inline","note":"one byte above, so the result is externalized instead"}
+{"byte_length":196625,"content_digest":"e16c31649a00e25a9e92f71dee82d269a45c24a623228da69308a34c1d163bb0","file":"streamed.bin","name":"streamed","note":"several transfers and a remainder"}
