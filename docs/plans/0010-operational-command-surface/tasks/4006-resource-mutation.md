@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/Cargo.toml
   - policy/workspace-capabilities.toml
   - crates/slingshot-domain/tests/resource_mutation.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Resource Mutation Results and Inline Binary

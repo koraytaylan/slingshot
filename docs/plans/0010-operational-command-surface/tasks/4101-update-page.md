@@ -9,6 +9,7 @@ depends_on:
 gated: false
 touches:
   - crates/slingshot-domain/src/command/update_page.rs
+  - crates/slingshot-domain/src/command/resource_mutation.rs
   - crates/slingshot-domain/src/command/mod.rs
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/update_page.rs
@@ -24,7 +25,7 @@ merged_as: ""
 
 1. Commit canonical accepted and refused argument fixtures and exact no-effect failure documents before the implementation, one line per vector, each carrying the note that says what it proves.
 2. Implement `UpdatePageCommand` with `page_path`, an optional `title`, an optional `properties` document under the existing JCR mutation property model, and an optional bounded `removed_property_names` list of validated property names, at most `MAXIMUM_REMOVED_PROPERTY_NAMES`.
-3. Refuse a request that names the same property in both documents, and refuse one that carries neither a title, a property, nor a removal, because a mutation that changes nothing is a caller believing something happened.
+3. Declare the removal list and the two refusals it comes with once, beside the shared mutation results, because five update commands carry the same pair of documents: a request that names one property in both is refused rather than ordered, and a request that carries no title, no property, and no removal is refused because a mutation that changes nothing is a caller believing something happened.
 4. Compute the content-resource address from the page path rather than accepting one, reusing the content child name `create_page` already declares.
 5. Answer with the shared `ResourceMutationResult`, and allow exactly `page_not_found`, `page_access_denied`, `page_invalid`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, and `mutation_outcome_unknown`.
 6. Supply request-context validation that refuses a result whose address is not the content resource this request determined, and refuses a cross-command substitution.
