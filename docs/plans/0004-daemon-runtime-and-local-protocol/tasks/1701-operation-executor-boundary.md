@@ -16,7 +16,7 @@ touches:
   - crates/slingshot-development/src/main.rs
   - crates/slingshot-development/tests/operation_executor_composition.rs
 status: done
-merged_as: ""
+merged_as: "d0cf5e737377677be9d24f1a849076cd424481a5"
 ---
 # Operation Executor Boundary
 
