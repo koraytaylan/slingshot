@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-daemon/Cargo.toml
   - crates/slingshot-daemon/tests/fixtures/transport-disruption-proof.jsonl
   - crates/slingshot-daemon/tests/transport_disruption_proof.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Transport Disruption Proof
