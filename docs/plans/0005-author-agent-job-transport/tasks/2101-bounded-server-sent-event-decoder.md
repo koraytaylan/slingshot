@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-agent-connection/src/lib.rs
   - crates/slingshot-agent-connection/tests/fixtures/server-sent-events/**
   - crates/slingshot-agent-connection/tests/server_sent_event_decoder.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Bounded Server-Sent Event Decoder

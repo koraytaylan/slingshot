@@ -1,0 +1,179 @@
+{
+  "purpose": "Each stream is exact bytes and the exact items decoding them produces. A valid stream decodes the same however the transport splits it, and a refused stream names the one closed refusal it produces without advancing a cursor.",
+  "daemon_subscription_identifier": "daemon-subscription-one",
+  "agent_event_store_generation": 7,
+  "streams": [
+    {
+      "name": "single-line",
+      "file": "single-line.sse",
+      "heartbeats": 0,
+      "events": [
+        {
+          "operation": "operation-alpha",
+          "sequence": 1,
+          "kind": "accepted",
+          "cursor": "cursor-0001",
+          "name": "job-event"
+        }
+      ],
+      "partial": false
+    },
+    {
+      "name": "multiple-data-lines",
+      "file": "multiple-data-lines.sse",
+      "heartbeats": 0,
+      "events": [
+        {
+          "operation": "operation-alpha",
+          "sequence": 2,
+          "kind": "started",
+          "cursor": "cursor-0002",
+          "name": "job-event"
+        }
+      ],
+      "partial": false
+    },
+    {
+      "name": "comment-heartbeat",
+      "file": "comment-heartbeat.sse",
+      "heartbeats": 2,
+      "events": [
+        {
+          "operation": "operation-alpha",
+          "sequence": 3,
+          "kind": "progress",
+          "cursor": "cursor-0003",
+          "name": "job-event"
+        }
+      ],
+      "partial": false
+    },
+    {
+      "name": "unknown-and-retry-fields",
+      "file": "unknown-and-retry-fields.sse",
+      "heartbeats": 0,
+      "events": [
+        {
+          "operation": "operation-alpha",
+          "sequence": 4,
+          "kind": "progress",
+          "cursor": "cursor-0004",
+          "name": "job-event"
+        }
+      ],
+      "partial": false
+    },
+    {
+      "name": "carriage-return",
+      "file": "carriage-return.sse",
+      "heartbeats": 0,
+      "events": [
+        {
+          "operation": "operation-alpha",
+          "sequence": 5,
+          "kind": "progress",
+          "cursor": "cursor-0005",
+          "name": "job-event"
+        }
+      ],
+      "partial": false
+    },
+    {
+      "name": "interleaved-jobs",
+      "file": "interleaved-jobs.sse",
+      "heartbeats": 0,
+      "events": [
+        {
+          "operation": "operation-alpha",
+          "sequence": 6,
+          "kind": "progress",
+          "cursor": "cursor-0006",
+          "name": "job-event"
+        },
+        {
+          "operation": "operation-beta",
+          "sequence": 1,
+          "kind": "accepted",
+          "cursor": "cursor-0007",
+          "name": "job-event"
+        },
+        {
+          "operation": "operation-alpha",
+          "sequence": 7,
+          "kind": "progress",
+          "cursor": "cursor-0008",
+          "name": "job-event"
+        },
+        {
+          "operation": "operation-beta",
+          "sequence": 2,
+          "kind": "started",
+          "cursor": "cursor-0009",
+          "name": "job-event"
+        }
+      ],
+      "partial": false
+    },
+    {
+      "name": "unassociated-operation",
+      "file": "unassociated-operation.sse",
+      "heartbeats": 0,
+      "events": [
+        {
+          "operation": "operation-nobody-holds",
+          "sequence": 1,
+          "kind": "accepted",
+          "cursor": null,
+          "name": "job-event"
+        }
+      ],
+      "partial": false
+    },
+    {
+      "name": "missing-final-blank-line",
+      "file": "missing-final-blank-line.sse",
+      "heartbeats": 0,
+      "events": [],
+      "partial": true
+    },
+    {
+      "name": "blank-lines-alone",
+      "file": "blank-lines-alone.sse",
+      "heartbeats": 0,
+      "events": [],
+      "partial": false
+    }
+  ],
+  "refusals": [
+    {
+      "name": "malformed-data",
+      "file": "malformed-data.sse",
+      "refusal": "malformed"
+    },
+    {
+      "name": "surplus-field",
+      "file": "surplus-field.sse",
+      "refusal": "malformed"
+    },
+    {
+      "name": "missing-generation",
+      "file": "missing-generation.sse",
+      "refusal": "malformed"
+    },
+    {
+      "name": "wrong-subscription",
+      "file": "wrong-subscription.sse",
+      "refusal": "another-subscription"
+    },
+    {
+      "name": "wrong-generation",
+      "file": "wrong-generation.sse",
+      "refusal": "another-generation"
+    },
+    {
+      "name": "terminal-without-correlation",
+      "file": "terminal-without-correlation.sse",
+      "refusal": "terminal-without-correlation"
+    }
+  ]
+}
