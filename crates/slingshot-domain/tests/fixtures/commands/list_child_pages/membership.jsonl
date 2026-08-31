@@ -1,0 +1,5 @@
+{"candidate":"/content/example/en/report","immediate":true,"note":"a page directly below the anchor"}
+{"candidate":"/content/example/en/report/deeper","immediate":false,"note":"a grandchild"}
+{"candidate":"/content/example/enterprise","immediate":false,"note":"a sibling whose name begins the same"}
+{"candidate":"/content/example","immediate":false,"note":"the anchor's own parent"}
+{"candidate":"/content/example/en","immediate":false,"note":"the anchor itself"}

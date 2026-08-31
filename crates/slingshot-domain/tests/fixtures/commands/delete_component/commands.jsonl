@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\"}","note":"the plainest removal"}
+{"accepted":false,"document":"{}","note":"no component at all"}
+{"accepted":false,"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"reference_policy\":\"ignore_references\"}","note":"a reference policy this command does not have"}
+{"accepted":false,"document":"{\"component_path\":\"jcr:content/root/text\"}","note":"an address that is not absolute"}
