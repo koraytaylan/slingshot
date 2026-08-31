@@ -1,0 +1,7 @@
+{"environment": "production", "name": "the-declared-pair", "outcome": "resolved", "profile": "alpha-site"}
+{"environment": "staging", "name": "another-declared-pair", "outcome": "resolved", "profile": "remote-site", "warned": true}
+{"environment": "production", "name": "a-profile-nobody-declares", "outcome": "refused", "profile": "nobody-site"}
+{"environment": "nowhere", "name": "an-environment-that-profile-does-not-have", "outcome": "refused", "profile": "alpha-site"}
+{"name": "one-name-alone", "outcome": "refused", "profile": "alpha-site"}
+{"environment": "production", "name": "the-other-name-alone", "outcome": "refused"}
+{"environment": "production", "name": "a-name-the-grammar-refuses", "outcome": "not-selected", "profile": "Alpha Site"}
