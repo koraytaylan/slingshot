@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-daemon/tests/fixtures/transport-disruption-proof.jsonl
   - crates/slingshot-daemon/tests/transport_disruption_proof.rs
 status: done
-merged_as: ""
+merged_as: "8374c48edf050abc674fe4ed123a26249ba696ab"
 ---
 # Transport Disruption Proof
 
