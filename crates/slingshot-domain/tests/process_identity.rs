@@ -74,6 +74,34 @@ fn a_topic_is_solidus_separated_segments_over_its_own_alphabet() {
 }
 
 #[test]
+fn every_closed_set_is_written_in_the_byte_order_of_its_own_spellings() {
+    // A requested set is checked against the derived order and serialized in it,
+    // while the byte contract orders the same array by its spellings. The two
+    // agree only while the variants are declared in the order their spellings
+    // sort, and a pair that disagreed would be a set nobody could send: refused
+    // by the deserializer one way round and by the byte contract the other.
+    let written =
+        |value: &WorkflowInstanceState| serde_json::to_string(value).expect("a state serializes");
+    let instances: Vec<String> = WorkflowInstanceState::every().iter().map(written).collect();
+    let mut ordered = instances.clone();
+    ordered.sort();
+    assert_eq!(instances, ordered, "the workflow instance states are not in wire order");
+
+    let written = |value: &SlingJobState| serde_json::to_string(value).expect("a state serializes");
+    let jobs: Vec<String> = SlingJobState::every().iter().map(written).collect();
+    let mut ordered = jobs.clone();
+    ordered.sort();
+    assert_eq!(jobs, ordered, "the Sling job states are not in wire order");
+
+    let written =
+        |value: &SlingJobQueueState| serde_json::to_string(value).expect("a state serializes");
+    let queues: Vec<String> = SlingJobQueueState::every().iter().map(written).collect();
+    let mut ordered = queues.clone();
+    ordered.sort();
+    assert_eq!(queues, ordered, "the queue states are not in wire order");
+}
+
+#[test]
 fn every_closed_state_set_has_exactly_the_members_the_contract_names() {
     assert_eq!(WorkflowInstanceState::every().len(), WORKFLOW_INSTANCE_STATE_COUNT);
     assert_eq!(SlingJobState::every().len(), SLING_JOB_STATE_COUNT);

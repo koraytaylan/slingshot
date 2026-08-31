@@ -87,12 +87,15 @@ fn a_group_cannot_be_its_own_member() {
         group_identifier: identifier(GROUP),
         member_identifier: identifier(GROUP),
     };
-    assert_eq!(itself.require_usable(), Err(MutationResultFailure::NotThisRequest));
+    assert_eq!(itself.require_usable(), Err(MutationResultFailure::RequestContradictsItself));
     let removing_itself = RemoveGroupMemberCommand {
         group_identifier: identifier(GROUP),
         member_identifier: identifier(GROUP),
     };
-    assert_eq!(removing_itself.require_usable(), Err(MutationResultFailure::NotThisRequest));
+    assert_eq!(
+        removing_itself.require_usable(),
+        Err(MutationResultFailure::RequestContradictsItself)
+    );
 }
 
 #[test]

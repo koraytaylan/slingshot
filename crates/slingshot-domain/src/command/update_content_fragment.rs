@@ -40,7 +40,7 @@ impl UpdateContentFragmentCommand {
     ///
     /// # Errors
     ///
-    /// Returns [`ContentFragmentFailure::NotThisRequest`] when the request
+    /// Returns [`ContentFragmentFailure::ChangesNothing`] when the request
     /// carries neither a title nor an element, which is a request that would
     /// report success having done nothing.
     pub fn require_usable(&self) -> Result<(), ContentFragmentFailure> {
@@ -48,7 +48,7 @@ impl UpdateContentFragmentCommand {
         if assigns || self.title.is_some() {
             Ok(())
         } else {
-            Err(ContentFragmentFailure::NotThisRequest)
+            Err(ContentFragmentFailure::ChangesNothing)
         }
     }
 }

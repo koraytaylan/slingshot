@@ -24,7 +24,9 @@ use serde::{Deserialize, Serialize};
 use crate::command::command_identity::CommandContract;
 use crate::command::component_resource_type::ComponentResourceType;
 use crate::command::repository_path::RepositoryPath;
-use crate::command::resource_mapping_entry::{RequestAddress, ResourceMappingFailure};
+use crate::command::resource_mapping_entry::{
+    RequestAddress, RequestAuthority, ResourceMappingFailure,
+};
 
 /// One request to resolve an address to a resource.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,7 +49,7 @@ pub struct MapResourcePathCommand {
     /// The authority the emitted address should be relative to, when the caller
     /// said.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_authority: Option<String>,
+    pub request_authority: Option<RequestAuthority>,
 }
 
 /// What resolving an address found.

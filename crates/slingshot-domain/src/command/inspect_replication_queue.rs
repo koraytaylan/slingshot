@@ -73,14 +73,15 @@ impl InspectReplicationQueueResult {
     /// # Errors
     ///
     /// Returns [`ListingResultFailure::TooManyRequested`] above the contract's
-    /// queue bound and [`ListingResultFailure::NotStrictlyAscending`] when an
-    /// entry repeats or sorts before its predecessor.
+    /// result limit - a page holds at most a page, whatever the whole queue
+    /// holds - and [`ListingResultFailure::NotStrictlyAscending`] when an entry
+    /// repeats or sorts before its predecessor.
     pub fn new(
         blocked: bool,
         entries: Vec<ReplicationQueueEntry>,
         next_continuation_token: Option<ContinuationToken>,
     ) -> Result<Self, ListingResultFailure> {
-        let bound = CommandContract::embedded().limit("maximum_replication_queue_entries");
+        let bound = CommandContract::embedded().limit("maximum_result_limit");
         if u64::try_from(entries.len()).unwrap_or(u64::MAX) > bound {
             return Err(ListingResultFailure::TooManyRequested);
         }

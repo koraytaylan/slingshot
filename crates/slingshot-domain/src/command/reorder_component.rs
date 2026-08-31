@@ -69,7 +69,7 @@ impl ReorderComponentCommand {
             ComponentPlacement::Before { sibling_name }
                 if self.component_name().as_deref() == Some(sibling_name.as_text()) =>
             {
-                Err(MutationResultFailure::NotThisRequest)
+                Err(MutationResultFailure::RequestContradictsItself)
             }
             ComponentPlacement::Before { .. } | ComponentPlacement::Last {} => Ok(()),
         }

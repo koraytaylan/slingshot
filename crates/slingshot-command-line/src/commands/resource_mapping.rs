@@ -8,7 +8,7 @@
 
 use slingshot_domain::command::catalog::Command;
 use slingshot_domain::command::list_resource_mappings::ListResourceMappingsCommand;
-use slingshot_domain::command::resource_mapping_entry::RequestAddress;
+use slingshot_domain::command::resource_mapping_entry::{RequestAddress, RequestAuthority};
 use slingshot_domain::command::resource_resolution::{
     MapResourcePathCommand, ResolveResourcePathCommand,
 };
@@ -55,7 +55,16 @@ pub fn build(invocation: &Invocation) -> Result<Command, RequestRefusal> {
         _ => Ok(Command::MapResourcePath(MapResourcePathCommand {
             include_trace: flag(invocation, INCLUDE_TRACE_OPTION),
             repository_path: path(invocation, PATH_OPTION)?,
-            request_authority: optional_text(invocation, REQUEST_AUTHORITY_OPTION),
+            request_authority: authority(invocation)?,
         })),
     }
+}
+
+/// Returns the authority one mapping is relative to, when it names one.
+fn authority(invocation: &Invocation) -> Result<Option<RequestAuthority>, RequestRefusal> {
+    optional_text(invocation, REQUEST_AUTHORITY_OPTION)
+        .map(|stated| {
+            RequestAuthority::parse(&stated).map_err(|_| unusable(REQUEST_AUTHORITY_OPTION))
+        })
+        .transpose()
 }

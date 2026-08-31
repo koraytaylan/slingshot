@@ -90,7 +90,7 @@ fn a_placement_refuses_the_other_placement_s_members() {
 #[test]
 fn a_component_cannot_be_asked_to_precede_itself() {
     let itself = command(ComponentPlacement::Before { sibling_name: name("text") });
-    assert_eq!(itself.require_usable(), Err(MutationResultFailure::NotThisRequest));
+    assert_eq!(itself.require_usable(), Err(MutationResultFailure::RequestContradictsItself));
     let another = command(ComponentPlacement::Before { sibling_name: name("image") });
     assert_eq!(another.require_usable(), Ok(()));
 }

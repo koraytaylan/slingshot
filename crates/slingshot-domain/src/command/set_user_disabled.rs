@@ -40,7 +40,7 @@ impl SetUserDisabledCommand {
             return Ok(());
         };
         if !self.disabled {
-            return Err(MutationResultFailure::NotThisRequest);
+            return Err(MutationResultFailure::RequestContradictsItself);
         }
         let bound = CommandContract::embedded().limit("maximum_authorizable_disabled_reason_bytes");
         if u64::try_from(reason.len()).unwrap_or(u64::MAX) > bound {

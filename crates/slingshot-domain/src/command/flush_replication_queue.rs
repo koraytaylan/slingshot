@@ -114,7 +114,9 @@ impl FlushReplicationQueueResult {
     /// # Errors
     ///
     /// Returns [`MutationResultFailure::NotThisRequest`] when it names another
-    /// request's agent or removes more than the request expected, and
+    /// request's agent, or removes a different number than the request
+    /// expected: fewer is the silent under-flush the expectation exists to
+    /// catch, and more is the over-flush. Returns
     /// [`MutationResultFailure::CountTooLarge`] above the contract's queue
     /// bound.
     pub fn require_answers(
@@ -125,10 +127,10 @@ impl FlushReplicationQueueResult {
         if self.removed_entry_count > bound {
             return Err(MutationResultFailure::CountTooLarge);
         }
-        let overran = command
+        let disagreed = command
             .expected_entry_count
-            .is_some_and(|expected| self.removed_entry_count > expected);
-        if self.agent_identifier != command.agent_identifier || overran {
+            .is_some_and(|expected| self.removed_entry_count != expected);
+        if self.agent_identifier != command.agent_identifier || disagreed {
             return Err(MutationResultFailure::NotThisRequest);
         }
         Ok(())
