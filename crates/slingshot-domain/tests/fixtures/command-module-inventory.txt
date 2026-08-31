@@ -15,6 +15,7 @@ catalog
 command_identity
 component_resource_type
 create_page
+delete_page
 discovery_budget
 download_content_package
 find_assets_by_metadata
@@ -24,6 +25,7 @@ find_pages_containing_phrase
 find_pages_using_components
 inspect_open_service_gateway_initiative_configuration
 load_content_as_javascript_object_notation
+move_page
 operational_listing
 package_selection
 platform_service_identity
@@ -36,3 +38,4 @@ resource_mutation
 result_window
 schema
 search_predicate
+update_page
