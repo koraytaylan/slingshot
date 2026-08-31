@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 use slingshot_domain::installation::InstallationIdentifier;
 use slingshot_storage::artifact_store::{
     ARTIFACT_IDENTIFIER_VERSION, ArtifactFailure, ArtifactIdentifier, DIGEST_CHARACTERS,
-    MAXIMUM_ARTIFACT_ACCESS_BYTES, MAXIMUM_ARTIFACT_SLOT_BYTES, MAXIMUM_BYTE_LENGTH_CHARACTERS,
-    MAXIMUM_DESCRIPTOR_BYTES, MAXIMUM_MEDIA_TYPE_BYTES, STRUCTURED_RESULT_SLOT,
+    MAXIMUM_ARTIFACT_ACCESS_BYTES, MAXIMUM_BYTE_LENGTH_CHARACTERS, MAXIMUM_DESCRIPTOR_BYTES,
+    STRUCTURED_RESULT_SLOT, maximum_artifact_slot_bytes, maximum_media_type_bytes,
 };
 
 use crate::fixtures::*;
@@ -96,8 +96,8 @@ fn a_file_name_never_becomes_an_identity() {
 
 #[test]
 fn the_whole_access_record_fits_the_machine_envelope() {
-    let widest = MAXIMUM_ARTIFACT_SLOT_BYTES
-        + MAXIMUM_MEDIA_TYPE_BYTES
+    let widest = maximum_artifact_slot_bytes()
+        + maximum_media_type_bytes()
         + MAXIMUM_DESCRIPTOR_BYTES
         + MAXIMUM_BYTE_LENGTH_CHARACTERS
         + DIGEST_CHARACTERS
@@ -110,8 +110,8 @@ fn the_whole_access_record_fits_the_machine_envelope() {
 
     let (_directory, store) = store();
     let mut asked = request(&partition(FIRST_PRINCIPAL), "operation-1", "content_package");
-    asked.artifact_slot = "s".repeat(MAXIMUM_ARTIFACT_SLOT_BYTES);
-    asked.media_type = "m".repeat(MAXIMUM_MEDIA_TYPE_BYTES);
+    asked.artifact_slot = "s".repeat(maximum_artifact_slot_bytes());
+    asked.media_type = "m".repeat(maximum_media_type_bytes());
     asked.descriptor = Some("d".repeat(MAXIMUM_DESCRIPTOR_BYTES));
     let widest_record = store
         .install(&asked, &mut content("one-octet").as_slice())
@@ -122,8 +122,8 @@ fn the_whole_access_record_fits_the_machine_envelope() {
     );
 
     for (field, over) in [
-        ("artifact slot", "s".repeat(MAXIMUM_ARTIFACT_SLOT_BYTES + 1)),
-        ("media type", "m".repeat(MAXIMUM_MEDIA_TYPE_BYTES + 1)),
+        ("artifact slot", "s".repeat(maximum_artifact_slot_bytes() + 1)),
+        ("media type", "m".repeat(maximum_media_type_bytes() + 1)),
         ("descriptor", "d".repeat(MAXIMUM_DESCRIPTOR_BYTES + 1)),
     ] {
         let mut asked = request(&partition(SECOND_PRINCIPAL), "operation-1", "content_package");
