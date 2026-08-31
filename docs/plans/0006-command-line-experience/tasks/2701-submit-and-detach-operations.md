@@ -14,7 +14,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/src/operation_submission.rs
   - crates/slingshot-command-line/tests/operation_submission.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Submit And Detach Operations
