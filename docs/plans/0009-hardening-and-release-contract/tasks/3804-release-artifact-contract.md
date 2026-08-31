@@ -24,7 +24,10 @@ touches:
   - crates/slingshot-development/src/release_artifacts.rs
   - crates/slingshot-development/tests/release_artifact_contract.rs
   - "crates/slingshot-development/tests/fixtures/release-artifacts/**"
-status: blocked
+  - scripts/record_rustsec_owner_review
+  - crates/slingshot-development/tests/github_workflow_contract.rs
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
+status: done
 merged_as: ""
 ---
 # Release Artifact Contract

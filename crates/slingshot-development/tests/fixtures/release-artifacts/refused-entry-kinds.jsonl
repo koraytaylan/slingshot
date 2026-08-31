@@ -1,0 +1,4 @@
+# One entry kind per row that a release archive does not hold.
+{"name": "a-link", "kind": "Link"}
+{"name": "a-directory", "kind": "Directory"}
+{"name": "a-device", "kind": "Special"}
