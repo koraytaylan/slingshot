@@ -10,7 +10,7 @@ touches:
   - examples/finite-state-machine/failure.machine.json
   - crates/slingshot-development/tests/fixtures/finite-state-machine-failure/**
   - crates/slingshot-development/tests/finite_state_machine_failure.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Failed Workflow Command

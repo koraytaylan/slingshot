@@ -1,0 +1,5 @@
+# One row per ending, the authority it establishes, and whether it may be undone.
+{"name": "a-rejected-replication", "envelope": {"outcome": "operation_terminal_error", "disposition": "AuthoritativeRemoteFailure", "kind": "RemoteFailed", "failure": {"category": "admission_rejected"}}, "authority": "AuthoritativeRemoteFailure", "compensable": true}
+{"name": "a-non-execution", "envelope": {"outcome": "operation_terminal_error", "disposition": "AuthoritativeNonExecution", "kind": "RemoteFailed", "failure": {"category": "admission_rejected"}}, "authority": "AuthoritativeNonExecution", "compensable": false}
+{"name": "an-indeterminate-outcome", "envelope": {"outcome": "operation_terminal_error", "disposition": "FailClosedIndeterminate", "kind": "RemoteFailed", "failure": {"category": "admission_outcome_unknown"}}, "authority": "FailClosedIndeterminate", "compensable": false}
+{"name": "a-remote-success-that-failed-afterwards", "envelope": {"outcome": "operation_terminal_error", "disposition": "AuthoritativeRemoteSuccess", "kind": "RemoteFailed", "failure": {"category": "artifact_publication_failed"}}, "authority": "AuthoritativeRemoteSuccess", "compensable": false}
