@@ -1,0 +1,123 @@
+#!/bin/sh
+# Decide whether one source revision is releasable, once, in isolation.
+#
+# Every gate runs inside a rootless container with no network, no host engine
+# socket, no added capability, and read-only inputs. Cargo's offline mode is a
+# flag one program honours; a build script, a test, or a tool a test spawns is
+# free to ignore it, which is exactly why the denial happens outside every one
+# of them rather than inside one of them.
+#
+# This command prepares nothing. An input that is missing, dirty, or unverified
+# is a refusal rather than something to go and fetch: acceptance that repaired
+# its own inputs would be accepting whatever it managed to assemble.
+
+set -eu
+
+# An option and the value beside it are two arguments.
+OPTION_AND_VALUE=2
+
+CONTAINER=support/release-acceptance-container.toml
+FINITE_STATE_MACHINE_SOURCE=''
+RUSTSEC_ADVISORY_DATABASE=''
+REVIEW_RECORD=''
+LOCKED_SOURCE_CACHE=''
+PLATFORM_EVIDENCE=''
+OUTPUT_DIRECTORY=''
+
+report_stage() {
+    printf '\n== %s ==\n' "$1"
+}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+require_absolute_directory() {
+    case "$1" in
+        /*) ;;
+        *) report_refusal "$1 is not an absolute path" ;;
+    esac
+    [ -d "$1" ] || report_refusal "$1 is not a directory"
+}
+
+read_value() {
+    sed -n "s/^$1 = \"\(.*\)\"$/\1/p" "$CONTAINER" | head -n 1
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --finite-state-machine-source)
+            FINITE_STATE_MACHINE_SOURCE=$2; shift "$OPTION_AND_VALUE" ;;
+        --rustsec-advisory-database)
+            RUSTSEC_ADVISORY_DATABASE=$2; shift "$OPTION_AND_VALUE" ;;
+        --rustsec-owner-review-record)
+            REVIEW_RECORD=$2; shift "$OPTION_AND_VALUE" ;;
+        --locked-source-cache)
+            LOCKED_SOURCE_CACHE=$2; shift "$OPTION_AND_VALUE" ;;
+        --platform-evidence-directory)
+            PLATFORM_EVIDENCE=$2; shift "$OPTION_AND_VALUE" ;;
+        --output-directory)
+            OUTPUT_DIRECTORY=$2; shift "$OPTION_AND_VALUE" ;;
+        *) report_refusal "$1 is not an option this command takes" ;;
+    esac
+done
+
+[ -n "$FINITE_STATE_MACHINE_SOURCE" ] || report_refusal 'name the verified pinned source'
+[ -n "$RUSTSEC_ADVISORY_DATABASE" ] || report_refusal 'name the verified advisory database'
+[ -n "$REVIEW_RECORD" ] || report_refusal 'name the same-run owner review record'
+[ -n "$LOCKED_SOURCE_CACHE" ] || report_refusal 'name the verified coordinator cache member'
+[ -n "$PLATFORM_EVIDENCE" ] || report_refusal 'name the authenticated platform evidence'
+[ -n "$OUTPUT_DIRECTORY" ] || report_refusal 'name a new directory to write the manifest into'
+require_absolute_directory "$FINITE_STATE_MACHINE_SOURCE"
+require_absolute_directory "$RUSTSEC_ADVISORY_DATABASE"
+require_absolute_directory "$LOCKED_SOURCE_CACHE"
+require_absolute_directory "$PLATFORM_EVIDENCE"
+[ -f "$REVIEW_RECORD" ] || report_refusal "$REVIEW_RECORD is not a file"
+[ ! -e "$OUTPUT_DIRECTORY" ] || report_refusal "$OUTPUT_DIRECTORY already exists"
+[ -f "$CONTAINER" ] || report_refusal "$CONTAINER is not committed"
+
+report_stage 'the isolation contract'
+cargo run --locked --quiet -p slingshot-development -- release-acceptance-container
+
+RUNTIME=$(read_value name)
+IMAGE_DIGEST=$(read_value digest)
+IMAGE_USER=$(read_value user)
+command -v "$RUNTIME" >/dev/null 2>&1 || report_refusal "$RUNTIME is not on this machine, and acceptance runs nowhere else"
+
+report_stage 'the source tree'
+git diff --quiet HEAD || report_refusal 'the working tree differs from the commit being accepted'
+SOURCE_COMMIT=$(git rev-parse HEAD)
+SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')
+
+mkdir -p "$OUTPUT_DIRECTORY"
+report_stage 'every gate, inside the container'
+# Read-only inputs, no network, no capabilities, and one writable root. Every
+# denial named in the contract appears here, because a contract nobody applied
+# is a description rather than a boundary.
+"$RUNTIME" run --rm \
+    --network none \
+    --user "$IMAGE_USER" \
+    --read-only \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --volume "$PWD:/slingshot:ro" \
+    --volume "$FINITE_STATE_MACHINE_SOURCE:/finite-state-machine:ro" \
+    --volume "$RUSTSEC_ADVISORY_DATABASE:/advisory-db:ro" \
+    --volume "$REVIEW_RECORD:/review-record.json:ro" \
+    --volume "$LOCKED_SOURCE_CACHE:/cache:ro" \
+    --volume "$PLATFORM_EVIDENCE:/platform-evidence:ro" \
+    --volume "$OUTPUT_DIRECTORY:/acceptance-output" \
+    --workdir /slingshot \
+    --env SLINGSHOT_ACCEPTANCE_OUTPUT=/acceptance-output \
+    "$IMAGE_DIGEST" \
+    scripts/run_acceptance_gates \
+    || report_refusal 'a gate refused inside the container, so this revision is not releasable'
+
+report_stage 'the acceptance manifest'
+cargo run --locked --quiet -p slingshot-development -- \
+    verify-release-acceptance \
+    --manifest "$OUTPUT_DIRECTORY/acceptance.json" \
+    --source-commit "$SOURCE_COMMIT"
+
+printf '\n== %s is releasable ==\n' "$SOURCE_TREE"

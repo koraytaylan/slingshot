@@ -11,8 +11,8 @@ use std::process::ExitCode;
 
 use slingshot_development::{
     RepositoryCommandFailure, dependency_direction, finite_state_machine_compatibility,
-    github_automation_authority, release_artifacts, release_input_cache, rustsec_advisory_pin,
-    source_policy, supported_platform_matrix,
+    github_automation_authority, release_acceptance, release_artifacts, release_input_cache,
+    rustsec_advisory_pin, source_policy, supported_platform_matrix,
 };
 
 /// Number of leading process arguments that carry the executable path.
@@ -32,6 +32,12 @@ const RUSTSEC_PIN_COMMAND: &str = "rustsec-advisory-pin";
 
 /// Name of the command that proposes pin bytes for a reviewed candidate.
 const RUSTSEC_PIN_REVIEW_COMMAND: &str = "rustsec-pin-review";
+
+/// Name of the command that validates the acceptance isolation contract.
+const CONTAINER_COMMAND: &str = "release-acceptance-container";
+
+/// Name of the command that verifies one acceptance manifest.
+const VERIFY_ACCEPTANCE_COMMAND: &str = "verify-release-acceptance";
 
 /// Name of the command that builds one row's release archive.
 const PACKAGE_COMMAND: &str = "package-release-artifacts";
@@ -135,6 +141,8 @@ fn release_command(
         VERIFY_CACHE_COMMAND => verify_locked_source_cache(arguments, working_directory, output),
         PACKAGE_COMMAND => package_release_artifacts(arguments, working_directory, output),
         VERIFY_ARTIFACTS_COMMAND => verify_release_artifacts(arguments, working_directory, output),
+        CONTAINER_COMMAND => check_acceptance_container(working_directory, output),
+        VERIFY_ACCEPTANCE_COMMAND => verify_release_acceptance(arguments, output),
         _ => Err(RepositoryCommandFailure::UnknownCommand(requested.to_owned())),
     }
 }
@@ -662,6 +670,54 @@ fn verify_release_artifacts(
     release_artifacts::require_admissible(&surveyed, &members, compressed)
         .map_err(|failure| refuse(failure.to_string()))?;
     writeln!(output, "this archive holds exactly the {} members its row declares", members.len())
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Validates the committed isolation contract an acceptance run happens inside.
+fn check_acceptance_container(
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let path = workspace_root.join(release_acceptance::CONTAINER_PATH);
+    let text = std::fs::read_to_string(&path).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
+    })?;
+    let held = release_acceptance::parse_container(&text).map_err(|failure| {
+        RepositoryCommandFailure::ToolFailed {
+            program: CONTAINER_COMMAND.to_owned(),
+            reason: failure.to_string(),
+        }
+    })?;
+    writeln!(
+        output,
+        "acceptance runs on {} with the network {} and every capability dropped",
+        held.runtime.name, held.isolation.network
+    )
+    .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Verifies one acceptance manifest records every gate, in order, all holding.
+fn verify_release_acceptance(
+    arguments: &[String],
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let named = |option| named_value(arguments, option, VERIFY_ACCEPTANCE_COMMAND);
+    let path = PathBuf::from(named("--manifest")?);
+    let text = std::fs::read_to_string(&path).map_err(|failure| {
+        RepositoryCommandFailure::PathUnreadable { path, reason: failure.to_string() }
+    })?;
+    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
+        program: VERIFY_ACCEPTANCE_COMMAND.to_owned(),
+        reason,
+    };
+    let manifest =
+        release_acceptance::parse_manifest(&text).map_err(|failure| refuse(failure.to_string()))?;
+    release_acceptance::require_revision(&manifest, &named("--source-commit")?)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    release_acceptance::require_complete(&manifest)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    writeln!(output, "every one of the {} gates held", manifest.gates.len())
         .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
 }
 
