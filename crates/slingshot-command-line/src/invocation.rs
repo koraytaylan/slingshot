@@ -69,6 +69,12 @@ pub const EXPECTED_DIGEST_OPTION: &str = "--expected-digest";
 /// The option naming where a fetched thing is written.
 pub const DESTINATION_OPTION: &str = "--destination";
 
+/// The option naming a repository path a command acts on.
+pub const PATH_OPTION: &str = "--path";
+
+/// The option naming how far below a resource a command reaches.
+pub const DEPTH_OPTION: &str = "--depth";
+
 /// Every option this surface knows, in the order a reference lists them.
 pub const EVERY_OPTION: &[&str] = &[
     PROFILE_OPTION,
@@ -85,6 +91,8 @@ pub const EVERY_OPTION: &[&str] = &[
     RESULT_IDENTIFIER_OPTION,
     EXPECTED_DIGEST_OPTION,
     DESTINATION_OPTION,
+    PATH_OPTION,
+    DEPTH_OPTION,
 ];
 
 /// The leaves this surface offers that are not catalog commands.
@@ -309,6 +317,7 @@ pub fn leaves_taking(option: &str) -> Vec<String> {
         LIMIT_OPTION | BEFORE_OPTION => named(&["maintenance-preview", "operation-list"]),
         RESULT_IDENTIFIER_OPTION | EXPECTED_DIGEST_OPTION => named(&["maintenance-result"]),
         DESTINATION_OPTION => named(&["maintenance-result", "operation-artifact"]),
+        PATH_OPTION | DEPTH_OPTION => catalog_leaves(),
         _ => every_leaf_that_reaches_somewhere(),
     }
 }
