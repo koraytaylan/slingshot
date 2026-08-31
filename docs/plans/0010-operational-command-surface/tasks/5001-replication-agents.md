@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/replication_agent.rs
   - "crates/slingshot-domain/tests/fixtures/commands/replication_agent/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # List and Inspect Replication Agents

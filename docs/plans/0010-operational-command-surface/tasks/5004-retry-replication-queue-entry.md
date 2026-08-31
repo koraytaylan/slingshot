@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/retry_replication_queue_entry.rs
   - "crates/slingshot-domain/tests/fixtures/commands/retry_replication_queue_entry/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Retry a Replication Queue Entry

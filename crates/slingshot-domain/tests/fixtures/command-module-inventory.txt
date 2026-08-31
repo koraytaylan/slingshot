@@ -39,8 +39,10 @@ find_pages_containing_phrase
 find_pages_using_components
 find_sling_jobs
 find_workflow_instances
+flush_replication_queue
 group_membership
 inspect_open_service_gateway_initiative_configuration
+inspect_replication_queue
 inspect_sling_job
 inspect_workflow_instance
 list_asset_renditions
@@ -63,11 +65,13 @@ query_paths
 read_content_fragment
 reorder_component
 replicate_content
+replication_agent
 repository_path
 resource_mapping_entry
 resource_mutation
 resource_resolution
 result_window
+retry_replication_queue_entry
 schema
 search_predicate
 set_open_service_gateway_initiative_bundle_state

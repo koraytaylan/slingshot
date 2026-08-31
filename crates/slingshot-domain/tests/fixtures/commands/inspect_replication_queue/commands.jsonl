@@ -1,0 +1,3 @@
+{"accepted":true,"document":"{\"agent_identifier\":\"publish\"}","note":"the whole queue"}
+{"accepted":true,"document":"{\"agent_identifier\":\"publish\",\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":25}}","note":"an explicit first page"}
+{"accepted":false,"document":"{}","note":"no agent at all"}

@@ -1,0 +1,3 @@
+{"accepted":true,"document":"{\"agent_identifier\":\"publish\"}","note":"one agent"}
+{"accepted":false,"document":"{}","note":"no agent at all"}
+{"accepted":false,"document":"{\"agent_identifier\":\"\"}","note":"an empty agent identifier"}

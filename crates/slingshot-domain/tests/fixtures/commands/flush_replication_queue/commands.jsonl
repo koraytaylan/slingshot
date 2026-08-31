@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"agent_identifier\":\"publish\"}","note":"emptying it regardless"}
+{"accepted":true,"document":"{\"agent_identifier\":\"publish\",\"expected_entry_count\":12}","note":"emptying it only if it is still what it was"}
+{"accepted":false,"document":"{}","note":"no agent at all"}
+{"accepted":false,"document":"{\"agent_identifier\":\"publish\",\"extra\":1}","note":"a member this command does not have"}
