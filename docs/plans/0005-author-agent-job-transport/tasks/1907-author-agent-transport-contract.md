@@ -8,11 +8,12 @@ gated: false
 touches:
   - policy/author-agent-transport-contract-1.json
   - policy/author-agent-transport-contract-1.sha256
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - crates/slingshot-domain/src/lib.rs
   - crates/slingshot-domain/src/author_agent_transport_contract.rs
   - crates/slingshot-domain/tests/author_agent_transport_contract.rs
   - crates/slingshot-domain/tests/fixtures/author-agent-transport-contract/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Author-Agent Transport Contract
