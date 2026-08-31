@@ -21,7 +21,7 @@ touches:
   - crates/slingshot-development/src/source_policy.rs
   - crates/slingshot-development/tests/product_documentation.rs
 status: done
-merged_as: ""
+merged_as: "3e46baf979caa6a99555679a436d04850e683feb"
 ---
 # Present State Product Documentation
 
