@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/workflow-documentation-commands.txt
   - crates/slingshot-development/tests/workflow_documentation.rs
 status: done
-merged_as: ""
+merged_as: "54048d2aaf12f6e05022c544cf84498b7fa75b1a"
 ---
 # Workflow Integration Reference
 
