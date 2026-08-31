@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-daemon/src/operation_queries.rs
   - crates/slingshot-daemon/tests/operation_queries.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Operation Status And Result
