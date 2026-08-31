@@ -139,6 +139,7 @@ crates/slingshot-daemon/src/startup.rs|slingshot-daemon|service|leaf|slingshot_d
 crates/slingshot-daemon/src/unavailable_operation_executor.rs|slingshot-daemon|service|leaf|slingshot_daemon::unavailable_operation_executor|daemon-runtime-module-scaffold
 crates/slingshot-development/src/daemon_chaos_subject.rs|slingshot-development|tooling|leaf|slingshot_development::daemon_chaos_subject|workspace-module-map
 crates/slingshot-development/src/dependency_direction.rs|slingshot-development|tooling|leaf|slingshot_development::dependency_direction|workspace-module-map
+crates/slingshot-development/src/finite_state_machine_compatibility.rs|slingshot-development|tooling|leaf|slingshot_development::finite_state_machine_compatibility|pinned-finite-state-machine-executable
 crates/slingshot-development/src/lib.rs|slingshot-development|tooling|crate-root|slingshot_development|workspace-module-map
 crates/slingshot-development/src/platform_runtime_contract.rs|slingshot-development|tooling|leaf|slingshot_development::platform_runtime_contract|workspace-module-map
 crates/slingshot-development/src/profile_authentication_harness.rs|slingshot-development|tooling|leaf|slingshot_development::profile_authentication_harness|profile-authentication-module-scaffold

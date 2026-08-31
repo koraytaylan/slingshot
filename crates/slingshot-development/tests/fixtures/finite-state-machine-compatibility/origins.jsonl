@@ -1,0 +1,22 @@
+# One row per origin spelling: what is written, and what it canonicalizes to.
+# An empty canonical form means the spelling is refused rather than repaired.
+{"name": "canonical", "spelling": "https://github.com/koraytaylan/fsm", "canonical": "https://github.com/koraytaylan/fsm"}
+{"name": "canonical-with-suffix", "spelling": "https://github.com/koraytaylan/fsm.git", "canonical": "https://github.com/koraytaylan/fsm"}
+{"name": "secure-shell", "spelling": "ssh://git@github.com/koraytaylan/fsm", "canonical": "https://github.com/koraytaylan/fsm"}
+{"name": "secure-shell-with-suffix", "spelling": "ssh://git@github.com/koraytaylan/fsm.git", "canonical": "https://github.com/koraytaylan/fsm"}
+{"name": "short-form", "spelling": "git@github.com:koraytaylan/fsm", "canonical": "https://github.com/koraytaylan/fsm"}
+{"name": "short-form-with-suffix", "spelling": "git@github.com:koraytaylan/fsm.git", "canonical": "https://github.com/koraytaylan/fsm"}
+{"name": "user-information", "spelling": "https://someone@github.com/koraytaylan/fsm", "canonical": ""}
+{"name": "another-host", "spelling": "https://github.com.example.invalid/koraytaylan/fsm", "canonical": ""}
+{"name": "a-port", "spelling": "https://github.com:443/koraytaylan/fsm", "canonical": ""}
+{"name": "a-query", "spelling": "https://github.com/koraytaylan/fsm?ref=main", "canonical": ""}
+{"name": "a-fragment", "spelling": "https://github.com/koraytaylan/fsm#main", "canonical": ""}
+{"name": "a-percent-escape", "spelling": "https://github.com/koraytaylan/fs%6d", "canonical": ""}
+{"name": "a-backslash", "spelling": "https://github.com/koraytaylan\\fsm", "canonical": ""}
+{"name": "a-trailing-slash", "spelling": "https://github.com/koraytaylan/fsm/", "canonical": ""}
+{"name": "an-extra-segment", "spelling": "https://github.com/koraytaylan/fsm/tree/main", "canonical": ""}
+{"name": "an-empty-segment", "spelling": "https://github.com//fsm", "canonical": ""}
+{"name": "a-dot-segment", "spelling": "https://github.com/./fsm", "canonical": ""}
+{"name": "another-ssh-user", "spelling": "ssh://someone@github.com/koraytaylan/fsm", "canonical": ""}
+{"name": "another-scheme", "spelling": "git://github.com/koraytaylan/fsm", "canonical": ""}
+{"name": "no-scheme", "spelling": "github.com/koraytaylan/fsm", "canonical": ""}
