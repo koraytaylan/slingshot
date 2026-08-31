@@ -19,6 +19,7 @@ schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+slingshot-configuration.workspace = true
 slingshot-daemon.workspace = true
 slingshot-domain.workspace = true
 slingshot-local-protocol.workspace = true

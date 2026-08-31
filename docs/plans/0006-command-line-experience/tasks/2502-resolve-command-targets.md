@@ -7,9 +7,10 @@ depends_on:
   - define-command-invocations
 gated: false
 touches:
+  - crates/slingshot-command-line/Cargo.toml
   - crates/slingshot-command-line/src/target_selection.rs
   - crates/slingshot-command-line/tests/target_selection.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Resolve Command Targets
