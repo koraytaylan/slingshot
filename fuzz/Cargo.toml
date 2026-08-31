@@ -20,6 +20,7 @@ libfuzzer-sys = "0.4"
 slingshot-configuration = { path = "../crates/slingshot-configuration" }
 slingshot-domain = { path = "../crates/slingshot-domain" }
 slingshot-agent-connection = { path = "../crates/slingshot-agent-connection" }
+slingshot-command-line = { path = "../crates/slingshot-command-line" }
 slingshot-agent-protocol = { path = "../crates/slingshot-agent-protocol" }
 slingshot-local-protocol = { path = "../crates/slingshot-local-protocol" }
 
@@ -40,6 +41,13 @@ bench = false
 [[bin]]
 name = "local_protocol_frame"
 path = "fuzz_targets/local_protocol_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "model_context_protocol_message"
+path = "fuzz_targets/model_context_protocol_message.rs"
 test = false
 doc = false
 bench = false

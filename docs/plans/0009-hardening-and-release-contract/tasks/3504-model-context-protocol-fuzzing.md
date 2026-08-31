@@ -13,7 +13,7 @@ touches:
   - fuzz/fuzz_targets/model_context_protocol_message.rs
   - "fuzz/corpus/model_context_protocol_message/**"
   - crates/slingshot-development/tests/model_context_protocol_fuzz_corpus.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Model Context Protocol Fuzzing
