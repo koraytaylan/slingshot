@@ -16,7 +16,7 @@ touches:
   - crates/slingshot-daemon/src/local_server.rs
   - crates/slingshot-daemon/tests/request_dispatch.rs
 status: done
-merged_as: ""
+merged_as: "6bd2dca75284025cfabc820cea8e856c3640fe9b"
 ---
 # Local Request Dispatch
 
