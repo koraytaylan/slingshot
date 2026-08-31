@@ -1,0 +1,5 @@
+# One row per evidence a review may be entered on, or may not.
+{"name": "provably-ran-and-failed", "disposition": "AuthoritativeRemoteFailure", "reviewable": true}
+{"name": "provably-did-not-run", "disposition": "AuthoritativeNonExecution", "reviewable": false}
+{"name": "nobody-can-tell", "disposition": "FailClosedIndeterminate", "reviewable": false}
+{"name": "ran-and-succeeded", "disposition": "AuthoritativeRemoteSuccess", "reviewable": false}

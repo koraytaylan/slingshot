@@ -1,0 +1,28 @@
+{
+  "name": "compensation",
+  "initial": "start",
+  "states": {
+    "start": { "on": { "run": { "target": "replicating", "effect": "replicate" } } },
+    "replicating": {
+      "on": {
+        "replicated": { "target": "done" },
+        "replication_failed": { "target": "reviewing" }
+      }
+    },
+    "reviewing": {
+      "on": {
+        "backup_restore_approved": { "target": "compensating", "effect": "backup_restore" },
+        "backup_restore_declined": { "target": "failed" }
+      }
+    },
+    "compensating": {
+      "on": {
+        "backup_restored": { "target": "compensated" },
+        "backup_restore_failed": { "target": "failed" }
+      }
+    },
+    "compensated": { "type": "final" },
+    "done": { "type": "final" },
+    "failed": { "type": "final" }
+  }
+}
