@@ -1,0 +1,33 @@
+{
+  "purpose": "Physical Sling job identifier sets an accepted or duplicate answer may carry. Sortedness and distinctness are required rather than imposed, because the set is compared across recoveries and an agent that answers differently the second time is saying something.",
+  "sets": [
+    { "name": "one-job", "identifiers": ["sling-job-alpha"], "acceptable": true },
+    {
+      "name": "sorted-distinct-pair",
+      "identifiers": ["sling-job-alpha", "sling-job-beta"],
+      "acceptable": true
+    },
+    {
+      "name": "sorted-distinct-triple",
+      "identifiers": ["sling-job-alpha", "sling-job-beta", "sling-job-gamma"],
+      "acceptable": true
+    },
+    { "name": "empty-set", "identifiers": [], "acceptable": false },
+    {
+      "name": "unsorted-pair",
+      "identifiers": ["sling-job-beta", "sling-job-alpha"],
+      "acceptable": false
+    },
+    {
+      "name": "duplicated-job",
+      "identifiers": ["sling-job-alpha", "sling-job-alpha"],
+      "acceptable": false
+    },
+    { "name": "empty-identifier", "identifiers": [""], "acceptable": false },
+    {
+      "name": "empty-identifier-among-named",
+      "identifiers": ["", "sling-job-alpha"],
+      "acceptable": false
+    }
+  ]
+}

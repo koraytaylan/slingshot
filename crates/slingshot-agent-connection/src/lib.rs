@@ -9,5 +9,6 @@ pub mod authentication;
 pub mod author_cross_site_request_forgery_protection;
 pub mod author_hypertext_transfer_protocol_policy;
 pub mod capability_discovery;
+pub mod command_submission;
 pub mod request_authentication;
 pub mod transport_policy;
