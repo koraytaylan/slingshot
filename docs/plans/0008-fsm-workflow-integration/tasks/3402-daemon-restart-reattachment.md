@@ -10,7 +10,7 @@ touches:
   - examples/finite-state-machine/daemon-restart.machine.json
   - crates/slingshot-development/tests/fixtures/finite-state-machine-daemon-restart/**
   - crates/slingshot-development/tests/finite_state_machine_daemon_restart.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Daemon Restart Reattachment
