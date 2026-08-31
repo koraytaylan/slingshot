@@ -23,6 +23,8 @@ crates/slingshot-agent-connection/src/authentication/mod.rs|slingshot-agent-conn
 crates/slingshot-agent-connection/src/authentication/token_assertion.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::authentication::token_assertion|profile-authentication-module-scaffold
 crates/slingshot-agent-connection/src/lib.rs|slingshot-agent-connection|adapter|crate-root|slingshot_agent_connection|workspace-module-map
 crates/slingshot-agent-connection/src/transport_policy.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::transport_policy|profile-authentication-module-scaffold
+crates/slingshot-agent-protocol/src/continuation_key_authority.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::continuation_key_authority|continuation-key-lifecycle-contract
+crates/slingshot-agent-protocol/src/continuation_token.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::continuation_token|continuation-key-lifecycle-contract
 crates/slingshot-agent-protocol/src/identity.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::identity|agent-identity-and-wire-schema-contract
 crates/slingshot-agent-protocol/src/lib.rs|slingshot-agent-protocol|contract|crate-root|slingshot_agent_protocol|workspace-module-map
 crates/slingshot-agent-protocol/src/remote_job.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::remote_job|workspace-module-map
