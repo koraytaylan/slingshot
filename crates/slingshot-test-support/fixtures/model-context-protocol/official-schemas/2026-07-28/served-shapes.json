@@ -1,0 +1,149 @@
+{
+  "errors": {
+    "codes": [
+      -32700,
+      -32600,
+      -32601,
+      -32602,
+      -32603,
+      -32022
+    ],
+    "forbidden": [],
+    "required": [
+      "code",
+      "message"
+    ]
+  },
+  "inbound_notifications": {
+    "notifications/cancelled": {
+      "forbidden": [
+        "id"
+      ],
+      "required": [
+        "requestId"
+      ]
+    }
+  },
+  "outbound_notifications": {
+    "notifications/progress": {
+      "forbidden": [
+        "id"
+      ],
+      "required": [
+        "requestId",
+        "progress"
+      ]
+    }
+  },
+  "requests": {
+    "ping": {
+      "forbidden": [],
+      "required": [
+        "protocolVersion"
+      ]
+    },
+    "resources/list": {
+      "forbidden": [],
+      "required": [
+        "protocolVersion"
+      ]
+    },
+    "resources/read": {
+      "forbidden": [],
+      "required": [
+        "protocolVersion",
+        "uri"
+      ]
+    },
+    "resources/templates/list": {
+      "forbidden": [],
+      "required": [
+        "protocolVersion"
+      ]
+    },
+    "server/discover": {
+      "forbidden": [],
+      "required": [
+        "protocolVersion"
+      ]
+    },
+    "tools/call": {
+      "forbidden": [],
+      "required": [
+        "protocolVersion",
+        "name",
+        "arguments"
+      ]
+    },
+    "tools/list": {
+      "forbidden": [],
+      "required": [
+        "protocolVersion"
+      ]
+    }
+  },
+  "results": {
+    "ping": {
+      "forbidden": [
+        "ttlMs"
+      ],
+      "required": [
+        "resultType"
+      ]
+    },
+    "resources/list": {
+      "forbidden": [],
+      "required": [
+        "resultType",
+        "ttlMs",
+        "cacheScope",
+        "resources"
+      ]
+    },
+    "resources/read": {
+      "forbidden": [],
+      "required": [
+        "resultType",
+        "ttlMs",
+        "cacheScope",
+        "contents"
+      ]
+    },
+    "resources/templates/list": {
+      "forbidden": [],
+      "required": [
+        "resultType",
+        "ttlMs",
+        "cacheScope",
+        "resourceTemplates"
+      ]
+    },
+    "server/discover": {
+      "forbidden": [],
+      "required": [
+        "resultType",
+        "supportedVersions",
+        "capabilities"
+      ]
+    },
+    "tools/call": {
+      "forbidden": [
+        "ttlMs"
+      ],
+      "required": [
+        "resultType",
+        "content"
+      ]
+    },
+    "tools/list": {
+      "forbidden": [],
+      "required": [
+        "resultType",
+        "ttlMs",
+        "cacheScope",
+        "tools"
+      ]
+    }
+  },
+  "revision": "2026-07-28"
+}
