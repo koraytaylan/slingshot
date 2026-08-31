@@ -129,6 +129,21 @@ pub const MINIMUM_BYTES_OPTION: &str = "--minimum-bytes";
 /// The option naming the largest original rendition an asset may have.
 pub const MAXIMUM_BYTES_OPTION: &str = "--maximum-bytes";
 
+/// The option naming what a created page or component is called.
+pub const NAME_OPTION: &str = "--name";
+
+/// The option carrying the title a created page records.
+pub const TITLE_OPTION: &str = "--title";
+
+/// The option naming the type a created component records.
+pub const RESOURCE_TYPE_OPTION: &str = "--resource-type";
+
+/// The option naming where under a page's content a component goes.
+pub const COMPONENT_PARENT_OPTION: &str = "--content-parent";
+
+/// The option naming the document of properties a mutation applies.
+pub const PROPERTIES_OPTION: &str = "--properties";
+
 /// Every option this surface knows, in the order a reference lists them.
 pub const EVERY_OPTION: &[&str] = &[
     PROFILE_OPTION,
@@ -165,6 +180,11 @@ pub const EVERY_OPTION: &[&str] = &[
     TAGS_OPTION,
     MINIMUM_BYTES_OPTION,
     MAXIMUM_BYTES_OPTION,
+    NAME_OPTION,
+    TITLE_OPTION,
+    RESOURCE_TYPE_OPTION,
+    COMPONENT_PARENT_OPTION,
+    PROPERTIES_OPTION,
 ];
 
 /// The leaves this surface offers that are not catalog commands.
