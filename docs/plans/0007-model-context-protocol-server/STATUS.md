@@ -9,6 +9,14 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 13/16 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `1a592249115df391edac4d8f84fcb52262a3d36e`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3104 found the composition serving an initialized session in the wrong era.**
+    Replaying the sequence an executor really sends showed the server decorating a
+    legacy session's results with the current era's members, because the era was decided
+    per request and a client that had initialized sends nothing about revisions
+    afterwards. A session that finished the older handshake is now served in that era
+    whatever a later request says; a session that never initialized stays stateless.
+    The composition is 3107's file, and the transcript is where the defect was visible
+    at all.
   - **3103 taught the process harness to feed a child its input.** A conversation is
     lines in and lines out, and the harness started every child with nothing on its
     standard input. Writing the whole input and closing it joins the harness, because a

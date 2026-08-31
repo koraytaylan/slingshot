@@ -1,0 +1,4 @@
+# One row per conversation an older client holds, and why.
+{"name": "initialize-echoed", "intent": "an executor asking for this era's revision is answered with it", "sends": [{"id": "one", "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}]}
+{"name": "initialize-fallback", "intent": "an executor asking for another revision is offered this one rather than refused", "sends": [{"id": "one", "method": "initialize", "params": {"protocolVersion": "2026-07-28"}}]}
+{"name": "the-whole-handshake-then-work", "intent": "the sequence an executor really sends, in order", "sends": [{"id": "one", "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}, {"method": "notifications/initialized"}, {"id": "two", "method": "tools/list", "params": {"protocolVersion": "2026-07-28"}}]}
