@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-daemon/src/request_dispatch.rs
   - crates/slingshot-daemon/tests/shutdown.rs
 status: done
-merged_as: ""
+merged_as: "6bd2dca"
 ---
 # Graceful Daemon Stop
 
