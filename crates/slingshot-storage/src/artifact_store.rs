@@ -29,6 +29,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::OptionalExtension as _;
 use sha2::{Digest as _, Sha256};
+use slingshot_domain::command::command_identity::CommandContract;
 use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
 use slingshot_domain::installation::InstallationIdentifier;
 
@@ -50,11 +51,33 @@ pub const CANONICAL_JSON_MEDIA_TYPE: &str = "application/json";
 /// Characters a digest is spelled with.
 pub const DIGEST_CHARACTERS: usize = 64;
 
-/// Bytes an artifact slot may occupy.
-pub const MAXIMUM_ARTIFACT_SLOT_BYTES: usize = 128;
+/// The contract limit bounding an artifact slot.
+const ARTIFACT_SLOT_LIMIT: &str = "maximum_artifact_slot_bytes";
 
-/// Bytes a media type may occupy.
-pub const MAXIMUM_MEDIA_TYPE_BYTES: usize = 128;
+/// The contract limit bounding an artifact's media type.
+const MEDIA_TYPE_LIMIT: &str = "maximum_artifact_media_type_bytes";
+
+/// Returns how many bytes an artifact slot may occupy.
+///
+/// Asked of the command contract by name rather than written down again here.
+/// A second declaration is a second thing that can drift, and this one had:
+/// the contract bounded a slot at one width and this crate enforced another.
+#[must_use]
+pub fn maximum_artifact_slot_bytes() -> usize {
+    contract_limit(ARTIFACT_SLOT_LIMIT)
+}
+
+/// Returns how many bytes an artifact's media type may occupy.
+#[must_use]
+pub fn maximum_media_type_bytes() -> usize {
+    contract_limit(MEDIA_TYPE_LIMIT)
+}
+
+/// Returns one command-contract limit as a byte count.
+fn contract_limit(named: &str) -> usize {
+    usize::try_from(CommandContract::embedded().limit(named))
+        .expect("a byte bound fits this machine's word")
+}
 
 /// Bytes a descriptor may occupy.
 pub const MAXIMUM_DESCRIPTOR_BYTES: usize = 512;
@@ -279,8 +302,8 @@ pub struct InstallationRequest {
 impl InstallationRequest {
     /// Requires every bounded field to fit its bound.
     fn require_bounded(&self) -> Result<(), ArtifactFailure> {
-        require_within("artifact slot", MAXIMUM_ARTIFACT_SLOT_BYTES, &self.artifact_slot)?;
-        require_within("media type", MAXIMUM_MEDIA_TYPE_BYTES, &self.media_type)?;
+        require_within("artifact slot", maximum_artifact_slot_bytes(), &self.artifact_slot)?;
+        require_within("media type", maximum_media_type_bytes(), &self.media_type)?;
         match self.descriptor.as_deref() {
             Some(descriptor) => require_within("descriptor", MAXIMUM_DESCRIPTOR_BYTES, descriptor),
             None => Ok(()),
