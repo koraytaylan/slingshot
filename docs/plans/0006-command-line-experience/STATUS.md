@@ -9,6 +9,10 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 2/20 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `95f1e298dbac69e2a37e48d338409fd7c1cf74d5`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **2502 needed the configuration crate the contract already allowed it.** Resolving a
+    target is Plan 0002's selector and its closed diagnostic vocabulary; the dependency
+    table already permitted the edge and the manifest simply did not have it yet, so the
+    manifest joins this task's footprint.
   - **2501 needed the registry it is specified to consult.** The task requires an
     operation key for every command the catalog classifies as not intrinsically
     idempotent, and the command-line crate had no edge to the domain that publishes that
