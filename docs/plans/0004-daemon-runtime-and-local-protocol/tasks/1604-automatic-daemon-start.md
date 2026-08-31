@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/daemon_connection.rs
   - crates/slingshot-command-line/src/daemon_process.rs
   - crates/slingshot-command-line/tests/automatic_daemon_start.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Automatic Daemon Start
