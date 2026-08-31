@@ -1,0 +1,16 @@
+{
+  "name": "retry",
+  "initial": "start",
+  "states": {
+    "start": { "on": { "run": { "target": "replicating", "effect": "replicate" } } },
+    "replicating": {
+      "on": {
+        "replicated": { "target": "done" },
+        "replication_failed": { "target": "failed" },
+        "mcp_error": { "target": "replicating", "effect": "replicate" }
+      }
+    },
+    "done": { "type": "final" },
+    "failed": { "type": "final" }
+  }
+}
