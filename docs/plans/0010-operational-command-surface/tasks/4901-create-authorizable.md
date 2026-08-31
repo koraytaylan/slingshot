@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/create_authorizable.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_authorizable/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Create a User or a Group

@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/delete_authorizable.rs
   - "crates/slingshot-domain/tests/fixtures/commands/delete_authorizable/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Delete an Authorizable

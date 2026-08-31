@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"authorizable_identifier\":\"author\",\"disabled\":true}","note":"disabling one"}
+{"accepted":true,"document":"{\"authorizable_identifier\":\"author\",\"disabled\":true,\"reason\":\"Left the company\"}","note":"disabling one with a reason"}
+{"accepted":true,"document":"{\"authorizable_identifier\":\"author\",\"disabled\":false}","note":"enabling one again"}
+{"accepted":false,"document":"{\"authorizable_identifier\":\"author\"}","note":"no decision, which has no default"}

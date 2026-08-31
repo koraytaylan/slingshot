@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"group_identifier\":\"content-authors\",\"include_indirect\":false}","note":"direct members only"}
+{"accepted":true,"document":"{\"group_identifier\":\"content-authors\",\"include_indirect\":true}","note":"everyone who arrives there"}
+{"accepted":false,"document":"{\"group_identifier\":\"content-authors\"}","note":"no decision, which has no default"}
+{"accepted":false,"document":"{\"include_indirect\":true}","note":"no group"}

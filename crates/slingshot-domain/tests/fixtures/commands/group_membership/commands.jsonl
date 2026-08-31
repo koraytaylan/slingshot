@@ -1,0 +1,5 @@
+{"accepted":true,"document":"{\"group_identifier\":\"content-authors\",\"member_identifier\":\"author\"}","note":"adding a user to a group"}
+{"accepted":true,"document":"{\"group_identifier\":\"content-authors\",\"member_identifier\":\"editors\"}","note":"adding a group to a group"}
+{"accepted":false,"document":"{\"group_identifier\":\"content-authors\"}","note":"no member"}
+{"accepted":false,"document":"{\"member_identifier\":\"author\"}","note":"no group"}
+{"accepted":false,"document":"{\"group_identifier\":\"content-authors\",\"member_identifier\":\"author\",\"extra\":1}","note":"a member this command does not have"}

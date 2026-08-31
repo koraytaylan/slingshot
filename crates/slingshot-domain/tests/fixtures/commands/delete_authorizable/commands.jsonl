@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"authorizable_identifier\":\"author\",\"expected_kind\":\"user\"}","note":"removing a user"}
+{"accepted":true,"document":"{\"authorizable_identifier\":\"content-authors\",\"expected_kind\":\"group\"}","note":"removing a group"}
+{"accepted":false,"document":"{\"authorizable_identifier\":\"author\"}","note":"no expected kind, which has no default"}
+{"accepted":false,"document":"{\"authorizable_identifier\":\"author\",\"expected_kind\":\"administrator\"}","note":"a kind nobody declared"}

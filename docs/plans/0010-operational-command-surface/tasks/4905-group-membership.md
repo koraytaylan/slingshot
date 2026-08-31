@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/group_membership.rs
   - "crates/slingshot-domain/tests/fixtures/commands/group_membership/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Add and Remove a Group Member
