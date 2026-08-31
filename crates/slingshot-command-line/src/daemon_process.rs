@@ -14,6 +14,8 @@
 //! and the type says which of the two it is rather than leaving a caller to
 //! infer it from whether a field is empty.
 
+use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
+
 /// Where a daemon reads its configuration from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigurationRootSource {
@@ -126,4 +128,119 @@ impl DaemonProcessArguments {
             self.environment.clone(),
         ]
     }
+}
+
+/// What a client requires of the daemon it is about to talk to.
+///
+/// All three are checked before a versioned request is sent. A daemon built
+/// against another runtime contract, serving another partition, or serving
+/// another revision is not this client's daemon, and sending it work would mean
+/// acting in a context nobody chose.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DaemonExpectation {
+    /// Which partition this client acts in.
+    pub author_target_identity_digest: String,
+    /// Which runtime contract this client was built against.
+    pub runtime_contract_digest: String,
+    /// Which environment revision this client acts under.
+    pub selected_environment_revision: String,
+}
+
+impl DaemonExpectation {
+    /// Returns the runtime contract digest this build carries.
+    ///
+    /// Recomputed from the embedded bytes rather than remembered, so a build
+    /// whose contract changed cannot describe itself with the old digest.
+    #[must_use]
+    pub fn embedded_runtime_digest() -> String {
+        DaemonRuntimeContract::embedded_digest().as_text().to_owned()
+    }
+}
+
+/// Why a daemon is not one this client may send work to.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum HandshakeRefusal {
+    /// It was built against another runtime contract.
+    #[error(
+        "this daemon was built against another runtime contract; stop it and start it again with \
+         this build, or use the build it was started from"
+    )]
+    RuntimeContractMismatch,
+    /// It serves another partition.
+    #[error("this daemon serves another target; stop it or select the target it serves")]
+    TargetMismatch,
+    /// It serves another environment revision.
+    #[error("this daemon serves another environment revision; stop it and start it again")]
+    RevisionMismatch,
+}
+
+impl HandshakeRefusal {
+    /// Returns whether retained control is still usable despite this.
+    ///
+    /// All of them. A mismatched daemon is one this client cannot send work to
+    /// and exactly the one it needs to be able to ask about and stop - refusing
+    /// those too would leave a caller with a running daemon and no way to
+    /// replace it.
+    #[must_use]
+    pub fn permits_retained_control(&self) -> bool {
+        true
+    }
+}
+
+/// Requires one daemon's handshake to be one this client may send work to.
+///
+/// # Errors
+///
+/// Returns [`HandshakeRefusal`] naming the first thing that differs, coarsest
+/// first: a daemon built against another contract is refused before its target
+/// is considered, because nothing it says about a target means the same thing.
+pub fn require_compatible(
+    expectation: &DaemonExpectation,
+    runtime_contract_digest: &str,
+    author_target_identity_digest: &str,
+    selected_environment_revision: &str,
+) -> Result<(), HandshakeRefusal> {
+    if runtime_contract_digest != expectation.runtime_contract_digest {
+        return Err(HandshakeRefusal::RuntimeContractMismatch);
+    }
+    if author_target_identity_digest != expectation.author_target_identity_digest {
+        return Err(HandshakeRefusal::TargetMismatch);
+    }
+    if selected_environment_revision != expectation.selected_environment_revision {
+        return Err(HandshakeRefusal::RevisionMismatch);
+    }
+    Ok(())
+}
+
+/// What ensuring one daemon is serving produced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LifecycleOutcome {
+    /// One was already serving, and it is compatible.
+    AlreadyServing,
+    /// One was started, and it became ready.
+    Started,
+    /// One is serving and this client may not send it work.
+    Incompatible(Box<HandshakeRefusal>),
+    /// A start was attempted and did not produce a serving daemon.
+    NotServing(Box<StartFailure>),
+}
+
+/// Why a start did not produce a serving daemon.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum StartFailure {
+    /// The child exited before it served anything.
+    #[error("the daemon exited before it began serving: {detail}")]
+    ChildExited {
+        /// What it said on the way out.
+        detail: String,
+    },
+    /// It never became ready within the attempts allowed.
+    #[error("the daemon did not become ready within {attempts} attempts")]
+    NeverReady {
+        /// How many times readiness was polled.
+        attempts: u32,
+    },
+    /// Something is there and does not answer properly.
+    #[error("something is serving that namespace and does not answer as a daemon")]
+    Unhealthy,
 }
