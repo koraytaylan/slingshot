@@ -121,6 +121,8 @@ crates/slingshot-local-protocol/src/framing.rs|slingshot-local-protocol|contract
 crates/slingshot-local-protocol/src/lib.rs|slingshot-local-protocol|contract|crate-root|slingshot_local_protocol|workspace-module-map
 crates/slingshot-local-protocol/src/message.rs|slingshot-local-protocol|contract|leaf|slingshot_local_protocol::message|daemon-runtime-module-scaffold
 crates/slingshot-local-protocol/src/ping.rs|slingshot-local-protocol|contract|leaf|slingshot_local_protocol::ping|minimal-local-protocol
+crates/slingshot-storage/src/agent_job_repository.rs|slingshot-storage|adapter|leaf|slingshot_storage::agent_job_repository|agent-job-storage
+crates/slingshot-storage/src/agent_subscription_ledger.rs|slingshot-storage|adapter|leaf|slingshot_storage::agent_subscription_ledger|agent-job-storage
 crates/slingshot-storage/src/artifact_store.rs|slingshot-storage|adapter|leaf|slingshot_storage::artifact_store|daemon-runtime-module-scaffold
 crates/slingshot-storage/src/database.rs|slingshot-storage|adapter|leaf|slingshot_storage::database|daemon-runtime-module-scaffold
 crates/slingshot-storage/src/installation_state.rs|slingshot-storage|adapter|leaf|slingshot_storage::installation_state|daemon-runtime-module-scaffold

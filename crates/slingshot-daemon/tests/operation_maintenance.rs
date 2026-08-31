@@ -331,3 +331,27 @@ fn two_previews_of_the_same_rows_digest_alike_and_of_different_rows_do_not() {
         "as is the same rows under a cutoff that excludes one"
     );
 }
+
+#[test]
+fn a_preview_counts_what_approving_it_would_free() {
+    let repository = OperationRepository::new(
+        OperationDatabase::open_in_memory(settings()).expect("a database"),
+    );
+    let digest = partition(FIRST_PRINCIPAL);
+    for index in 1..=SETTLED_OPERATIONS {
+        settle(&repository, &digest, &format!("ended-{index}"), index);
+    }
+    let reviewed = previewed(repository.database(), &digest, EVERYTHING);
+    let released = reviewed.released();
+    assert_eq!(
+        released.operation_rows,
+        reviewed.manifest.released_operation_rows(),
+        "the number a person reads before approving is the number the approval is about"
+    );
+    assert_eq!(
+        released.agent_submission_rows,
+        reviewed.manifest.released_agent_rows(),
+        "a target with no remote work frees no remote rows"
+    );
+    assert_eq!(released.subscription_rows, 0, "and retires no shared subscription");
+}
