@@ -22,7 +22,7 @@ touches:
   - crates/slingshot-development/tests/github_workflow_contract.rs
   - "crates/slingshot-development/tests/fixtures/github-automation-authority/**"
 status: done
-merged_as: ""
+merged_as: "ffecddf89d14d13473d04cd5f6920ec69921465b"
 ---
 # Owner-Confirmed GitHub Automation
 
