@@ -1,0 +1,17 @@
+{"arguments": [], "name": "nothing-at-all", "refusal": "no-leaf"}
+{"arguments": ["teleport"], "name": "a-leaf-nobody-offers", "refusal": "unknown-leaf"}
+{"arguments": ["query_paths", "--turbo"], "name": "an-option-nobody-knows", "refusal": "unknown-option"}
+{"arguments": ["query_paths", "--profile"], "name": "a-value-that-never-came", "refusal": "missing-value"}
+{"arguments": ["query_paths", "--profile", "--machine"], "name": "a-value-that-is-another-option", "refusal": "missing-value"}
+{"arguments": ["query_paths", "--profile", "one", "--profile", "two"], "name": "the-same-option-twice", "refusal": "repeated-option"}
+{"arguments": ["operation-list", "--detach"], "name": "detaching-a-local-leaf", "refusal": "option-not-on-this-leaf"}
+{"arguments": ["daemon-status", "--operation-key", "one"], "name": "a-key-on-a-local-leaf", "refusal": "option-not-on-this-leaf"}
+{"arguments": ["query_paths", "--author-target-digest", "abc"], "name": "a-historical-digest-on-an-execution", "refusal": "option-not-on-this-leaf"}
+{"arguments": ["operation-wait", "--author-target-digest", "abc"], "name": "a-historical-digest-on-a-wait", "refusal": "option-not-on-this-leaf"}
+{"arguments": ["operation-restart", "--author-target-digest", "abc"], "name": "a-historical-digest-on-a-restart", "refusal": "option-not-on-this-leaf"}
+{"arguments": ["maintenance-apply", "--reviewed-digest", "abc", "--before", "1"], "name": "fresh-criteria-on-an-apply", "refusal": "option-not-on-this-leaf"}
+{"arguments": ["help", "--machine"], "name": "an-option-on-help", "refusal": "option-not-on-this-leaf"}
+{"arguments": ["create_page"], "name": "a-mutation-without-its-key", "refusal": "operation-key-required"}
+{"arguments": ["operation-restart", "--expected-category", "ambiguous_submission"], "name": "a-restart-without-its-revision", "refusal": "required-option-missing"}
+{"arguments": ["maintenance-apply"], "name": "an-apply-without-its-digest", "refusal": "required-option-missing"}
+{"arguments": ["maintenance-result", "--result-identifier", "one", "--expected-digest", "abc"], "name": "a-result-read-without-a-destination", "refusal": "required-option-missing"}
