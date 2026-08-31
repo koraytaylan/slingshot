@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{}","note":"every bundle"}
+{"accepted":true,"document":"{\"states\":[\"installed\",\"resolved\"]}","note":"the ones that are not running"}
+{"accepted":true,"document":"{\"symbolic_name_prefix\":\"com.example\"}","note":"one prefix"}
+{"accepted":false,"document":"{\"states\":[]}","note":"an empty state set"}
+{"accepted":false,"document":"{\"states\":[\"resolved\",\"active\"]}","note":"a descending state set"}
+{"accepted":false,"document":"{\"states\":[\"confused\"]}","note":"a state nobody declared"}

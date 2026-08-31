@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/list_open_service_gateway_initiative_bundles.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_open_service_gateway_initiative_bundles/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # List Bundles

@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"symbolic_name\":\"com.example.bundle\",\"transition\":\"start\"}","note":"starting a bundle"}
+{"accepted":true,"document":"{\"symbolic_name\":\"com.example.bundle\",\"transition\":\"stop\"}","note":"stopping one"}
+{"accepted":true,"document":"{\"symbolic_name\":\"com.example.bundle\",\"transition\":\"refresh\"}","note":"refreshing one"}
+{"accepted":false,"document":"{\"symbolic_name\":\"com.example.bundle\"}","note":"no transition"}
+{"accepted":false,"document":"{\"symbolic_name\":\"com.example.bundle\",\"transition\":\"reboot\"}","note":"a transition nobody declared"}
+{"accepted":false,"document":"{\"symbolic_name\":\"com..example\",\"transition\":\"start\"}","note":"a malformed symbolic name"}

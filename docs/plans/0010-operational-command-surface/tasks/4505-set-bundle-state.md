@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/set_open_service_gateway_initiative_bundle_state.rs
   - "crates/slingshot-domain/tests/fixtures/commands/set_open_service_gateway_initiative_bundle_state/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Set a Bundle State

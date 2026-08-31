@@ -1,0 +1,5 @@
+{"accepted":true,"document":"{}","note":"every component"}
+{"accepted":true,"document":"{\"states\":[\"satisfied\",\"unsatisfied\"]}","note":"the ones that are not instantiated"}
+{"accepted":true,"document":"{\"name_prefix\":\"com.example\"}","note":"one prefix"}
+{"accepted":false,"document":"{\"states\":[]}","note":"an empty state set"}
+{"accepted":false,"document":"{\"name_prefix\":\"\"}","note":"an empty prefix"}
