@@ -160,6 +160,7 @@ fn a_departing_owner_removes_only_the_record_carrying_its_own_nonce() {
     replacement.publish_readiness(&contract, "second").expect("readiness publishes");
     let replacement_nonce = replacement.readiness_nonce().to_owned();
     let forged = ReadinessRecord {
+        identity: None,
         process_identifier: std::process::id(),
         readiness_nonce: first_nonce.clone(),
         endpoint_display: "forged".to_owned(),
@@ -184,6 +185,7 @@ fn a_record_without_a_held_lock_is_recovered_and_the_lock_file_persists() {
     let root = temporary_runtime_root("recovery");
     let target = namespace(&root, FIRST_PROFILE, FIRST_ENVIRONMENT);
     let abandoned = ReadinessRecord {
+        identity: None,
         process_identifier: std::process::id(),
         readiness_nonce: "d".repeat(contract.namespace.readiness_nonce_rendered_bytes as usize),
         endpoint_display: "abandoned".to_owned(),
