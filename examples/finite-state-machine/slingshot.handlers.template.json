@@ -1,0 +1,48 @@
+{
+  "format": "fsm.handlers/1",
+  "handlers": {
+    "replicate": {
+      "effect": "replicate",
+      "kind": "mcp",
+      "argv": ["/absolute/path/to/slingshot", "--profile", "local", "--environment", "author", "protocol", "serve"],
+      "tool": "replicate_content",
+      "arguments": {
+        "path": "/content/site/en",
+        "operation_key": "{{workflow_effect_operation_key}}"
+      },
+      "timeout_ms": 30000,
+      "retry": {
+        "attempts": 3,
+        "backoff_ms": 500,
+        "initial_delay_ms": 500,
+        "maximum_delay_ms": 5000
+      },
+      "on_ok": "replicated",
+      "on_failed": "replication_failed",
+      "advances": [
+        { "payload": {}, "stamps": [] }
+      ]
+    },
+    "preview_maintenance": {
+      "effect": "preview_maintenance",
+      "kind": "mcp",
+      "argv": ["/absolute/path/to/slingshot", "--profile", "local", "--environment", "author", "protocol", "serve"],
+      "tool": "maintenance-preview",
+      "arguments": {
+        "author_target_identity_digest": "{{author_target_identity_digest}}"
+      },
+      "timeout_ms": 30000,
+      "retry": {
+        "attempts": 3,
+        "backoff_ms": 500,
+        "initial_delay_ms": 500,
+        "maximum_delay_ms": 5000
+      },
+      "on_ok": "previewed",
+      "on_failed": "preview_failed",
+      "advances": [
+        { "payload": {}, "stamps": [] }
+      ]
+    }
+  }
+}
