@@ -73,12 +73,36 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
     },
     InventoriedStatement {
         purpose: "read one operation inside its target partition",
-        text: "SELECT command_fingerprint, lifecycle_state, operation_revision, \
-                      selected_environment_revision \
+        // A summary is not a payload: the canonical command, the opaque author
+        // identity, and the contract digest stay in the row rather than
+        // travelling with every lookup that only wants to know where the work
+        // has got to.
+        text: "SELECT caller_identity, command_fingerprint, command_wire_name, \
+                      enqueue_sequence, installation_identifier, latest_progress, \
+                      lifecycle_state, operation_revision, recorded_at_unix_milliseconds, \
+                      result_disposition, selected_environment_revision, \
+                      settled_at_unix_milliseconds, terminal_failure_disposition, \
+                      terminal_failure_kind, terminal_failure_metadata, \
+                      workflow_correlation_identifier \
                FROM operation \
                WHERE author_target_identity_digest = ? AND operation_identifier = ?",
         parameters: 2,
         maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "reserve the next enqueue sequence inside one target partition",
+        text: "SELECT COALESCE(MAX(enqueue_sequence), 0) + 1 FROM operation \
+               WHERE author_target_identity_digest = ?",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "reconstruct one target's operations in enqueue order",
+        text: "SELECT operation_identifier FROM operation \
+               WHERE author_target_identity_digest = ? \
+               ORDER BY enqueue_sequence, operation_identifier",
+        parameters: 1,
+        maximum_rows: LISTING_ROWS,
     },
     InventoriedStatement {
         purpose: "list one target's operations, newest first",
@@ -91,13 +115,61 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: LISTING_ROWS,
     },
     InventoriedStatement {
-        purpose: "record one lifecycle advance under compare-and-set",
+        purpose: "record one folded operation under compare-and-set",
         text: "UPDATE operation \
-               SET lifecycle_state = ?, operation_revision = ? \
+               SET latest_progress = ?, lifecycle_state = ?, operation_revision = ?, \
+                   result_disposition = ?, settled_at_unix_milliseconds = ?, \
+                   terminal_failure_disposition = ?, terminal_failure_kind = ?, \
+                   terminal_failure_metadata = ? \
                WHERE author_target_identity_digest = ? AND operation_identifier = ? \
                  AND operation_revision = ?",
-        parameters: 5,
+        parameters: 11,
         maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "record the one recovery fact an operation is waiting on",
+        text: "INSERT OR REPLACE INTO recovery_fact \
+               (attempt_count, author_target_identity_digest, category, detail, \
+                evidence_certainty, evidence_kind, manual_resume_eligible, \
+                operation_identifier, retry_delay_milliseconds, \
+                retry_observed_at_unix_milliseconds) \
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        parameters: 10,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read the one recovery fact an operation is waiting on",
+        text: "SELECT attempt_count, category, detail, evidence_certainty, evidence_kind, \
+                      manual_resume_eligible, retry_delay_milliseconds, \
+                      retry_observed_at_unix_milliseconds \
+               FROM recovery_fact \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "clear the recovery fact an operation is no longer waiting on",
+        text: "DELETE FROM recovery_fact \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "record one recovery-resume receipt",
+        text: "INSERT INTO recovery_resume_receipt \
+               (applied_operation_revision, author_target_identity_digest, \
+                operation_identifier, recorded_at_unix_milliseconds, \
+                selected_environment_revision, source_fingerprint) \
+               VALUES (?, ?, ?, ?, ?, ?)",
+        parameters: 6,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "count one operation's recovery-resume receipts",
+        text: "SELECT COUNT(*) FROM recovery_resume_receipt \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
         purpose: "read one maintenance result by target and identifier alone",
@@ -112,7 +184,7 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
     InventoriedStatement {
         purpose: "read one recovery-resume receipt by its source fingerprint",
         text: "SELECT applied_operation_revision, operation_identifier, \
-                      selected_environment_revision \
+                      recorded_at_unix_milliseconds, selected_environment_revision \
                FROM recovery_resume_receipt \
                WHERE author_target_identity_digest = ? AND source_fingerprint = ?",
         parameters: 2,
