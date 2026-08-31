@@ -1,0 +1,4 @@
+# One row per moment a daemon can restart, and what survives it.
+{"name": "before-the-call", "restarted_at": "before", "same_key": true, "same_operation": true, "why": "the key is derived from the occurrence, which a restart does not change"}
+{"name": "while-the-call-waited", "restarted_at": "waiting", "same_key": true, "same_operation": true, "why": "the retry carries the same key and the daemon recovers the same operation"}
+{"name": "after-the-answer", "restarted_at": "after", "same_key": true, "same_operation": true, "why": "the answer was already journalled, and asking again finds the same operation"}
