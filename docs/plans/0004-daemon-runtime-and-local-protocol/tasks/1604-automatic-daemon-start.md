@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/src/daemon_process.rs
   - crates/slingshot-command-line/tests/automatic_daemon_start.rs
 status: done
-merged_as: ""
+merged_as: "4c317d6830a460409ad622239ab8cc3ed806fc3a"
 ---
 # Automatic Daemon Start
 
