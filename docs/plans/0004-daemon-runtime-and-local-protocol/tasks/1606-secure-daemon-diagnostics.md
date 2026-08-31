@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-daemon/tests/diagnostics.rs
   - "crates/slingshot-daemon/tests/fixtures/diagnostics/**"
 status: done
-merged_as: ""
+merged_as: "8cf55cd404cc6979aec9d22a0062fbcb21f53515"
 ---
 # Secure Daemon Diagnostics
 
