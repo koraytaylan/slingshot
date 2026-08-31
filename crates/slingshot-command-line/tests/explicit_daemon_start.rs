@@ -221,12 +221,8 @@ async fn a_successor_starts_one_daemon_once_an_abandoned_election_is_released() 
 fn help_and_version_create_no_runtime_state() {
     let root = temporary_runtime_root("h");
     for arguments in [vec!["--version"], vec!["--help"]] {
-        let produced = Command::new(product_executable())
-            .args(&arguments)
-            .arg("--runtime-root")
-            .arg(&root)
-            .output()
-            .expect("the executable runs");
+        let produced =
+            Command::new(product_executable()).args(&arguments).output().expect("it runs");
         assert!(produced.status.success(), "{arguments:?}");
         assert!(!produced.stdout.is_empty(), "{arguments:?}");
     }
@@ -256,7 +252,7 @@ fn an_invocation_that_names_no_target_exits_distinctly() {
     assert_eq!(produced.status.code(), Some(i32::from(EXIT_SUCCESS)));
     let rendered = String::from_utf8(produced.stdout).expect("the result is text");
     assert_eq!(rendered.lines().count(), 1, "{rendered}");
-    assert!(rendered.contains("\"running\":false"), "{rendered}");
+    assert!(rendered.contains("daemon-ping: absent"), "{rendered}");
     assert!(produced.stderr.is_empty(), "a served probe writes no diagnostic");
     std::fs::remove_dir_all(&root).ok();
 }

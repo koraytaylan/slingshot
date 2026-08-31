@@ -261,6 +261,18 @@ fn no_document_claims_evidence_that_does_not_exist() {
     assert!(architecture.contains("## What is not here"));
 }
 
+/// What a documented probe writes when nothing owns the target.
+const ABSENT_LINE: &str = "daemon-ping: absent";
+
+/// What a documented start writes when it creates the daemon.
+const CREATED_LINE: &str = "daemon-start: created";
+
+/// What a documented probe writes when a daemon owns the target.
+const SERVING_LINE: &str = "daemon-ping: serving";
+
+/// The member a readiness nonce would appear under if one were published.
+const NONCE_MEMBER: &str = "readiness_nonce";
+
 #[test]
 fn the_documented_invocations_behave_the_way_they_are_shown() {
     let root = std::env::temp_dir().join(format!("d{}", std::process::id()));
@@ -269,23 +281,18 @@ fn the_documented_invocations_behave_the_way_they_are_shown() {
     let probed = run_documented(&root, "ping");
     assert!(probed.status.success(), "{}", String::from_utf8_lossy(&probed.stderr));
     let reported = String::from_utf8(probed.stdout).expect("the result is text");
-    assert!(reported.contains("\"running\":false"), "{reported}");
+    assert_eq!(reported.trim(), ABSENT_LINE, "{reported}");
     assert!(!root.exists(), "the documented probe creates nothing");
 
     let started = run_documented(&root, "start");
     assert!(started.status.success(), "{}", String::from_utf8_lossy(&started.stderr));
-    let created: serde_json::Value =
-        serde_json::from_str(String::from_utf8(started.stdout).expect("text").trim())
-            .expect("the result reads");
-    assert_eq!(created["profile"].as_str(), Some(DOCUMENTED_PROFILE));
-    assert_eq!(created["environment"].as_str(), Some(DOCUMENTED_ENVIRONMENT));
+    let created = String::from_utf8(started.stdout).expect("the result is text");
+    assert_eq!(created.trim(), CREATED_LINE, "{created}");
 
     let running = run_documented(&root, "ping");
-    let observed: serde_json::Value =
-        serde_json::from_str(String::from_utf8(running.stdout).expect("text").trim())
-            .expect("the result reads");
-    assert_eq!(observed["running"].as_bool(), Some(true));
-    assert_eq!(observed["readiness_nonce"], created["readiness_nonce"]);
+    let observed = String::from_utf8(running.stdout).expect("the result is text");
+    assert_eq!(observed.trim(), SERVING_LINE, "{observed}");
+    assert!(!observed.contains(NONCE_MEMBER), "a documented probe publishes no nonce");
 
     stop_documented_daemon(&root);
     std::fs::remove_dir_all(&root).ok();

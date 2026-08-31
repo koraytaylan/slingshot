@@ -66,6 +66,15 @@ pub const RESULT_IDENTIFIER_OPTION: &str = "--result-identifier";
 /// The option naming the digest a read expects.
 pub const EXPECTED_DIGEST_OPTION: &str = "--expected-digest";
 
+/// The option naming where a namespace's objects live.
+pub const RUNTIME_ROOT_OPTION: &str = "--runtime-root";
+
+/// The option naming the operation a leaf reads or releases.
+pub const OPERATION_IDENTIFIER_OPTION: &str = "--operation";
+
+/// The option naming the artifact a read fetches.
+pub const ARTIFACT_OPTION: &str = "--artifact";
+
 /// The option naming where a fetched thing is written.
 pub const DESTINATION_OPTION: &str = "--destination";
 
@@ -185,6 +194,9 @@ pub const EVERY_OPTION: &[&str] = &[
     RESOURCE_TYPE_OPTION,
     COMPONENT_PARENT_OPTION,
     PROPERTIES_OPTION,
+    OPERATION_IDENTIFIER_OPTION,
+    ARTIFACT_OPTION,
+    RUNTIME_ROOT_OPTION,
 ];
 
 /// The leaves this surface offers that are not catalog commands.
@@ -223,6 +235,18 @@ pub const HISTORICAL_LEAVES: &[&str] = &[
     "operation-list",
     "operation-result",
     "operation-status",
+];
+
+/// The leaves that name the one operation they act on.
+///
+/// Declared beside the vocabulary rather than beside the routing, so the parser
+/// and the application read the same list instead of two that agree today.
+pub const OPERATION_NAMING_LEAVES: &[&str] = &[
+    "operation-artifact",
+    "operation-restart",
+    "operation-result",
+    "operation-status",
+    "operation-wait",
 ];
 
 /// The leaves that answer without reaching anything at all.
@@ -356,6 +380,22 @@ pub fn parse(arguments: &[String]) -> Result<Invocation, ParseRefusal> {
     Ok(invocation)
 }
 
+/// Returns whether `option` is followed by a value.
+///
+/// Four are not, and each of them is a decision rather than a value: how the
+/// outcome is written, whether a walk descends, whether every predicate must
+/// match, and whether the run returns without waiting.
+#[must_use]
+pub fn takes_a_value(option: &str) -> bool {
+    !matches!(option, MACHINE_OUTPUT_OPTION | RECURSIVE_OPTION | MATCH_ALL_OPTION | DETACH_OPTION)
+}
+
+/// Returns whether `leaf` names something this build offers.
+#[must_use]
+pub fn names_a_leaf(leaf: &str) -> bool {
+    LOCAL_LEAVES.contains(&leaf) || is_catalog_command(leaf)
+}
+
 /// Returns whether `leaf` is a catalog command rather than a local leaf.
 #[must_use]
 pub fn is_catalog_command(leaf: &str) -> bool {
@@ -400,20 +440,44 @@ fn require_option_permitted(leaf: &str, option: &str) -> Result<(), ParseRefusal
 /// two should be reading the same thing.
 #[must_use]
 pub fn leaves_taking(option: &str) -> Vec<String> {
+    observation_leaves_taking(option).unwrap_or_else(|| command_leaves_taking(option))
+}
+
+/// Returns which local leaves take `option`, when it is one of theirs.
+fn observation_leaves_taking(option: &str) -> Option<Vec<String>> {
     let named = |leaves: &[&str]| leaves.iter().map(|leaf| (*leaf).to_owned()).collect();
-    match option {
-        DETACH_OPTION | OPERATION_KEY_OPTION => catalog_leaves(),
+    let leaves = match option {
         TARGET_DIGEST_OPTION => named(HISTORICAL_LEAVES),
         EXPECTED_REVISION_OPTION | EXPECTED_CATEGORY_OPTION => named(&["operation-restart"]),
         REVIEWED_DIGEST_OPTION => named(&["maintenance-apply"]),
         BEFORE_OPTION => named(&["maintenance-preview", "operation-list"]),
+        RESULT_IDENTIFIER_OPTION => named(&["maintenance-result"]),
+        EXPECTED_DIGEST_OPTION | DESTINATION_OPTION => {
+            named(&["maintenance-result", "operation-artifact"])
+        }
+        OPERATION_IDENTIFIER_OPTION => named(OPERATION_NAMING_LEAVES),
+        ARTIFACT_OPTION => named(&["operation-artifact"]),
+        _ => return None,
+    };
+    Some(leaves)
+}
+
+/// Returns which leaves take `option`, for the options a command takes.
+fn command_leaves_taking(option: &str) -> Vec<String> {
+    let named =
+        |leaves: &[&str]| -> Vec<String> { leaves.iter().map(|leaf| (*leaf).to_owned()).collect() };
+    match option {
+        DETACH_OPTION | OPERATION_KEY_OPTION => catalog_leaves(),
         LIMIT_OPTION => {
             let mut leaves = named(&["maintenance-preview", "operation-list"]);
             leaves.extend(catalog_leaves());
             leaves
         }
-        RESULT_IDENTIFIER_OPTION | EXPECTED_DIGEST_OPTION => named(&["maintenance-result"]),
-        DESTINATION_OPTION => named(&["maintenance-result", "operation-artifact"]),
+        CONTINUATION_TOKEN_OPTION => {
+            let mut leaves = named(&["operation-list"]);
+            leaves.extend(catalog_leaves());
+            leaves
+        }
         PATH_OPTION
         | DEPTH_OPTION
         | RECURSIVE_OPTION
@@ -423,7 +487,6 @@ pub fn leaves_taking(option: &str) -> Vec<String> {
         | EXCLUDE_OPTION
         | NODE_TYPE_OPTION
         | OFFSET_OPTION
-        | CONTINUATION_TOKEN_OPTION
         | PROPERTY_PREDICATE_OPTION
         | TEMPLATE_OPTION
         | PHRASE_OPTION

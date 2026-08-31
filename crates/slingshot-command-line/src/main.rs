@@ -1,19 +1,17 @@
 //! Process entry point for the `slingshot` product executable.
 //!
-//! The entry point parses the invocation, resolves its own absolute path so a
-//! start can create a child from the same executable, runs the command on the
-//! asynchronous runtime, and maps the outcome onto a process exit status.
-//! Diagnostics go to the diagnostic stream; the result stream carries the
-//! structured result and nothing else.
+//! Thin on purpose. It hands the argument vector, this executable's own path,
+//! and the two streams to the dispatcher, and turns the exit it returns into a
+//! process status. Every decision, every effect, and every byte written belongs
+//! to something that can be driven without a process.
 
 use std::io;
 use std::process::ExitCode;
 
-use clap::Parser;
-use slingshot_command_line::command_line::{self, ProductArguments};
+use slingshot_command_line::command_line;
 
 fn main() -> ExitCode {
-    let arguments = ProductArguments::parse();
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
     let executable = match std::env::current_exe() {
         Ok(path) => path,
         Err(failure) => {
@@ -21,19 +19,9 @@ fn main() -> ExitCode {
             return ExitCode::from(command_line::EXIT_RUNTIME_UNUSABLE);
         }
     };
-    let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
-        Ok(runtime) => runtime,
-        Err(failure) => {
-            eprintln!("slingshot: the runtime could not be started: {failure}");
-            return ExitCode::from(command_line::EXIT_RUNTIME_UNUSABLE);
-        }
-    };
     let mut standard_output = io::stdout().lock();
-    match runtime.block_on(command_line::run(arguments, &executable, &mut standard_output)) {
-        Ok(status) => ExitCode::from(status),
-        Err(failure) => {
-            eprintln!("slingshot: {failure}");
-            ExitCode::from(failure.exit_status())
-        }
-    }
+    let mut standard_error = io::stderr().lock();
+    let exit =
+        command_line::run(&arguments, &executable, &mut standard_output, &mut standard_error);
+    ExitCode::from(u8::try_from(exit).unwrap_or(command_line::EXIT_RUNTIME_UNUSABLE))
 }
