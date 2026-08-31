@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/flush_replication_queue.rs
   - "crates/slingshot-domain/tests/fixtures/commands/flush_replication_queue/**"
 status: done
-merged_as: ""
+merged_as: "defddc2954214669c5af76eb3f2f147dece6268c"
 ---
 # Flush a Replication Queue
 

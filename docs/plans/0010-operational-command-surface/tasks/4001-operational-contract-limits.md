@@ -11,8 +11,8 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/catalog.json
   - schemas/commands/command-schema-1.json
   - crates/slingshot-development/tests/fixtures/protocol-compatibility/snapshot.json
-status: planned
-merged_as: ""
+status: done
+merged_as: "ab145fad161d30aef848e2020356a5cabf28afcb"
 ---
 # Operational Contract Limits
 

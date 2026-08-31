@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/find_sling_jobs.rs
   - "crates/slingshot-domain/tests/fixtures/commands/find_sling_jobs/**"
 status: done
-merged_as: ""
+merged_as: "5f8dabf0bc80ff1bf0a55195ce88cfc3957e9f9e"
 ---
 # Find Sling Jobs
 

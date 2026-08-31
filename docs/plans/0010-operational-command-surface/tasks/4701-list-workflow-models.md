@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-domain/tests/list_workflow_models.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_workflow_models/**"
 status: done
-merged_as: ""
+merged_as: "e71740fdc51e0a18c337831b46347358209836f2"
 ---
 # List Workflow Models
 

@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/list_group_members.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_group_members/**"
 status: done
-merged_as: ""
+merged_as: "a73a0b157a88358ff0b1aa98aff3ea0fee48c32e"
 ---
 # List Group Members
 

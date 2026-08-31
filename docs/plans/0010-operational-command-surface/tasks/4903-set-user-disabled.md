@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/set_user_disabled.rs
   - "crates/slingshot-domain/tests/fixtures/commands/set_user_disabled/**"
 status: done
-merged_as: ""
+merged_as: "a73a0b157a88358ff0b1aa98aff3ea0fee48c32e"
 ---
 # Disable and Enable a User
 

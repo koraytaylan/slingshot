@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/update_component.rs
   - "crates/slingshot-domain/tests/fixtures/commands/update_component/**"
 status: done
-merged_as: ""
+merged_as: "f971744a47cdd3c277cb7473deccd7094e5a42c9"
 ---
 # Update a Component
 
