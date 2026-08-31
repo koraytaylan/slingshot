@@ -497,6 +497,7 @@ fn not_run(behavior: &str, reason: &str) -> ReportedOutcome {
 /// Proves that readiness is replaced in one operation and removed by its nonce.
 fn prove_atomic_readiness(contract: &FoundationContract, root: &Path) {
     let first = ReadinessRecord {
+        identity: None,
         process_identifier: std::process::id(),
         readiness_nonce: "a".repeat(contract.namespace.readiness_nonce_rendered_bytes as usize),
         endpoint_display: "first".to_owned(),
@@ -527,6 +528,7 @@ fn prove_atomic_readiness(contract: &FoundationContract, root: &Path) {
         "the live owner removes its own record"
     );
     let oversized = ReadinessRecord {
+        identity: None,
         endpoint_display: "e".repeat(contract.namespace.readiness_record_bytes as usize),
         ..replacement
     };
@@ -612,6 +614,7 @@ fn prove_detached_survival(contract: &FoundationContract) -> ReportedOutcome {
 /// Proves that records left by a departed owner are recovered, not obeyed.
 fn prove_stale_recovery(contract: &FoundationContract, root: &Path) {
     let stale = ReadinessRecord {
+        identity: None,
         process_identifier: std::process::id(),
         readiness_nonce: "c".repeat(contract.namespace.readiness_nonce_rendered_bytes as usize),
         endpoint_display: "stale".to_owned(),

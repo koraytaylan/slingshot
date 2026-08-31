@@ -2,7 +2,15 @@
 //!
 //! A namespace has exactly one authority: the process holding its
 //! operating-system owner lock. Readiness records and process identifiers are
-//! diagnostics, and neither can manufacture ownership. The owner draws one
+//! diagnostics, and neither can manufacture ownership. A process identifier in
+//! particular proves nothing at all: the operating system reuses them, so an
+//! identifier that matches a record may name a program that has nothing to do
+//! with this one. Nothing here looks one up, checks it, or signals it.
+//!
+//! Classifying an apparent owner as live therefore means reaching its endpoint
+//! and getting back the exact nonce its record claims. A record on its own is
+//! a claim someone left behind; a matching live answer is the only evidence
+//! that whoever left it is still there. The owner draws one
 //! random readiness nonce and keeps it alive beside the lock; that nonce is the
 //! only thing that authorizes a cooperative stop, and dropping the owner
 //! removes only the readiness record carrying that exact nonce, so a departing
@@ -14,7 +22,7 @@ use slingshot_local_protocol::ping;
 
 use crate::platform_runtime::failure::PlatformFailure;
 use crate::platform_runtime::locks::OwnerLock;
-use crate::platform_runtime::readiness::{self, ReadinessRecord};
+use crate::platform_runtime::readiness::{self, PublishedIdentity, ReadinessRecord};
 use crate::runtime_namespace::RuntimeNamespace;
 
 /// What a process learns when it asks to own a runtime namespace.
@@ -35,12 +43,42 @@ pub struct OwnerEvidence {
     pub readiness: Option<ReadinessRecord>,
 }
 
+/// What probing an apparent owner's endpoint established.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Liveness {
+    /// The endpoint answered with the exact nonce the record claims.
+    Live,
+    /// The endpoint answered, but with another nonce.
+    ///
+    /// Someone is there and it is not who the record says, so the record is a
+    /// prior instance's and the endpoint belongs to its replacement. Neither is
+    /// a thing this process may clean up.
+    AnotherInstance,
+    /// Nothing answered, so the record is what a departed owner left.
+    Departed,
+}
+
+/// Returns what an answered nonce says about an apparent owner.
+///
+/// Taking the answer rather than performing the probe keeps the decision
+/// testable without a live endpoint, and keeps transport out of a module whose
+/// subject is authority.
+#[must_use]
+pub fn classify_liveness(record: &ReadinessRecord, answered_nonce: Option<&str>) -> Liveness {
+    match answered_nonce {
+        Some(nonce) if nonce == record.readiness_nonce => Liveness::Live,
+        Some(_) => Liveness::AnotherInstance,
+        None => Liveness::Departed,
+    }
+}
+
 /// The one authority over a runtime namespace, held for a daemon's lifetime.
 #[derive(Debug)]
 pub struct DaemonOwnership {
     namespace: RuntimeNamespace,
     readiness_nonce: String,
     held: OwnerLock,
+    identity: Option<PublishedIdentity>,
     published: bool,
 }
 
@@ -79,6 +117,10 @@ impl DaemonOwnership {
                 readiness,
             }));
         };
+        // Holding the lock is what makes this safe. A live owner holds it, so
+        // reaching here means nobody does, and the record can only be one a
+        // departed owner left. Recovering it without the lock would be a race
+        // with whoever is actually starting.
         let stale = readiness::read(namespace.runtime_root(), namespace.digest())?;
         if let Some(record) = stale {
             readiness::remove_matching(
@@ -91,6 +133,7 @@ impl DaemonOwnership {
             readiness_nonce: draw_readiness_nonce(contract),
             namespace,
             held,
+            identity: None,
             published: false,
         })))
     }
@@ -116,6 +159,21 @@ impl DaemonOwnership {
         self.held.path()
     }
 
+    /// Records what this owner serves, before it publishes readiness.
+    ///
+    /// Separate from acquisition because the two answer different questions in
+    /// different orders: a process takes the lock to find out whether it is the
+    /// owner at all, and only an owner goes on to establish a target.
+    pub fn identify(&mut self, identity: PublishedIdentity) {
+        self.identity = Some(identity);
+    }
+
+    /// Returns what this owner serves, once it has been told.
+    #[must_use]
+    pub fn identity(&self) -> Option<&PublishedIdentity> {
+        self.identity.as_ref()
+    }
+
     /// Publishes readiness for this owner, atomically.
     ///
     /// # Errors
@@ -128,9 +186,10 @@ impl DaemonOwnership {
         endpoint_display: &str,
     ) -> Result<(), PlatformFailure> {
         let record = ReadinessRecord {
+            endpoint_display: endpoint_display.to_owned(),
+            identity: self.identity.clone(),
             process_identifier: std::process::id(),
             readiness_nonce: self.readiness_nonce.clone(),
-            endpoint_display: endpoint_display.to_owned(),
         };
         readiness::publish(
             contract,
