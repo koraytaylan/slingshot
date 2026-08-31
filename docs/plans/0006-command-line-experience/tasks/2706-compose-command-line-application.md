@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-command-line/src/main.rs
   - crates/slingshot-command-line/tests/application_dispatch.rs
   - "crates/slingshot-command-line/tests/fixtures/application-dispatch/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Compose Command-Line Application
