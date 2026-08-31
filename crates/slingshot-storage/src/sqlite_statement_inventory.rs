@@ -172,6 +172,32 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
+        purpose: "record one artifact's content, once per digest",
+        text: "INSERT OR IGNORE INTO artifact_blob \
+               (byte_length, content_digest, recorded_at_unix_milliseconds) \
+               VALUES (?, ?, ?)",
+        parameters: 3,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "associate one artifact with the operation slot it fills",
+        text: "INSERT INTO artifact_association \
+               (artifact_identifier, artifact_slot, author_target_identity_digest, \
+                byte_length, content_digest, media_type, operation_identifier) \
+               VALUES (?, ?, ?, ?, ?, ?, ?)",
+        parameters: 7,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read the artifact one operation slot holds",
+        text: "SELECT artifact_identifier, byte_length, content_digest, media_type \
+               FROM artifact_association \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ? \
+                 AND artifact_slot = ?",
+        parameters: 3,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
         purpose: "read one maintenance result by target and identifier alone",
         text: "SELECT association_revision, byte_length, content_digest, kind, media_type, \
                       owning_application_receipt_identifier, reviewed_source_digest \
