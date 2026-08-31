@@ -11,7 +11,7 @@ touches:
   - ARCHITECTURE.md
   - docs/DAEMON.md
   - crates/slingshot-development/tests/product_documentation.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Daemon Runtime Documentation
