@@ -1,0 +1,15 @@
+# One distinct value per class this executable must never publish.
+# A secret may appear nowhere. A provenance value may appear in an answer a
+# caller asked for by name, and in no diagnostic.
+{"name": "password", "value": "s3ntinel-password-9f2a4c", "kind": "secret", "why": "a basic-credential password"}
+{"name": "bearer-token", "value": "s3ntinel-bearer-token-71bd0e", "kind": "secret", "why": "an access token a request carries"}
+{"name": "private-key", "value": "s3ntinel-private-key-4ab19c", "kind": "secret", "why": "a service credential's private key"}
+{"name": "client-secret", "value": "s3ntinel-client-secret-22e70d", "kind": "secret", "why": "a client secret from a credentials document"}
+{"name": "readiness-nonce", "value": "s3ntinel-readiness-nonce-c05f13", "kind": "secret", "why": "the nonce that authorizes a cooperative stop"}
+{"name": "credential-path", "value": "/s3ntinel/credentials/service.json", "kind": "provenance", "why": "where a credential document was read from"}
+{"name": "certificate-path", "value": "/s3ntinel/trust/additional-authority.pem", "kind": "provenance", "why": "where an additional certificate authority was read from"}
+{"name": "configuration-root", "value": "/s3ntinel/configuration-root", "kind": "provenance", "why": "where this account's configuration lives"}
+{"name": "profile-name", "value": "s3ntinelprofile", "kind": "provenance", "why": "which profile a caller selected"}
+{"name": "environment-name", "value": "s3ntinelenvironment", "kind": "provenance", "why": "which environment a caller selected"}
+{"name": "source-digest", "value": "s3ntineldigest0123456789abcdef0123456789abcdef0123456789abcdef01", "kind": "provenance", "why": "the digest of a configuration source"}
+{"name": "discovery-order", "value": "s3ntinel-read-first", "kind": "provenance", "why": "which source was read before another"}
