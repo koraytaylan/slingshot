@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/tests/legacy_revision_transcripts.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/legacy-revision/**
 status: done
-merged_as: ""
+merged_as: "cc3e4b6295f3023882c2098b5627b2f2003cc514"
 ---
 # Pin Legacy Revision Transcripts
 
