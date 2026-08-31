@@ -1,0 +1,3 @@
+{"id":"one","result":{"cacheScope":"session","resultType":"complete","tools":[],"ttlMs":60000}}
+{"id":"two","result":{"cacheScope":"session","resources":[],"resultType":"complete","ttlMs":60000}}
+{"id":"three","result":{"cacheScope":"session","resourceTemplates":[],"resultType":"complete","ttlMs":60000}}

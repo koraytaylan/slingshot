@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/tests/current_revision_transcripts.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/current-revision/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Pin Current Revision Transcripts

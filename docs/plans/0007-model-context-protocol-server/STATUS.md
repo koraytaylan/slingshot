@@ -9,6 +9,11 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 12/16 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `1a592249115df391edac4d8f84fcb52262a3d36e`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3103 taught the process harness to feed a child its input.** A conversation is
+    lines in and lines out, and the harness started every child with nothing on its
+    standard input. Writing the whole input and closing it joins the harness, because a
+    child left with an open input that never produces anything waits for a deadline
+    instead of finishing.
   - **3107 also touched the command reference and the golden sessions.** Adding a leaf
     to the closed vocabulary changes what the reference lists and what the session
     coverage requires, and both are checked against the vocabulary rather than written

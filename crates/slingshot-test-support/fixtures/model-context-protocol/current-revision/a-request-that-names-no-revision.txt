@@ -1,0 +1,2 @@
+{"error":{"code":-32022,"data":{"requested":"","supported":["2026-07-28","2025-06-18"]},"message":"this build serves neither of the revisions this request names"},"id":"one"}
+{"id":"two","result":{"resultType":"complete"}}

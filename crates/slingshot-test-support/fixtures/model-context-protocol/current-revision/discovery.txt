@@ -1,0 +1,1 @@
+{"id":"one","result":{"capabilities":{"resources":{},"tools":{}},"resultType":"complete","supportedVersions":["2026-07-28","2025-06-18"]}}
