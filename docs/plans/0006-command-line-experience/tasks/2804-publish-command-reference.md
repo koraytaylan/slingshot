@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/tests/command_reference.rs
   - docs/COMMANDS.md
-status: planned
+status: done
 merged_as: ""
 ---
 # Publish Command Reference
