@@ -13,6 +13,7 @@
 
 pub mod add_component;
 pub mod artifact;
+pub mod authorizable_identity;
 pub mod canonical_json;
 pub mod catalog;
 pub mod command_identity;

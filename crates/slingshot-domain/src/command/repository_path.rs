@@ -69,7 +69,11 @@ impl PathFailure {
 ///
 /// Every role shares the same shape - construct by validating, keep the exact
 /// bytes, render them back - and differs only in what it accepts, so the shape
-/// is written once and each role supplies its own rule.
+/// is written once and each role supplies its own rule. The operational
+/// vocabulary the later families address - an authorizable, a bundle, a
+/// workflow instance, a job topic - is the same shape again, so the macro is
+/// visible to the whole family and names its own failure type absolutely,
+/// rather than being copied into each module that needs one.
 macro_rules! address_value {
     ($(#[$attribute:meta])* $name:ident, $role:literal) => {
         $(#[$attribute])*
@@ -92,10 +96,19 @@ macro_rules! address_value {
             pub fn role() -> &'static str {
                 $role
             }
+
+            /// Returns the wrapper around a spelling this role has accepted.
+            ///
+            /// Reachable only inside this crate and only from the `parse` that
+            /// validated the bytes, because a wrapper is a claim that the
+            /// validation ran.
+            pub(crate) fn from_accepted(value: &str) -> Self {
+                Self { value: value.to_owned() }
+            }
         }
 
         impl TryFrom<String> for $name {
-            type Error = PathFailure;
+            type Error = $crate::command::repository_path::PathFailure;
 
             fn try_from(value: String) -> Result<Self, Self::Error> {
                 Self::parse(&value)
@@ -115,6 +128,8 @@ macro_rules! address_value {
         }
     };
 }
+
+pub(crate) use address_value;
 
 address_value!(
     /// One repository item name, optionally namespace-qualified.
@@ -190,7 +205,7 @@ impl RepositoryName {
             accept_prefix(prefix)?;
         }
         accept_local(local)?;
-        Ok(Self { value: name.to_owned() })
+        Ok(Self::from_accepted(name))
     }
 
     /// Reports whether this name carries a namespace prefix.
@@ -212,7 +227,7 @@ impl RepositoryPathSegment {
         let refuse = || PathFailure::at(Self::role(), "sibling index");
         let Some(opening) = segment.find(SIBLING_OPENING) else {
             RepositoryName::parse(segment)?;
-            return Ok(Self { value: segment.to_owned() });
+            return Ok(Self::from_accepted(segment));
         };
         let (name, suffix) = segment.split_at(opening);
         RepositoryName::parse(name)?;
@@ -221,7 +236,7 @@ impl RepositoryPathSegment {
             .and_then(|rest| rest.strip_suffix(SIBLING_CLOSING))
             .ok_or_else(refuse)?;
         accept_sibling_index(index)?;
-        Ok(Self { value: segment.to_owned() })
+        Ok(Self::from_accepted(segment))
     }
 
     /// Returns the name part of this segment.
@@ -257,13 +272,13 @@ impl RepositoryPath {
             "bytes",
         )?;
         if path == Self::ROOT {
-            return Ok(Self { value: path.to_owned() });
+            return Ok(Self::from_accepted(path));
         }
         let Some(body) = path.strip_prefix(PATH_SEPARATOR) else {
             return Err(PathFailure::at(Self::role(), "leading separator"));
         };
         accept_segments(body, Self::role())?;
-        Ok(Self { value: path.to_owned() })
+        Ok(Self::from_accepted(path))
     }
 
     /// Reports whether this path is the root.
@@ -296,9 +311,9 @@ impl RepositoryPath {
         }
         let (head, _) = self.value.rsplit_once(PATH_SEPARATOR)?;
         if head.is_empty() {
-            return Some(Self { value: Self::ROOT.to_owned() });
+            return Some(Self::from_accepted(Self::ROOT));
         }
-        Some(Self { value: head.to_owned() })
+        Some(Self::from_accepted(head))
     }
 
     /// Returns the path of the child `segment` addresses.
@@ -347,7 +362,7 @@ impl RepositoryRelativePath {
             return Err(PathFailure::at(Self::role(), "leading separator"));
         }
         accept_segments(path, Self::role())?;
-        Ok(Self { value: path.to_owned() })
+        Ok(Self::from_accepted(path))
     }
 }
 
@@ -365,7 +380,7 @@ impl PropertyName {
         if name.contains(SIBLING_OPENING) {
             return Err(PathFailure::at(Self::role(), "sibling index"));
         }
-        Ok(Self { value: name.to_owned() })
+        Ok(Self::from_accepted(name))
     }
 }
 
@@ -379,7 +394,7 @@ impl PageName {
     pub fn parse(name: &str) -> Result<Self, PathFailure> {
         let bound = CommandContract::embedded().limit("maximum_page_name_bytes");
         accept_creatable(name, bound, Self::role())?;
-        Ok(Self { value: name.to_owned() })
+        Ok(Self::from_accepted(name))
     }
 }
 
@@ -393,7 +408,7 @@ impl ComponentName {
     pub fn parse(name: &str) -> Result<Self, PathFailure> {
         let bound = CommandContract::embedded().limit("maximum_component_name_bytes");
         accept_creatable(name, bound, Self::role())?;
-        Ok(Self { value: name.to_owned() })
+        Ok(Self::from_accepted(name))
     }
 }
 
@@ -412,7 +427,7 @@ impl PrimaryNodeTypeName {
         if !parsed.is_qualified() {
             return Err(PathFailure::at(Self::role(), "namespace"));
         }
-        Ok(Self { value: name.to_owned() })
+        Ok(Self::from_accepted(name))
     }
 }
 
@@ -438,7 +453,7 @@ impl RelativePropertyPath {
                 .map_err(|_| PathFailure::at(Self::role(), "child address"))?;
         }
         PropertyName::parse(name).map_err(|_| PathFailure::at(Self::role(), "name"))?;
-        Ok(Self { value: path.to_owned() })
+        Ok(Self::from_accepted(path))
     }
 }
 
@@ -496,7 +511,7 @@ impl ::core::fmt::Display for RepositoryPropertyPath {
 }
 
 /// Requires one value to be nonempty, within `bound`, and already normalized.
-fn accept_within(
+pub(crate) fn accept_within(
     value: &str,
     bound: u64,
     role: &'static str,

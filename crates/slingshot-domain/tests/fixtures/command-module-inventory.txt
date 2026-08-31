@@ -9,6 +9,7 @@
 # without appearing in the other two.
 add_component
 artifact
+authorizable_identity
 canonical_json
 catalog
 command_identity
