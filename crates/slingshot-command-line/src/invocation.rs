@@ -75,6 +75,21 @@ pub const PATH_OPTION: &str = "--path";
 /// The option naming how far below a resource a command reaches.
 pub const DEPTH_OPTION: &str = "--depth";
 
+/// The option that includes everything below a named path.
+pub const RECURSIVE_OPTION: &str = "--recursive";
+
+/// The option naming the stem a produced package is named from.
+pub const PACKAGE_NAME_OPTION: &str = "--package-name";
+
+/// The option naming the subtrees a package holds.
+pub const ROOTS_OPTION: &str = "--roots";
+
+/// The option naming the subtrees a package admits, in order.
+pub const INCLUDE_OPTION: &str = "--include";
+
+/// The option naming the subtrees a package removes, in order.
+pub const EXCLUDE_OPTION: &str = "--exclude";
+
 /// Every option this surface knows, in the order a reference lists them.
 pub const EVERY_OPTION: &[&str] = &[
     PROFILE_OPTION,
@@ -93,6 +108,11 @@ pub const EVERY_OPTION: &[&str] = &[
     DESTINATION_OPTION,
     PATH_OPTION,
     DEPTH_OPTION,
+    RECURSIVE_OPTION,
+    PACKAGE_NAME_OPTION,
+    ROOTS_OPTION,
+    INCLUDE_OPTION,
+    EXCLUDE_OPTION,
 ];
 
 /// The leaves this surface offers that are not catalog commands.
@@ -317,7 +337,8 @@ pub fn leaves_taking(option: &str) -> Vec<String> {
         LIMIT_OPTION | BEFORE_OPTION => named(&["maintenance-preview", "operation-list"]),
         RESULT_IDENTIFIER_OPTION | EXPECTED_DIGEST_OPTION => named(&["maintenance-result"]),
         DESTINATION_OPTION => named(&["maintenance-result", "operation-artifact"]),
-        PATH_OPTION | DEPTH_OPTION => catalog_leaves(),
+        PATH_OPTION | DEPTH_OPTION | RECURSIVE_OPTION | PACKAGE_NAME_OPTION | ROOTS_OPTION
+        | INCLUDE_OPTION | EXCLUDE_OPTION => catalog_leaves(),
         _ => every_leaf_that_reaches_somewhere(),
     }
 }
@@ -366,6 +387,10 @@ fn absorb(
     match option {
         MACHINE_OUTPUT_OPTION => {
             invocation.output = Some(OutputForm::Machine);
+            return Ok(0);
+        }
+        RECURSIVE_OPTION => {
+            invocation.arguments.insert(RECURSIVE_OPTION.to_owned(), String::new());
             return Ok(0);
         }
         DETACH_OPTION => {

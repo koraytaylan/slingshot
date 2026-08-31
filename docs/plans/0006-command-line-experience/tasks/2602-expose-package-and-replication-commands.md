@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/commands/package.rs
   - crates/slingshot-command-line/src/commands/replication.rs
   - crates/slingshot-command-line/tests/package_and_replication_commands.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Expose Package And Replication Commands
