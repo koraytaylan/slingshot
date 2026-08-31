@@ -10,7 +10,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/src/model_context_protocol/tool_catalog.rs
   - crates/slingshot-command-line/tests/model_context_protocol_tool_catalog.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Derive Operation Tools
