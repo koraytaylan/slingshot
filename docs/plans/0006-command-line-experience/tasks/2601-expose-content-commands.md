@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/src/commands/content.rs
   - crates/slingshot-command-line/tests/content_commands.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Expose Content Commands
