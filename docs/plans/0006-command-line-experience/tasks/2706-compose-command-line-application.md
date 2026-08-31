@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-command-line/tests/application_dispatch.rs
   - "crates/slingshot-command-line/tests/fixtures/application-dispatch/**"
 status: done
-merged_as: ""
+merged_as: "18d7fdb1cf48a6dd152ce16c2ede56bfdbfea831"
 ---
 # Compose Command-Line Application
 
