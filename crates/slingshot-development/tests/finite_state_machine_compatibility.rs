@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use slingshot_development::finite_state_machine_compatibility::{
     COMMIT_CHARACTERS, FiniteStateMachineCompatibilityPin, MANIFEST_FORMAT, MANIFEST_PATH,
-    PinRefusal, canonical_origin,
+    PinRefusal, SeedLimits, SeedRefusal, canonical_origin, verify_seed,
 };
 
 /// Where the origin spellings live.
@@ -231,4 +231,221 @@ fn every_seed_dimension_is_bounded_and_the_key_contract_is_closed() {
     assert_eq!(contract.maximum_suffix_bytes, 15);
     assert_eq!(contract.maximum_key_bytes, 107);
     assert_eq!(contract.suffixes, vec![String::new(), "-backup-restore".to_owned()]);
+}
+
+/// How many files the seeds that are counted by file hold.
+const COUNTED_FILES: u64 = 2;
+
+/// How many directories a seed with one file two below the root holds.
+const NESTED_DIRECTORIES: u64 = 3;
+
+/// How far below the root that file sits.
+const NESTED_DEPTH: u64 = 3;
+
+/// How many bytes the deliberately long names in these seeds hold.
+const NAME_BYTES: usize = 32;
+
+/// How many bytes the two halves of the aggregate seed hold together.
+const TOGETHER_BYTES: u64 = 10;
+
+/// Returns a directory nothing else in this suite writes into.
+fn seed_named(named: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!("seed-{named}-{}", std::process::id()));
+    std::fs::remove_dir_all(&root).ok();
+    std::fs::create_dir_all(&root).expect("the seed root is created");
+    root
+}
+
+/// Writes one file into a seed, creating whatever it lives in.
+fn write_into(seed: &std::path::Path, relative: &str, content: &str) {
+    let path = seed.join(relative);
+    std::fs::create_dir_all(path.parent().expect("a file has a parent"))
+        .expect("the directory is created");
+    std::fs::write(&path, content).expect("the file is written");
+}
+
+/// Returns the committed limits with one dimension tightened by `tighten`.
+fn limits_with(tighten: impl FnOnce(&mut SeedLimits)) -> SeedLimits {
+    let mut limits = pin().cargo_home_seed;
+    tighten(&mut limits);
+    limits
+}
+
+#[test]
+fn an_ordinary_bounded_seed_is_accepted_and_counted() {
+    let seed = seed_named("ordinary");
+    write_into(&seed, "registry/cache/example/first.crate", "the first crate");
+    write_into(&seed, "registry/cache/example/second.crate", "the second crate");
+    let survey = verify_seed(&seed, &pin().cargo_home_seed).expect("this seed is ordinary");
+    assert_eq!(survey.files, COUNTED_FILES);
+    assert_eq!(survey.directories, NESTED_DIRECTORIES + 1, "the root, registry, cache, example");
+    let written = "the first crate".len() as u64 * COUNTED_FILES + 1;
+    assert_eq!(survey.aggregate_file_bytes, written, "the second crate is one byte longer");
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn a_seed_holding_exactly_as_many_files_as_it_may_is_accepted_and_one_more_is_not() {
+    let seed = seed_named("file-count");
+    write_into(&seed, "first", "a");
+    write_into(&seed, "second", "b");
+    let exact = limits_with(|limits| limits.maximum_files = COUNTED_FILES);
+    assert_eq!(
+        verify_seed(&seed, &exact).expect("exactly as many is as many").files,
+        COUNTED_FILES
+    );
+    let next = limits_with(|limits| limits.maximum_files = COUNTED_FILES - 1);
+    assert_eq!(
+        verify_seed(&seed, &next),
+        Err(SeedRefusal::TooManyFiles { held: COUNTED_FILES, limit: COUNTED_FILES - 1 }),
+        "the count is decided as it is reached, not after everything is read"
+    );
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn a_seed_holding_exactly_as_many_directories_as_it_may_is_accepted_and_one_more_is_not() {
+    let seed = seed_named("directory-count");
+    write_into(&seed, "one/two/held", "a");
+    let exact = limits_with(|limits| limits.maximum_directories = NESTED_DIRECTORIES);
+    let held = verify_seed(&seed, &exact).expect("the root and two more");
+    assert_eq!(held.directories, NESTED_DIRECTORIES);
+    let next = limits_with(|limits| limits.maximum_directories = NESTED_DIRECTORIES - 1);
+    assert_eq!(
+        verify_seed(&seed, &next),
+        Err(SeedRefusal::TooManyDirectories {
+            held: NESTED_DIRECTORIES,
+            limit: NESTED_DIRECTORIES - 1
+        })
+    );
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn a_seed_exactly_as_deep_as_it_may_be_is_accepted_and_one_deeper_is_not() {
+    let seed = seed_named("depth");
+    write_into(&seed, "one/two/held", "a");
+    let exact = limits_with(|limits| limits.maximum_depth = NESTED_DEPTH);
+    assert!(verify_seed(&seed, &exact).is_ok(), "the file sits that far below the root");
+    let next = limits_with(|limits| limits.maximum_depth = NESTED_DEPTH - 1);
+    let failure = verify_seed(&seed, &next).expect_err("one deeper than it may be");
+    let expected =
+        SeedRefusal::TooDeep { held: NESTED_DEPTH, limit: NESTED_DEPTH - 1, path: String::new() };
+    assert_eq!(std::mem::discriminant(&failure), std::mem::discriminant(&expected), "{failure}");
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn a_file_exactly_as_large_as_it_may_be_is_accepted_and_one_byte_more_is_not() {
+    let seed = seed_named("file-bytes");
+    let held = "0123456789";
+    write_into(&seed, "held", held);
+    let exact = limits_with(|limits| limits.maximum_file_bytes = held.len() as u64);
+    assert!(verify_seed(&seed, &exact).is_ok());
+    let next = limits_with(|limits| limits.maximum_file_bytes = held.len() as u64 - 1);
+    let failure = verify_seed(&seed, &next).expect_err("one byte over");
+    assert!(matches!(failure, SeedRefusal::FileTooLarge { .. }), "{failure}");
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn files_holding_exactly_as_much_as_they_may_together_are_accepted_and_one_byte_more_is_not() {
+    let seed = seed_named("aggregate");
+    write_into(&seed, "first", "01234");
+    write_into(&seed, "second", "56789");
+    let together = TOGETHER_BYTES;
+    let exact = limits_with(|limits| limits.maximum_aggregate_file_bytes = together);
+    assert_eq!(
+        verify_seed(&seed, &exact).expect("exactly together").aggregate_file_bytes,
+        together
+    );
+    let next = limits_with(|limits| limits.maximum_aggregate_file_bytes = together - 1);
+    assert_eq!(
+        verify_seed(&seed, &next),
+        Err(SeedRefusal::TooLargeAltogether { held: together, limit: together - 1 })
+    );
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn a_component_exactly_as_long_as_it_may_be_is_accepted_and_one_byte_longer_is_not() {
+    let seed = seed_named("component");
+    let named = "n".repeat(NAME_BYTES);
+    write_into(&seed, &named, "a");
+    let exact = limits_with(|limits| limits.maximum_component_utf8_bytes = named.len() as u64);
+    assert!(verify_seed(&seed, &exact).is_ok());
+    let next = limits_with(|limits| limits.maximum_component_utf8_bytes = named.len() as u64 - 1);
+    let failure = verify_seed(&seed, &next).expect_err("one byte longer");
+    assert!(matches!(failure, SeedRefusal::ComponentTooLong { .. }), "{failure}");
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn a_relative_path_exactly_as_long_as_it_may_be_is_accepted_and_one_byte_longer_is_not() {
+    let seed = seed_named("relative-path");
+    write_into(&seed, "one/two", "a");
+    let relative = "one/two".len() as u64;
+    let exact = limits_with(|limits| limits.maximum_relative_path_utf8_bytes = relative);
+    assert!(verify_seed(&seed, &exact).is_ok());
+    let next = limits_with(|limits| limits.maximum_relative_path_utf8_bytes = relative - 1);
+    let failure = verify_seed(&seed, &next).expect_err("one byte longer");
+    assert!(matches!(failure, SeedRefusal::PathTooLong { .. }), "{failure}");
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn a_seed_holding_anything_but_ordinary_files_and_directories_is_refused() {
+    let seed = seed_named("not-ordinary");
+    write_into(&seed, "held", "a");
+    std::os::unix::fs::symlink(seed.join("held"), seed.join("also-held"))
+        .expect("the link is made");
+    let failure = verify_seed(&seed, &pin().cargo_home_seed).expect_err("a link is not a file");
+    assert_eq!(
+        failure,
+        SeedRefusal::NotOrdinary("also-held".to_owned()),
+        "a link is followed by whatever reads the seed, and it points wherever it likes"
+    );
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn one_path_breaking_several_rules_earns_the_first_of_them() {
+    let seed = seed_named("precedence");
+    let named = "n".repeat(NAME_BYTES);
+    write_into(&seed, &format!("one/{named}"), "0123456789");
+    let tightened = limits_with(|limits| {
+        limits.maximum_component_utf8_bytes = 1;
+        limits.maximum_relative_path_utf8_bytes = 1;
+        limits.maximum_depth = 1;
+        limits.maximum_file_bytes = 1;
+    });
+    let failure = verify_seed(&seed, &tightened).expect_err("it breaks four rules");
+    assert!(
+        matches!(failure, SeedRefusal::ComponentTooLong { .. }),
+        "the first rule in the declared order decides, and this is {failure}"
+    );
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn two_paths_breaking_the_same_rule_are_decided_in_sorted_order() {
+    let seed = seed_named("sorted");
+    write_into(&seed, "aardvark", "0123456789");
+    write_into(&seed, "zebra", "0123456789");
+    let tightened = limits_with(|limits| limits.maximum_file_bytes = 1);
+    let failure = verify_seed(&seed, &tightened).expect_err("both are too large");
+    assert_eq!(
+        failure.to_string(),
+        SeedRefusal::FileTooLarge { held: 10, limit: 1, path: "aardvark".to_owned() }.to_string(),
+        "the same seed earns the same diagnostic on every machine that walks it"
+    );
+    std::fs::remove_dir_all(&seed).ok();
+}
+
+#[test]
+fn a_seed_that_is_not_there_is_refused_rather_than_treated_as_empty() {
+    let seed = seed_named("absent");
+    std::fs::remove_dir_all(&seed).ok();
+    let failure = verify_seed(&seed, &pin().cargo_home_seed).expect_err("there is nothing to walk");
+    assert!(matches!(failure, SeedRefusal::Unwalkable(_)), "{failure}");
 }
