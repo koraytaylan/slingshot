@@ -52,8 +52,10 @@ pub struct SourcePolicy {
     pub planning_headings: Vec<String>,
     /// Macros whose expansion is a placeholder rather than behavior.
     pub placeholder_macros: Vec<String>,
-    /// Markers that switch a rule off where somebody found it inconvenient.
+    /// Markers that switch a rule off in code where somebody found it inconvenient.
     pub suppression_markers: Vec<String>,
+    /// Markers aimed at this checker, which act wherever they are written.
+    pub universal_suppression_markers: Vec<String>,
     /// Markers that record an expectation the compiler keeps honest.
     pub expectation_markers: Vec<String>,
     /// What an expectation has to state.
@@ -594,6 +596,28 @@ pub(crate) fn check_line_count(policy: &LoadedPolicy, path: &str, text: &str) ->
     vec![Violation::at(path, lines, "file-is-longer-than-the-ceiling", format!("{lines} lines"))]
 }
 
+/// Refuses a marker aimed at this checker, wherever it is written.
+///
+/// A code attribute written in prose acts on nothing, which is why the document
+/// that explains the attribute rule may name it. A marker aimed at this checker
+/// acts wherever it is written, so it is refused wherever it is written.
+pub(crate) fn check_universal_suppressions(
+    policy: &LoadedPolicy,
+    path: &str,
+    text: &str,
+) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    let rule = "suppression-marker-silences-a-rule";
+    for (offset, line) in text.lines().enumerate() {
+        for marker in &policy.source.universal_suppression_markers {
+            if line.contains(marker.as_str()) {
+                violations.push(Violation::at(path, offset + FIRST_LINE, rule, marker.clone()));
+            }
+        }
+    }
+    violations
+}
+
 /// Refuses a marker that switches a rule off where somebody found it awkward.
 ///
 /// A rule with an escape hatch holds only where nobody minded it, which is not
@@ -606,7 +630,7 @@ pub(crate) fn check_line_count(policy: &LoadedPolicy, path: &str, text: &str) ->
 /// it cannot quietly outlive the situation it was written for; a suppression
 /// can, and does.
 pub(crate) fn check_suppressions(policy: &LoadedPolicy, path: &str, text: &str) -> Vec<Violation> {
-    let mut violations = Vec::new();
+    let mut violations = check_universal_suppressions(policy, path, text);
     let rule = "suppression-marker-silences-a-rule";
     let reason = policy.source.required_expectation_reason.as_str();
     for (offset, line) in text.lines().enumerate() {
@@ -811,7 +835,7 @@ pub fn check_file(
         SourceKind::Prose => {
             let mut found = check_line_count(policy, relative, &text);
             found.extend(check_prose(policy, relative, &text));
-            found.extend(check_suppressions(policy, relative, &text));
+            found.extend(check_universal_suppressions(policy, relative, &text));
             found
         }
     })

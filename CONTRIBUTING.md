@@ -40,7 +40,22 @@ this workspace's own.
 A numeric value that carries meaning carries a name. A named constant, a named
 static, an enumeration discriminant, an array literal, and an index position are
 already data with a name, data laid out as data, or a position rather than a
-quantity. Everything else is named.
+quantity. Everything else is named. A shell has no constants, so a name there is
+an assignment; a positional parameter, a file descriptor, and arithmetic on the
+argument count stay structure a reader can see, and every other bare number in a
+script is named too.
+
+A value the command contract already declares is read from it rather than
+written down again. `policy/source-policy.toml` names the directory that owns
+that contract, and everywhere else a constant named after one of its limits, or
+its own format identifier spelled out, is refused. A second declaration is a
+thing that can disagree with the first quietly, for as long as nobody compares
+them - which is exactly what happened once before the rule existed.
+
+No rule is switched off where it is inconvenient. `#[allow(...)]` and an ignore
+marker in prose are refused outright. `#[expect(...)]` is admitted, because the
+compiler reports one whose lint has stopped firing and it therefore cannot
+outlive the situation it was written for - and only when it states its reason.
 
 ## Size and shape
 
@@ -57,6 +72,17 @@ the same spelling rule.
 
 Documentation describes the code in the commit it ships with, not a plan for
 it. Planning prose belongs in `docs/plans/`.
+
+What can be decided is decided: that an exported item carries documentation,
+that a fallible public function names what makes it fail, that one which can end
+the process says when, that no unfinished-work marker or planning heading is
+left in product prose. What cannot be decided is reviewed. The four review
+subjects are closed in `policy/documentation-rules.toml`, each named by exactly
+one checklist entry, and the completed review is recorded in
+[docs/DOCUMENTATION_REVIEW.md](docs/DOCUMENTATION_REVIEW.md). The checker never
+infers whether prose is accurate, complete, or worth reading, and an assertion
+refuses a checker that so much as restates one of those questions - because
+restating a question reads as a claim to have answered it.
 
 The checker enforces the falsifiable forms: every exported item carries
 documentation that is not empty, a fallible interface says what makes it fail,

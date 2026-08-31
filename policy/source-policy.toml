@@ -34,10 +34,15 @@ planning-headings = ["**Steps:**", "**Tests:**", "**Done when:**", "## Why this 
 # Macros whose expansion is a placeholder rather than behavior.
 placeholder-macros = ["todo", "unimplemented"]
 
-# Markers that switch a rule off for one line or one item. A rule with an
-# escape hatch holds only where nobody minded it, so the escape hatch is itself
-# refused. A directive addressed to a different tool is not one of these.
-suppression-markers = ["#[allow(", "#![allow(", "policy:ignore"]
+# Markers that switch a rule off for one line or one item of code. A rule with
+# an escape hatch holds only where nobody minded it, so the escape hatch is
+# itself refused. A directive addressed to a different tool is not one of these.
+suppression-markers = ["#[allow(", "#![allow("]
+
+# Markers aimed at this checker, which act wherever they are written and are
+# therefore refused wherever they are written. A code attribute in prose acts on
+# nothing, which is why the document that explains the rule above may name it.
+universal-suppression-markers = ["policy:ignore"]
 
 # Markers that record an expectation rather than switch a rule off. The
 # compiler reports one of these when the lint it names stops firing, so it
