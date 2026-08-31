@@ -1,0 +1,42 @@
+{"allowed": true, "becomes": "queued", "event_kind": "accepted", "held_state": "queued", "kind": "transition", "name": "queued-then-accepted"}
+{"allowed": true, "becomes": "running", "event_kind": "started", "held_state": "queued", "kind": "transition", "name": "queued-then-started"}
+{"allowed": true, "becomes": "running", "event_kind": "progress", "held_state": "queued", "kind": "transition", "name": "queued-then-progress"}
+{"allowed": true, "becomes": "succeeded", "event_kind": "succeeded", "held_state": "queued", "kind": "transition", "name": "queued-then-succeeded"}
+{"allowed": true, "becomes": "failed", "event_kind": "failed", "held_state": "queued", "kind": "transition", "name": "queued-then-failed"}
+{"allowed": false, "becomes": "queued", "event_kind": "accepted", "held_state": "running", "kind": "transition", "name": "running-then-accepted"}
+{"allowed": true, "becomes": "running", "event_kind": "started", "held_state": "running", "kind": "transition", "name": "running-then-started"}
+{"allowed": true, "becomes": "running", "event_kind": "progress", "held_state": "running", "kind": "transition", "name": "running-then-progress"}
+{"allowed": true, "becomes": "succeeded", "event_kind": "succeeded", "held_state": "running", "kind": "transition", "name": "running-then-succeeded"}
+{"allowed": true, "becomes": "failed", "event_kind": "failed", "held_state": "running", "kind": "transition", "name": "running-then-failed"}
+{"allowed": false, "becomes": "queued", "event_kind": "accepted", "held_state": "succeeded", "kind": "transition", "name": "succeeded-then-accepted"}
+{"allowed": false, "becomes": "running", "event_kind": "started", "held_state": "succeeded", "kind": "transition", "name": "succeeded-then-started"}
+{"allowed": false, "becomes": "running", "event_kind": "progress", "held_state": "succeeded", "kind": "transition", "name": "succeeded-then-progress"}
+{"allowed": true, "becomes": "succeeded", "event_kind": "succeeded", "held_state": "succeeded", "kind": "transition", "name": "succeeded-then-succeeded"}
+{"allowed": false, "becomes": "failed", "event_kind": "failed", "held_state": "succeeded", "kind": "transition", "name": "succeeded-then-failed"}
+{"allowed": false, "becomes": "queued", "event_kind": "accepted", "held_state": "failed", "kind": "transition", "name": "failed-then-accepted"}
+{"allowed": false, "becomes": "running", "event_kind": "started", "held_state": "failed", "kind": "transition", "name": "failed-then-started"}
+{"allowed": false, "becomes": "running", "event_kind": "progress", "held_state": "failed", "kind": "transition", "name": "failed-then-progress"}
+{"allowed": false, "becomes": "succeeded", "event_kind": "succeeded", "held_state": "failed", "kind": "transition", "name": "failed-then-succeeded"}
+{"allowed": true, "becomes": "failed", "event_kind": "failed", "held_state": "failed", "kind": "transition", "name": "failed-then-failed"}
+{"applied": 3, "disposition": "applied", "kind": "sequence", "name": "applied-3-event-4", "sequence": 4, "watermark": 2}
+{"applied": 3, "disposition": "needs-snapshot", "kind": "sequence", "name": "applied-3-event-5", "sequence": 5, "watermark": 2}
+{"applied": 3, "disposition": "needs-snapshot", "kind": "sequence", "name": "applied-3-event-12", "sequence": 12, "watermark": 2}
+{"applied": 3, "disposition": "stale-cursor-only", "kind": "sequence", "name": "applied-3-event-2", "sequence": 2, "watermark": 2}
+{"applied": 3, "disposition": "stale-cursor-only", "kind": "sequence", "name": "applied-3-event-1", "sequence": 1, "watermark": 2}
+{"field": "selected-environment-revision", "kind": "substitution", "name": "selected-environment-revision"}
+{"field": "transport-contract", "kind": "substitution", "name": "transport-contract"}
+{"field": "canonical-byte-contract", "kind": "substitution", "name": "canonical-byte-contract"}
+{"field": "argument-schema", "kind": "substitution", "name": "argument-schema"}
+{"field": "result-schema", "kind": "substitution", "name": "result-schema"}
+{"field": "contract-limits", "kind": "substitution", "name": "contract-limits"}
+{"field": "semantic-version", "kind": "substitution", "name": "semantic-version"}
+{"field": "wire-name", "kind": "substitution", "name": "wire-name"}
+{"field": "submitted-digest", "kind": "substitution", "name": "submitted-digest"}
+{"field": "same-command-different-arguments", "kind": "substitution", "name": "same-command-different-arguments"}
+{"canonical_digest": "contents-one", "cursor": "cursor-0001", "disposition": "advanced", "held_cursor": null, "held_digest": null, "kind": "subscription", "name": "first-position-of-all"}
+{"canonical_digest": "contents-nine", "cursor": "cursor-0009", "disposition": "advanced", "held_cursor": "cursor-0005", "held_digest": "contents-five", "kind": "subscription", "name": "a-later-position"}
+{"canonical_digest": "contents-six", "cursor": "cursor-0006", "disposition": "advanced", "held_cursor": "cursor-0005", "held_digest": "contents-five", "kind": "subscription", "name": "the-next-position"}
+{"canonical_digest": "contents-five", "cursor": "cursor-0005", "disposition": "exact-replay", "held_cursor": "cursor-0005", "held_digest": "contents-five", "kind": "subscription", "name": "same-position-same-contents"}
+{"canonical_digest": "contents-other", "cursor": "cursor-0005", "disposition": "integrity-conflict", "held_cursor": "cursor-0005", "held_digest": "contents-five", "kind": "subscription", "name": "same-position-other-contents"}
+{"canonical_digest": "contents-two", "cursor": "cursor-0002", "disposition": "stale-cursor-only", "held_cursor": "cursor-0005", "held_digest": "contents-five", "kind": "subscription", "name": "an-earlier-position"}
+{"canonical_digest": "contents-four", "cursor": "cursor-0004", "disposition": "stale-cursor-only", "held_cursor": "cursor-0005", "held_digest": "contents-five", "kind": "subscription", "name": "the-position-before"}

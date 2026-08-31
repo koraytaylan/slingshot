@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-agent-connection/src/lib.rs
   - crates/slingshot-agent-connection/tests/fixtures/job-event-reducer.jsonl
   - crates/slingshot-agent-connection/tests/job_event_reducer.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Job Event Reducer
