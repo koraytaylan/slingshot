@@ -7,11 +7,12 @@ depends_on:
   - command-line-module-scaffold
 gated: false
 touches:
+  - crates/slingshot-command-line/tests/command_line_module_scaffold.rs
   - crates/slingshot-command-line/Cargo.toml
   - crates/slingshot-command-line/src/invocation.rs
   - crates/slingshot-command-line/tests/invocation_parsing.rs
   - crates/slingshot-test-support/fixtures/command-invocations/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Define Command Invocations

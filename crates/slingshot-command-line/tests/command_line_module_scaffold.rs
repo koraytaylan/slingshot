@@ -222,7 +222,7 @@ fn every_top_level_leaf_is_owned_by_the_crate_root_and_nothing_else() {
 }
 
 #[test]
-fn every_scaffold_leaf_carries_documentation_and_no_behavior_at_all() {
+fn every_leaf_opens_with_documentation_and_claims_nothing_it_has_not_done() {
     for leaf in inventory() {
         let text = read_repository_file(&leaf.path);
         let named = &leaf.path;
@@ -230,15 +230,17 @@ fn every_scaffold_leaf_carries_documentation_and_no_behavior_at_all() {
         for marker in PLANNING_MARKERS {
             assert!(!text.contains(marker), "{named} carries planning language: {marker:?}");
         }
-        for line in text.lines() {
-            assert!(
-                line.trim().is_empty() || line.trim_start().starts_with("//!"),
-                "{named} carries something other than documentation: {line}"
-            );
-        }
         assert!(
             text.lines().filter(|line| line.starts_with("//!")).count() > 1,
             "{named} says what it owns rather than only naming itself"
+        );
+        if text.lines().any(|line| !line.trim().is_empty() && !line.trim_start().starts_with("//!"))
+        {
+            continue;
+        }
+        assert!(
+            text.trim_end().ends_with('.'),
+            "{named} is still documentation only, and reads as prose rather than a stub"
         );
     }
 }

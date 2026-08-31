@@ -2125,6 +2125,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "slingshot-daemon",
+ "slingshot-domain",
  "slingshot-local-protocol",
  "slingshot-test-support",
  "tempfile",
