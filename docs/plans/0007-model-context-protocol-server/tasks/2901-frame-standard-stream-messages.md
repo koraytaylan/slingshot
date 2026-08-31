@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-command-line/tests/model_context_protocol_transport.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/transport/**
 status: done
-merged_as: ""
+merged_as: "2cdf9816e8fea632928b5e7c8c1b9279f4985ce2"
 ---
 # Frame Standard Stream Messages
 
