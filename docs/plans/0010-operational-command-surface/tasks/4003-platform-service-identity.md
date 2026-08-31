@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/platform_service_identity.rs
 status: done
-merged_as: ""
+merged_as: "306545d6beb9bf51b5b7963cf7b4c3e9b5cff945"
 ---
 # Platform Service Identity
 

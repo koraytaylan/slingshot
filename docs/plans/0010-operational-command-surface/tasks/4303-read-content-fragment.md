@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/read_content_fragment.rs
   - "crates/slingshot-domain/tests/fixtures/commands/read_content_fragment/**"
 status: done
-merged_as: ""
+merged_as: "37b2e8e9db8503286b3ba6df14ef0aeeb0015c67"
 ---
 # Read a Content Fragment
 

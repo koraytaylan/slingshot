@@ -21,7 +21,7 @@ touches:
   - crates/slingshot-domain/tests/command_fingerprint.rs
   - schemas/command-schema-digest-vectors.json
 status: done
-merged_as: ""
+merged_as: "027611437479306e2e6ba052ae770b621debcfc2"
 ---
 # Command Schemas
 

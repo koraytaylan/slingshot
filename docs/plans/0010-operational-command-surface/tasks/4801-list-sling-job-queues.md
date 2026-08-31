@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-domain/tests/list_sling_job_queues.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_sling_job_queues/**"
 status: done
-merged_as: ""
+merged_as: "5f8dabf0bc80ff1bf0a55195ce88cfc3957e9f9e"
 ---
 # List Sling Job Queues
 

@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-domain/tests/replication_agent.rs
   - "crates/slingshot-domain/tests/fixtures/commands/replication_agent/**"
 status: done
-merged_as: ""
+merged_as: "defddc2954214669c5af76eb3f2f147dece6268c"
 ---
 # List and Inspect Replication Agents
 
