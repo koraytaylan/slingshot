@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/finite-state-machine-handler/**
   - crates/slingshot-development/tests/finite_state_machine_handler.rs
 status: done
-merged_as: ""
+merged_as: "0fb0fcb54db18414826e4b8366f4ed30b502f59a"
 ---
 # Workflow Handler Operation Keys
 
