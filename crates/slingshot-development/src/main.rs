@@ -31,6 +31,13 @@ const RUSTSEC_PIN_COMMAND: &str = "rustsec-advisory-pin";
 /// Name of the command that proposes pin bytes for a reviewed candidate.
 const RUSTSEC_PIN_REVIEW_COMMAND: &str = "rustsec-pin-review";
 
+/// Name of the internal command that runs a daemon with a scripted executor.
+///
+/// Internal because it exists for tests. It is a subcommand of this binary
+/// rather than a binary of its own, so the workspace keeps exactly the two
+/// targets a release accounts for.
+const TEST_DAEMON_COMMAND: &str = slingshot_development::slingshot_test_daemon::TEST_DAEMON_COMMAND;
+
 /// Runs the repository command named by the first argument.
 fn dispatch(
     arguments: &[String],
@@ -47,8 +54,25 @@ fn dispatch(
         SOURCE_POLICY_COMMAND => check_source_policy(working_directory, output),
         RUSTSEC_PIN_COMMAND => verify_advisory_pin(working_directory, output),
         RUSTSEC_PIN_REVIEW_COMMAND => review_advisory_pin(arguments, output),
+        TEST_DAEMON_COMMAND => run_test_daemon(output),
         _ => Err(RepositoryCommandFailure::UnknownCommand(requested.clone())),
     }
+}
+
+/// Runs a daemon composed with a scripted executor.
+///
+/// Reports the composition it built rather than serving, because what this
+/// subcommand exists to prove from outside is that the development binary can
+/// reach the fake and the product binary cannot.
+fn run_test_daemon(output: &mut dyn Write) -> Result<(), RepositoryCommandFailure> {
+    use slingshot_daemon::unavailable_operation_executor::UnavailableOperationExecutor;
+    use slingshot_development::slingshot_test_daemon::TestDaemonComposition;
+
+    let composition = TestDaemonComposition::new(UnavailableOperationExecutor::outcome());
+    writeln!(output, "{TEST_DAEMON_COMMAND} composed a scripted executor")
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))?;
+    drop(composition);
+    Ok(())
 }
 
 /// Reads the workspace metadata and reports every forbidden dependency edge.
