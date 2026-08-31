@@ -19,7 +19,7 @@ touches:
   - crates/slingshot-development/src/release_metadata.rs
   - crates/slingshot-development/tests/release_metadata.rs
   - "crates/slingshot-development/tests/fixtures/release-metadata/**"
-status: planned
+status: blocked
 merged_as: ""
 ---
 # Owner-Supplied Release Metadata
