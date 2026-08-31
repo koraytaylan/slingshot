@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-daemon/tests/operation_maintenance.rs
   - crates/slingshot-storage/src/maintenance.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Terminal Operation Maintenance
