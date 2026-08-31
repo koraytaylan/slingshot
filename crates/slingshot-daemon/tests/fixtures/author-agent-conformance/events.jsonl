@@ -1,0 +1,5 @@
+{"held": false, "job": "stale-cursor-only", "name": "unassociated-operation", "sequence": 2, "subscription": "advanced"}
+{"held": true, "job": "applied", "name": "the-next-event", "sequence": 4, "subscription": "advanced"}
+{"held": true, "job": "integrity-conflict", "name": "an-event-repeated-exactly", "sequence": 3, "subscription": "advanced"}
+{"held": true, "job": "needs-snapshot", "name": "a-gap", "sequence": 9, "subscription": "advanced"}
+{"held": true, "job": "stale-cursor-only", "name": "an-old-event", "sequence": 1, "subscription": "advanced"}
