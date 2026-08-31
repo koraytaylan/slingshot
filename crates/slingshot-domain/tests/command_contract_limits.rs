@@ -41,10 +41,22 @@ const CORE_IDENTIFIERS: usize = 3;
 /// Prerelease identifiers the split-charge assertion uses.
 const SPLIT: usize = 2;
 
+/// Input bytes one Base64 group encodes.
+const BASE64_INPUT_GROUP: u64 = 3;
+
+/// Output characters one Base64 group produces.
+const BASE64_OUTPUT_GROUP: u64 = 4;
+
 /// Digits one underscore-grouped number puts between separators.
 const DIGIT_GROUP: usize = 3;
 
-/// Commands this plan publishes.
+/// Commands the registry publishes.
+///
+/// Plan 0003 published the first twelve and Plan 0010 the rest. The list is
+/// written here rather than read from the catalog on purpose: this assertion
+/// exists to catch a command that entered the manifest without anybody
+/// deciding it should, and a list derived from the thing under test cannot do
+/// that.
 const COMMANDS: &[&str] = &[
     "load_content_as_json",
     "inspect_open_service_gateway_initiative_configuration",
@@ -58,6 +70,58 @@ const COMMANDS: &[&str] = &[
     "download_content_package",
     "create_page",
     "add_component",
+    "add_group_member",
+    "cancel_sling_job",
+    "create_asset",
+    "create_asset_folder",
+    "create_content_fragment",
+    "create_experience_fragment",
+    "create_group",
+    "create_user",
+    "delete_asset",
+    "delete_authorizable",
+    "delete_component",
+    "delete_content_fragment",
+    "delete_experience_fragment",
+    "delete_open_service_gateway_initiative_configuration",
+    "delete_page",
+    "find_open_service_gateway_initiative_configurations",
+    "find_sling_jobs",
+    "find_workflow_instances",
+    "flush_replication_queue",
+    "inspect_replication_agent",
+    "inspect_replication_queue",
+    "inspect_sling_job",
+    "inspect_workflow_instance",
+    "list_asset_renditions",
+    "list_child_pages",
+    "list_group_members",
+    "list_open_service_gateway_initiative_bundles",
+    "list_open_service_gateway_initiative_components",
+    "list_replication_agents",
+    "list_resource_mappings",
+    "list_sling_job_queues",
+    "list_workflow_models",
+    "map_resource_path",
+    "move_asset",
+    "move_page",
+    "read_content_fragment",
+    "remove_group_member",
+    "reorder_component",
+    "resolve_resource_path",
+    "retry_replication_queue_entry",
+    "set_open_service_gateway_initiative_bundle_state",
+    "set_user_disabled",
+    "set_workflow_instance_suspension",
+    "start_workflow",
+    "terminate_workflow_instance",
+    "update_asset_metadata",
+    "update_component",
+    "update_content_fragment",
+    "update_experience_fragment",
+    "update_open_service_gateway_initiative_configuration",
+    "update_page",
+    "update_user_profile",
 ];
 
 /// Returns the directory this crate's manifest lives in.
@@ -117,6 +181,12 @@ fn the_derived_limit_is_exactly_what_its_equation_says() {
         contract.limit("maximum_agent_inline_loaded_document_bytes")
             < contract.limit("maximum_loaded_content_artifact_bytes"),
         "an inline document could not be smaller than the artifact it becomes"
+    );
+    let decoded = contract.limit("maximum_inline_binary_decoded_bytes");
+    assert_eq!(
+        contract.limit("maximum_inline_binary_encoded_bytes"),
+        decoded.div_ceil(BASE64_INPUT_GROUP) * BASE64_OUTPUT_GROUP,
+        "the encoded bound is not the base64 expansion of the decoded one"
     );
 }
 
