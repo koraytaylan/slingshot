@@ -18,7 +18,7 @@ touches:
   - crates/slingshot-daemon/tests/configuration_startup.rs
   - "crates/slingshot-daemon/tests/fixtures/configuration-startup/**"
 status: done
-merged_as: ""
+merged_as: "5d48a718e850eddf89f4cd7aa8b19a8ae12eee8f"
 ---
 # Daemon Configuration Startup
 
