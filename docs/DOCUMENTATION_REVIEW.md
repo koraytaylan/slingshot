@@ -55,3 +55,15 @@ reference is generated from the metadata the executable reads and compared
 byte for byte, and the two protocol documents carry generated sections beside
 hand-written prose. Prospective language belongs to the plan bundles under
 `docs/plans/`, which the scan structurally excludes for exactly that reason.
+
+Reviewed again after the command surface grew from twelve rows to sixty-four.
+Three prose statements had counted the old surface and were corrected rather
+than left to be discovered: the readme's live-author paragraph, which had said
+nine rows were admissible and three were refused; the architecture note's
+account of what is not here, which had said no Adobe Experience Manager
+operation exists when sixty-four contracts do; and the live-author leaf's own
+documentation, which had explained why three of nine submissions are enough.
+Everything else that names a command is generated from the registry and
+compared byte for byte, so no other document could have drifted without the
+gate saying so.
+

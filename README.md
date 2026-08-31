@@ -104,9 +104,10 @@ slingshot --profile local --environment author verify live-author --enable-live-
 ```
 
 Without `--enable-live-author` the leaf is refused before a byte of
-configuration is read. What it may run is the registry's own answer: the nine
-rows it calls reads that replace nothing, never the three that write. One run is
-evidence about the author it ran against and about nothing else.
+configuration is read. What it may run is the registry's own answer: the
+twenty-eight rows it calls reads that replace nothing, never the thirty-six that
+write. One run is evidence about the author it ran against and about nothing
+else.
 [docs/COMMANDS.md](docs/COMMANDS.md) says what it reports and what it refuses to
 claim.
 
