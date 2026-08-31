@@ -22,6 +22,7 @@ pub mod fake_operation_executor;
 pub mod finite_state_machine_executable;
 pub mod identity_management_server;
 pub mod network_fault_script;
+pub mod observable_capture;
 pub mod operation_fault_injection;
 pub mod platform_runtime;
 pub mod process_barrier;

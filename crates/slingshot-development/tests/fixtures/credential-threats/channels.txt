@@ -1,0 +1,7 @@
+# Every channel a run can be observed through.
+arguments
+standard output
+standard error
+files
+environment
+diagnostics

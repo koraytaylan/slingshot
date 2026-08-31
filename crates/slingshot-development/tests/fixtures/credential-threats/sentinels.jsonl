@@ -1,0 +1,8 @@
+# One distinct value per class of secret, and what it stands for.
+{"name": "basic-password", "value": "s3ntinel-basic-password-4c19", "why": "the password in a basic credential"}
+{"name": "service-private-key", "value": "s3ntinel-private-key-7ab3", "why": "the private key in a service credential"}
+{"name": "client-secret", "value": "s3ntinel-client-secret-91de", "why": "the client secret a token exchange sends"}
+{"name": "access-token", "value": "s3ntinel-access-token-2f70", "why": "the token an author request carries"}
+{"name": "readiness-nonce", "value": "s3ntinel-readiness-nonce-88ac", "why": "the nonce that authorizes a cooperative stop"}
+{"name": "credential-file-path", "value": "/s3ntinel/credentials/service.json", "why": "where a credential document lives"}
+{"name": "configuration-root", "value": "/s3ntinel/config-root", "why": "where this account's configuration lives"}
