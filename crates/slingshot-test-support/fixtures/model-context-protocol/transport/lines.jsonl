@@ -1,0 +1,10 @@
+# One line per case: what the transport is given, and what it makes of it.
+{"name": "a-request", "line": "{\"id\":\"one\",\"method\":\"tools/list\",\"params\":{}}", "outcome": "request", "detail": "one"}
+{"name": "a-numeric-identifier", "line": "{\"id\":7,\"method\":\"tools/list\"}", "outcome": "request", "detail": "7"}
+{"name": "a-notification", "line": "{\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":\"one\"}}", "outcome": "notification", "detail": ""}
+{"name": "no-parameters", "line": "{\"id\":\"two\",\"method\":\"tools/list\"}", "outcome": "request", "detail": "two"}
+{"name": "not-an-object", "line": "[\"id\",\"one\"]", "outcome": "refused", "detail": "NotAnObject"}
+{"name": "not-readable", "line": "{\"id\":\"one\",", "outcome": "refused", "detail": "NotReadable"}
+{"name": "no-method", "line": "{\"id\":\"one\",\"params\":{}}", "outcome": "refused", "detail": "UnknownDirection"}
+{"name": "identifier-is-an-object", "line": "{\"id\":{\"held\":1},\"method\":\"tools/list\"}", "outcome": "refused", "detail": "UnknownDirection"}
+{"name": "duplicate-member", "line": "{\"id\":\"one\",\"method\":\"tools/list\",\"id\":\"two\"}", "outcome": "refused", "detail": "DuplicateMember"}

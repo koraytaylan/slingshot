@@ -44,6 +44,11 @@ const ITEM_BEGINNINGS: &[&str] = &[
     "#[",
 ];
 
+/// How many lines of its own documentation a leaf opens with at least.
+///
+/// A heading and a reason. One line is a name, which the file already has.
+const LEAST_DESCRIPTION_LINES: usize = 3;
+
 /// How many directories separate this crate from the workspace root.
 const CRATE_DEPTH: usize = 2;
 
@@ -188,25 +193,31 @@ fn the_family_root_declares_its_children_and_holds_nothing_else() {
 }
 
 #[test]
-fn every_leaf_opens_with_documentation_and_declares_nothing_yet() {
+fn every_leaf_opens_with_documentation_and_claims_nothing_it_has_not_done() {
     for leaf in inventory() {
         let source = read_repository_file(&leaf.path);
         assert!(
             source.starts_with("//!"),
-            "{} opens with something other than its own docs",
+            "{} opens with something other than its own documentation",
             leaf.path
         );
         for marker in PLANNING_MARKERS {
             assert!(!source.contains(marker), "{} carries planning language: {marker}", leaf.path);
         }
-        for line in source.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with("//!") {
-                continue;
-            }
+        let described = source.lines().take_while(|line| line.starts_with("//!")).count();
+        assert!(
+            described >= LEAST_DESCRIPTION_LINES,
+            "{} opens with {described} lines, which does not say what it owns",
+            leaf.path
+        );
+        let first_item = source
+            .lines()
+            .map(str::trim)
+            .position(|line| ITEM_BEGINNINGS.iter().any(|held| line.starts_with(held)));
+        if let Some(position) = first_item {
             assert!(
-                !ITEM_BEGINNINGS.iter().any(|beginning| line.starts_with(beginning)),
-                "{} declares {line:?} before the task that owns it",
+                position >= described,
+                "{} declares something above its own documentation",
                 leaf.path
             );
         }
