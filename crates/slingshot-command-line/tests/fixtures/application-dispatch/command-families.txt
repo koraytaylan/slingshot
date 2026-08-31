@@ -1,0 +1,14 @@
+# The eight command families, in the order the reference presents them.
+#
+# Written here as well as in the scaffold fixture so the dispatch matrix and
+# the module inventory are compared against each other rather than each
+# against itself.
+
+content
+package
+replication
+configuration
+page_query
+path_query
+asset_query
+page_mutation
