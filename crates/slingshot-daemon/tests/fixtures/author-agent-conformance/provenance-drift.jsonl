@@ -1,0 +1,7 @@
+{"field": "transport_contract_digest", "name": "transport-contract"}
+{"field": "canonical_json_contract_digest", "name": "canonical-byte-contract"}
+{"field": "argument_schema_digest", "name": "argument-schema"}
+{"field": "result_schema_digest", "name": "result-schema"}
+{"field": "command_contract_limits_digest", "name": "contract-limits"}
+{"field": "command_semantic_contract_version", "name": "semantic-version"}
+{"field": "command_wire_name", "name": "wire-name"}
