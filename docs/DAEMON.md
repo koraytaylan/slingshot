@@ -50,10 +50,26 @@ security context nobody chose.
 
 ## What execution does in this build
 
-A product build composes no operation executor. Every execute request is refused
-before a row exists, so there is nothing for a client to find, wait on, or ask
-about afterwards. The refusal is honest about why: nothing was submitted
-anywhere, so it carries confirmed non-execution rather than an unknown.
+A product build installs the author-backed operation executor. Startup composes
+it after the storage is open and the cross-partition audit has passed, and it is
+installed rather than chosen: no setting names an executor, so no deployment can
+end up running the one that runs nothing. That one stays reachable through an
+explicit constructor in the test-support crate, which no product crate depends
+on.
+
+An execution goes through it in one order. The submission is derived from what
+this build has and sent; the filtered event stream for that target partition
+supervises it; a snapshot reconciles it when the stream is not enough; and the
+artifacts its result declares are fetched and published. Only the last of those
+may report success.
+
+Everything unresolved along the way is outstanding work rather than an ending. A
+submission whose fate is unclear, a stream that dropped, an artifact that is not
+there yet: each carries a recovery category and a certainty, because settling an
+operation on this daemon's own difficulty would be reporting a local problem as
+a remote fact. Two answers do end an execution without the agent finishing it -
+work the agent no longer holds, and two accounts of it that disagree - and both
+fail closed rather than guessing.
 
 ## Facts an operation can be in
 
