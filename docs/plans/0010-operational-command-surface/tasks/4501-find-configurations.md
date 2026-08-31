@@ -18,12 +18,12 @@ merged_as: "6a823953ac8e4e7cf5a603243fec21ffc0a53361"
 ---
 # Find Configurations
 
-Inspecting a configuration requires knowing its exact persistent identifier, which is the thing an operator does not have. This task represents finding configurations by prefix and filter, and it deliberately reports no value: the metatype evidence that decides whether a value may be read is a per-identifier judgement, and a listing has not made it.
+Inspecting a configuration requires knowing its exact persistent identifier, which is the thing an operator does not have. This task represents finding configurations by prefix, and it deliberately reports no value: the metatype evidence that decides whether a value may be read is a per-identifier judgement, and a listing has not made it.
 
 **Steps:**
 
 1. Commit canonical accepted and refused argument fixtures and exact no-effect failure documents before the implementation, one line per vector, each carrying the note that says what it proves.
-2. Implement the command with an optional `persistent_identifier_prefix`, an optional `filter` under the bounded lookup filter grammar the inspection command already defines, and an optional `result_window`, reusing that grammar rather than declaring a second one.
+2. Implement the command with an optional `persistent_identifier_prefix` and an optional `result_window`, and deliberately without the inspection command's lookup filter: that filter is bound to an exact-match lookup that refuses more than two matches, so a listing built on it would be a second way to ask one question that answers differently.
 3. Implement the match as the persistent identifier, the factory persistent identifier when there is one, whether the configuration is bound to a bundle location, and the number of property keys it holds. No member carries a property value, and the type makes that structural rather than a promise.
 4. Order matches strictly ascending by persistent identifier under the shared text order rule.
 5. Allow the shared discovery failures plus `configuration_lookup_failed` and `configuration_lookup_budget_exceeded`.
