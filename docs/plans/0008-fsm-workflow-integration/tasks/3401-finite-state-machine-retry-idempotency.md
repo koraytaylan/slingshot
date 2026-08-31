@@ -11,8 +11,8 @@ touches:
   - examples/finite-state-machine/retry.machine.json
   - crates/slingshot-development/tests/fixtures/finite-state-machine-retry/**
   - crates/slingshot-development/tests/finite_state_machine_retry_idempotency.rs
-status: planned
-merged_as: ""
+status: done
+merged_as: "ffd3f8d4a6603380ea957221471cef4b37e1ecd5"
 ---
 # FSM Retry Idempotency
 
