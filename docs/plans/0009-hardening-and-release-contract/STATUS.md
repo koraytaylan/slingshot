@@ -10,6 +10,34 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 15/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3808 delivers the offline cache contract and refuses to invent the owner's part
+    of it.** Its own steps reach into three tasks that have not been through their
+    owner gate: the native row map and the protected review environment
+    (`owner-confirmed-github-automation`), the attestation authority
+    (`owner-confirmed-native-evidence-trust`), and the release metadata
+    (`owner-supplied-release-metadata`). Without those there is no row set to address a
+    member to, no authority to authenticate a same-run RustSec review record against,
+    and no workflow to run a preparation job in. What is delivered is everything that
+    decides whether a prepared cache may be believed: the declaration, the manifest
+    schema, a verifier that walks the cache and digests what is there rather than
+    reading the count the manifest reports about itself, and the two commands - the one
+    that reaches the network saying so out loud, and the one that never fetches,
+    repairs, or consults an ambient cache. The preparation command takes the whole
+    declared input surface and refuses at the review record, naming the committed
+    authority that is missing, rather than admitting an unauthenticated one. What a
+    cache may hold is not restated here: a cache is a Cargo home, so it is bounded by
+    Plan 0008's manifest through Plan 0008's verifier, and a test refuses a declaration
+    that copies any of those seven values. `.github/workflows/release.yml` is
+    deliberately not created, because this plan gives GitHub automation to a gated task
+    and to no other.
+  - **3808 uncovered a defect in Plan 0008 and it was fixed before this task closed.**
+    The compatibility gate took `--cargo-home-seed`, checked that it named a directory,
+    and then built with it ignored: the seed never became `CARGO_HOME`, and not one of
+    the seven dimensions its own manifest bounds a seed in was ever measured. A gate
+    that accepts a seed and proves nothing about it is worse than one that refuses
+    seeds, because the run reads as evidence. The verifier the manifest already
+    promised is now written, the gate bounds a seed before making it the Cargo home,
+    and both landed separately in `5e194b9`.
   - **3703 attacks through the production authority rather than editing it.** Its
     footprint names the daemon's ownership and local server for changes; both already
     refuse everything the attack model describes, and the suite drives their real

@@ -1,0 +1,6 @@
+# One row per change to a prepared manifest that this verifier refuses.
+{"name": "another-format", "override": {"format": "something.else/1"}, "refusal": "ForeignFormat"}
+{"name": "resolving-at-build-time", "override": {"resolution": "online"}, "refusal": "ResolutionUnacceptable"}
+{"name": "another-lockfile", "override": {"lock_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, "refusal": "AnotherLockfile"}
+{"name": "counting-nothing", "override": {"entries": 0}, "refusal": "Changed"}
+{"name": "digesting-to-something-else", "override": {"cache_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "refusal": "Changed"}
