@@ -22,6 +22,7 @@ slingshot-configuration.workspace = true
 slingshot-daemon.workspace = true
 slingshot-domain.workspace = true
 slingshot-local-protocol.workspace = true
+slingshot-storage.workspace = true
 slingshot-test-support.workspace = true
 sqlparser.workspace = true
 syn.workspace = true

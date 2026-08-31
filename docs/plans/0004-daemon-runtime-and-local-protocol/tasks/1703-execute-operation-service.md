@@ -9,9 +9,10 @@ depends_on:
 gated: false
 touches:
   - crates/slingshot-daemon/src/operation_submission.rs
+  - crates/slingshot-development/Cargo.toml
   - crates/slingshot-daemon/tests/operation_submission.rs
   - crates/slingshot-development/tests/operation_submission_process.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Execute Operation Service
