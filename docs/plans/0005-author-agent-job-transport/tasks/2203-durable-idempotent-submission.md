@@ -8,7 +8,11 @@ depends_on:
   - job-snapshot-reconciliation
 gated: false
 touches:
+  - crates/slingshot-storage/migrations/**
+  - crates/slingshot-storage/src/database.rs
+  - crates/slingshot-storage/src/sqlite_statement_inventory.rs
   - crates/slingshot-storage/src/operation/remote_submission.rs
+  - crates/slingshot-storage/tests/migrations.rs
   - crates/slingshot-storage/src/operation/mod.rs
   - crates/slingshot-daemon/src/operation/remote_submission.rs
   - crates/slingshot-daemon/src/operation/mod.rs
