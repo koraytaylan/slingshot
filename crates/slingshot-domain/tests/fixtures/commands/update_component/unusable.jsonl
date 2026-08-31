@@ -1,0 +1,2 @@
+{"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\"}","note":"nothing to change","refusal":"changes_nothing"}
+{"document":"{\"component_path\":\"/content/example/en/report/jcr:content/root/text\",\"properties\":{\"text\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Hello\"}}},\"removed_property_names\":[\"text\"]}","note":"one property named in both documents","refusal":"both_assigned_and_removed"}

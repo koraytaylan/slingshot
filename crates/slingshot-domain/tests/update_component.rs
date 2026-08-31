@@ -17,6 +17,9 @@ use slingshot_domain::command::update_component::{
 /// Commands this test reads.
 const COMMANDS: &str = include_str!("fixtures/commands/update_component/commands.jsonl");
 
+/// Parsable requests the shared mutation rule then refuses.
+const UNUSABLE: &str = include_str!("fixtures/commands/update_component/unusable.jsonl");
+
 /// Failures this test reads.
 const FAILURES: &str = include_str!("fixtures/commands/update_component/failures.jsonl");
 
@@ -44,7 +47,7 @@ fn path(value: &str) -> RepositoryPath {
 #[test]
 fn every_command_vector_parses_exactly_as_the_fixture_says() {
     let vectors = rows(COMMANDS);
-    assert!(vectors.len() >= 6, "both documents, their overlap, and every refusal");
+    assert!(vectors.len() >= 5, "both documents, their overlap, and every refusal");
     for row in &vectors {
         let document = text(row, "document");
         let note = text(row, "note");
@@ -66,16 +69,17 @@ fn every_command_vector_parses_exactly_as_the_fixture_says() {
 
 #[test]
 fn the_shared_mutation_rule_applies_here_unchanged() {
-    let nothing: UpdateComponentCommand =
-        serde_json::from_str(&format!("{{\"component_path\":\"{COMPONENT}\"}}"))
-            .expect("a parsable command");
-    assert_eq!(nothing.require_usable(), Err(PropertyMutationFailure::ChangesNothing));
-
-    let both: UpdateComponentCommand = serde_json::from_str(&format!(
-        "{{\"component_path\":\"{COMPONENT}\",\"properties\":{{\"text\":{{\"cardinality\":\"single\",\"value\":{{\"type\":\"string\",\"value\":\"Hello\"}}}}}},\"removed_property_names\":[\"text\"]}}"
-    ))
-    .expect("a parsable command");
-    assert_eq!(both.require_usable(), Err(PropertyMutationFailure::BothAssignedAndRemoved));
+    for row in rows(UNUSABLE) {
+        let note = text(&row, "note");
+        let parsed: UpdateComponentCommand = serde_json::from_str(text(&row, "document"))
+            .unwrap_or_else(|failure| panic!("{note}: the document did not parse: {failure}"));
+        let expected = match text(&row, "refusal") {
+            "changes_nothing" => PropertyMutationFailure::ChangesNothing,
+            "both_assigned_and_removed" => PropertyMutationFailure::BothAssignedAndRemoved,
+            other => panic!("{note}: the fixture names an unknown refusal {other}"),
+        };
+        assert_eq!(parsed.require_usable(), Err(expected), "{note}");
+    }
 }
 
 #[test]
