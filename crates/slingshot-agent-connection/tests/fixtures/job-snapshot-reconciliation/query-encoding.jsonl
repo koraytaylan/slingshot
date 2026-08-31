@@ -1,0 +1,8 @@
+{"encoded": "sling-job-alpha", "name": "ordinary", "value": "sling-job-alpha"}
+{"encoded": "job%26other%3D1", "name": "separator", "value": "job&other=1"}
+{"encoded": "%2Fetc%2Fpasswd", "name": "path-separator", "value": "/etc/passwd"}
+{"encoded": "job%252Fone", "name": "already-encoded", "value": "job%2Fone"}
+{"encoded": "job%2Bone", "name": "plus", "value": "job+one"}
+{"encoded": "job%20one", "name": "space", "value": "job one"}
+{"encoded": "job%23one", "name": "fragment", "value": "job#one"}
+{"encoded": "job%3Fone", "name": "question", "value": "job?one"}

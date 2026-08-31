@@ -2,4 +2,6 @@
 //!
 //! The module map assigns this family the operation lifecycle, the scheduler,
 //! and the executor boundary the daemon composes. This commit declares the
-//! family root alone.
+//! family root and its reconciliation leaf.
+
+pub mod job_reconciliation;

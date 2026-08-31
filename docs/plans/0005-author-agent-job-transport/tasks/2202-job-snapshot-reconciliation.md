@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-daemon/src/operation/mod.rs
   - crates/slingshot-agent-connection/tests/fixtures/job-snapshot-reconciliation/**
   - crates/slingshot-agent-connection/tests/job_snapshot_reconciliation.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Job Snapshot Reconciliation
