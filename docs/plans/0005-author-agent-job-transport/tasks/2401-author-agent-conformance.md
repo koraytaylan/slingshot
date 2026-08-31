@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-daemon/tests/fixtures/author-agent-conformance/**
   - crates/slingshot-daemon/tests/author_agent_conformance.rs
 status: done
-merged_as: ""
+merged_as: "6fd929fa31c530e117bd655ab6b695bd40d9b10f"
 ---
 # Author-Agent Conformance
 
