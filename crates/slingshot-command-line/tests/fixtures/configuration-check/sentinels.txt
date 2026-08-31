@@ -1,0 +1,18 @@
+# Strings no configuration-check output may contain.
+#
+# A report that named the file it could not read would enumerate the
+# configuration root for whoever ran it, and one that carried a credential
+# would do worse. Both are checked by scanning the whole rendered report.
+
+alpha-site
+remote-site
+nobody-site
+production
+staging
+profiles/
+credentials
+.pem
+.json
+/home/
+password
+BEGIN PRIVATE KEY

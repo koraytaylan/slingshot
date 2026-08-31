@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/configuration_check.rs
   - crates/slingshot-command-line/tests/configuration_check.rs
   - "crates/slingshot-command-line/tests/fixtures/configuration-check/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Check Selected Configuration
