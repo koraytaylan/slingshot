@@ -20,6 +20,8 @@ touches:
   - crates/slingshot-storage/src/database.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
   - crates/slingshot-storage/src/sqlite_vfs.rs
+  - crates/slingshot-storage/src/operation/listing.rs
+  - crates/slingshot-storage/src/operation/mod.rs
   - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/src/artifact_store.rs
   - crates/slingshot-storage/src/installation_state.rs
