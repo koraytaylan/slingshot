@@ -10,7 +10,7 @@ touches:
   - examples/finite-state-machine/artifact.machine.json
   - crates/slingshot-development/tests/fixtures/finite-state-machine-artifact/**
   - crates/slingshot-development/tests/finite_state_machine_artifact.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Workflow Artifact and Maintenance Result References
