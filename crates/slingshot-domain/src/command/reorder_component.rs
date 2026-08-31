@@ -30,7 +30,12 @@ pub enum ComponentPlacement {
         sibling_name: ComponentName,
     },
     /// After every sibling.
-    Last,
+    ///
+    /// Declared with a body so that a document naming a sibling beside it is
+    /// refused rather than silently read as this variant: an internally tagged
+    /// unit variant accepts whatever else the object carries, and a caller whose
+    /// sibling name was quietly dropped would believe it had been used.
+    Last {},
 }
 
 /// One request to reorder a component.
@@ -66,7 +71,7 @@ impl ReorderComponentCommand {
             {
                 Err(MutationResultFailure::NotThisRequest)
             }
-            _ => Ok(()),
+            ComponentPlacement::Before { .. } | ComponentPlacement::Last {} => Ok(()),
         }
     }
 }

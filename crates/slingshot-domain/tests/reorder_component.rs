@@ -74,6 +74,20 @@ fn every_command_vector_parses_exactly_as_the_fixture_says() {
 }
 
 #[test]
+fn a_placement_refuses_the_other_placement_s_members() {
+    for refused in [
+        "{\"mode\":\"last\",\"sibling_name\":\"image\"}",
+        "{\"mode\":\"before\"}",
+        "{\"mode\":\"first\"}",
+    ] {
+        assert!(
+            serde_json::from_str::<ComponentPlacement>(refused).is_err(),
+            "{refused} was accepted as a placement"
+        );
+    }
+}
+
+#[test]
 fn a_component_cannot_be_asked_to_precede_itself() {
     let itself = command(ComponentPlacement::Before { sibling_name: name("text") });
     assert_eq!(itself.require_usable(), Err(MutationResultFailure::NotThisRequest));
@@ -83,7 +97,7 @@ fn a_component_cannot_be_asked_to_precede_itself() {
 
 #[test]
 fn a_result_answers_only_the_request_that_named_its_component() {
-    let asked = command(ComponentPlacement::Last);
+    let asked = command(ComponentPlacement::Last {});
     let answered = ReorderComponentResult {
         preceding_sibling_name: Some(name("image")),
         repository_path: path(COMPONENT),
@@ -98,7 +112,7 @@ fn a_result_answers_only_the_request_that_named_its_component() {
 
 #[test]
 fn a_component_cannot_be_reported_as_following_itself() {
-    let asked = command(ComponentPlacement::Last);
+    let asked = command(ComponentPlacement::Last {});
     let itself = ReorderComponentResult {
         preceding_sibling_name: Some(name("text")),
         repository_path: path(COMPONENT),
@@ -128,7 +142,7 @@ fn a_missing_sibling_belongs_only_to_a_request_that_named_one() {
         Ok(())
     );
     assert_eq!(
-        refusal.require_answers(&command(ComponentPlacement::Last)),
+        refusal.require_answers(&command(ComponentPlacement::Last {})),
         Err(MutationResultFailure::NotThisRequest),
         "a placement that named no sibling was answered with a missing one"
     );
