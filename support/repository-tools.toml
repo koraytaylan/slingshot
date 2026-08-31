@@ -26,6 +26,13 @@ source = "platform-package"
 install = "the platform package manager"
 version-check = "shellcheck --version|version: 0.11.0"
 
+[[tool]]
+name = "gh"
+version = "2.97.0"
+source = "https://github.com/cli/cli/releases/tag/v2.97.0"
+install = "the platform package manager, or the release archive above"
+version-check = "gh --version|gh version 2.97.0"
+
 [advisory-database]
 # The pinned dependency-policy tool looks for the advisory database under this
 # exact directory name, derived from the pinned database location. The name

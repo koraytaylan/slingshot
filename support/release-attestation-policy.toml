@@ -1,0 +1,75 @@
+# What makes native build evidence trustworthy.
+#
+# Internal checksums prove that an archive and a manifest agree with each
+# other. They prove nothing about where either came from, and an attacker who
+# produced both would produce two things that agree. So a release archive is
+# believed only when a provider that this repository does not control attests
+# that it was built by a workflow at a source revision, and only when that
+# attestation verifies offline against a snapshot of the provider's trust root
+# that a reviewer looked at and committed.
+#
+# No signing key, token, or certificate private material belongs here. Nothing
+# in this repository signs anything: the provider signs, and this verifies.
+
+format = "slingshot.release-attestation-policy/1"
+
+[repository]
+# Attestation is available to public repositories and to eligible private ones
+# on GitHub Enterprise Cloud. GitHub Enterprise Server is not eligible, and a
+# policy that pretended otherwise would verify against a root nobody publishes.
+visibility = "public"
+eligibility = "github-hosted-public"
+
+[issuer]
+# The identity provider whose token the signing certificate was issued against,
+# and the Sigstore instance whose root is committed beside this document.
+oidc-issuer = "https://token.actions.githubusercontent.com"
+instance = "public-good"
+
+[identity]
+# The exact certificate identity a release attestation must carry. A bundle
+# signed by any other workflow, in any other repository, is somebody else's
+# evidence about somebody else's build.
+source-repository-uri = "https://github.com/koraytaylan/slingshot"
+source-repository-owner-uri = "https://github.com/koraytaylan"
+workflow-path = ".github/workflows/release.yml"
+builder-identity = "https://github.com/actions/runner/github-hosted"
+runner-environment = "github-hosted"
+
+[statement]
+# The statement and provenance versions this build reads. A version this does
+# not name is a document whose meaning this build has not been written against.
+in-toto-version = "https://in-toto.io/Statement/v1"
+predicate-type = "https://slsa.dev/provenance/v1"
+digest-algorithm = "sha256"
+
+[verifier]
+# The offline verifier and the exact version of it. A verifier is a program
+# whose behaviour changes between versions, so the version is part of what was
+# reviewed.
+name = "gh"
+version = "2.97.0"
+
+[trusted-root]
+# The reviewed snapshot of the provider's trust root, and where it came from.
+# Verification uses this file and never the verifier's built-in default, an
+# operating-system trust store, or a network lookup: each of those would let
+# the thing being verified choose what verifies it.
+path = "compatibility/github-artifact-attestation-trusted-root.jsonl"
+sha256 = "05a094edfa2e8eb7d1b4b37244e28ffb6d86b8b86ce3eb122b644b4335ae4dc1"
+media-type = "application/vnd.dev.sigstore.trustedroot+json;version=0.1"
+provenance = "sigstore/root-signing@c9bda74ad2221f938f7d2e0295ca3aad2da710a8 targets/trusted_root.json"
+
+[validity]
+# A certificate is short-lived by design and the log entry says when it was
+# used. Verification requires the integrated time to fall inside the
+# certificate's validity, and accepts no bundle whose certificate had expired
+# when it was signed.
+require-integrated-time-within-certificate-validity = true
+accept-expired-certificate = false
+
+# An offline snapshot cannot reveal a revocation published after it was taken.
+# Rotation is a reviewed commit rather than something a run discovers: a
+# verification that fetched newer trust material would be trusting whatever it
+# could reach at the time.
+accept-unpinned-root-update = false

@@ -1,0 +1,45 @@
+# The policy the independently pinned bundle satisfies.
+#
+# This is deliberately not Slingshot's policy and deliberately not Slingshot's
+# repository. The accepted cryptographic fixture is a real attestation somebody
+# else's release workflow produced, so proving that the mechanism works means
+# proving it against that bundle's own identity. Recording output this build
+# produced, or claiming a bundle came from a Slingshot workflow that does not
+# exist, would be proving the mechanism against itself.
+
+format = "slingshot.release-attestation-policy/1"
+
+[repository]
+visibility = "public"
+eligibility = "github-hosted-public"
+
+[issuer]
+oidc-issuer = "https://token.actions.githubusercontent.com"
+instance = "public-good"
+
+[identity]
+source-repository-uri = "https://github.com/sigstore/sigstore-js"
+source-repository-owner-uri = "https://github.com/sigstore"
+workflow-path = ".github/workflows/release.yml"
+builder-identity = "https://github.com/actions/runner/github-hosted"
+runner-environment = "github-hosted"
+
+[statement]
+in-toto-version = "https://in-toto.io/Statement/v1"
+predicate-type = "https://slsa.dev/provenance/v1"
+digest-algorithm = "sha512"
+
+[verifier]
+name = "gh"
+version = "2.97.0"
+
+[trusted-root]
+path = "compatibility/github-artifact-attestation-trusted-root.jsonl"
+sha256 = "05a094edfa2e8eb7d1b4b37244e28ffb6d86b8b86ce3eb122b644b4335ae4dc1"
+media-type = "application/vnd.dev.sigstore.trustedroot+json;version=0.1"
+provenance = "sigstore/root-signing@c9bda74ad2221f938f7d2e0295ca3aad2da710a8 targets/trusted_root.json"
+
+[validity]
+require-integrated-time-within-certificate-validity = true
+accept-expired-certificate = false
+accept-unpinned-root-update = false
