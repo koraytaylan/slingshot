@@ -582,6 +582,39 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 3,
         maximum_rows: 0,
     },
+    InventoriedStatement {
+        purpose: "claim the right to start one agent submission",
+        // A higher fence takes the claim from a lower one, and nothing takes it
+        // after the checkpoint. That second clause is the whole no-return rule:
+        // a lease that expired after the work started does not become a licence
+        // for somebody else to start it again.
+        text: "UPDATE agent_operation SET worker_fence = ? \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
+                 AND execution_checkpoint IS NULL \
+                 AND (worker_fence IS NULL OR worker_fence < ?)",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "record the no-return checkpoint on one agent submission",
+        // Only the holder of the current fence, and only once. The attempt
+        // count moves with it, so an outbox attempt is counted exactly when an
+        // effect may have happened rather than when one was contemplated.
+        text: "UPDATE agent_operation \
+               SET execution_checkpoint = ?, outbox_attempts = outbox_attempts + 1 \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
+                 AND worker_fence = ? AND execution_checkpoint IS NULL",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read one agent submission's execution fence",
+        text: "SELECT execution_checkpoint, outbox_attempts, worker_fence \
+               FROM agent_operation \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
 ];
 
 /// Returns the text of the statement with `purpose`.

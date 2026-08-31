@@ -1,0 +1,16 @@
+{"classification": "compatible", "kind": "supplied", "name": "equal-target-and-revision", "revision": "environment-revision-one", "target": "target-identity-digest-one"}
+{"classification": "revision-changed", "kind": "supplied", "name": "changed-revision", "revision": "environment-revision-two", "target": "target-identity-digest-one"}
+{"classification": "target-disjoint", "kind": "supplied", "name": "another-target", "revision": "environment-revision-one", "target": "target-identity-digest-two"}
+{"classification": "target-disjoint", "kind": "supplied", "name": "another-target-and-revision", "revision": "environment-revision-two", "target": "target-identity-digest-two"}
+{"kind": "crash", "name": "before-the-job-manager-call", "physical_records": [], "resolution": "may-attempt-again", "started": false}
+{"kind": "crash", "name": "during-the-job-manager-call-nothing-recorded", "physical_records": [], "resolution": "fail-closed", "started": true}
+{"kind": "crash", "name": "after-one-record", "physical_records": ["sling-job-alpha"], "resolution": "recorded", "started": true}
+{"kind": "crash", "name": "after-a-requeue", "physical_records": ["sling-job-beta", "sling-job-alpha", "sling-job-beta"], "resolution": "recorded", "started": true}
+{"disposition": "accepted", "kind": "disposition", "may-send": false, "name": "accepted", "needs-lookup": false, "outcome": "accepted"}
+{"disposition": "duplicate", "kind": "disposition", "may-send": false, "name": "duplicate", "needs-lookup": false, "outcome": "duplicate"}
+{"disposition": "not-executed", "kind": "disposition", "may-send": true, "name": "capacity-refusal", "needs-lookup": false, "outcome": "authoritative-non-execution"}
+{"disposition": "not-executed", "kind": "disposition", "may-send": true, "name": "pre-byte-failure", "needs-lookup": false, "outcome": "confirmed-not-executed"}
+{"disposition": "recovery-window-expired", "kind": "disposition", "may-send": false, "name": "retired", "needs-lookup": false, "outcome": "recovery-window-expired"}
+{"disposition": "conflict", "kind": "disposition", "may-send": false, "name": "conflict", "needs-lookup": false, "outcome": "conflict"}
+{"disposition": "retry-after", "kind": "disposition", "may-send": true, "name": "throttled", "needs-lookup": false, "outcome": "retry-after"}
+{"disposition": "unknown", "kind": "disposition", "may-send": false, "name": "framing-failure", "needs-lookup": true, "outcome": "submission-unknown"}
