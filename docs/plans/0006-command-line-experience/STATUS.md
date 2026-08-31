@@ -9,6 +9,12 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 1/20 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `95f1e298dbac69e2a37e48d338409fd7c1cf74d5`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **2501 needed the registry it is specified to consult.** The task requires an
+    operation key for every command the catalog classifies as not intrinsically
+    idempotent, and the command-line crate had no edge to the domain that publishes that
+    classification. Restating the classification here would have created a second list to
+    keep in step with the first, so the crate takes the inward dependency and its manifest
+    joins the footprint.
   - **2505 had to stop the formatter reordering its declarations.** The task fixes the
     command family's declaration order, and `rustfmt` sorts module declarations
     alphabetically by default, so the order could not survive the formatter the gate runs.
