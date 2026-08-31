@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/finite-state-machine-daemon-restart/**
   - crates/slingshot-development/tests/finite_state_machine_daemon_restart.rs
 status: done
-merged_as: ""
+merged_as: "e24d3572b421f80f0deda6944cdb80d7ceb9861b"
 ---
 # Daemon Restart Reattachment
 
