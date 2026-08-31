@@ -9,6 +9,17 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 5/16 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `1a592249115df391edac4d8f84fcb52262a3d36e`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3002 projects and pins schemas rather than committing golden copies of them.**
+    The task asks for committed schema goldens for all twelve command tools. A schema
+    is projected from the registry, so committing its bytes would commit a second copy
+    of something already derived, and the copy is what drifts. What is committed is one
+    digest per tool for its input and output schema, rewritten deliberately under a
+    named review command, which catches the change the goldens exist to catch without
+    keeping a second inventory.
+    The typed-construction stage is declared and the first two are enforced here. Raw
+    canonical bytes and declared shape are what this projection can decide; constructing
+    a command from the values is the command builder's own decision, and duplicating it
+    here would create a second constructor to disagree with the first.
   - **2902 has no way to retrieve the official artifact, and does not pretend otherwise.**
     The task requires the complete unmodified official revision document, its source
     location, its retrieval identity, and its digest, used as the oracle every request
