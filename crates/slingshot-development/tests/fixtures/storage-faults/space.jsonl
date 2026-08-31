@@ -1,0 +1,7 @@
+# One row per space question, computed from the contract rather than from the code.
+{"name": "plenty-of-room", "available_bytes": 8860991616, "wanted_bytes": 1024, "answer": "permitted"}
+{"name": "exactly-the-reserve-left", "available_bytes": 2215247904, "wanted_bytes": 1, "answer": "backpressured"}
+{"name": "one-byte-of-usable-space", "available_bytes": 2215247905, "wanted_bytes": 1, "answer": "permitted"}
+{"name": "wanting-one-byte-more-than-usable", "available_bytes": 2215247905, "wanted_bytes": 2, "answer": "backpressured"}
+{"name": "wanting-more-than-exists", "available_bytes": 2215247905, "wanted_bytes": 4430495808, "answer": "refused"}
+{"name": "nothing-free-at-all", "available_bytes": 0, "wanted_bytes": 1, "answer": "refused"}
