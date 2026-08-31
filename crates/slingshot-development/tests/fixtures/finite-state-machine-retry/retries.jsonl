@@ -1,0 +1,5 @@
+# One row per way a call can end, and whether a retry attaches to the same work.
+{"name": "the-handler-timed-out", "outcome": "mcp_error", "attaches": true, "why": "the call ended and the operation did not, so the retry attaches to it"}
+{"name": "the-operation-was-still-running", "outcome": "operation_status", "attaches": true, "why": "a nonterminal state is not a failure, and asking again is not asking for more work"}
+{"name": "the-operation-ended-badly", "outcome": "operation_terminal_error", "attaches": false, "why": "an ending is an answer, and a retry of it would be a second occurrence"}
+{"name": "the-operation-ended-well", "outcome": "operation_result", "attaches": false, "why": "an ending is an answer"}
