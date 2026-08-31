@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-daemon/src/operation_wait.rs
   - crates/slingshot-daemon/tests/operation_wait.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Operation Wait And Progress
