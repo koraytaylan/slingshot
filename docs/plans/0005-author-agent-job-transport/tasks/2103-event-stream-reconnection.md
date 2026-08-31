@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-agent-connection/src/lib.rs
   - crates/slingshot-agent-connection/tests/fixtures/event-stream-reconnection.jsonl
   - crates/slingshot-agent-connection/tests/event_stream_reconnection.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Event Stream Reconnection
