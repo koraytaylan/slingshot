@@ -1,0 +1,4 @@
+{"accepted": true, "attempt": 1, "from": "queued", "name": "queued-then-running", "progress": 0, "to": "running"}
+{"accepted": true, "attempt": 1, "from": "running", "name": "running-then-progress", "progress": 40, "to": "running"}
+{"accepted": true, "attempt": 2, "from": "running", "name": "running-then-requeued", "progress": 40, "to": "running"}
+{"accepted": false, "attempt": 2, "from": "running", "name": "running-then-queued", "progress": 40, "to": "queued"}

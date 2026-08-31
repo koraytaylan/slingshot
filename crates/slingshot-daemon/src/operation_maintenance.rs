@@ -35,6 +35,33 @@ pub struct MaintenancePreview {
     pub manifest: TerminalMaintenanceManifest,
 }
 
+/// What applying one preview would free.
+///
+/// Counted from the manifest rather than measured afterwards, so the number a
+/// person reads before approving is the number the approval is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReleasedCapacity {
+    /// Remote submissions it would remove.
+    pub agent_submission_rows: u64,
+    /// Operations it would remove.
+    pub operation_rows: u64,
+    /// Shared subscriptions it would retire.
+    pub subscription_rows: u64,
+}
+
+impl MaintenancePreview {
+    /// Returns what applying this would free.
+    #[must_use]
+    pub fn released(&self) -> ReleasedCapacity {
+        ReleasedCapacity {
+            agent_submission_rows: self.manifest.released_agent_rows(),
+            operation_rows: self.manifest.released_operation_rows(),
+            subscription_rows: u64::try_from(self.manifest.retired_subscriptions.len())
+                .unwrap_or(u64::MAX),
+        }
+    }
+}
+
 /// Returns what one maintenance run would remove.
 ///
 /// The limit is the smaller of what was asked for and what the contract allows,

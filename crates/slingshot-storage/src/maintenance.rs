@@ -54,6 +54,22 @@ pub struct ProposedRemoval {
     pub settled_at_unix_milliseconds: u64,
 }
 
+/// One remote submission a manifest proposes to remove.
+///
+/// Named beside the operation that submitted it rather than folded into it,
+/// because the two are removed for the same reason and reviewed as one list.
+/// A reviewer who saw only the local half would be approving the removal of
+/// remote correlation they were never shown.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ProposedAgentRemoval {
+    /// What the submission is called at the agent.
+    pub agent_operation_identifier: String,
+    /// Which submission it was.
+    pub submitted_command_digest: String,
+    /// How it ended.
+    pub terminal_disposition: String,
+}
+
 /// What one maintenance run would remove, exactly.
 ///
 /// Whole operations only. An operation's children go with it, so a manifest
@@ -62,6 +78,8 @@ pub struct ProposedRemoval {
 /// removing it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TerminalMaintenanceManifest {
+    /// The remote submissions it proposes to remove, in a fixed order.
+    pub agent_removals: Vec<ProposedAgentRemoval>,
     /// The partition this run is about.
     pub author_target_identity_digest: String,
     /// Operations settled before this instant were eligible.
@@ -76,6 +94,14 @@ pub struct TerminalMaintenanceManifest {
     pub limit: u64,
     /// What it proposes to remove, in a fixed order.
     pub removals: Vec<ProposedRemoval>,
+    /// The shared subscriptions no retained submission would still need.
+    ///
+    /// Reviewed rather than reclaimed. A subscription outlives the submissions
+    /// that opened it and may still be carrying another one's events, so it is
+    /// retired only when the same review that removes its last submission says
+    /// so, and only if nothing retained still names it at the moment of
+    /// removal.
+    pub retired_subscriptions: Vec<String>,
 }
 
 impl TerminalMaintenanceManifest {
@@ -102,6 +128,18 @@ impl TerminalMaintenanceManifest {
             hasher.update(removal.operation_revision.to_be_bytes());
             hasher.update(removal.settled_at_unix_milliseconds.to_be_bytes());
         }
+        for removal in &self.agent_removals {
+            hasher.update(removal.agent_operation_identifier.as_bytes());
+            hasher.update([FIELD_SEPARATOR]);
+            hasher.update(removal.submitted_command_digest.as_bytes());
+            hasher.update([FIELD_SEPARATOR]);
+            hasher.update(removal.terminal_disposition.as_bytes());
+            hasher.update([FIELD_SEPARATOR]);
+        }
+        for subscription in &self.retired_subscriptions {
+            hasher.update(subscription.as_bytes());
+            hasher.update([FIELD_SEPARATOR]);
+        }
         hasher.finalize().iter().map(|octet| format!("{octet:02x}")).collect()
     }
 
@@ -109,6 +147,12 @@ impl TerminalMaintenanceManifest {
     #[must_use]
     pub fn released_operation_rows(&self) -> u64 {
         u64::try_from(self.removals.len()).unwrap_or(u64::MAX)
+    }
+
+    /// Returns how many remote submissions applying this would release.
+    #[must_use]
+    pub fn released_agent_rows(&self) -> u64 {
+        u64::try_from(self.agent_removals.len()).unwrap_or(u64::MAX)
     }
 }
 
@@ -173,12 +217,71 @@ pub fn preview(
             })
         },
     )?;
+    let removals = rows.collect::<Result<Vec<ProposedRemoval>, _>>()?;
     Ok(TerminalMaintenanceManifest {
+        agent_removals: proposed_agent_removals(
+            database,
+            author_target_identity_digest,
+            before_unix_milliseconds,
+            limit,
+        )?,
         author_target_identity_digest: author_target_identity_digest.to_owned(),
         before_unix_milliseconds,
         limit,
-        removals: rows.collect::<Result<Vec<ProposedRemoval>, _>>()?,
+        removals,
+        retired_subscriptions: retirable_subscriptions(
+            database,
+            author_target_identity_digest,
+            limit,
+        )?,
     })
+}
+
+/// Returns the remote submissions the same window would remove.
+fn proposed_agent_removals(
+    database: &OperationDatabase,
+    author_target_identity_digest: &str,
+    before_unix_milliseconds: u64,
+    limit: u64,
+) -> Result<Vec<ProposedAgentRemoval>, RepositoryFailure> {
+    let connection = database.connection();
+    let mut prepared = connection
+        .prepare(statement_text("select the agent submissions one maintenance run would remove"))?;
+    let rows = prepared.query_map(
+        rusqlite::params![
+            author_target_identity_digest,
+            i64::try_from(before_unix_milliseconds).unwrap_or(i64::MAX),
+            i64::try_from(limit).unwrap_or(i64::MAX),
+        ],
+        |row| {
+            Ok(ProposedAgentRemoval {
+                agent_operation_identifier: row.get("agent_operation_identifier")?,
+                submitted_command_digest: row.get("submitted_command_digest")?,
+                terminal_disposition: row.get("terminal_disposition")?,
+            })
+        },
+    )?;
+    Ok(rows.collect::<Result<Vec<ProposedAgentRemoval>, _>>()?)
+}
+
+/// Returns the subscriptions no retained submission still needs.
+fn retirable_subscriptions(
+    database: &OperationDatabase,
+    author_target_identity_digest: &str,
+    limit: u64,
+) -> Result<Vec<String>, RepositoryFailure> {
+    let connection = database.connection();
+    let mut prepared = connection
+        .prepare(statement_text("select the subscriptions no retained agent submission needs"))?;
+    let rows = prepared.query_map(
+        rusqlite::params![
+            author_target_identity_digest,
+            author_target_identity_digest,
+            i64::try_from(limit).unwrap_or(i64::MAX),
+        ],
+        |row| row.get(0),
+    )?;
+    Ok(rows.collect::<Result<Vec<String>, _>>()?)
 }
 
 /// Returns how many operations one maintenance run may remove.
@@ -290,6 +393,25 @@ fn remove_and_record(
         transaction.execute(
             statement_text("remove one terminal operation and everything hanging off it"),
             rusqlite::params![reviewed.author_target_identity_digest, removal.operation_identifier],
+        )?;
+    }
+    for removal in &reviewed.agent_removals {
+        transaction.execute(
+            statement_text("remove one ended agent submission"),
+            rusqlite::params![
+                reviewed.author_target_identity_digest,
+                removal.agent_operation_identifier
+            ],
+        )?;
+    }
+    for subscription in &reviewed.retired_subscriptions {
+        transaction.execute(
+            statement_text("retire one subscription no retained agent submission needs"),
+            rusqlite::params![
+                reviewed.author_target_identity_digest,
+                subscription,
+                reviewed.author_target_identity_digest
+            ],
         )?;
     }
     transaction.execute(

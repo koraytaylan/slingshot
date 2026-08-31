@@ -1,0 +1,6 @@
+{"cursor": "cursor-0001", "digest": "contents-one", "held": null, "name": "first-position-of-all", "outcome": "advanced"}
+{"cursor": "cursor-0009", "digest": "contents-nine", "held": "cursor-0005", "name": "a-later-position", "outcome": "advanced"}
+{"cursor": "cursor-0006", "digest": "contents-six", "held": "cursor-0005", "name": "the-next-position", "outcome": "advanced"}
+{"cursor": "cursor-0005", "digest": "contents-five", "held": "cursor-0005", "name": "same-position-same-contents", "outcome": "exact-replay"}
+{"cursor": "cursor-0005", "digest": "contents-other", "held": "cursor-0005", "name": "same-position-other-contents", "outcome": "integrity-conflict"}
+{"cursor": "cursor-0002", "digest": "contents-two", "held": "cursor-0005", "name": "an-earlier-position", "outcome": "stale-cursor-only"}

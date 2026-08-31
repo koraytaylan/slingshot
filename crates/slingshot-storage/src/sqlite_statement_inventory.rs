@@ -395,11 +395,21 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         // The applied sequence is in the predicate as well as the assignment,
         // so two folds racing on one row cannot both succeed and neither can
         // apply an event to a row that has already moved past it.
+        //
+        // The last three clauses are the domain's transition table, restated
+        // where the write happens. A row may be set to queued only while it is
+        // queued, because Sling delivers at least once and a physical requeue
+        // is the same work running rather than work that stopped; and attempts
+        // and progress only ever increase. Restated rather than trusted, so a
+        // caller that skipped the reducer cannot write a fact the domain would
+        // have refused.
         text: "UPDATE agent_operation \
                SET applied_sequence = ?, attempt = ?, job_state = ?, progress = ? \
                WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
-                 AND applied_sequence = ? AND terminal_disposition IS NULL",
-        parameters: 7,
+                 AND applied_sequence = ? AND terminal_disposition IS NULL \
+                 AND (job_state = 'queued' OR ? <> 'queued') \
+                 AND attempt <= ? AND progress <= ?",
+        parameters: 10,
         maximum_rows: 0,
     },
     InventoriedStatement {
