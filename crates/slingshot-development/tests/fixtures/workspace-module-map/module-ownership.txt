@@ -28,6 +28,7 @@ crates/slingshot-agent-connection/src/command_submission.rs|slingshot-agent-conn
 crates/slingshot-agent-connection/src/event_stream_heartbeat.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::event_stream_heartbeat|event-stream-heartbeat
 crates/slingshot-agent-connection/src/event_stream_reconnection.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::event_stream_reconnection|event-stream-reconnection
 crates/slingshot-agent-connection/src/job_event_reducer.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::job_event_reducer|job-event-reducer
+crates/slingshot-agent-connection/src/job_snapshot_reconciliation.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::job_snapshot_reconciliation|job-snapshot-reconciliation
 crates/slingshot-agent-connection/src/lib.rs|slingshot-agent-connection|adapter|crate-root|slingshot_agent_connection|workspace-module-map
 crates/slingshot-agent-connection/src/request_authentication.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::request_authentication|author-request-authentication
 crates/slingshot-agent-connection/src/server_sent_event_decoder.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::server_sent_event_decoder|bounded-server-sent-event-decoder
@@ -66,6 +67,7 @@ crates/slingshot-daemon/src/diagnostics.rs|slingshot-daemon|service|leaf|slingsh
 crates/slingshot-daemon/src/lib.rs|slingshot-daemon|service|crate-root|slingshot_daemon|workspace-module-map
 crates/slingshot-daemon/src/local_server.rs|slingshot-daemon|service|leaf|slingshot_daemon::local_server|workspace-module-map
 crates/slingshot-daemon/src/operation/mod.rs|slingshot-daemon|service|family-root|slingshot_daemon::operation|workspace-module-map
+crates/slingshot-daemon/src/operation/job_reconciliation.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation::job_reconciliation|job-snapshot-reconciliation
 crates/slingshot-daemon/src/operation_maintenance.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_maintenance|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/operation_queries.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_queries|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/operation_recovery.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_recovery|daemon-runtime-module-scaffold
