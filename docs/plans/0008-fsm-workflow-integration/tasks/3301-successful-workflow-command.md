@@ -7,11 +7,13 @@ depends_on:
   - workflow-handler-operation-keys
 gated: false
 touches:
+  - crates/slingshot-development/src/finite_state_machine_acknowledgement.rs
+  - crates/slingshot-development/src/lib.rs
   - examples/finite-state-machine/success.machine.json
   - crates/slingshot-development/tests/fixtures/finite-state-machine-success/**
   - crates/slingshot-development/tests/finite_state_machine_success.rs
 status: done
-merged_as: ""
+merged_as: "337ad059b116f818fedc4fa4fb911bc1a5c56d4a"
 ---
 # Successful Workflow Command
 
