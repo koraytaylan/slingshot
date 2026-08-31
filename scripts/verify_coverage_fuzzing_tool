@@ -1,0 +1,39 @@
+#!/bin/sh
+# Verify one built coverage-fuzzing bundle and print the executable's path.
+#
+# Offline, bounded, and path-only. It reads the bundle's own manifest, checks it
+# against what this repository pins, and prints the one absolute path a consumer
+# may run. It installs nothing, mutates no Cargo home, and searches no path,
+# because a tool found rather than supplied is a tool nobody pinned.
+
+set -eu
+
+BUNDLE=''
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --bundle)
+            [ "$#" -ge 2 ] || report_refusal 'the bundle option names a directory'
+            BUNDLE=$2
+            shift 2
+            ;;
+        *)
+            report_refusal "$1 is not an option this verifier takes"
+            ;;
+    esac
+done
+
+[ -n "$BUNDLE" ] || report_refusal 'this verifier is given a bundle explicitly and finds none for itself'
+[ -d "$BUNDLE" ] || report_refusal "$BUNDLE is not a directory"
+case "$BUNDLE" in
+    /*) ;;
+    *) report_refusal "$BUNDLE is not an absolute path" ;;
+esac
+[ -f "$BUNDLE/bundle.json" ] || report_refusal 'the bundle holds no manifest'
+
+cargo run --locked --quiet -p slingshot-development -- verify-coverage-fuzzing-tool --bundle "$BUNDLE"

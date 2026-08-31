@@ -7,6 +7,7 @@
 //! roots, and declares the profile-authentication harness leaf as
 //! documentation-only structure.
 
+pub mod coverage_fuzzing_tool;
 pub mod daemon_chaos_subject;
 pub mod dependency_direction;
 pub mod finite_state_machine_acknowledgement;
