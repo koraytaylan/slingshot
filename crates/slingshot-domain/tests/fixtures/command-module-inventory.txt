@@ -14,11 +14,16 @@ canonical_json
 catalog
 command_identity
 component_resource_type
+content_fragment_element
 create_asset
 create_asset_folder
+create_content_fragment
+create_experience_fragment
 create_page
 delete_asset
 delete_component
+delete_content_fragment
+delete_experience_fragment
 delete_page
 discovery_budget
 download_content_package
@@ -39,6 +44,7 @@ platform_service_identity
 process_identity
 property_value
 query_paths
+read_content_fragment
 reorder_component
 replicate_content
 repository_path
@@ -48,4 +54,6 @@ schema
 search_predicate
 update_asset_metadata
 update_component
+update_content_fragment
+update_experience_fragment
 update_page

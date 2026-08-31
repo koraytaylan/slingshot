@@ -1,0 +1,2 @@
+{"document":"{\"variation_path\":\"/content/experience-fragments/example/hero/web\"}","note":"nothing to change","refusal":"changes_nothing"}
+{"document":"{\"properties\":{\"jcr:description\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"A hero\"}}},\"removed_property_names\":[\"jcr:description\"],\"variation_path\":\"/content/experience-fragments/example/hero/web\"}","note":"one property named in both documents","refusal":"both_assigned_and_removed"}

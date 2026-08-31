@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/delete_content_fragment.rs
   - "crates/slingshot-domain/tests/fixtures/commands/delete_content_fragment/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Delete a Content Fragment
