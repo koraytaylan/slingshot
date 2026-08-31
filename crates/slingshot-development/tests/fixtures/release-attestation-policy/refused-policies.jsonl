@@ -1,0 +1,6 @@
+# One change to the committed policy per row, and the refusal it earns.
+{"name": "another-format", "find": "format = \"slingshot.release-attestation-policy/1\"", "replace": "format = \"something.else/1\"", "refusal": "ForeignFormat"}
+{"name": "an-ineligible-repository", "find": "visibility = \"public\"", "replace": "visibility = \"github-enterprise-server\"", "refusal": "ValueUnacceptable"}
+{"name": "an-expired-certificate-accepted", "find": "accept-expired-certificate = false", "replace": "accept-expired-certificate = true", "refusal": "TrustWouldBeChosenByTheVerified"}
+{"name": "trust-advanced-during-a-run", "find": "accept-unpinned-root-update = false", "replace": "accept-unpinned-root-update = true", "refusal": "TrustWouldBeChosenByTheVerified"}
+{"name": "integrated-time-ignored", "find": "require-integrated-time-within-certificate-validity = true", "replace": "require-integrated-time-within-certificate-validity = false", "refusal": "TrustWouldBeChosenByTheVerified"}

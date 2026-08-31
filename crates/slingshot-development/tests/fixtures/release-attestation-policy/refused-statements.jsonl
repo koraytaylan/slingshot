@@ -1,0 +1,8 @@
+# One change to the independently pinned statement per row.
+# Each is applied to the real bundle's decoded statement, so what is under
+# test is a genuine attestation with exactly one thing altered.
+{"name": "another-repository", "pointer": "/predicate/buildDefinition/externalParameters/workflow/repository", "replacement": "https://github.com/somebody/else", "refusal": "IdentityUnauthorized"}
+{"name": "another-workflow", "pointer": "/predicate/buildDefinition/externalParameters/workflow/path", "replacement": ".github/workflows/something-else.yml", "refusal": "IdentityUnauthorized"}
+{"name": "another-builder", "pointer": "/predicate/runDetails/builder/id", "replacement": "https://github.com/actions/runner/self-hosted", "refusal": "IdentityUnauthorized"}
+{"name": "an-older-statement-version", "pointer": "/_type", "replacement": "https://in-toto.io/Statement/v0.1", "refusal": "IdentityUnauthorized"}
+{"name": "another-provenance-version", "pointer": "/predicateType", "replacement": "https://slsa.dev/provenance/v0.2", "refusal": "IdentityUnauthorized"}
