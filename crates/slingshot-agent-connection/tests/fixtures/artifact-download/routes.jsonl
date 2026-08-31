@@ -1,0 +1,4 @@
+{"encoded_operation": "agent-operation-alpha", "encoded_slot": "content_package", "name": "ordinary", "operation": "agent-operation-alpha", "slot": "content_package"}
+{"encoded_operation": "alpha%26slot%3Dother", "encoded_slot": "content_package", "name": "separator-in-the-operation", "operation": "alpha&slot=other", "slot": "content_package"}
+{"encoded_operation": "..%2F..%2Fetc%2Fpasswd", "encoded_slot": "content_package", "name": "path-escape", "operation": "../../etc/passwd", "slot": "content_package"}
+{"encoded_operation": "alpha%252Fone", "encoded_slot": "content_package", "name": "already-encoded", "operation": "alpha%2Fone", "slot": "content_package"}

@@ -21,6 +21,7 @@ crates/slingshot-agent-connection/src/authentication/environment_provider.rs|sli
 crates/slingshot-agent-connection/src/authentication/identity_management_exchange.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::authentication::identity_management_exchange|profile-authentication-module-scaffold
 crates/slingshot-agent-connection/src/authentication/mod.rs|slingshot-agent-connection|adapter|family-root|slingshot_agent_connection::authentication|workspace-module-map
 crates/slingshot-agent-connection/src/authentication/token_assertion.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::authentication::token_assertion|profile-authentication-module-scaffold
+crates/slingshot-agent-connection/src/artifact_download.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::artifact_download|artifact-download
 crates/slingshot-agent-connection/src/author_cross_site_request_forgery_protection.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::author_cross_site_request_forgery_protection|author-cross-site-request-forgery-protection
 crates/slingshot-agent-connection/src/author_hypertext_transfer_protocol_policy.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::author_hypertext_transfer_protocol_policy|author-hypertext-transfer-protocol-policy
 crates/slingshot-agent-connection/src/capability_discovery.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::capability_discovery|capability-discovery
@@ -68,6 +69,7 @@ crates/slingshot-daemon/src/diagnostics.rs|slingshot-daemon|service|leaf|slingsh
 crates/slingshot-daemon/src/lib.rs|slingshot-daemon|service|crate-root|slingshot_daemon|workspace-module-map
 crates/slingshot-daemon/src/local_server.rs|slingshot-daemon|service|leaf|slingshot_daemon::local_server|workspace-module-map
 crates/slingshot-daemon/src/operation/mod.rs|slingshot-daemon|service|family-root|slingshot_daemon::operation|workspace-module-map
+crates/slingshot-daemon/src/operation/artifact_completion.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation::artifact_completion|artifact-download
 crates/slingshot-daemon/src/operation/job_reconciliation.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation::job_reconciliation|job-snapshot-reconciliation
 crates/slingshot-daemon/src/operation/recovery_and_event_supervisor.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation::recovery_and_event_supervisor|recovery-and-event-supervisor
 crates/slingshot-daemon/src/operation/remote_result_settlement.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation::remote_result_settlement|bounded-structured-results

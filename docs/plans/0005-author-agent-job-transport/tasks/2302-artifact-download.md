@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-daemon/src/operation/mod.rs
   - crates/slingshot-agent-connection/tests/fixtures/artifact-download/**
   - crates/slingshot-agent-connection/tests/artifact_download.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Artifact Download

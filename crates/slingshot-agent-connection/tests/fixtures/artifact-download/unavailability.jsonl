@@ -1,0 +1,7 @@
+{"elapsed": 0, "identified": true, "name": "identified-missing-within-grace", "outcome": "grace", "reason": "missing"}
+{"elapsed": 30000, "identified": true, "name": "identified-missing-beyond-grace", "outcome": "result-unavailable", "reason": "missing"}
+{"elapsed": 0, "identified": true, "name": "identified-retention-expired", "outcome": "result-unavailable", "reason": "retention-expired"}
+{"elapsed": 30000, "field": "generation", "identified": false, "name": "wrong-generation", "outcome": "protocol-invalid", "reason": "missing"}
+{"elapsed": 0, "field": "operation", "identified": false, "name": "wrong-operation", "outcome": "protocol-invalid", "reason": "retention-expired"}
+{"elapsed": 0, "field": "artifact", "identified": false, "name": "wrong-artifact", "outcome": "protocol-invalid", "reason": "retention-expired"}
+{"elapsed": 0, "field": "slot", "identified": false, "name": "wrong-slot", "outcome": "protocol-invalid", "reason": "retention-expired"}
