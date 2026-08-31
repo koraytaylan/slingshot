@@ -10,7 +10,7 @@ gated: false
 touches:
   - crates/slingshot-development/tests/local_operation_session.rs
   - "crates/slingshot-development/tests/fixtures/local-operation-session/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Local Operation Golden Session

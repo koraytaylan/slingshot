@@ -1,0 +1,5 @@
+{"kind":"retained_control","note":"an incompatible client still reaches retained control","operation_version":9,"outcome":"serve","step":"dispatch"}
+{"kind":"execute","note":"and a compatible one reaches execute","operation_version":1,"outcome":"serve","step":"dispatch"}
+{"note":"which this build refuses, because it composes no executor","outcome":"refused","refusal":"execution_unavailable","step":"execute"}
+{"note":"so there is no operation for anyone to find","operation":"operation-1","outcome":"absent","step":"read"}
+{"note":"and nothing to list","rows":0,"step":"list"}

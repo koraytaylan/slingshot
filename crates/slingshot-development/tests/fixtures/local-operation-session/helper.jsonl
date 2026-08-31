@@ -1,0 +1,16 @@
+{"lifecycle_state":"queued","note":"the helper composition admits the work","outcome":"admitted","revision":1,"step":"execute"}
+{"lifecycle_state":"queued","note":"and an identical repeat finds it rather than making a second","outcome":"replayed","revision":1,"step":"execute"}
+{"note":"the scheduler starts it","revision":2,"step":"advance","to":"submitting"}
+{"note":"the remote takes it","revision":3,"step":"advance","to":"accepted"}
+{"note":"and begins","revision":4,"step":"advance","to":"running"}
+{"category":"persistent_capacity_unavailable","evidence":"authoritative_remote_success","note":"the remote succeeded and the result does not fit, which is not an ending","revision":5,"step":"recovery"}
+{"lifecycle_state":"running","note":"so status says it is running and waiting on something","revision":5,"step":"status","waiting":true}
+{"evidence":"authoritative_remote_success","note":"and result says what, without inventing a doubt about the remote","outcome":"recovery_required","step":"result"}
+{"note":"a person frees capacity and resumes it","outcome":"applied","step":"resume"}
+{"note":"and an exact repeat replays the receipt","outcome":"replayed","step":"resume"}
+{"note":"the local half finishes","revision":6,"step":"advance","to":"succeeded"}
+{"disposition":"inline","note":"and the result travels in the response","outcome":"succeeded","step":"result"}
+{"note":"one operation, listed","rows":1,"step":"list"}
+{"note":"which has ended, so maintenance proposes it","removals":1,"step":"maintenance_preview"}
+{"note":"and applying what was reviewed removes exactly it","outcome":"applied","released":1,"step":"maintenance_apply"}
+{"note":"leaving nothing behind","rows":0,"step":"list"}
