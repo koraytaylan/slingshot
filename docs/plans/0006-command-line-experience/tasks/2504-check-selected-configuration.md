@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/tests/configuration_check.rs
   - "crates/slingshot-command-line/tests/fixtures/configuration-check/**"
 status: done
-merged_as: ""
+merged_as: "7e5bb65c33dd64cfdaf6ef7408e13211b1e5bcbd"
 ---
 # Check Selected Configuration
 
