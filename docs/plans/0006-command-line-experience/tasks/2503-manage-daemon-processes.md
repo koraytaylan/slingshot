@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/tests/daemon_process.rs
   - crates/slingshot-test-support/src/daemon_process.rs
 status: done
-merged_as: ""
+merged_as: "cdcdc542ce339ec96bf8993ceadad19691b97909"
 ---
 # Manage Daemon Processes
 
