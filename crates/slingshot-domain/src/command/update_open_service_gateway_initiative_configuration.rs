@@ -64,7 +64,9 @@ impl ConfigurationAssignments {
     /// # Errors
     ///
     /// Returns [`ConfigurationUpdateFailure::TooManyKeys`] above the bound one
-    /// configuration may hold.
+    /// configuration may hold, and
+    /// [`ConfigurationUpdateFailure::DuplicateKeyIdentity`] when two keys differ
+    /// only in case, which Configuration Admin reads as one key.
     pub fn new(
         values: std::collections::BTreeMap<
             OpenServiceGatewayInitiativeConfigurationPropertyKey,
@@ -121,9 +123,11 @@ impl RemovedConfigurationKeys {
     /// # Errors
     ///
     /// Returns [`ConfigurationUpdateFailure::TooManyKeys`] above the bound one
-    /// configuration may hold, and
+    /// configuration may hold,
     /// [`ConfigurationUpdateFailure::RemovalsNotAscendingDistinct`] when the
-    /// list is empty, repeats a key, or is out of order.
+    /// list is empty, repeats a key, or is out of order, and
+    /// [`ConfigurationUpdateFailure::DuplicateKeyIdentity`] when two keys differ
+    /// only in case, which Configuration Admin reads as one key.
     pub fn new(
         keys: Vec<OpenServiceGatewayInitiativeConfigurationPropertyKey>,
     ) -> Result<Self, ConfigurationUpdateFailure> {

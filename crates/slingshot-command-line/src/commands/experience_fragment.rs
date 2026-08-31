@@ -9,18 +9,15 @@ use slingshot_domain::command::catalog::Command;
 use slingshot_domain::command::content_fragment_element::ContentFragmentVariationName;
 use slingshot_domain::command::create_experience_fragment::CreateExperienceFragmentCommand;
 use slingshot_domain::command::delete_experience_fragment::DeleteExperienceFragmentCommand;
-use slingshot_domain::command::find_pages_containing_phrase::PageTitle;
 use slingshot_domain::command::repository_path::RepositoryName;
 use slingshot_domain::command::update_experience_fragment::UpdateExperienceFragmentCommand;
 
 use crate::commands::content::{RequestRefusal, require_key, required};
 use crate::commands::operational_values::{
-    optional_text, path, reference_policy, removed_property_names, unusable,
+    path, reference_policy, removed_property_names, title, unusable,
 };
 use crate::commands::page_mutation::properties;
-use crate::invocation::{
-    Invocation, NAME_OPTION, PATH_OPTION, TEMPLATE_OPTION, TITLE_OPTION, VARIATION_OPTION,
-};
+use crate::invocation::{Invocation, NAME_OPTION, PATH_OPTION, TEMPLATE_OPTION, VARIATION_OPTION};
 
 /// The wire name of the fragment creation.
 pub const CREATE_EXPERIENCE_FRAGMENT: &str = "create_experience_fragment";
@@ -79,11 +76,4 @@ fn update(invocation: &Invocation) -> Result<Command, RequestRefusal> {
         title: title(invocation)?,
         variation_path: path(invocation, PATH_OPTION)?,
     }))
-}
-
-/// Returns the title one invocation records, when it records one.
-fn title(invocation: &Invocation) -> Result<Option<PageTitle>, RequestRefusal> {
-    optional_text(invocation, TITLE_OPTION)
-        .map(|stated| PageTitle::new(stated).map_err(|_| unusable(TITLE_OPTION)))
-        .transpose()
 }

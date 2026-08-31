@@ -98,16 +98,21 @@ fn entries_are_strictly_ascending_and_bounded() {
         ),
         Err(ListingResultFailure::NotStrictlyAscending)
     );
-    let bound =
-        usize::try_from(CommandContract::embedded().limit("maximum_replication_queue_entries"))
-            .expect("the bound fits");
-    // The bound itself is a hundred thousand rows; building one past it is what
-    // this proves, and the shorter page is proved by every other vector here.
-    let beyond: Vec<ReplicationQueueEntry> = (0..=bound)
+    // A page holds at most a page, whatever the whole queue holds: the bound is
+    // the result limit rather than the queue's own, and both sides of it are
+    // proved here because the two numbers are a hundred-fold apart and an
+    // assertion against the wrong one passes without proving anything.
+    let bound = usize::try_from(CommandContract::embedded().limit("maximum_result_limit"))
+        .expect("the bound fits");
+    let rows: Vec<ReplicationQueueEntry> = (0..=bound)
         .map(|index| entry(&format!("e-{index:06}"), ReplicationAction::Activate, false))
         .collect();
+    assert!(
+        InspectReplicationQueueResult::new(false, rows[..bound].to_vec(), None).is_ok(),
+        "the bound itself was refused"
+    );
     assert_eq!(
-        InspectReplicationQueueResult::new(false, beyond, None),
+        InspectReplicationQueueResult::new(false, rows, None),
         Err(ListingResultFailure::TooManyRequested)
     );
 }
