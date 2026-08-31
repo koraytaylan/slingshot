@@ -1,0 +1,43 @@
+{"attempt": 1, "ceiling": 250, "delay": 0, "kind": "jitter", "name": "attempt-1-sample-0", "sample": 0}
+{"attempt": 1, "ceiling": 250, "delay": 125, "kind": "jitter", "name": "attempt-1-sample-125", "sample": 125}
+{"attempt": 1, "ceiling": 250, "delay": 250, "kind": "jitter", "name": "attempt-1-sample-250", "sample": 250}
+{"attempt": 1, "ceiling": 250, "delay": 0, "kind": "jitter", "name": "attempt-1-sample-251", "sample": 251}
+{"attempt": 2, "ceiling": 500, "delay": 499, "kind": "jitter", "name": "attempt-2-sample-499", "sample": 499}
+{"attempt": 3, "ceiling": 1000, "delay": 1000, "kind": "jitter", "name": "attempt-3-sample-1000", "sample": 1000}
+{"attempt": 4, "ceiling": 2000, "delay": 339, "kind": "jitter", "name": "attempt-4-sample-12345", "sample": 12345}
+{"attempt": 5, "ceiling": 4000, "delay": 3999, "kind": "jitter", "name": "attempt-5-sample-3999", "sample": 3999}
+{"attempt": 6, "ceiling": 8000, "delay": 0, "kind": "jitter", "name": "attempt-6-sample-8001", "sample": 8001}
+{"attempt": 7, "ceiling": 16000, "delay": 16000, "kind": "jitter", "name": "attempt-7-sample-16000", "sample": 16000}
+{"attempt": 8, "ceiling": 30000, "delay": 9966, "kind": "jitter", "name": "attempt-8-sample-999999", "sample": 999999}
+{"attempt": 9, "ceiling": 30000, "delay": 0, "kind": "jitter", "name": "attempt-9-sample-30001", "sample": 30001}
+{"chosen": 8000, "eligible_at": 1700000008000, "kind": "restart", "name": "restart-with-unchanged-clock", "now": 1700000000000, "resumed": 8000}
+{"chosen": 8000, "eligible_at": 1700000008000, "kind": "restart", "name": "restart-partway-through", "now": 1700000005000, "resumed": 3000}
+{"chosen": 8000, "eligible_at": 1700000008000, "kind": "restart", "name": "restart-after-the-wait", "now": 1700000008000, "resumed": 0}
+{"chosen": 8000, "eligible_at": 1700000008000, "kind": "restart", "name": "restart-after-a-forward-jump", "now": 1700000013000, "resumed": 0}
+{"chosen": 8000, "eligible_at": 1700000008000, "kind": "restart", "name": "restart-after-a-backward-jump", "now": 1699999958000, "resumed": 8000}
+{"kind": "status", "name": "status-408", "retryable": true, "status": 408}
+{"kind": "status", "name": "status-429", "retryable": true, "status": 429}
+{"kind": "status", "name": "status-500", "retryable": true, "status": 500}
+{"kind": "status", "name": "status-502", "retryable": true, "status": 502}
+{"kind": "status", "name": "status-503", "retryable": true, "status": 503}
+{"kind": "status", "name": "status-504", "retryable": true, "status": 504}
+{"kind": "status", "name": "status-200", "retryable": false, "status": 200}
+{"kind": "status", "name": "status-204", "retryable": false, "status": 204}
+{"kind": "status", "name": "status-400", "retryable": false, "status": 400}
+{"kind": "status", "name": "status-403", "retryable": false, "status": 403}
+{"kind": "status", "name": "status-409", "retryable": false, "status": 409}
+{"kind": "status", "name": "status-418", "retryable": false, "status": 418}
+{"honoured": 0, "kind": "retry-after", "name": "retry-after-0", "requested": 0}
+{"honoured": 5000, "kind": "retry-after", "name": "retry-after-5000", "requested": 5000}
+{"honoured": 60000, "kind": "retry-after", "name": "retry-after-60000", "requested": 60000}
+{"honoured": 60000, "kind": "retry-after", "name": "retry-after-3600000", "requested": 3600000}
+{"kind": "reset", "name": "cursor-expired", "reason": "cursor-expired", "route": "high-water-snapshot-reset"}
+{"kind": "reset", "name": "generation-changed", "reason": "generation-changed", "route": "high-water-snapshot-reset"}
+{"kind": "reset", "name": "equal-cursor-digest-conflict", "reason": "equal-cursor-digest-conflict", "route": "high-water-snapshot-reset"}
+{"generation": 7, "kind": "route", "name": "canonical-pair", "route": "/libs/slingshot/agent/events?agent_event_store_generation=7&daemon_subscription_identifier=daemon-subscription-one", "subscription": "daemon-subscription-one"}
+{"defect": "informational-head", "kind": "head", "name": "informational-head", "refusal": "head"}
+{"defect": "declared-trailer", "kind": "head", "name": "declared-trailer", "refusal": "head"}
+{"defect": "unsupported-protocol-version", "kind": "head", "name": "unsupported-protocol-version", "refusal": "head"}
+{"defect": "alternative-service-offered", "kind": "head", "name": "alternative-service-offered", "refusal": "head"}
+{"defect": "unexpected-content-coding", "kind": "head", "name": "unexpected-content-coding", "refusal": "head"}
+{"defect": "server-offered-route", "kind": "head", "name": "server-offered-route", "refusal": "server-route"}

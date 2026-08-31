@@ -11,6 +11,7 @@ pub mod author_hypertext_transfer_protocol_policy;
 pub mod capability_discovery;
 pub mod command_submission;
 pub mod event_stream_heartbeat;
+pub mod event_stream_reconnection;
 pub mod request_authentication;
 pub mod server_sent_event_decoder;
 pub mod transport_policy;
