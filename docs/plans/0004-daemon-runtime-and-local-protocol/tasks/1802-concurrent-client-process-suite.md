@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-test-support/src/process_barrier.rs
   - crates/slingshot-development/tests/concurrent_daemon_clients.rs
 status: done
-merged_as: ""
+merged_as: "3c20802bda89f5289698bc0145e9fed60b92c9a9"
 ---
 # Concurrent Client Process Suite
 
