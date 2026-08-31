@@ -1,0 +1,12 @@
+{"arguments": ["help"], "metadata_only": true, "name": "help-alone", "verb": "help"}
+{"arguments": ["version"], "metadata_only": true, "name": "version-alone", "verb": "version"}
+{"arguments": ["check-configuration", "--profile", "production", "--environment", "publish"], "environment": "publish", "name": "check-configuration-with-a-selection", "profile": "production", "verb": "check-configuration"}
+{"arguments": ["query_paths", "--profile", "production"], "name": "a-read-only-command-needs-no-key", "profile": "production", "verb": "query_paths"}
+{"arguments": ["create_page", "--operation-key", "one"], "name": "a-mutation-with-its-key", "operation_key": "one", "verb": "create_page"}
+{"arguments": ["add_component", "--operation-key", "two", "--detach"], "detached": true, "name": "a-mutation-detached", "operation_key": "two", "verb": "add_component"}
+{"arguments": ["query_paths", "--machine"], "machine": true, "name": "machine-output-on-a-command", "verb": "query_paths"}
+{"arguments": ["operation-list", "--author-target-digest", "abc", "--limit", "10"], "name": "a-historical-listing", "verb": "operation-list"}
+{"arguments": ["maintenance-preview", "--before", "1700000000000", "--limit", "64"], "name": "a-maintenance-preview", "verb": "maintenance-preview"}
+{"arguments": ["maintenance-apply", "--reviewed-digest", "abc"], "name": "a-maintenance-apply", "verb": "maintenance-apply"}
+{"arguments": ["maintenance-result", "--result-identifier", "one", "--expected-digest", "abc", "--destination", "/tmp/out.json"], "name": "a-maintenance-result-read", "verb": "maintenance-result"}
+{"arguments": ["operation-restart", "--expected-revision", "4", "--expected-category", "ambiguous_submission"], "name": "an-operation-restart", "verb": "operation-restart"}

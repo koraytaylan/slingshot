@@ -15,6 +15,10 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     classification. Restating the classification here would have created a second list to
     keep in step with the first, so the crate takes the inward dependency and its manifest
     joins the footprint.
+    It also relaxes the scaffold suite's emptiness check, which was true of the commit
+    that created the leaves and stops being true of the first one to implement any of
+    them; what stays checked is the enduring claim, that every leaf opens with
+    documentation of what it owns and claims nothing it has not done.
   - **2505 had to stop the formatter reordering its declarations.** The task fixes the
     command family's declaration order, and `rustfmt` sorts module declarations
     alphabetically by default, so the order could not survive the formatter the gate runs.
