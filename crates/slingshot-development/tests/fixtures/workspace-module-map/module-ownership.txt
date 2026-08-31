@@ -26,6 +26,7 @@ crates/slingshot-agent-connection/src/transport_policy.rs|slingshot-agent-connec
 crates/slingshot-agent-protocol/src/continuation_key_authority.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::continuation_key_authority|continuation-key-lifecycle-contract
 crates/slingshot-agent-protocol/src/continuation_token.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::continuation_token|continuation-key-lifecycle-contract
 crates/slingshot-agent-protocol/src/identity.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::identity|agent-identity-and-wire-schema-contract
+crates/slingshot-agent-protocol/src/job_contract.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::job_contract|agent-store-and-logical-execution-contract
 crates/slingshot-agent-protocol/src/lib.rs|slingshot-agent-protocol|contract|crate-root|slingshot_agent_protocol|workspace-module-map
 crates/slingshot-agent-protocol/src/remote_job.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::remote_job|workspace-module-map
 crates/slingshot-agent-protocol/src/wire_contract.rs|slingshot-agent-protocol|contract|leaf|slingshot_agent_protocol::wire_contract|agent-identity-and-wire-schema-contract
@@ -93,6 +94,7 @@ crates/slingshot-domain/src/configuration_snapshot.rs|slingshot-domain|domain|le
 crates/slingshot-domain/src/daemon_runtime_contract.rs|slingshot-domain|domain|leaf|slingshot_domain::daemon_runtime_contract|daemon-runtime-module-scaffold
 crates/slingshot-domain/src/installation.rs|slingshot-domain|domain|leaf|slingshot_domain::installation|daemon-runtime-module-scaffold
 crates/slingshot-domain/src/lib.rs|slingshot-domain|domain|crate-root|slingshot_domain|workspace-module-map
+crates/slingshot-domain/src/logical_agent_operation.rs|slingshot-domain|domain|leaf|slingshot_domain::logical_agent_operation|agent-store-and-logical-execution-contract
 crates/slingshot-domain/src/operation.rs|slingshot-domain|domain|leaf|slingshot_domain::operation|daemon-runtime-module-scaffold
 crates/slingshot-domain/src/operation_executor.rs|slingshot-domain|domain|leaf|slingshot_domain::operation_executor|daemon-runtime-module-scaffold
 crates/slingshot-domain/src/persistent_capacity.rs|slingshot-domain|domain|leaf|slingshot_domain::persistent_capacity|daemon-runtime-module-scaffold

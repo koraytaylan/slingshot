@@ -14,6 +14,7 @@ pub mod command_fingerprint;
 pub mod configuration_snapshot;
 pub mod daemon_runtime_contract;
 pub mod installation;
+pub mod logical_agent_operation;
 pub mod operation;
 pub mod operation_executor;
 pub mod persistent_capacity;
