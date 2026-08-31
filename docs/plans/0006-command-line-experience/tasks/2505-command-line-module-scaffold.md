@@ -6,6 +6,7 @@ kind: chore
 depends_on: []
 gated: false
 touches:
+  - rustfmt.toml
   - crates/slingshot-command-line/src/lib.rs
   - crates/slingshot-command-line/src/application.rs
   - crates/slingshot-command-line/src/invocation.rs
