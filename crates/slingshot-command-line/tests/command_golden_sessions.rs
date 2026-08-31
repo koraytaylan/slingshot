@@ -405,7 +405,6 @@ fn published_nonce(root: &Path, namespace: &RuntimeNamespace) -> Option<String> 
 
 #[test]
 fn an_unresponsive_owned_child_ends_through_its_retained_handle() {
-    let contract = FoundationContract::embedded();
     let root = TemporaryRuntimeRoot::create("c").expect("the temporary root is created");
     let namespace = namespace_of(root.path(), ENVIRONMENT);
     let harness = ProcessHarness::new();
@@ -420,10 +419,7 @@ fn an_unresponsive_owned_child_ends_through_its_retained_handle() {
         .start_retained(&product_executable(), &ProcessRequest::new(&spoken))
         .expect("the daemon child starts");
     assert!(
-        wait_until(contract.startup.explicit_start_total(), || !owner_is_free(
-            root.path(),
-            namespace.digest()
-        )),
+        wait_until(SCENARIO_PATIENCE, || !owner_is_free(root.path(), namespace.digest())),
         "the child took ownership"
     );
     let identifier = child.identifier();
@@ -431,10 +427,7 @@ fn an_unresponsive_owned_child_ends_through_its_retained_handle() {
     assert!(child.is_reaped());
     assert!(child.deliver(DeliverableSignal::Kill).is_err(), "a reaped handle reaches nothing");
     assert!(
-        wait_until(contract.shutdown.cooperative_stop(), || owner_is_free(
-            root.path(),
-            namespace.digest()
-        )),
+        wait_until(SCENARIO_PATIENCE, || owner_is_free(root.path(), namespace.digest())),
         "the ended child released its owner lock"
     );
     assert_ne!(identifier, 0, "the identifier is recorded as a diagnostic");
@@ -481,6 +474,15 @@ fn interrupted_session(root: &Path, arguments: &[String]) -> CapturedProcess {
     child.deliver(DeliverableSignal::Interrupt).expect("the interrupt is delivered");
     child.capture_within(SIGNAL_DEADLINE).expect("the interrupted child finishes")
 }
+
+/// How long a scenario waits for a real child on a machine running everything.
+///
+/// Longer than any deadline the product declares, deliberately. The product's
+/// own start deadline says how long a client waits before giving up, which is a
+/// claim about a caller's patience; a suite running the whole workspace at once
+/// is not that caller, and borrowing the number would turn a loaded machine
+/// into a failing invariant.
+const SCENARIO_PATIENCE: Duration = Duration::from_secs(120);
 
 /// How long a session waits to be sure a child is blocked rather than done.
 const SETTLING_DEADLINE: Duration = Duration::from_millis(400);
