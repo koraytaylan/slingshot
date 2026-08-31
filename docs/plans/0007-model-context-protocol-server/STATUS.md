@@ -9,6 +9,16 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 9/16 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `1a592249115df391edac4d8f84fcb52262a3d36e`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3101 decides everything before dispatch and leaves the dispatch to the entry.**
+    Subscribing to an operation until it ends, reconnecting from the last durable
+    revision, and preserving complete maintenance bytes are conversations with a daemon
+    that serves versioned operations; this build's daemon serves retained control. What
+    is implemented and proved here is every decision those conversations turn on:
+    provenance before the tool, the tool before the arguments, the three argument checks
+    in their fixed order, a supplied key preserved exactly, an omitted optional key
+    invented once and reused across every reconnect and retry, and a resume that
+    schedules nothing unless what it believes is still true. The exchange is the
+    application entry's to make once the daemon answers it.
   - **3003 decides everything a read depends on and reaches no daemon to perform one.**
     The task's read sequence is a conversation with Plan 0004's maintenance metadata and
     read services, which this build's daemon does not serve over the wire; a scenario
