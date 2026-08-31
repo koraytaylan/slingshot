@@ -27,3 +27,10 @@ path = "fuzz_targets/configuration_document.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "local_protocol_frame"
+path = "fuzz_targets/local_protocol_frame.rs"
+test = false
+doc = false
+bench = false
