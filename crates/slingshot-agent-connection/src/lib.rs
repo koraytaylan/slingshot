@@ -5,6 +5,7 @@
 //! `slingshot-domain`. This commit declares the crate's authentication family
 //! and its transport-policy leaf as documentation-only structure.
 
+pub mod artifact_download;
 pub mod authentication;
 pub mod author_cross_site_request_forgery_protection;
 pub mod author_hypertext_transfer_protocol_policy;
