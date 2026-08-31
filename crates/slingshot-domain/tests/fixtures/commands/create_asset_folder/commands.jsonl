@@ -1,0 +1,7 @@
+{"accepted":true,"document":"{\"name\":\"example\",\"parent_path\":\"/content/dam\"}","note":"the plainest folder"}
+{"accepted":true,"document":"{\"name\":\"example\",\"parent_path\":\"/content/dam\",\"title\":\"Example\"}","note":"a folder with a title"}
+{"accepted":true,"document":"{\"name\":\"example\",\"parent_path\":\"/\"}","note":"a folder under the repository root"}
+{"accepted":false,"document":"{\"parent_path\":\"/content/dam\"}","note":"no name"}
+{"accepted":false,"document":"{\"name\":\"example\"}","note":"no parent"}
+{"accepted":false,"document":"{\"name\":\"ex/ample\",\"parent_path\":\"/content/dam\"}","note":"a name that is a path"}
+{"accepted":false,"document":"{\"name\":\"example\",\"parent_path\":\"/content/dam\",\"extra\":1}","note":"a member this command does not have"}

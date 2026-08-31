@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/list_asset_renditions.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_asset_renditions/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # List Asset Renditions

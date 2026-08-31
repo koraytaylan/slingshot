@@ -1,0 +1,2 @@
+{"document":"{\"asset_path\":\"/content/dam/example/logo.png\"}","note":"nothing to change","refusal":"changes_nothing"}
+{"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"properties\":{\"dc:title\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Logo\"}}},\"removed_property_names\":[\"dc:title\"]}","note":"one property named in both documents","refusal":"both_assigned_and_removed"}

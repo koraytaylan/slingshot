@@ -1,0 +1,7 @@
+{"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"failure\":\"asset_not_found\"}","members":["asset_path","failure"],"note":"refused as asset not found","proves_no_effect":true}
+{"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"failure\":\"asset_access_denied\"}","members":["asset_path","failure"],"note":"refused as asset access denied","proves_no_effect":true}
+{"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"failure\":\"asset_invalid\"}","members":["asset_path","failure"],"note":"refused as asset invalid","proves_no_effect":true}
+{"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"failure\":\"property_rejected\"}","members":["asset_path","failure"],"note":"refused as property rejected","proves_no_effect":true}
+{"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"failure\":\"property_not_removable\"}","members":["asset_path","failure"],"note":"refused as property not removable","proves_no_effect":true}
+{"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"failure\":\"repository_commit_failed\"}","members":["asset_path","failure"],"note":"refused as repository commit failed","proves_no_effect":true}
+{"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"failure\":\"mutation_outcome_unknown\"}","members":["asset_path","failure"],"note":"refused as mutation outcome unknown","proves_no_effect":false}

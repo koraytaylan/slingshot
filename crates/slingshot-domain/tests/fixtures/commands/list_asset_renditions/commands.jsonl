@@ -1,0 +1,5 @@
+{"accepted":true,"document":"{\"asset_path\":\"/content/dam/example/logo.png\"}","note":"the plainest listing"}
+{"accepted":true,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"result_window\":{\"mode\":\"initial\",\"offset\":0,\"limit\":25}}","note":"an explicit first page"}
+{"accepted":true,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"result_window\":{\"mode\":\"continuation\",\"continuation_token\":\"abc\"}}","note":"a resumed page"}
+{"accepted":false,"document":"{}","note":"no asset at all"}
+{"accepted":false,"document":"{\"asset_path\":\"/content/dam/example/logo.png\",\"extra\":1}","note":"a member this command does not have"}

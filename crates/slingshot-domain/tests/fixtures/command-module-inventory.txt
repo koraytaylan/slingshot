@@ -14,7 +14,10 @@ canonical_json
 catalog
 command_identity
 component_resource_type
+create_asset
+create_asset_folder
 create_page
+delete_asset
 delete_component
 delete_page
 discovery_budget
@@ -25,8 +28,10 @@ find_pages_by_template
 find_pages_containing_phrase
 find_pages_using_components
 inspect_open_service_gateway_initiative_configuration
+list_asset_renditions
 list_child_pages
 load_content_as_javascript_object_notation
+move_asset
 move_page
 operational_listing
 package_selection
@@ -41,5 +46,6 @@ resource_mutation
 result_window
 schema
 search_predicate
+update_asset_metadata
 update_component
 update_page

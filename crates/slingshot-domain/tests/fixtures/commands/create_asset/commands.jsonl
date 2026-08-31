@@ -1,0 +1,6 @@
+{"accepted":true,"document":"{\"name\":\"logo.png\",\"parent_path\":\"/content/dam/example\",\"payload\":{\"media_type\":\"image/png\",\"encoded_content\":\"aGVsbG8=\"}}","note":"the plainest asset"}
+{"accepted":true,"document":"{\"metadata\":{\"dc:title\":{\"cardinality\":\"single\",\"value\":{\"type\":\"string\",\"value\":\"Logo\"}}},\"name\":\"logo.png\",\"parent_path\":\"/content/dam/example\",\"payload\":{\"media_type\":\"image/png\",\"encoded_content\":\"aGVsbG8=\"}}","note":"an asset with metadata"}
+{"accepted":false,"document":"{\"name\":\"logo.png\",\"parent_path\":\"/content/dam/example\"}","note":"no payload"}
+{"accepted":false,"document":"{\"name\":\"logo.png\",\"parent_path\":\"/content/dam/example\",\"payload\":{\"media_type\":\"image/png\",\"encoded_content\":\"aGVsbG8\"}}","note":"a payload whose padding is missing"}
+{"accepted":false,"document":"{\"name\":\"logo.png\",\"parent_path\":\"/content/dam/example\",\"payload\":{\"media_type\":\"\",\"encoded_content\":\"aGVsbG8=\"}}","note":"a payload naming no media type"}
+{"accepted":false,"document":"{\"name\":\"logo.png\",\"parent_path\":\"/content/dam/example\",\"payload\":{\"media_type\":\"image/png\",\"encoded_content\":\"aGVsbG8=\"},\"extra\":1}","note":"a member this command does not have"}

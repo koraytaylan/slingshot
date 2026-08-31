@@ -112,7 +112,7 @@ fn a_reference_policy_has_two_spellings_and_no_default() {
 #[test]
 fn a_payload_decodes_to_exactly_the_bytes_it_was_given() {
     let payload = InlineBinaryPayload::new("image/png", "aGVsbG8=").expect("a legal payload");
-    assert_eq!(payload.media_type(), "image/png");
+    assert_eq!(payload.media_type().as_text(), "image/png");
     assert_eq!(payload.encoded_content(), "aGVsbG8=");
     assert_eq!(payload.decoded_content(), b"hello");
     assert_eq!(payload.decoded_byte_length(), u64::try_from(b"hello".len()).expect("it fits"));
