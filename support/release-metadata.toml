@@ -1,0 +1,36 @@
+# The legal declaration a release ships under.
+#
+# The owner chose this. A license is a statement about what somebody else may
+# do with this software, and no build may infer, default to, or repair one - so
+# every value here is exact and the packaging commands refuse rather than
+# proceed when they disagree with what is committed.
+#
+# The repository address is copied from the validated automation authority
+# rather than resolved again here. One authority, one address.
+
+format = "slingshot.release-metadata/1"
+
+[license]
+# The SPDX expression Cargo declares, and the one this repository means. Exactly
+# one Cargo declaration: naming both an expression and a file lets two answers
+# exist, and a reader would have to work out which one governs.
+expression = "MIT OR Apache-2.0"
+
+# The material that expression refers to. One file, because the supported
+# platform matrix declares exactly one LICENSE member in every archive, so a
+# dual license is one document carrying both texts rather than two files an
+# archive has no room for.
+material = "LICENSE"
+material-sha256 = "6772849797e9359f20bad3e961ca968756c1b6b05f97fabcd830ff2fb0505997"
+material-bytes = 13477
+
+[repository]
+# Copied from support/github-automation-authority.toml after it validates.
+canonical-address = "https://github.com/koraytaylan/slingshot"
+owner-identifier = 101099
+
+[packages]
+# Every workspace member stays unpublished. This product is distributed as
+# release archives, not as crates, and an accidental publish is a thing that
+# cannot be taken back.
+publish = false

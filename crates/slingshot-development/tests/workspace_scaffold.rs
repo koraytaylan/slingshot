@@ -909,36 +909,33 @@ fn member_lint_override_fixtures_are_rejected() {
 }
 
 #[test]
-fn every_member_is_unpublished_without_inferred_legal_metadata() {
+fn every_member_is_unpublished_and_carries_the_one_supplied_declaration() {
+    let declared = slingshot_development::release_metadata::parse_metadata(&read_repository_file(
+        slingshot_development::release_metadata::METADATA_PATH,
+    ))
+    .expect("the owner supplied a declaration");
+    let expression = Some(declared.license.expression.as_str());
+    let address = Some(declared.repository.canonical_address.as_str());
     for package in workspace_packages() {
-        assert_eq!(package.publish_registries, Some(Vec::new()), "{}", package.name);
-        assert_eq!(package.license, None, "{} license", package.name);
-        assert_eq!(package.license_file, None, "{} license file", package.name);
-        assert_eq!(package.repository, None, "{} repository", package.name);
-    }
-}
-
-#[test]
-fn release_packaging_stays_refused_until_the_owner_supplies_metadata() {
-    let expectation = fixture_document(EXPECTED_WORKSPACE_FIXTURE);
-    let required = fixture_list(&expectation, "required-release-fields");
-    for package in workspace_packages() {
+        let name = &package.name;
+        assert_eq!(package.publish_registries, Some(Vec::new()), "{name}");
+        assert_eq!(package.license.as_deref(), expression, "{name} license");
+        assert_eq!(package.license_file, None, "{name} names a file beside an expression");
+        assert_eq!(package.repository.as_deref(), address, "{name} repository");
         let missing = evaluate_release_prerequisites(
             package.license.as_deref(),
             package.license_file.as_deref(),
             package.repository.as_deref(),
         );
-        assert_eq!(missing, required, "{} must stay unpackageable", package.name);
+        assert_eq!(missing, Vec::<String>::new(), "{name} still lacks something a release needs");
     }
     let satisfied = fixture_document("release-prerequisites-satisfied.toml");
     assert_eq!(satisfied.boolean("package.publish"), Some(true), "the fixture is publishable");
+    let expectation = fixture_document(EXPECTED_WORKSPACE_FIXTURE);
     assert_eq!(
-        evaluate_release_prerequisites(
-            satisfied.text("package.license"),
-            satisfied.text("package.license-file"),
-            satisfied.text("package.repository"),
-        ),
-        Vec::<String>::new()
+        evaluate_release_prerequisites(None, None, None),
+        fixture_list(&expectation, "required-release-fields"),
+        "and a package with none of them still names every one it is missing"
     );
 }
 

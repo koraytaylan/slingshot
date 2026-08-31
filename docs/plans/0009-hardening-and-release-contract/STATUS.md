@@ -10,10 +10,6 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 20/24 tasks done; 5 blocked; 0 dropped.
 - **Integration:** `blocked`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Blocked:**
-  - **3806 owner-supplied-release-metadata** (`gated`). Waits for the owner to supply
-    the exact license declaration and the complete `LICENSE` bytes, and for 3807's
-    validated canonical repository address. A license is a legal statement; guessing
-    one would be inventing the owner's words.
   - **3805 owner-confirmed-native-evidence-trust** (`gated`). Waits for the owner to
     confirm GitHub Artifact Attestations as the native-evidence authority and to
     approve the exact issuer, workflow identity, runner classes, statement and
