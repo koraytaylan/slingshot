@@ -22,9 +22,12 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     are stated as separate kinds, and Plan 0008's material in `docs/WORKFLOWS.md` is
     still there with the commit and repository it pins. The clauses about the GitHub
     adapter, attestation eligibility, provenance versus package signing, and release
-    artifacts are not written, because the tasks that would make them true are behind
-    owner gates and prose describing them would be prose about something that does not
-    exist. Explaining the suppression rule meant naming `#[allow(...)]` in
+    artifacts were not written while the tasks that would make them true were behind
+    owner gates; those gates were later confirmed and those tasks landed, so what is
+    absent from the nine documents now is prose about the release surface rather than
+    a claim about something that does not exist, and adding it is documentation work
+    the contract tests will hold to the same standard. Explaining the suppression rule
+    meant naming `#[allow(...)]` in
     `CONTRIBUTING.md`, which the rule refused; a code attribute written in prose acts
     on nothing, so the marker list is now split into the code markers and the ones
     aimed at this checker, which are refused wherever they are written.
@@ -35,10 +38,11 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     the workspace module map. The footprint gained those two modules, the crate root
     that declares them, `policy/source-policy.toml` where the two new rules read their
     values, the review record the checklist asks for, and one script that had a
-    quantity nobody had named. `release-artifact-contract`, which this task depends on,
-    is blocked behind three owner gates; the release code that exists - the two cache
-    commands and their scripts - is audited, and there is no other release code to
-    audit yet.
+    quantity nobody had named. `release-artifact-contract`, which this task depends
+    on, was blocked behind three owner gates when this ran, so the release code it
+    audited was the two cache commands and their scripts; the release code those gates
+    later unblocked is held to the same rules by the same checker, which runs over the
+    whole repository on every change.
   - **3902 found a contract stated twice, and the second statement disagreed.**
     `slingshot-storage` declared an artifact-slot bound of its own where the command
     contract already declares one, and the two numbers were different: the contract
@@ -71,14 +75,17 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     takes. Agreement is checked where a capability is visible: the daemon's own
     discovery holds the agent's advertised contracts, and this crate may not depend on
     the crate that defines them.
-  - **3808 delivers the offline cache contract and refuses to invent the owner's part
-    of it.** Its own steps reach into three tasks that have not been through their
-    owner gate: the native row map and the protected review environment
-    (`owner-confirmed-github-automation`), the attestation authority
-    (`owner-confirmed-native-evidence-trust`), and the release metadata
-    (`owner-supplied-release-metadata`). Without those there is no row set to address a
-    member to, no authority to authenticate a same-run RustSec review record against,
-    and no workflow to run a preparation job in. What is delivered is everything that
+  - **3808 delivered the offline cache contract and refused to invent the owner's
+    part of it; the owner then supplied it.** Its own steps reach into three tasks
+    that had not been through their owner gate when it ran: the native row map and the
+    protected review environment (`owner-confirmed-github-automation`), the
+    attestation authority (`owner-confirmed-native-evidence-trust`), and the release
+    metadata (`owner-supplied-release-metadata`). All three have since been confirmed
+    and landed, and the release workflow now runs the preparation command this task
+    wrote. What it still does not carry is a separately addressed cache member per
+    native row: the release prepares one cache per row job rather than a member set
+    addressed by role, which is a narrower arrangement that the same verifier holds to
+    the same bounds. What is delivered is everything that
     decides whether a prepared cache may be believed: the declaration, the manifest
     schema, a verifier that walks the cache and digests what is there rather than
     reading the count the manifest reports about itself, and the two commands - the one
@@ -88,9 +95,10 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
     authority that is missing, rather than admitting an unauthenticated one. What a
     cache may hold is not restated here: a cache is a Cargo home, so it is bounded by
     Plan 0008's manifest through Plan 0008's verifier, and a test refuses a declaration
-    that copies any of those seven values. `.github/workflows/release.yml` is
-    deliberately not created, because this plan gives GitHub automation to a gated task
-    and to no other.
+    that copies any of those seven values. `.github/workflows/release.yml` was not
+    created by this task, because this plan gives GitHub automation to gated tasks and
+    to no other; `release-artifact-contract` created it once those gates were
+    confirmed.
   - **3808 uncovered a defect in Plan 0008 and it was fixed before this task closed.**
     The compatibility gate took `--cargo-home-seed`, checked that it named a directory,
     and then built with it ignored: the seed never became `CARGO_HOME`, and not one of
