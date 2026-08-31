@@ -9,9 +9,10 @@ gated: false
 touches:
   - crates/slingshot-agent-connection/src/author_hypertext_transfer_protocol_policy.rs
   - crates/slingshot-agent-connection/src/lib.rs
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - crates/slingshot-agent-connection/tests/fixtures/author-hypertext-transfer-protocol-policy/**
   - crates/slingshot-agent-connection/tests/author_hypertext_transfer_protocol_policy.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Author Hypertext Transfer Protocol Policy
