@@ -60,6 +60,7 @@ crates/slingshot-command-line/src/commands/path_query.rs|slingshot-command-line|
 crates/slingshot-command-line/src/commands/replication.rs|slingshot-command-line|entry|leaf|slingshot_command_line::commands::replication|command-line-module-scaffold
 crates/slingshot-command-line/src/configuration_check.rs|slingshot-command-line|entry|leaf|slingshot_command_line::configuration_check|command-line-module-scaffold
 crates/slingshot-command-line/src/daemon_answer.rs|slingshot-command-line|entry|leaf|slingshot_command_line::daemon_answer|compose-command-line-application
+crates/slingshot-command-line/src/daemon_request.rs|slingshot-command-line|entry|leaf|slingshot_command_line::daemon_request|compose-command-line-application
 crates/slingshot-command-line/src/daemon_connection.rs|slingshot-command-line|entry|leaf|slingshot_command_line::daemon_connection|workspace-module-map
 crates/slingshot-command-line/src/daemon_entry.rs|slingshot-command-line|entry|leaf|slingshot_command_line::daemon_entry|workspace-module-map
 crates/slingshot-command-line/src/daemon_process.rs|slingshot-command-line|entry|leaf|slingshot_command_line::daemon_process|daemon-runtime-module-scaffold

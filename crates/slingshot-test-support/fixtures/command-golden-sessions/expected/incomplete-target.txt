@@ -1,0 +1,4 @@
+exit: 2
+standard output:
+standard error:
+slingshot: a target is a profile and an environment, and this names one of them

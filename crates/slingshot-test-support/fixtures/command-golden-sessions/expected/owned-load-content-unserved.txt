@@ -1,0 +1,4 @@
+exit: 2
+standard output:
+standard error:
+slingshot: load_content_as_json changes something, so a repeat needs the key that makes it the same request

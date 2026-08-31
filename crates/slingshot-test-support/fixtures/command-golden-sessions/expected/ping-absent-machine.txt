@@ -1,0 +1,4 @@
+exit: 0
+standard output:
+{"outcome":"daemon_control","action":"daemon-ping","state":"absent"}
+standard error:

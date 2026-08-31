@@ -22,18 +22,10 @@
 use std::path::Path;
 
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
-use slingshot_domain::command::catalog::Command;
-use slingshot_domain::daemon_runtime_contract::{
-    DAEMON_OPERATION_PROTOCOL_VERSION, DaemonRuntimeContract,
-};
+use slingshot_domain::command::catalog::CommandCatalog;
 use slingshot_local_protocol::control::{HelloResult, operation_compatibility};
 use slingshot_local_protocol::message::{OperationEnvelope, OperationRequest, OperationResponse};
 
-use crate::commands::content::RequestRefusal;
-use crate::commands::{
-    asset_query, configuration, content, package, page_mutation, page_query, path_query,
-    replication,
-};
 use crate::configuration_check::CheckReport;
 use crate::daemon_answer::{
     AccessContext, Admitted, Submission, maintained, observed, recovering, recovery_facts,
@@ -43,21 +35,22 @@ use crate::daemon_connection::{
     ExchangeFailure, ExpectedTarget, ObservedOwner, OwnerDisposition, classify_owner,
 };
 use crate::daemon_process::DaemonExpectation;
+use crate::daemon_request::{
+    build_command, expected_digest, expected_revision, maintenance_request, observation_request,
+    required, spoken_operation_version,
+};
 use crate::exit_classification;
 use crate::interrupt::{self, Phase, SignalOutcome};
-use crate::invocation::Selection;
 use crate::invocation::{
-    ARTIFACT_OPTION, CONTINUATION_TOKEN_OPTION, EVERY_OPTION, EXPECTED_CATEGORY_OPTION,
-    EXPECTED_DIGEST_OPTION, EXPECTED_REVISION_OPTION, Invocation, LIMIT_OPTION, LOCAL_LEAVES,
-    METADATA_ONLY_LEAVES, OPERATION_IDENTIFIER_OPTION, OPERATION_NAMING_LEAVES,
-    RESULT_IDENTIFIER_OPTION, REVIEWED_DIGEST_OPTION, TARGET_DIGEST_OPTION, is_catalog_command,
+    EVERY_OPTION, Invocation, LOCAL_LEAVES, METADATA_ONLY_LEAVES, OPERATION_IDENTIFIER_OPTION,
+    OPERATION_NAMING_LEAVES, Selection, is_catalog_command,
 };
 use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
-use crate::operation_maintenance::{MAXIMUM_PAGE_SIZE, MAXIMUM_PREVIEW_LIMIT};
 use crate::operation_submission;
 use crate::target_selection::{
     NAMESPACE_ONLY_LEAVES, NamespacePair, TargetRequirement, namespace_of, requirement_of,
 };
+use slingshot_configuration::profile_loader::ConfigurationDiagnostic;
 
 /// What this product is called wherever it names itself.
 const PRODUCT_NAME: &str = "slingshot";
@@ -99,6 +92,9 @@ const HELP_HEADING: &str = "slingshot - one command line over one daemon";
 
 /// The heading above the leaves help lists.
 const HELP_COMMANDS: &str = "commands:";
+
+/// The heading above the registry commands help lists.
+const HELP_CATALOG: &str = "commands this daemon runs against an author:";
 
 /// The heading above the options help lists.
 const HELP_OPTIONS: &str = "options:";
@@ -375,6 +371,13 @@ pub enum Answer {
 pub struct Completion {
     /// What it produced.
     pub answer: Answer,
+    /// What it has to say about why, in a closed vocabulary and no other.
+    ///
+    /// Separate from the answer because the two go to different streams and
+    /// serve different readers. A refused configuration check still answers -
+    /// the selection does not resolve - and the diagnostics say what was wrong
+    /// with it, in the exact words the configuration produced them in.
+    pub diagnostics: Vec<String>,
     /// What the process exits with.
     pub exit: i32,
 }
@@ -391,6 +394,8 @@ pub enum RunRefusal {
     Unavailable(String),
     /// Something on this machine failed.
     Local(String),
+    /// Somebody asked the run to stop while it was waiting.
+    Halted(Box<Phase>),
 }
 
 impl RunRefusal {
@@ -398,11 +403,12 @@ impl RunRefusal {
     #[must_use]
     pub fn completion(self) -> Completion {
         let (message, exit) = match self {
+            Self::Halted(phase) => return interrupted(&phase),
             Self::Usage(message) => (message, exit_classification::USAGE),
             Self::Unavailable(message) => (message, exit_classification::UNAVAILABLE),
             Self::Local(message) => (message, exit_classification::LOCAL_FAILURE),
         };
-        Completion { answer: Answer::Refusal(message), exit }
+        Completion { answer: Answer::Refusal(message), diagnostics: Vec::new(), exit }
     }
 }
 
@@ -495,7 +501,11 @@ impl CommandLineApplication<'_> {
             profile,
             resolved: report.is_resolved(),
         };
-        Ok(Completion { answer: Answer::Envelope(Box::new(envelope)), exit })
+        Ok(Completion {
+            answer: Answer::Envelope(Box::new(envelope)),
+            diagnostics: report.diagnostics().iter().map(stated).collect(),
+            exit,
+        })
     }
 
     /// Returns the namespace one invocation names.
@@ -518,6 +528,7 @@ impl CommandLineApplication<'_> {
         };
         Ok(Completion {
             answer: Answer::Envelope(Box::new(envelope)),
+            diagnostics: Vec::new(),
             exit: exit_classification::SUCCESS,
         })
     }
@@ -561,10 +572,8 @@ impl CommandLineApplication<'_> {
         invocation: &Invocation,
         namespace: &NamespacePair,
     ) -> Result<HelloResult, RunRefusal> {
-        let hello = self
-            .daemon
-            .hello(namespace)
-            .map_err(|failure| RunRefusal::Unavailable(failure.to_string()))?;
+        let phase = Phase::BeforeReceipt { retry_operation_identifier: self.request_identifier() };
+        let hello = self.reached(self.daemon.hello(namespace), &phase)?;
         let spoken = spoken_operation_version();
         let compatibility = operation_compatibility(
             &hello,
@@ -619,6 +628,7 @@ impl CommandLineApplication<'_> {
         hello: &HelloResult,
         request: OperationRequest,
     ) -> Result<OperationResponse, RunRefusal> {
+        let phase = Phase::BeforeReceipt { retry_operation_identifier: self.request_identifier() };
         let envelope = OperationEnvelope {
             author_target_identity_digest: hello.author_target_identity_digest.clone(),
             daemon_runtime_contract_digest: hello.daemon_runtime_contract_digest.clone(),
@@ -628,9 +638,27 @@ impl CommandLineApplication<'_> {
             selected_environment_revision: hello.selected_environment_revision.clone(),
         };
         envelope.require_well_formed().map_err(|failure| RunRefusal::Local(failure.to_string()))?;
-        self.daemon
-            .operate(namespace, &envelope)
-            .map_err(|failure| RunRefusal::Unavailable(failure.to_string()))
+        self.reached(self.daemon.operate(namespace, &envelope), &phase)
+    }
+
+    /// Returns what one exchange reached, or why it reached nothing.
+    ///
+    /// A failed exchange after somebody asked the run to stop is that stop
+    /// rather than an unavailable daemon: the daemon was there, and the run
+    /// walked away from it. Reporting it as unavailable would tell a caller
+    /// something false about the daemon and lose the account of what they did.
+    fn reached<Answered>(
+        &self,
+        outcome: Result<Answered, ExchangeFailure>,
+        phase: &Phase,
+    ) -> Result<Answered, RunRefusal> {
+        match outcome {
+            Ok(answered) => Ok(answered),
+            Err(_) if self.signals.stop_requested() => {
+                Err(RunRefusal::Halted(Box::new(phase.clone())))
+            }
+            Err(failure) => Err(RunRefusal::Unavailable(failure.to_string())),
+        }
     }
 
     /// Returns what this run reports if somebody has asked it to stop.
@@ -717,6 +745,7 @@ impl CommandLineApplication<'_> {
                 replayed: admitted.replayed,
                 revision: operation_revision,
             })),
+            diagnostics: Vec::new(),
             exit: exit_classification::SUCCESS,
         })
     }
@@ -806,159 +835,28 @@ impl CommandLineApplication<'_> {
     }
 }
 
-// -------------------------------------------------------------- the requests
+// --------------------------------------------------------------- the answers
 
-/// Returns the typed command one catalog invocation describes.
+/// Returns one configuration diagnostic in the words it was produced in.
 ///
-/// Every builder is asked, and the one whose command this is answers. Asking
-/// them all rather than consulting a table of leaf names keeps one list: each
-/// family already knows which commands it builds, and a second list beside it
-/// would be a second thing to keep in step.
-fn build_command(invocation: &Invocation) -> Result<Command, RequestRefusal> {
-    for build in EVERY_COMMAND_BUILDER {
-        match build(invocation) {
-            Err(RequestRefusal::AnotherCommand { .. }) => continue,
-            answered => return answered,
-        }
-    }
-    Err(RequestRefusal::AnotherCommand { named: invocation.verb.clone() })
-}
-
-/// One family's builder.
-type CommandBuilder = fn(&Invocation) -> Result<Command, RequestRefusal>;
-
-/// Every family that turns an invocation into a typed command.
-const EVERY_COMMAND_BUILDER: &[CommandBuilder] = &[
-    asset_query::build,
-    configuration::build,
-    content::build,
-    package::build,
-    page_mutation::build,
-    page_query::build,
-    path_query::build,
-    replication::build,
-];
-
-/// Returns the value of one option a leaf cannot act without.
-fn required<'invocation>(
-    invocation: &'invocation Invocation,
-    named: &str,
-) -> Result<&'invocation str, RunRefusal> {
-    invocation
-        .arguments
-        .get(named)
-        .map(String::as_str)
-        .ok_or_else(|| RunRefusal::Usage(format!("{named} names what this command acts on")))
-}
-
-/// Returns one option's value read as a whole number.
-fn counted(invocation: &Invocation, named: &str, absent: u64) -> Result<u64, RunRefusal> {
-    match invocation.arguments.get(named) {
-        None => Ok(absent),
-        Some(stated) => {
-            stated.parse().map_err(|_| RunRefusal::Usage(format!("{named} takes a whole number")))
-        }
-    }
-}
-
-/// Returns the request one observation leaf describes.
-fn observation_request(invocation: &Invocation) -> Result<OperationRequest, RunRefusal> {
-    let operation_identifier = required(invocation, OPERATION_IDENTIFIER_OPTION)?.to_owned();
-    match invocation.verb.as_str() {
-        "operation-status" => Ok(OperationRequest::OperationStatus { operation_identifier }),
-        "operation-wait" => Ok(OperationRequest::Wait { operation_identifier }),
-        "operation-result" => Ok(OperationRequest::Result { operation_identifier }),
-        "operation-restart" => Ok(OperationRequest::ResumeOperationRecovery {
-            expected_operation_revision: counted(invocation, EXPECTED_REVISION_OPTION, 0)?,
-            expected_recovery_category: required(invocation, EXPECTED_CATEGORY_OPTION)?.to_owned(),
-            operation_identifier,
-        }),
-        _ => Ok(OperationRequest::ArtifactRead {
-            artifact_identifier: required(invocation, ARTIFACT_OPTION)?.to_owned(),
-            expected_content_digest: required(invocation, EXPECTED_DIGEST_OPTION)?.to_owned(),
-            operation_identifier,
-            preferred_chunk_bytes: preferred_chunk_bytes(),
-            starting_byte_offset: 0,
-        }),
-    }
-}
-
-/// Returns the request one maintenance leaf describes.
-fn maintenance_request(
-    invocation: &Invocation,
-    partition: &str,
-) -> Result<OperationRequest, RunRefusal> {
-    let author_target_identity_digest = partition.to_owned();
-    match invocation.verb.as_str() {
-        "operation-list" => Ok(OperationRequest::ListOperations {
-            cursor: invocation.arguments.get(CONTINUATION_TOKEN_OPTION).cloned(),
-            lifecycle_states: Vec::new(),
-            page_size: paged(invocation, MAXIMUM_PAGE_SIZE)?,
-        }),
-        "maintenance-preview" => Ok(OperationRequest::TerminalMaintenancePreview {
-            author_target_identity_digest,
-            maximum_operations: paged(invocation, MAXIMUM_PREVIEW_LIMIT)?,
-        }),
-        "maintenance-apply" => Ok(OperationRequest::TerminalMaintenanceApply {
-            author_target_identity_digest,
-            reviewed_manifest_digest: required(invocation, REVIEWED_DIGEST_OPTION)?.to_owned(),
-        }),
-        _ => Ok(OperationRequest::MaintenanceResultMetadata {
-            author_target_identity_digest,
-            maintenance_result_identifier: required(invocation, RESULT_IDENTIFIER_OPTION)?
-                .to_owned(),
-        }),
-    }
-}
-
-/// Returns the page size one invocation asks for, inside its bound.
-fn paged(invocation: &Invocation, bound: u64) -> Result<u32, RunRefusal> {
-    let asked = counted(invocation, LIMIT_OPTION, bound)?;
-    if asked == 0 || asked > bound {
-        return Err(RunRefusal::Usage(format!("{LIMIT_OPTION} is between one and {bound}")));
-    }
-    u32::try_from(asked).map_err(|_| RunRefusal::Usage(format!("{LIMIT_OPTION} is too large")))
-}
-
-/// Returns the partition this invocation acts in.
-fn expected_digest(invocation: &Invocation, hello: &HelloResult) -> String {
-    invocation
-        .arguments
-        .get(TARGET_DIGEST_OPTION)
-        .cloned()
-        .unwrap_or_else(|| hello.author_target_identity_digest.clone())
-}
-
-/// Returns the environment revision this invocation acts under.
-fn expected_revision(invocation: &Invocation, hello: &HelloResult) -> String {
-    invocation
-        .arguments
-        .get(EXPECTED_REVISION_OPTION)
-        .cloned()
-        .unwrap_or_else(|| hello.selected_environment_revision.clone())
-}
-
-/// Returns how large a chunk this build asks a transfer for.
-///
-/// The contract's own bound. Asking for more would be clamped anyway, and
-/// asking for less would make a large artifact cost more round trips than the
-/// daemon and this client have both agreed to pay.
-fn preferred_chunk_bytes() -> u32 {
-    let allowed = DaemonRuntimeContract::embedded().limit("maximum_local_artifact_chunk_bytes");
-    u32::try_from(allowed).unwrap_or(u32::MAX)
+/// Five fields and nothing else. A path, a name, a value, or a suggestion would
+/// tell whoever ran this what the configuration root holds, and the closed
+/// vocabulary exists precisely so that a diagnostic cannot.
+fn stated(diagnostic: &ConfigurationDiagnostic) -> String {
+    format!(
+        "{} {} {} {} x{}",
+        diagnostic.source_class.as_text(),
+        diagnostic.stage.as_text(),
+        diagnostic.structural_location,
+        diagnostic.code.code(),
+        diagnostic.occurrences
+    )
 }
 
 /// Returns the refusal one unreadable answer produces.
 fn unreadable(response: &OperationResponse) -> RunRefusal {
     RunRefusal::Local(format!("that daemon answered a status read with {response:?}"))
 }
-
-/// Returns the operation-protocol version this build speaks.
-fn spoken_operation_version() -> u32 {
-    u32::try_from(DAEMON_OPERATION_PROTOCOL_VERSION).unwrap_or(u32::MAX)
-}
-
-// --------------------------------------------------------------- the answers
 
 /// Returns what this build answers out of itself.
 fn metadata(invocation: &Invocation) -> Completion {
@@ -967,7 +865,11 @@ fn metadata(invocation: &Invocation) -> Completion {
     } else {
         help_text()
     };
-    Completion { answer: Answer::Text(text), exit: exit_classification::SUCCESS }
+    Completion {
+        answer: Answer::Text(text),
+        diagnostics: Vec::new(),
+        exit: exit_classification::SUCCESS,
+    }
 }
 
 /// Returns the help this build prints, from the vocabulary it actually has.
@@ -975,6 +877,11 @@ fn help_text() -> String {
     let mut lines = vec![HELP_HEADING.to_owned(), String::new(), HELP_COMMANDS.to_owned()];
     for leaf in LOCAL_LEAVES {
         lines.push(format!("  {leaf}"));
+    }
+    lines.push(String::new());
+    lines.push(HELP_CATALOG.to_owned());
+    for descriptor in CommandCatalog::published().descriptors() {
+        lines.push(format!("  {} - {}", descriptor.wire_name, descriptor.title));
     }
     lines.push(String::new());
     lines.push(HELP_OPTIONS.to_owned());
@@ -987,13 +894,16 @@ fn help_text() -> String {
 /// Returns what a run interrupted in `phase` reports.
 fn interrupted(phase: &Phase) -> Completion {
     match interrupt::on_signal(phase) {
-        SignalOutcome::CommittedWork => {
-            Completion { answer: Answer::Text(String::new()), exit: exit_classification::SUCCESS }
-        }
+        SignalOutcome::CommittedWork => Completion {
+            answer: Answer::Text(String::new()),
+            diagnostics: Vec::new(),
+            exit: exit_classification::SUCCESS,
+        },
         SignalOutcome::Interrupted { interruption } => Completion {
             answer: Answer::Envelope(Box::new(MachineOutcomeEnvelope::LocalApplicationError {
                 interruption,
             })),
+            diagnostics: Vec::new(),
             exit: exit_classification::INTERRUPTED,
         },
     }

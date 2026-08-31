@@ -1,0 +1,4 @@
+exit: 2
+standard output:
+standard error:
+slingshot: operation-restart requires --expected-category

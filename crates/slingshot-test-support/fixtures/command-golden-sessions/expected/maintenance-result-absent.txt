@@ -1,0 +1,4 @@
+exit: 2
+standard output:
+standard error:
+slingshot: maintenance-result requires --expected-digest

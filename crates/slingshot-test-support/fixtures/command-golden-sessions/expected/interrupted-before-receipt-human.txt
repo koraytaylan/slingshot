@@ -1,0 +1,4 @@
+exit: 130
+standard output:
+standard error:
+slingshot: interrupted before the daemon answered; quoting command-line-<instant> will say whether anything was admitted

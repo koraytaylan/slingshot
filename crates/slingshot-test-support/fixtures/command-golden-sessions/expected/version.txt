@@ -1,0 +1,4 @@
+exit: 0
+standard output:
+slingshot 0.1.0
+standard error:

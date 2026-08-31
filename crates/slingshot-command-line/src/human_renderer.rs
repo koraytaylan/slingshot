@@ -24,8 +24,8 @@ use crate::machine_outcome_envelope::{Interruption, MachineOutcomeEnvelope};
 use crate::machine_readable_renderer::Stream;
 
 /// What a person is told when nothing was submitted.
-pub const PRE_RECEIPT_TEMPLATE: &str = "interrupted before the daemon answered; nothing was submitted, and quoting {identifier} \
-     will say whether anything was";
+pub const PRE_RECEIPT_TEMPLATE: &str = "interrupted before the daemon answered; quoting {identifier} will say whether \
+     anything was admitted";
 
 /// What they are told when the operation exists.
 pub const POST_RECEIPT_TEMPLATE: &str =

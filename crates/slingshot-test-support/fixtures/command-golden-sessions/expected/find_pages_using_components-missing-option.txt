@@ -1,0 +1,4 @@
+exit: 2
+standard output:
+standard error:
+slingshot: --resource-types is required, and this invocation does not carry it
