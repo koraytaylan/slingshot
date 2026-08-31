@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-daemon/src/shutdown.rs
   - crates/slingshot-daemon/src/request_dispatch.rs
   - crates/slingshot-daemon/tests/shutdown.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Graceful Daemon Stop
