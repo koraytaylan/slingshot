@@ -97,6 +97,20 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
+        purpose: "list every partition holding work that has not ended",
+        // Startup audits these before it binds anything. Terminal rows are
+        // deliberately excluded: history from a target this daemon no longer
+        // serves is something to keep and answer questions about, while
+        // unfinished work under another identity is something no daemon may
+        // quietly adopt.
+        text: "SELECT DISTINCT author_target_identity_digest, selected_environment_revision \
+               FROM operation \
+               WHERE lifecycle_state NOT IN ('succeeded', 'failed') \
+               ORDER BY author_target_identity_digest, selected_environment_revision",
+        parameters: 0,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
         purpose: "reconstruct one target's operations in enqueue order",
         text: "SELECT operation_identifier FROM operation \
                WHERE author_target_identity_digest = ? \
@@ -249,6 +263,25 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
 ];
+
+/// Returns the text of the statement with `purpose`.
+///
+/// The inventory is the single place a statement exists, so every runner looks
+/// its text up here rather than holding a copy. A statement that is not in the
+/// list is therefore not reachable at all.
+///
+/// # Panics
+///
+/// Panics when no statement carries `purpose`, which is a programming mistake
+/// rather than a runtime condition: the purposes are constants in this file.
+#[must_use]
+pub fn statement_text(purpose: &str) -> &'static str {
+    STATEMENTS
+        .iter()
+        .find(|inventoried| inventoried.purpose == purpose)
+        .map(|inventoried| inventoried.text)
+        .unwrap_or_else(|| panic!("the inventory holds a statement for {purpose}"))
+}
 
 /// Returns whether `text` is a statement this crate may run.
 #[must_use]
