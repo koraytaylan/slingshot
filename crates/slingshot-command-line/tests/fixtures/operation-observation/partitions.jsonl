@@ -1,0 +1,15 @@
+{"ended": true, "historical": true, "name": "historical-status-ended", "observation": "status", "outcome": "permitted"}
+{"ended": false, "historical": true, "name": "historical-status-running", "observation": "status", "outcome": "history-not-settled"}
+{"ended": false, "historical": false, "name": "current-status", "observation": "status", "outcome": "permitted"}
+{"ended": true, "historical": true, "name": "historical-result-ended", "observation": "result", "outcome": "permitted"}
+{"ended": false, "historical": true, "name": "historical-result-running", "observation": "result", "outcome": "history-not-settled"}
+{"ended": false, "historical": false, "name": "current-result", "observation": "result", "outcome": "permitted"}
+{"ended": true, "historical": true, "name": "historical-artifact-ended", "observation": "artifact", "outcome": "permitted"}
+{"ended": false, "historical": true, "name": "historical-artifact-running", "observation": "artifact", "outcome": "history-not-settled"}
+{"ended": false, "historical": false, "name": "current-artifact", "observation": "artifact", "outcome": "permitted"}
+{"ended": true, "historical": true, "name": "historical-wait-ended", "observation": "wait", "outcome": "history-not-actionable"}
+{"ended": false, "historical": true, "name": "historical-wait-running", "observation": "wait", "outcome": "history-not-actionable"}
+{"ended": false, "historical": false, "name": "current-wait", "observation": "wait", "outcome": "permitted"}
+{"ended": true, "historical": true, "name": "historical-resume-ended", "observation": "resume", "outcome": "history-not-actionable"}
+{"ended": false, "historical": true, "name": "historical-resume-running", "observation": "resume", "outcome": "history-not-actionable"}
+{"ended": false, "historical": false, "name": "current-resume", "observation": "resume", "outcome": "permitted"}

@@ -1,0 +1,4 @@
+{"name": "exact-preconditions", "observed_category": "ambiguous_submission", "observed_revision": 4, "outcome": "permitted", "paused": "ambiguous_submission", "revision": 4}
+{"name": "the-revision-moved", "observed_category": "ambiguous_submission", "observed_revision": 4, "outcome": "revision-moved", "paused": "ambiguous_submission", "revision": 5}
+{"name": "the-category-changed", "observed_category": "ambiguous_submission", "observed_revision": 4, "outcome": "category-changed", "paused": "artifact_transfer", "revision": 4}
+{"name": "not-paused-at-all", "observed_category": "ambiguous_submission", "observed_revision": 4, "outcome": "not-paused", "paused": null, "revision": 4}

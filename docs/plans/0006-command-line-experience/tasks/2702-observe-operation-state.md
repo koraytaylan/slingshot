@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-command-line/src/operation_observation.rs
   - crates/slingshot-command-line/tests/operation_observation.rs
   - "crates/slingshot-command-line/tests/fixtures/operation-observation/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Observe Operation State
