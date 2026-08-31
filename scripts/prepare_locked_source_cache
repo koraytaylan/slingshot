@@ -13,6 +13,8 @@
 set -eu
 
 AUTHORITY=support/github-automation-authority.toml
+# An option and the value beside it are two arguments.
+OPTION_AND_VALUE=2
 FINITE_STATE_MACHINE_SOURCE=''
 RUSTSEC_ADVISORY_DATABASE=''
 RUSTSEC_OWNER_REVIEW_RECORD=''
@@ -29,7 +31,7 @@ report_refusal() {
 }
 
 require_value() {
-    [ "$2" -ge 2 ] || report_refusal "$1 names a path"
+    [ "$2" -ge "$OPTION_AND_VALUE" ] || report_refusal "$1 names a path"
 }
 
 require_absolute_directory() {

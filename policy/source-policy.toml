@@ -34,6 +34,25 @@ planning-headings = ["**Steps:**", "**Tests:**", "**Done when:**", "## Why this 
 # Macros whose expansion is a placeholder rather than behavior.
 placeholder-macros = ["todo", "unimplemented"]
 
+# Markers that switch a rule off for one line or one item. A rule with an
+# escape hatch holds only where nobody minded it, so the escape hatch is itself
+# refused. A directive addressed to a different tool is not one of these.
+suppression-markers = ["#[allow(", "#![allow(", "policy:ignore"]
+
+# Markers that record an expectation rather than switch a rule off. The
+# compiler reports one of these when the lint it names stops firing, so it
+# cannot outlive the situation it was written for - which is the whole
+# difference from a suppression. It carries the reason it exists.
+expectation-markers = ["#[expect(", "#![expect("]
+
+# What an expectation has to state.
+required-expectation-reason = "reason ="
+
+# The directory that owns Plan 0003's command contract. Everywhere else asks the
+# contract for a limit by name; a constant named after one, or the contract's
+# own format identifier written out, is a second declaration that can drift.
+command-contract-directory = "crates/slingshot-domain"
+
 # Directories the scan does not enter. Planning documents are intentionally
 # prospective, and the source-policy fixtures are deliberately broken samples
 # the checker is proved against rather than repository source it governs.

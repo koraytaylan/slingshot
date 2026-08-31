@@ -19,7 +19,9 @@ pub mod profile_authentication_harness;
 pub mod release_input_cache;
 pub mod rustsec_advisory_pin;
 pub mod slingshot_test_daemon;
+pub mod script_policy;
 pub mod source_policy;
+pub mod workflow_policy;
 pub mod supported_platform_matrix;
 pub mod test_daemon_faults;
 
