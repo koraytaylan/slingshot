@@ -1,0 +1,92 @@
+#!/bin/sh
+# The repository-local compatibility gate.
+#
+# One command, no provider, no network of its own. It is given a checkout of
+# the pinned external source and, optionally, one bounded directory to seed a
+# private Cargo home with; it validates the manifest, builds the pinned
+# executable and this product, and then runs every integration target in the
+# committed inventory exactly once.
+#
+# It refuses rather than skips. A gate that reported success having run nothing
+# is the failure this exists to prevent, so an absent source, an absent
+# executable, and an empty inventory are all refusals.
+
+set -eu
+
+MANIFEST=compatibility/finite-state-machine.toml
+INVENTORY=compatibility/finite-state-machine-test-targets.toml
+SOURCE=''
+SEED=''
+
+report_stage() {
+    printf '\n== %s ==\n' "$1"
+}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --finite-state-machine-source)
+            [ "$#" -ge 2 ] || report_refusal 'the source option names a checkout'
+            SOURCE=$2
+            shift 2
+            ;;
+        --cargo-home-seed)
+            [ "$#" -ge 2 ] || report_refusal 'the seed option names a directory'
+            SEED=$2
+            shift 2
+            ;;
+        *)
+            report_refusal "$1 is not an option this gate takes"
+            ;;
+    esac
+done
+
+[ -n "$SOURCE" ] || report_refusal 'this gate is given the pinned source explicitly and finds none for itself'
+[ -d "$SOURCE" ] || report_refusal "$SOURCE is not a directory"
+[ -f "$MANIFEST" ] || report_refusal "$MANIFEST is not committed"
+[ -f "$INVENTORY" ] || report_refusal "$INVENTORY is not committed"
+
+TARGETS=$(grep '^name = ' "$INVENTORY" | sed 's/^name = "//; s/"$//')
+[ -n "$TARGETS" ] || report_refusal 'the inventory names no target, so this gate would prove nothing'
+FIRST_TARGET=$(printf '%s\n' "$TARGETS" | head -n 1)
+REMAINING_TARGETS=$(printf '%s\n' "$TARGETS" | tail -n +2)
+
+report_stage 'the compatibility manifest'
+# The inventory's first target owns the manifest, and it runs before anything is
+# built: a build against a manifest that has drifted proves the wrong thing.
+cargo test --locked -p slingshot-development --test "$FIRST_TARGET"
+
+report_stage 'the pinned executable'
+CARGO_HOME_ARGUMENT=''
+if [ -n "$SEED" ]; then
+    [ -d "$SEED" ] || report_refusal "$SEED is not a directory"
+    CARGO_HOME_ARGUMENT='--frozen --offline'
+    printf 'a seed was supplied, so dependency acquisition is frozen and offline\n'
+else
+    printf 'no seed was supplied, so dependency acquisition may use the network\n'
+fi
+FINITE_STATE_MACHINE_TARGET=$(mktemp -d)
+# shellcheck disable=SC2086
+( cd "$SOURCE" && cargo build --locked $CARGO_HOME_ARGUMENT --target-dir "$FINITE_STATE_MACHINE_TARGET" ) \
+    || report_refusal 'the pinned source did not build'
+EXECUTABLE="$FINITE_STATE_MACHINE_TARGET/debug/fsm-cli"
+[ -x "$EXECUTABLE" ] || report_refusal 'the build produced no executable where one was expected'
+
+report_stage 'this product'
+cargo build --locked -p slingshot-command-line
+PRODUCT=$(cargo metadata --format-version 1 --no-deps 2>/dev/null | sed 's/.*"target_directory":"\([^"]*\)".*/\1/')/debug/slingshot
+[ -x "$PRODUCT" ] || report_refusal 'this product produced no executable where one was expected'
+
+report_stage 'every remaining integration target'
+for TARGET in $REMAINING_TARGETS; do
+    printf '\n-- %s\n' "$TARGET"
+    SLINGSHOT_FINITE_STATE_MACHINE_EXECUTABLE="$EXECUTABLE" \
+        SLINGSHOT_EXECUTABLE="$PRODUCT" \
+        cargo test --locked -p slingshot-development --test "$TARGET"
+done
+
+printf '\n== the compatibility gate holds ==\n'

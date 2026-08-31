@@ -110,6 +110,29 @@ A daemon restart is transparent inside the handler deadline. The key comes from
 the occurrence, the operation is durable, and the effect fence is part of that
 durable state.
 
+## The compatibility gate
+
+One command, provider-neutral and repository-local. It is given a checkout of
+the pinned source and, optionally, one bounded directory to seed a private
+Cargo home with:
+
+```sh
+scripts/check_finite_state_machine_compatibility \
+  --finite-state-machine-source <checkout> \
+  [--cargo-home-seed <directory>]
+```
+
+It validates the manifest before it builds anything against it, builds the
+pinned executable and this product, and runs every target in
+`compatibility/finite-state-machine-test-targets.toml` exactly once. It refuses
+rather than skips: an absent source, an absent executable, and an empty
+inventory are refusals, because a gate reporting success having run nothing is
+the failure the arrangement exists to prevent.
+
+A supplied seed forces frozen, offline resolution and is bounded and digested
+without receiving any provenance claim. Without one, network-capable
+acquisition is recorded rather than assumed away.
+
 ## Examples
 
 <!-- generated: examples -->
