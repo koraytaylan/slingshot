@@ -10,6 +10,12 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 8/24 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `9008acc24db81466e88145367a6f3cbcd03c4faa`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3603 checks the arithmetic that decides a write rather than injecting the fault.**
+    Filling a real filesystem and interrupting real checkpoints needs a fault-injecting
+    filesystem beneath a running daemon. What decides every outcome of such a run is the
+    space arithmetic and the log geometry, and both are implemented here and compared
+    against vectors computed from the contract independently of the code - including the
+    check that the parts and the whole the contract itself names agree.
   - **3602 pins the reconciliation table rather than driving a live author.** Injecting
     faults into real TLS conversations needs the fake author served over a real socket
     with a fault-injecting transport; what decides every outcome of such a run is the

@@ -27,4 +27,5 @@ pub mod platform_runtime;
 pub mod process_barrier;
 pub mod process_harness;
 pub mod runtime_harness;
+pub mod storage_faults;
 pub mod supervised_child;
