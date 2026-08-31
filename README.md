@@ -31,7 +31,9 @@ daemon owns. `--runtime-root` places the target's runtime objects somewhere
 other than this user's own runtime directory.
 
 [docs/COMMANDS.md](docs/COMMANDS.md) is the reference for every leaf, option,
-answer, failure category, and exit this executable has.
+answer, failure category, and exit this executable has, and
+[docs/MODEL_CONTEXT_PROTOCOL.md](docs/MODEL_CONTEXT_PROTOCOL.md) is the one for
+the protocol server it can hand its streams to.
 
 ## Crates
 

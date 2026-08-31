@@ -9,6 +9,10 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Progress:** 15/16 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `in progress`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `1a592249115df391edac4d8f84fcb52262a3d36e`; mode `sequential`; final integration —.
 - **Exceptions:**
+  - **3106 registered its document where the workspace keeps them.** A new area document
+    is checked by the product documentation suite and linked from the README, and
+    neither is in this task's footprint; both join it, because a reference nothing links
+    to is a reference nobody reads.
   - **3105 proves the boundaries a process has and not the ones a daemon would add.**
     Scripted daemon endpoints, forced reconnects, and maintenance read linearization
     need a daemon serving versioned operations. What is proved at the process level is

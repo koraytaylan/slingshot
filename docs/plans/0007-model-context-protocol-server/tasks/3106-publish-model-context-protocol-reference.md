@@ -9,7 +9,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/tests/model_context_protocol_reference.rs
   - docs/MODEL_CONTEXT_PROTOCOL.md
-status: planned
+status: done
 merged_as: ""
 ---
 # Publish Model Context Protocol Reference
