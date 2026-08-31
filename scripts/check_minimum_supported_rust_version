@@ -1,0 +1,41 @@
+#!/bin/sh
+# Check that this workspace really builds at the version it says it needs.
+#
+# A declared minimum nobody builds against is a claim, not a fact: the first
+# dependency that raises its own minimum, or the first use of a newer language
+# feature, makes it false silently. This builds the whole workspace with the
+# pinned toolchain, which is the declared minimum, and refuses if the two ever
+# stop being the same value.
+
+set -eu
+
+MANIFEST=Cargo.toml
+TOOLCHAIN=rust-toolchain.toml
+
+report_stage() {
+    printf '\n== %s ==\n' "$1"
+}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+[ -f "$MANIFEST" ] || report_refusal "$MANIFEST is not here"
+[ -f "$TOOLCHAIN" ] || report_refusal "$TOOLCHAIN is not here"
+
+DECLARED=$(grep '^rust-version = ' "$MANIFEST" | head -n 1 | sed 's/^rust-version = "//; s/"$//')
+PINNED=$(grep '^channel = ' "$TOOLCHAIN" | head -n 1 | sed 's/^channel = "//; s/"$//')
+
+[ -n "$DECLARED" ] || report_refusal 'the workspace declares no minimum version'
+[ -n "$PINNED" ] || report_refusal 'the toolchain file pins no channel'
+
+report_stage 'the declared minimum and the pinned toolchain'
+printf 'declared %s, pinned %s\n' "$DECLARED" "$PINNED"
+[ "$DECLARED" = "$PINNED" ] \
+    || report_refusal "the workspace declares $DECLARED and builds with $PINNED, so one of them is untrue"
+
+report_stage 'building the workspace at that version'
+cargo build --locked --workspace --all-targets
+
+printf '\n== the minimum supported version is one this workspace builds at ==\n'

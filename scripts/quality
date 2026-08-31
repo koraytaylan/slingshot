@@ -79,6 +79,8 @@ prepare_advisory_configuration() {
 }
 
 run_rust_gates() {
+    report_stage 'the minimum supported version'
+    scripts/check_minimum_supported_rust_version
     report_stage 'formatting'
     cargo fmt --all --check
     report_stage 'compilation'
