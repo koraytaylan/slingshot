@@ -1,0 +1,5 @@
+{"accepted":true,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\"}","note":"the master variation"}
+{"accepted":true,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\",\"variation_name\":\"mobile\"}","note":"a named variation"}
+{"accepted":false,"document":"{}","note":"no fragment at all"}
+{"accepted":false,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\",\"variation_name\":\"mo/bile\"}","note":"a variation name that is a path"}
+{"accepted":false,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\",\"extra\":1}","note":"a member this command does not have"}

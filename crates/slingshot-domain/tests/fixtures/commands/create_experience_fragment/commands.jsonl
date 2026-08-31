@@ -1,0 +1,4 @@
+{"accepted":true,"document":"{\"name\":\"hero\",\"parent_path\":\"/content/experience-fragments/example\",\"template_path\":\"/conf/example/settings/wcm/templates/experience-fragment\",\"variation_name\":\"web\"}","note":"the plainest experience fragment"}
+{"accepted":true,"document":"{\"name\":\"hero\",\"parent_path\":\"/content/experience-fragments/example\",\"template_path\":\"/conf/example/settings/wcm/templates/experience-fragment\",\"title\":\"Hero\",\"variation_name\":\"web\"}","note":"one with a title"}
+{"accepted":false,"document":"{\"name\":\"hero\",\"parent_path\":\"/content/experience-fragments/example\",\"template_path\":\"/conf/example/settings/wcm/templates/experience-fragment\"}","note":"no variation name, which has no default"}
+{"accepted":false,"document":"{\"name\":\"hero\",\"parent_path\":\"/content/experience-fragments/example\",\"variation_name\":\"web\"}","note":"no template"}

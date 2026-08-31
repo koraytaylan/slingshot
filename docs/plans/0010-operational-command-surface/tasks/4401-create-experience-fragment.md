@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/create_experience_fragment.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_experience_fragment/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Create an Experience Fragment

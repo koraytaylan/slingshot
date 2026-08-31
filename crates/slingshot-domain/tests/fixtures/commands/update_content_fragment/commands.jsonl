@@ -1,0 +1,5 @@
+{"accepted":true,"document":"{\"elements\":{\"title\":\"Spring offer\"},\"fragment_path\":\"/content/dam/example/fragments/offer\"}","note":"one element on the master"}
+{"accepted":true,"document":"{\"elements\":{\"title\":\"Spring offer\"},\"fragment_path\":\"/content/dam/example/fragments/offer\",\"variation_name\":\"mobile\"}","note":"one element on a named variation"}
+{"accepted":true,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\",\"title\":\"Offer\"}","note":"a title alone"}
+{"accepted":false,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\",\"elements\":{\"tags\":[]}}","note":"an empty element list"}
+{"accepted":false,"document":"{\"fragment_path\":\"/content/dam/example/fragments/offer\",\"extra\":1}","note":"a member this command does not have"}

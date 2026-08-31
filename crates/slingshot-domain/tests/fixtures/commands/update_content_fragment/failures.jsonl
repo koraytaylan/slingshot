@@ -1,0 +1,8 @@
+{"document":"{\"failure\":\"fragment_not_found\",\"fragment_path\":\"/content/dam/example/fragments/offer\"}","members":["failure","fragment_path"],"note":"refused as fragment not found","proves_no_effect":true}
+{"document":"{\"failure\":\"fragment_access_denied\",\"fragment_path\":\"/content/dam/example/fragments/offer\"}","members":["failure","fragment_path"],"note":"refused as fragment access denied","proves_no_effect":true}
+{"document":"{\"failure\":\"fragment_invalid\",\"fragment_path\":\"/content/dam/example/fragments/offer\"}","members":["failure","fragment_path"],"note":"refused as fragment invalid","proves_no_effect":true}
+{"document":"{\"failure\":\"variation_not_found\",\"fragment_path\":\"/content/dam/example/fragments/offer\"}","members":["failure","fragment_path"],"note":"refused as variation not found","proves_no_effect":true}
+{"document":"{\"failure\":\"element_unknown\",\"fragment_path\":\"/content/dam/example/fragments/offer\"}","members":["failure","fragment_path"],"note":"refused as element unknown","proves_no_effect":true}
+{"document":"{\"failure\":\"element_value_rejected\",\"fragment_path\":\"/content/dam/example/fragments/offer\"}","members":["failure","fragment_path"],"note":"refused as element value rejected","proves_no_effect":true}
+{"document":"{\"failure\":\"repository_commit_failed\",\"fragment_path\":\"/content/dam/example/fragments/offer\"}","members":["failure","fragment_path"],"note":"refused as repository commit failed","proves_no_effect":true}
+{"document":"{\"failure\":\"mutation_outcome_unknown\",\"fragment_path\":\"/content/dam/example/fragments/offer\"}","members":["failure","fragment_path"],"note":"refused as mutation outcome unknown","proves_no_effect":false}

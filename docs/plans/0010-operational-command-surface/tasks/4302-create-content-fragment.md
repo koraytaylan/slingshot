@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/create_content_fragment.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_content_fragment/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Create a Content Fragment
