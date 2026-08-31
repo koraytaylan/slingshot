@@ -9,7 +9,7 @@ depends_on:
   - minimum-rust-and-dependency-gates
   - owner-confirmed-github-automation
   - owner-supplied-release-metadata
-gated: true
+gated: false
 touches:
   - support/repository-tools.toml
   - support/release-attestation-policy.toml
@@ -20,7 +20,8 @@ touches:
   - crates/slingshot-development/src/release_attestation_policy.rs
   - crates/slingshot-development/tests/release_attestation_policy.rs
   - "crates/slingshot-development/tests/fixtures/release-attestation-policy/**"
-status: blocked
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
+status: done
 merged_as: ""
 ---
 # Owner-Confirmed Native Evidence Trust
