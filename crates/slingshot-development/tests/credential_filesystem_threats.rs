@@ -90,7 +90,7 @@ fn a_root_anybody_may_write_is_refused_before_a_single_file_is_opened() {
         .with_directory("profiles")
         .with_source("profiles/local.toml", PROFILE.as_bytes());
     let held = load_profiles(hostile);
-    let diagnostics = held.err().expect("a root anybody may write is not a root");
+    let diagnostics = held.expect_err("a root anybody may write is not a root");
     assert!(!diagnostics.is_empty());
 }
 
