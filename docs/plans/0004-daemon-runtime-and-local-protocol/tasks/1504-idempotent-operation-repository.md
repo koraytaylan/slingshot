@@ -9,8 +9,12 @@ gated: false
 touches:
   - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
-  - crates/slingshot-storage/tests/operation_repository.rs
-status: planned
+  - crates/slingshot-storage/tests/operation_repository/admission.rs
+  - crates/slingshot-storage/tests/operation_repository/fixtures.rs
+  - crates/slingshot-storage/tests/operation_repository/lifecycle.rs
+  - crates/slingshot-storage/tests/operation_repository/main.rs
+  - crates/slingshot-storage/tests/operation_repository/recovery.rs
+status: done
 merged_as: ""
 ---
 # Idempotent Operation Repository
