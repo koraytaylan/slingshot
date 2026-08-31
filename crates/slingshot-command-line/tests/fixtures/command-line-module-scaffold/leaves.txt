@@ -1,0 +1,34 @@
+# Every Plan 0006 source leaf, its owning parent, and where it lives.
+#
+# Written independently of the module declarations so the two can disagree.
+# A leaf that is declared and absent, present and undeclared, owned twice, or
+# ordered differently under the command family is a finding rather than a
+# detail the checker forgives.
+
+crates/slingshot-command-line/src/application.rs|crate-root|top-level
+crates/slingshot-command-line/src/artifact_access.rs|crate-root|top-level
+crates/slingshot-command-line/src/artifact_download.rs|crate-root|top-level
+crates/slingshot-command-line/src/artifact_staging_lock.rs|crate-root|top-level
+crates/slingshot-command-line/src/artifact_staging_metadata.rs|crate-root|top-level
+crates/slingshot-command-line/src/configuration_check.rs|crate-root|top-level
+crates/slingshot-command-line/src/exit_classification.rs|crate-root|top-level
+crates/slingshot-command-line/src/human_renderer.rs|crate-root|top-level
+crates/slingshot-command-line/src/interrupt.rs|crate-root|top-level
+crates/slingshot-command-line/src/invocation.rs|crate-root|top-level
+crates/slingshot-command-line/src/machine_outcome_envelope.rs|crate-root|top-level
+crates/slingshot-command-line/src/machine_readable_renderer.rs|crate-root|top-level
+crates/slingshot-command-line/src/operation_maintenance.rs|crate-root|top-level
+crates/slingshot-command-line/src/operation_observation.rs|crate-root|top-level
+crates/slingshot-command-line/src/operation_submission.rs|crate-root|top-level
+crates/slingshot-command-line/src/predicate_arguments.rs|crate-root|top-level
+crates/slingshot-command-line/src/progress_renderer.rs|crate-root|top-level
+crates/slingshot-command-line/src/property_document.rs|crate-root|top-level
+crates/slingshot-command-line/src/target_selection.rs|crate-root|top-level
+crates/slingshot-command-line/src/commands/content.rs|commands|0
+crates/slingshot-command-line/src/commands/package.rs|commands|1
+crates/slingshot-command-line/src/commands/replication.rs|commands|2
+crates/slingshot-command-line/src/commands/configuration.rs|commands|3
+crates/slingshot-command-line/src/commands/page_query.rs|commands|4
+crates/slingshot-command-line/src/commands/path_query.rs|commands|5
+crates/slingshot-command-line/src/commands/asset_query.rs|commands|6
+crates/slingshot-command-line/src/commands/page_mutation.rs|commands|7
