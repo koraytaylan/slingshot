@@ -9,9 +9,10 @@ gated: false
 touches:
   - crates/slingshot-agent-connection/src/author_cross_site_request_forgery_protection.rs
   - crates/slingshot-agent-connection/src/lib.rs
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - crates/slingshot-agent-connection/tests/fixtures/author-cross-site-request-forgery-protection/**
   - crates/slingshot-agent-connection/tests/author_cross_site_request_forgery_protection.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Author Cross-Site Request Forgery Protection

@@ -6,6 +6,8 @@
 //! and its transport-policy leaf as documentation-only structure.
 
 pub mod authentication;
+pub mod author_cross_site_request_forgery_protection;
 pub mod author_hypertext_transfer_protocol_policy;
 pub mod capability_discovery;
+pub mod request_authentication;
 pub mod transport_policy;
