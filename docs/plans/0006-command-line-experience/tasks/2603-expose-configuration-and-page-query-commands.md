@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-command-line/src/predicate_arguments.rs
   - crates/slingshot-command-line/tests/configuration_and_page_query_commands.rs
 status: done
-merged_as: ""
+merged_as: "16ee7831c597f9dd0a38f89a4c07c36e5e8f575d"
 ---
 # Expose Configuration And Page Query Commands
 
