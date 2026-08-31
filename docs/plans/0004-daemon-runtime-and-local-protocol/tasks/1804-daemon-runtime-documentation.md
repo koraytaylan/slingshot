@@ -12,7 +12,7 @@ touches:
   - docs/DAEMON.md
   - crates/slingshot-development/tests/product_documentation.rs
 status: done
-merged_as: ""
+merged_as: "749e5fa38b5f0e1ac8b5c6c4930147988cc38f56"
 ---
 # Daemon Runtime Documentation
 
