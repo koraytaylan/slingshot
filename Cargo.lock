@@ -2183,6 +2183,7 @@ dependencies = [
  "slingshot-domain",
  "slingshot-local-protocol",
  "slingshot-storage",
+ "slingshot-test-support",
  "tempfile",
  "thiserror",
  "tokio",
