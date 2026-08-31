@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/tests/command_golden_sessions.rs
   - crates/slingshot-test-support/fixtures/command-golden-sessions/**
 status: done
-merged_as: ""
+merged_as: "339b1a0a17a4e87f155475159a684e9b7253cab0"
 ---
 # Pin Command Golden Sessions
 
