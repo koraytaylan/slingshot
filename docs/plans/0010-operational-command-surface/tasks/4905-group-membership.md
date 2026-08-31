@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/group_membership.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/group_membership.rs
   - "crates/slingshot-domain/tests/fixtures/commands/group_membership/**"
 status: planned

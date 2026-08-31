@@ -11,6 +11,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/replication_agent.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/replication_agent.rs
   - "crates/slingshot-domain/tests/fixtures/commands/replication_agent/**"
 status: planned

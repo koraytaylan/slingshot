@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/flush_replication_queue.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/flush_replication_queue.rs
   - "crates/slingshot-domain/tests/fixtures/commands/flush_replication_queue/**"
 status: planned

@@ -8,7 +8,9 @@ depends_on:
 gated: false
 touches:
   - crates/slingshot-domain/src/command/authorizable_identity.rs
+  - crates/slingshot-domain/src/command/repository_path.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/authorizable_identity.rs
 status: planned
 merged_as: ""
@@ -19,10 +21,11 @@ Eight commands address a user or a group, and none of them can borrow a reposito
 
 **Steps:**
 
-1. Implement `AuthorizableIdentifier` as a validated wrapper: non-empty, at most `MAXIMUM_AUTHORIZABLE_IDENTIFIER_BYTES`, already in normalization form C, and refusing a solidus, any control, a leading or trailing space, and the reserved single and double full-stop forms.
-2. Implement `AuthorizableKind` as the closed `User` or `Group`, serialized in snake case.
-3. Implement `AuthorizableIntermediatePath` as a bounded relative path of validated repository names joined by a solidus, at most `MAXIMUM_AUTHORIZABLE_INTERMEDIATE_PATH_BYTES`, refusing an absolute form, an empty interior segment, a trailing solidus, and every traversal form the repository path grammar refuses.
-4. Give each failure a variant that names the invalid field and the violated bound and never echoes the whole value.
+1. Make the validated-address shape the repository paths already share reachable from the rest of the family, and route its own constructions through the one constructor that shape now declares, rather than copying the shape into this leaf and into each of the three that follow it.
+2. Implement `AuthorizableIdentifier` as a validated wrapper: non-empty, at most `MAXIMUM_AUTHORIZABLE_IDENTIFIER_BYTES`, already in normalization form C, and refusing a solidus, any control, a leading or trailing space, and the reserved single and double full-stop forms.
+3. Implement `AuthorizableKind` as the closed `User` or `Group`, serialized in snake case.
+4. Implement `AuthorizableIntermediatePath` as a bounded relative path of validated repository names joined by a solidus, at most `MAXIMUM_AUTHORIZABLE_INTERMEDIATE_PATH_BYTES`, refusing an absolute form, an empty interior segment, a trailing solidus, and every traversal form the repository path grammar refuses.
+5. Give each failure a variant that names the invalid field and the violated bound and never echoes the whole value.
 
 **Tests:**
 

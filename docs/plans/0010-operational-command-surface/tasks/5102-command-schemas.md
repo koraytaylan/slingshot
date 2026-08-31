@@ -13,6 +13,7 @@ touches:
   - crates/slingshot-domain/src/command/schema_process.rs
   - crates/slingshot-domain/src/command/schema_administration.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - "schemas/commands/**"
   - crates/slingshot-domain/tests/command_schemas.rs
   - crates/slingshot-domain/tests/command_fingerprint.rs

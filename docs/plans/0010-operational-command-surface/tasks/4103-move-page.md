@@ -9,6 +9,7 @@ gated: false
 touches:
   - crates/slingshot-domain/src/command/move_page.rs
   - crates/slingshot-domain/src/command/mod.rs
+  - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/move_page.rs
   - "crates/slingshot-domain/tests/fixtures/commands/move_page/**"
 status: planned
