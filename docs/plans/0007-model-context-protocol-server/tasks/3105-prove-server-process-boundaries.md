@@ -10,7 +10,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/tests/model_context_protocol_process_boundaries.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/process-boundaries/**
-status: planned
+status: done
 merged_as: ""
 ---
 # Prove Server Process Boundaries
