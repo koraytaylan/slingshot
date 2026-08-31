@@ -1,0 +1,4 @@
+exit: 6
+standard output:
+standard error:
+slingshot: the daemon refused the request: method_not_found: the retained control surface has no method daemon.hello

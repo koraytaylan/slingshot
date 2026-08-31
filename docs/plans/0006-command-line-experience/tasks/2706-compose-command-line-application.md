@@ -11,6 +11,7 @@ gated: false
 touches:
   - crates/slingshot-command-line/src/application.rs
   - crates/slingshot-command-line/src/daemon_answer.rs
+  - crates/slingshot-command-line/src/daemon_request.rs
   - crates/slingshot-command-line/src/command_line.rs
   - crates/slingshot-command-line/src/main.rs
   - crates/slingshot-command-line/tests/application_dispatch.rs

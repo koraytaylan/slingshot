@@ -79,6 +79,12 @@ const OPTION_AND_VALUE: usize = 2;
 /// What every diagnostic this executable writes begins with.
 const DIAGNOSTIC_PREFIX: &str = "slingshot: ";
 
+/// How often a waiting exchange asks whether it has been asked to stop.
+const STOP_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(20);
+
+/// What an exchange reports when a signal ended it rather than an answer.
+const STOP_REQUESTED: &str = "the run was asked to stop while it was waiting";
+
 /// Identifier this executable puts on its retained control requests.
 const CONTROL_REQUEST_IDENTIFIER: &str = "command-line";
 
@@ -188,6 +194,7 @@ fn complete(invocation: &Invocation, executable: &Path) -> Completion {
         Err(reason) => {
             return Completion {
                 answer: Answer::Refusal(reason),
+                diagnostics: Vec::new(),
                 exit: exit_classification::LOCAL_FAILURE,
             };
         }
@@ -197,7 +204,7 @@ fn complete(invocation: &Invocation, executable: &Path) -> Completion {
     let filesystem = ProductFilesystem;
     let network = ProductNetwork;
     let signals = ProductSignals::watching();
-    let daemon = ProductDaemon::new(&contract, &runtime_root);
+    let daemon = ProductDaemon::new(&contract, &runtime_root, signals.flag());
     let process = ProductProcess {
         contract: &contract,
         executable: executable.to_path_buf(),
@@ -234,6 +241,9 @@ fn write_completion(
     output: &mut dyn Write,
     diagnostics: &mut dyn Write,
 ) -> i32 {
+    for diagnostic in &completion.diagnostics {
+        write_diagnostic(diagnostics, diagnostic);
+    }
     match &completion.answer {
         Answer::Refusal(message) => write_diagnostic(diagnostics, message),
         Answer::Text(text) if text.is_empty() => {}
@@ -418,6 +428,15 @@ struct ProductSignals {
 }
 
 impl ProductSignals {
+    /// Returns the flag this boundary answers from.
+    ///
+    /// Shared with the exchanges, so a signal that arrives while one is waiting
+    /// ends the wait instead of being noticed after it. A run blocked on a
+    /// daemon that never answers is exactly when somebody presses this.
+    fn flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.requested)
+    }
+
     /// Returns a boundary watching for the interrupt a person types.
     fn watching() -> Self {
         let requested = Arc::new(AtomicBool::new(false));
@@ -474,6 +493,13 @@ impl ProcessBoundary for ProductProcess<'_> {
     }
 }
 
+/// Waits until somebody asks this run to stop.
+async fn stopped(requested: &AtomicBool) {
+    while !requested.load(Ordering::SeqCst) {
+        tokio::time::sleep(STOP_POLL_INTERVAL).await;
+    }
+}
+
 /// Talking to the daemon that owns a namespace.
 struct ProductDaemon<'contract> {
     /// The contract every frame is written under.
@@ -482,15 +508,22 @@ struct ProductDaemon<'contract> {
     runtime_root: PathBuf,
     /// The runtime every exchange is driven on.
     runtime: Option<tokio::runtime::Runtime>,
+    /// Whether somebody has asked this run to stop.
+    stop_requested: Arc<AtomicBool>,
 }
 
 impl<'contract> ProductDaemon<'contract> {
     /// Returns a boundary that reaches daemons under one runtime root.
-    fn new(contract: &'contract FoundationContract, runtime_root: &Path) -> Self {
+    fn new(
+        contract: &'contract FoundationContract,
+        runtime_root: &Path,
+        stop_requested: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             contract,
             runtime_root: runtime_root.to_path_buf(),
             runtime: tokio::runtime::Builder::new_multi_thread().enable_all().build().ok(),
+            stop_requested,
         }
     }
 
@@ -516,7 +549,14 @@ impl<'contract> ProductDaemon<'contract> {
             .runtime
             .as_ref()
             .ok_or_else(|| ExchangeFailure::Transport("no runtime could be built".to_owned()))?;
-        runtime.block_on(work)
+        runtime.block_on(async {
+            tokio::select! {
+                answered = work => answered,
+                () = stopped(&self.stop_requested) => {
+                    Err(ExchangeFailure::Transport(STOP_REQUESTED.to_owned()))
+                }
+            }
+        })
     }
 
     /// Sends one retained control request and returns what came back.
