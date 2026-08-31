@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-daemon/tests/runtime_ownership.rs
   - crates/slingshot-development/tests/platform_runtime_contract.rs
 status: done
-merged_as: ""
+merged_as: "353411e9506701e9dc69316223f9e666f4974bde"
 ---
 # Single Daemon Ownership
 
