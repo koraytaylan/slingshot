@@ -9,9 +9,10 @@ gated: false
 touches:
   - crates/slingshot-agent-connection/src/request_authentication.rs
   - crates/slingshot-agent-connection/src/lib.rs
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - crates/slingshot-agent-connection/tests/fixtures/request-authentication/**
   - crates/slingshot-agent-connection/tests/request_authentication.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Author Request Authentication
