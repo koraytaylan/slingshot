@@ -1,0 +1,21 @@
+#!/bin/sh
+# Run every acceptance gate, in order, and record what each one decided.
+#
+# This runs inside the container and nowhere else. It prepares nothing, fetches
+# nothing, and installs nothing: everything it needs was mounted read-only
+# before it started, and a missing input is a refusal.
+
+set -eu
+
+OUTPUT=${SLINGSHOT_ACCEPTANCE_OUTPUT:-}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+[ -n "$OUTPUT" ] || report_refusal 'no output root was mounted, so nothing could be recorded'
+[ -d "$OUTPUT" ] || report_refusal "$OUTPUT is not a directory"
+
+cargo run --locked --frozen --offline --quiet -p slingshot-development -- \
+    run-release-acceptance --output-directory "$OUTPUT"
