@@ -1,0 +1,17 @@
+# Every Plan 0007 protocol leaf, its parent, and where it sits in the order.
+#
+# Written independently of the declarations so the two can disagree.
+
+crates/slingshot-command-line/src/model_context_protocol/active_request_registry.rs|model_context_protocol|0
+crates/slingshot-command-line/src/model_context_protocol/application.rs|model_context_protocol|1
+crates/slingshot-command-line/src/model_context_protocol/current_stateless_revision.rs|model_context_protocol|2
+crates/slingshot-command-line/src/model_context_protocol/legacy_initialized_revision.rs|model_context_protocol|3
+crates/slingshot-command-line/src/model_context_protocol/operation_execution.rs|model_context_protocol|4
+crates/slingshot-command-line/src/model_context_protocol/progress_and_cancellation.rs|model_context_protocol|5
+crates/slingshot-command-line/src/model_context_protocol/protocol_diagnostics.rs|model_context_protocol|6
+crates/slingshot-command-line/src/model_context_protocol/resource_catalog.rs|model_context_protocol|7
+crates/slingshot-command-line/src/model_context_protocol/result_projection.rs|model_context_protocol|8
+crates/slingshot-command-line/src/model_context_protocol/schema_projection.rs|model_context_protocol|9
+crates/slingshot-command-line/src/model_context_protocol/size_budget.rs|model_context_protocol|10
+crates/slingshot-command-line/src/model_context_protocol/standard_stream_transport.rs|model_context_protocol|11
+crates/slingshot-command-line/src/model_context_protocol/tool_catalog.rs|model_context_protocol|12

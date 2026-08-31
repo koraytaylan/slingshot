@@ -22,7 +22,7 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/tool_catalog.rs
   - crates/slingshot-command-line/tests/model_context_protocol_module_scaffold.rs
   - "crates/slingshot-command-line/tests/fixtures/model-context-protocol/module-scaffold/**"
-status: planned
+status: done
 merged_as: ""
 ---
 # Model Context Protocol Module Scaffold
