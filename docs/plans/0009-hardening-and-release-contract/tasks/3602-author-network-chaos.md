@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-test-support/src/lib.rs
   - crates/slingshot-test-support/src/network_fault_script.rs
   - crates/slingshot-development/tests/author_network_chaos.rs
-status: planned
+status: done
 merged_as: ""
 ---
 # Author Network Chaos
