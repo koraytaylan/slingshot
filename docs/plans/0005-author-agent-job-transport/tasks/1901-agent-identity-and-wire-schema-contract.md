@@ -23,7 +23,7 @@ touches:
   - schemas/agent-protocol/identity/**
   - schemas/agent-protocol/common/**
 status: done
-merged_as: ""
+merged_as: "142f7c3a4240549dfe9b88ecbc882d9fc4db1081"
 ---
 # Agent Identity and Wire Schema Contract
 
