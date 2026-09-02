@@ -20,7 +20,7 @@ touches:
   - crates/slingshot-storage/tests/persistent_capacity/fixtures.rs
   - crates/slingshot-storage/tests/persistent_capacity/main.rs
 status: done
-merged_as: "26d2d2bc6c54b49ac194ed7df6243aff02b6de62"
+merged_as: "08461239cef28b0da6338d19580de86b134e233c"
 ---
 # Persistent Capacity Accounting
 

@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/artifact-download/**
   - crates/slingshot-agent-connection/tests/artifact_download.rs
 status: done
-merged_as: "d8ebbe5b54ce946306ab9a1e345d5d313c33d1c6"
+merged_as: "b16cdaf25e5d682030f71d669320ef0a87c0803d"
 ---
 # Artifact Download
 

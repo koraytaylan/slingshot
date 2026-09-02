@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/create_page/**
   - crates/slingshot-domain/tests/create_page.rs
 status: done
-merged_as: "a73fef943baefb68aa944cfe42408ec5aea7e216"
+merged_as: "0d5062d317baca6c5775abdea00143dff852e8fb"
 ---
 # Create a Page
 

@@ -12,7 +12,7 @@ touches:
   - schemas/commands/command-schema-1.json
   - crates/slingshot-development/tests/fixtures/protocol-compatibility/snapshot.json
 status: done
-merged_as: "ab145fad161d30aef848e2020356a5cabf28afcb"
+merged_as: "f9ba6fd4839dfe2b22521b859b29dd5cd9a20863"
 ---
 # Operational Contract Limits
 

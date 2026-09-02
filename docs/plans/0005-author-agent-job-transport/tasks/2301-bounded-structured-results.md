@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/structured-job-results/**
   - crates/slingshot-agent-connection/tests/structured_job_results.rs
 status: done
-merged_as: "13946c52f617493ccf67fa34e0e26cd2e9c3e792"
+merged_as: "bfb48b931f9c6adfaea172a022ba0e1370398479"
 ---
 # Bounded Structured Results
 

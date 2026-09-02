@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-local-protocol/tests/message.rs
   - "crates/slingshot-local-protocol/tests/fixtures/messages/**"
 status: done
-merged_as: "1368d035c920d3dce70bb3bc41a17d00c13dbb00"
+merged_as: "363c637ca3cffc3bbb465371f5831100ca57248b"
 ---
 # Local Operation Envelopes
 

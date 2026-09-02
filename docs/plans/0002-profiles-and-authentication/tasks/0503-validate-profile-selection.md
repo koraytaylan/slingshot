@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-configuration/src/profile_selection.rs
   - crates/slingshot-configuration/tests/profile_selection.rs
 status: done
-merged_as: "c460c1a6fd4ee1b76119a2fe4e1e596161dc3fb6"
+merged_as: "a8f3978393a0b7c31255de3b7ba1bacb097aa9fa"
 ---
 # Validate Profile Selection
 

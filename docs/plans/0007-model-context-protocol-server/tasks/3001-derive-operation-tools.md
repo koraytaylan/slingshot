@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/tool_catalog.rs
   - crates/slingshot-command-line/tests/model_context_protocol_tool_catalog.rs
 status: done
-merged_as: "040f84ea0c2a48f8fbf2bfa75d7c8bd23b8d6de0"
+merged_as: "d944adb423aeee0b010e47fd2fcbe1a092b198d8"
 ---
 # Derive Operation Tools
 

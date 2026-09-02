@@ -18,7 +18,7 @@ touches:
   - crates/slingshot-test-support/tests/fixtures/fake-author/**
   - crates/slingshot-test-support/tests/fake_author.rs
 status: done
-merged_as: "78fd43af881f8b944b1dbbd4e8fe5a33a8dd7f8d"
+merged_as: "cf9066b4519e2255acfa406ee6f25067505bf8e7"
 ---
 # Fake Author
 

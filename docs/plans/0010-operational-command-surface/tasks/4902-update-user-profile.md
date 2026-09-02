@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/update_user_profile.rs
   - "crates/slingshot-domain/tests/fixtures/commands/update_user_profile/**"
 status: done
-merged_as: "a73a0b157a88358ff0b1aa98aff3ea0fee48c32e"
+merged_as: "73b484c65f39c4c34caa36963308a2e2367223d6"
 ---
 # Update a User Profile
 

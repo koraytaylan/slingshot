@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/delete_page.rs
   - "crates/slingshot-domain/tests/fixtures/commands/delete_page/**"
 status: done
-merged_as: "3fd7ff8550d67147d796fa3e9e752eab340cf192"
+merged_as: "1523ff714eec589cb3ee19ab44a70979383ec9c9"
 ---
 # Delete a Page
 

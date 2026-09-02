@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-test-support/src/network_fault_script.rs
   - crates/slingshot-development/tests/author_network_chaos.rs
 status: done
-merged_as: "8ffaefbbf14a5eccb0e637f7c1b466b3583a7261"
+merged_as: "9489b8ea41a24632052bdc4ef9add6d53a311837"
 ---
 # Author Network Chaos
 

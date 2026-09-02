@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-development/tests/supported_platform_matrix.rs
   - "crates/slingshot-development/tests/fixtures/supported-platform-matrix/**"
 status: done
-merged_as: "7bdd1bc801e8e60b53411a2c1c33387f8c367e41"
+merged_as: "79a2c9fdb203fef7d022428d88187f33e9dd7e17"
 ---
 # Supported Platform Matrix
 

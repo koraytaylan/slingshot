@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-local-protocol/tests/control.rs
   - "crates/slingshot-local-protocol/tests/fixtures/control/**"
 status: done
-merged_as: "cbef0d8a7145c5d5a24be39563f6a9a1ca9670c6"
+merged_as: "b3fdb84fc1ffaffb44cf92163bec9e657c9e0a76"
 ---
 # Stable Local Control Protocol
 

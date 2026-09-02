@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/authorizable_identity.rs
 status: done
-merged_as: "d893fdf2cf8055369eb1474ce91d440e7a24d40e"
+merged_as: "68f3c16d24da3e2c58d1c2ca7d2af015183b7b19"
 ---
 # Authorizable Identity
 

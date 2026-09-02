@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/src/property_document.rs
   - crates/slingshot-command-line/tests/page_mutation_commands.rs
 status: done
-merged_as: "557469a51122b0a8d9f53b27700579066a0d15ba"
+merged_as: "2bcd444989aa5fca44b8f72c55f8896c99e702a4"
 ---
 # Expose Page Mutation Commands
 

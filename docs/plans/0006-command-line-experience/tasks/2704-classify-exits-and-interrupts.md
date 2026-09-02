@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/src/interrupt.rs
   - crates/slingshot-command-line/tests/exits_and_interrupts.rs
 status: done
-merged_as: "1167c27e9749ccef69add3d622db7793f7ac3bfa"
+merged_as: "157fb59afe2c7e7e24b3c35e8388b9573d83b5ef"
 ---
 # Classify Exits And Interrupts
 

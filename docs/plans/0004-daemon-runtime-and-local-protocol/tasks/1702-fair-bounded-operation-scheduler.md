@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-daemon/tests/operation_scheduler.rs
   - "crates/slingshot-daemon/tests/fixtures/operation_scheduler/**"
 status: done
-merged_as: "38ccbbb4d883a9209639ec6cba8caadd3c534ce9"
+merged_as: "06ddf691464062838c44b7db11d31c3695b8dbc6"
 ---
 # Fair Bounded Operation Scheduler
 

@@ -17,7 +17,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/src/command/mod.rs
 status: done
-merged_as: "928aab747160deed1621a8799d1dec15499807e3"
+merged_as: "e5a62e0c8e951414e37e1f003f9bae17439a8e6c"
 ---
 # Download a Content Package
 

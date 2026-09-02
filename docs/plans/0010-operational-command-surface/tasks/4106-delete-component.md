@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/delete_component.rs
   - "crates/slingshot-domain/tests/fixtures/commands/delete_component/**"
 status: done
-merged_as: "9b29817d87f8bdaef18a143f96ebebda194bf6fd"
+merged_as: "63d30003e46cf0ee0a3c4f4fa2f0a7d5e7685e82"
 ---
 # Delete a Component
 

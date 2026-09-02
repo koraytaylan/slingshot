@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/list_open_service_gateway_initiative_bundles.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_open_service_gateway_initiative_bundles/**"
 status: done
-merged_as: "6a823953ac8e4e7cf5a603243fec21ffc0a53361"
+merged_as: "af6c4d98344844fabe8e8cd542255a10225ffbac"
 ---
 # List Bundles
 

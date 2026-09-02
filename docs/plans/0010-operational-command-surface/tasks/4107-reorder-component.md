@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/reorder_component.rs
   - "crates/slingshot-domain/tests/fixtures/commands/reorder_component/**"
 status: done
-merged_as: "8af78374fcfed6abe55c6fe93757f7d3b382d6dc"
+merged_as: "27d3dfa71a54703d14b3324ee38ffa12b42c2927"
 ---
 # Reorder a Component
 

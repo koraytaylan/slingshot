@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-command-line/tests/operation_observation.rs
   - "crates/slingshot-command-line/tests/fixtures/operation-observation/**"
 status: done
-merged_as: "57c6ca3943fc47a14184d10a18d3d535ac6d3201"
+merged_as: "587adf95be88829e437f8d965a516fd2c12eb283"
 ---
 # Observe Operation State
 

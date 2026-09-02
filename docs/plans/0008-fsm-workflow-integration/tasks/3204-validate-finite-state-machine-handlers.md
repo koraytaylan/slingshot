@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-development/tests/finite_state_machine_handler_validation.rs
   - "crates/slingshot-development/tests/fixtures/finite-state-machine-handler-validation/**"
 status: done
-merged_as: "ec1132841f669ab0dfab9bd63ec19911ac8f8aed"
+merged_as: "2db9ef0f582e0f6ecfd1f6cf5883731ca175df1e"
 ---
 # Validate FSM Handlers
 

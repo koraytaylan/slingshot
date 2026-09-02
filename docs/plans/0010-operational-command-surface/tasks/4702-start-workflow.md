@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/start_workflow.rs
   - "crates/slingshot-domain/tests/fixtures/commands/start_workflow/**"
 status: done
-merged_as: "e71740fdc51e0a18c337831b46347358209836f2"
+merged_as: "40945984945206f6a25bb5ea2b38026904a8de78"
 ---
 # Start a Workflow
 

@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-agent-protocol/tests/fixtures/continuation-key-lifecycle/**
   - schemas/agent-protocol/continuation/**
 status: done
-merged_as: "b8841508880659ace40648d715e66fee23f9fa47"
+merged_as: "5e38af94a22e0f99fb216d4a7d8eb6ef178672ec"
 ---
 # Continuation Key Lifecycle Contract
 

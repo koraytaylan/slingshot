@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/finite-state-machine-retry/**
   - crates/slingshot-development/tests/finite_state_machine_retry_idempotency.rs
 status: done
-merged_as: "ffd3f8d4a6603380ea957221471cef4b37e1ecd5"
+merged_as: "12f405d0552fa2400ac5628938303cc39fc07bac"
 ---
 # FSM Retry Idempotency
 

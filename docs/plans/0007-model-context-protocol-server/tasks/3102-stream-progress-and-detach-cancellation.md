@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/progress_and_cancellation.rs
   - crates/slingshot-command-line/tests/model_context_protocol_progress.rs
 status: done
-merged_as: "5515af92b6aa6405feb048db0ea81289709458d6"
+merged_as: "870064f9d71cf86da5e49c69a2e31e4709992654"
 ---
 # Stream Progress And Detach Cancellation
 

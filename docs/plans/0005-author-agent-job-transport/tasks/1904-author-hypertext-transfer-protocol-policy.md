@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/author-hypertext-transfer-protocol-policy/**
   - crates/slingshot-agent-connection/tests/author_hypertext_transfer_protocol_policy.rs
 status: done
-merged_as: "8cc165d4879f81d64ea611d16f5b022c41e07dee"
+merged_as: "2a30bf093d1833a85ec28fd80af8d8ce222e54c0"
 ---
 # Author Hypertext Transfer Protocol Policy
 

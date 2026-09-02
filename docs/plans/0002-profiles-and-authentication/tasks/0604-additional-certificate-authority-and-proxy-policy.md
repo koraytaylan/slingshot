@@ -16,7 +16,7 @@ touches:
   - crates/slingshot-agent-connection/tests/transport_policy.rs
   - "crates/slingshot-test-support/fixtures/additional-certificate-authority/**"
 status: done
-merged_as: "9a5d1f94cd45fc771312d217d67dd63739d2cc93"
+merged_as: "b4c7bf46069c3ec69da74f6800c7785741999f52"
 ---
 # Additional Certificate Authority And Proxy Policy
 

@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/replicate_content/**
   - crates/slingshot-domain/tests/replicate_content.rs
 status: done
-merged_as: "e8c0b7d3a9212f0e4e3ad02f9c29494ef46ed610"
+merged_as: "2fc0cf935d0dff3eccd6a92648332399acd0a946"
 ---
 # Replicate Content
 

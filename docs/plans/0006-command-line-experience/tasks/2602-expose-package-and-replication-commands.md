@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/src/commands/replication.rs
   - crates/slingshot-command-line/tests/package_and_replication_commands.rs
 status: done
-merged_as: "9b15e1958a0544541c3c4f86e9a9a120819b9f5d"
+merged_as: "d494f793323eaa4008dd276af26f3414db82c6e9"
 ---
 # Expose Package And Replication Commands
 

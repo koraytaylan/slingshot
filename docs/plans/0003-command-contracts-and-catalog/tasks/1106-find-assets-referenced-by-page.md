@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/find_assets_referenced_by_page/**
   - crates/slingshot-domain/tests/find_assets_referenced_by_page.rs
 status: done
-merged_as: "dc5d917782a0876d7cdb469afaf415c9c6dde5c7"
+merged_as: "d7cbdaf94a4a2ef98f3f792d68ce4299ce02a2c8"
 ---
 # Find Assets Referenced by a Page
 

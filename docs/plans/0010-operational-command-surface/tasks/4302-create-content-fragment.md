@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/create_content_fragment.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_content_fragment/**"
 status: done
-merged_as: "37b2e8e9db8503286b3ba6df14ef0aeeb0015c67"
+merged_as: "531272abad97284ebf36e3a12684145137339863"
 ---
 # Create a Content Fragment
 

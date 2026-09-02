@@ -12,7 +12,7 @@ touches:
   - "fuzz/corpus/local_protocol_frame/**"
   - crates/slingshot-development/tests/local_protocol_fuzz_corpus.rs
 status: done
-merged_as: "76a1a0ee120ac905c6dcca42ca82bff8596aa745"
+merged_as: "911ce1d85ef6a27c4124ff5d8e02f0a6107114aa"
 ---
 # Local Protocol Fuzzing
 
