@@ -1,18 +1,38 @@
 # The release, one job per native row, with provenance from the provider.
 #
-# The order is deliberate. The RustSec review happens first, in a protected
-# environment, and emits one record this run is bound to; the cache is prepared
-# once, over the network, on purpose; every row then builds twice offline from
-# that cache and compares bytes; and only the one attestation job holds a
-# permission beyond reading content.
+# The order is deliberate. The version a tag names is checked first, because it
+# is the one refusal that costs nothing and every job after it is expensive. The
+# RustSec review happens next, in a protected environment, and emits one record
+# this run is bound to; the cache is prepared once, over the network, on
+# purpose; every row then builds twice offline from that cache and compares
+# bytes; and only the one attestation job holds a permission beyond reading
+# content.
 name: release
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - v[0-9]*
 permissions:
   contents: read
 jobs:
+  release-version:
+    name: the version this run publishes
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: check the tag against the version the workspace declares
+        env:
+          SLINGSHOT_RELEASE_REFERENCE_TYPE: ${{ github.ref_type }}
+          SLINGSHOT_RELEASE_TAG: ${{ github.ref_name }}
+        run: scripts/verify_release_version
   rustsec-owner-review:
     name: the same-release advisory review
+    needs: release-version
     runs-on: ubuntu-24.04
     environment: release-rustsec-review
     permissions:
