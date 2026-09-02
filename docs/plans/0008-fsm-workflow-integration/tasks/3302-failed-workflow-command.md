@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/finite-state-machine-failure/**
   - crates/slingshot-development/tests/finite_state_machine_failure.rs
 status: done
-merged_as: "aebe34cc202a42d4746199e39baec3543eb16e13"
+merged_as: "aa7267b381a343baf69db5ab90008f4791fcb257"
 ---
 # Failed Workflow Command
 

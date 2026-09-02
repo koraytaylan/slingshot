@@ -16,7 +16,7 @@ touches:
   - scripts/check_minimum_supported_rust_version
   - crates/slingshot-development/tests/toolchain_and_dependency_policy.rs
 status: done
-merged_as: "d654c9e52cf589525a62330788a0bdee493faea9"
+merged_as: "1e29358c1debacb9ebfcc5f44295ac2cbfccefdc"
 ---
 # Minimum Rust And Dependency Gates
 

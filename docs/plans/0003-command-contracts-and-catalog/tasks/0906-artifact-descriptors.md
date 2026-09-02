@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/artifacts.jsonl
   - crates/slingshot-domain/tests/artifacts.rs
 status: done
-merged_as: "33a05c15cd58369c6a1d2203616255173e61d82d"
+merged_as: "640c2b52de76c3c7aca2cf50630d1fb095ebbaf3"
 ---
 # Artifact Descriptors
 

@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/tests/command_secret_scans.rs
   - crates/slingshot-test-support/fixtures/command-secret-scans/**
 status: done
-merged_as: "985e994f423fd92a5d604358cf06c0cc8aaa4eb0"
+merged_as: "59bd8cc8c7e1f668829ca00a4af8f42013a05875"
 ---
 # Scan Command Output For Secrets
 

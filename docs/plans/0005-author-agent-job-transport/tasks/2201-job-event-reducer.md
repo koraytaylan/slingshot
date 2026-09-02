@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/job-event-reducer.jsonl
   - crates/slingshot-agent-connection/tests/job_event_reducer.rs
 status: done
-merged_as: "a5f8a5d900ab5a7b5ec2178dac776fa59433e4e8"
+merged_as: "5d84a241b2fbea667831ff3b7510c6b8e4a971be"
 ---
 # Job Event Reducer
 

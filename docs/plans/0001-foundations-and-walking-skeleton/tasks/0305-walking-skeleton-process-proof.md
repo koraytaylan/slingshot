@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-command-line/tests/walking_skeleton.rs
   - "crates/slingshot-command-line/tests/fixtures/walking-skeleton/**"
 status: done
-merged_as: "8e5c4fbc8434886f48173579e1acdf400817ca87"
+merged_as: "a95fa0652f0d5d645d09e60709127a7a221dacfc"
 ---
 # Walking Skeleton Process Proof
 

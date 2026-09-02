@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-development/tests/dependency_direction.rs
   - "crates/slingshot-development/tests/fixtures/dependency-direction/**"
 status: done
-merged_as: "efc29c890d1b869817fd9d257fa0d5ca1c3267f4"
+merged_as: "960059897a0491ccd74ee3307a21f6567ef37969"
 ---
 # Dependency Direction Check
 

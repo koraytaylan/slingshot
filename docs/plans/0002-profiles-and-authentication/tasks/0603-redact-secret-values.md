@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-domain/src/secret_value.rs
   - crates/slingshot-domain/tests/secret_values.rs
 status: done
-merged_as: "767091eb785b2e1215ad3e04f8b319ad92ec2b5f"
+merged_as: "f4769144b03536ea779d61ebff9226b5d49797fe"
 ---
 # Redact Secret Values
 

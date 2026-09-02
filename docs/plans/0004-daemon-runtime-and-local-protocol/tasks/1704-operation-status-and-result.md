@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-daemon/src/operation_queries.rs
   - crates/slingshot-daemon/tests/operation_queries.rs
 status: done
-merged_as: "7846a052c0dad1f2e532fd6efac6d3d1eabe27f4"
+merged_as: "4b947a6dfcae3bd4c562f57996195b05e014ced3"
 ---
 # Operation Status And Result
 

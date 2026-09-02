@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/list_resource_mappings.rs
   - "crates/slingshot-domain/tests/fixtures/commands/list_resource_mappings/**"
 status: done
-merged_as: "b0be51285e14c99b39b5b90dbe397d97b1bc2bca"
+merged_as: "f7a356abc12e0d6fb065e195debd62b49b88d3ff"
 ---
 # List Resource Mappings
 

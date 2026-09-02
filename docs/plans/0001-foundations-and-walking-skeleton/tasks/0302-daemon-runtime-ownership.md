@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-daemon/src/ownership.rs
   - crates/slingshot-daemon/tests/runtime_ownership.rs
 status: done
-merged_as: "90bf78059f941c7b968a4da1b13b28dd233e9371"
+merged_as: "4ef6deed8be074d47ba1292ebcd42a675ad1bdb2"
 ---
 # Daemon Runtime Ownership
 

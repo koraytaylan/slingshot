@@ -19,7 +19,7 @@ touches:
   - crates/slingshot-domain/tests/workspace-capabilities/main.rs
   - crates/slingshot-domain/tests/workspace-capabilities/unicode_normalization.rs
 status: done
-merged_as: "329f151f9fc6195ecd5fb2a83fb9621d9ead9168"
+merged_as: "79edd0acda7adfd85891e827cb0127ca92214ce9"
 ---
 # Repository Path
 

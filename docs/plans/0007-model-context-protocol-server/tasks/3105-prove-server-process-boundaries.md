@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/tests/model_context_protocol_process_boundaries.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/process-boundaries/**
 status: done
-merged_as: "2efb9027383b804949b44dabe2cc1dc08c81a774"
+merged_as: "be072d1b0453f5bdc84abdf89471ec51773c8410"
 ---
 # Prove Server Process Boundaries
 

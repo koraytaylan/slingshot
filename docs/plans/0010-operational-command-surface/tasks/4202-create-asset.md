@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/create_asset.rs
   - "crates/slingshot-domain/tests/fixtures/commands/create_asset/**"
 status: done
-merged_as: "cef06b2be13779e36f2cb62f0ed61e4168ca9dfa"
+merged_as: "7e655ed4fdb2dd16c1a6367dd0661eb7ea63c02e"
 ---
 # Create an Asset
 

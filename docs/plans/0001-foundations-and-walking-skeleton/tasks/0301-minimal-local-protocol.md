@@ -17,7 +17,7 @@ touches:
   - crates/slingshot-local-protocol/tests/minimal_protocol.rs
   - "crates/slingshot-local-protocol/tests/fixtures/minimal-protocol/**"
 status: done
-merged_as: "081930c4e7a7bba075d6ac291a1547f685076ded"
+merged_as: "014b50bedff1050810c09c99c4d9213593d3fc67"
 ---
 # Minimal Local Protocol
 

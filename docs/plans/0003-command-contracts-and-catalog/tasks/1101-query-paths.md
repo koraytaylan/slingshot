@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/commands/query_paths/**
   - crates/slingshot-domain/tests/query_paths.rs
 status: done
-merged_as: "ae7c90545a935b658164b86122fb76e57f195fe9"
+merged_as: "96887356a351a66c6f322b0525bd1243f551fafe"
 ---
 # Query Paths
 

@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/operation_execution.rs
   - crates/slingshot-command-line/tests/model_context_protocol_operation_execution.rs
 status: done
-merged_as: "0e95766aefa7547027ec8585cd1a86a843909fee"
+merged_as: "fa7da842babb0d10c47e8af428e3e5e52c41a6e0"
 ---
 # Execute Operation Tools
 

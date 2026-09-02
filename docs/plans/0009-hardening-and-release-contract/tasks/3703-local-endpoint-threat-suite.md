@@ -17,7 +17,7 @@ touches:
   - crates/slingshot-test-support/src/local_endpoint_attacker.rs
   - crates/slingshot-development/tests/local_endpoint_threats.rs
 status: done
-merged_as: "25242a9238523701fbed40d07f4aea9ed12a1c52"
+merged_as: "0c75cb412e2c7a5ae949c24547493b72565a3fcf"
 ---
 # Local Endpoint Threat Suite
 

@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/tests/model_context_protocol_reference.rs
   - docs/MODEL_CONTEXT_PROTOCOL.md
 status: done
-merged_as: "aff815603ccaba37a4f4587ba29869197486e987"
+merged_as: "00b47276ffb95dbbf5f23a24a5499c1d0272e025"
 ---
 # Publish Model Context Protocol Reference
 

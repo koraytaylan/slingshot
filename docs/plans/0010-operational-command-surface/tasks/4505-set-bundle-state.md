@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/set_open_service_gateway_initiative_bundle_state.rs
   - "crates/slingshot-domain/tests/fixtures/commands/set_open_service_gateway_initiative_bundle_state/**"
 status: done
-merged_as: "6a823953ac8e4e7cf5a603243fec21ffc0a53361"
+merged_as: "af6c4d98344844fabe8e8cd542255a10225ffbac"
 ---
 # Set a Bundle State
 

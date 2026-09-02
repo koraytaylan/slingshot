@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/cancel_sling_job.rs
   - "crates/slingshot-domain/tests/fixtures/commands/cancel_sling_job/**"
 status: done
-merged_as: "5f8dabf0bc80ff1bf0a55195ce88cfc3957e9f9e"
+merged_as: "a5ee0899988228080f3f87492a88dcfccd106a2b"
 ---
 # Cancel a Sling Job
 

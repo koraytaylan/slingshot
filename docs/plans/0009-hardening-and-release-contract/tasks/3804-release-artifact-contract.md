@@ -28,7 +28,7 @@ touches:
   - crates/slingshot-development/tests/github_workflow_contract.rs
   - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
 status: done
-merged_as: "370955589c3018fb4ddd883328652134f7f3b7e8"
+merged_as: "2e2aa174fe2de645f0d5f5d7f246c3cd46c43645"
 ---
 # Release Artifact Contract
 

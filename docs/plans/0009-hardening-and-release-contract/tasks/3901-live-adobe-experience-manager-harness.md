@@ -16,7 +16,7 @@ touches:
   - crates/slingshot-command-line/tests/live_adobe_experience_manager.rs
   - "crates/slingshot-command-line/tests/fixtures/live-adobe-experience-manager/**"
 status: done
-merged_as: "20299d75693fc2c648a9a4375abdd3fc887bd7b1"
+merged_as: "9007dad4851f9edbddf234734f2c095e605fb760"
 ---
 # Live Adobe Experience Manager Harness
 

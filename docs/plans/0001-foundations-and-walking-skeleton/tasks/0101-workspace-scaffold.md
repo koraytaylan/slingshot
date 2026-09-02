@@ -17,7 +17,7 @@ touches:
   - crates/slingshot-development/tests/workspace_scaffold.rs
   - "crates/slingshot-development/tests/fixtures/workspace-scaffold/**"
 status: done
-merged_as: "cdf3f342b813276edc983c94f2c2418f9be669d6"
+merged_as: "6afb29648bc1ef9a858fb2a983ebd7c26a685262"
 ---
 # Workspace Scaffold
 

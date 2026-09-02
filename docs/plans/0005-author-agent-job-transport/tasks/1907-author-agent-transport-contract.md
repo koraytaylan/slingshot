@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/author_agent_transport_contract.rs
   - crates/slingshot-domain/tests/fixtures/author-agent-transport-contract/**
 status: done
-merged_as: "88d9f289bb1d59e363f4ffeadade9b2ea48e19c9"
+merged_as: "c0e7a5ac9d038a1569f5ec4a581309d40e50a13d"
 ---
 # Author-Agent Transport Contract
 

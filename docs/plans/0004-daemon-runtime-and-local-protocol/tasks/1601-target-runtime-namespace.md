@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-daemon/tests/runtime_namespace.rs
   - "crates/slingshot-daemon/tests/fixtures/runtime_namespace/**"
 status: done
-merged_as: "6765a85c4e4f693866f910c2d5e8a28de09f7d55"
+merged_as: "79a9e847e0d7c9aa389095dbfdf281eec2a7505f"
 ---
 # Target Runtime Namespace
 

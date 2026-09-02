@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - crates/slingshot-domain/tests/operational_listing.rs
 status: done
-merged_as: "306545d6beb9bf51b5b7963cf7b4c3e9b5cff945"
+merged_as: "1335f4b1aa066ff3f4a91fdb38ddff63746b47fc"
 ---
 # Operational Listing Page
 

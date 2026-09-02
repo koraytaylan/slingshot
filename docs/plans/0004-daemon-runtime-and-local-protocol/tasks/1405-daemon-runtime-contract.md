@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-domain/tests/daemon_runtime_contract.rs
   - "crates/slingshot-test-support/fixtures/daemon-runtime-contract/**"
 status: done
-merged_as: "8e4bd0551acc79b92efb3b216096da797bf4621e"
+merged_as: "e3f402d05f1152c3795f99df4827c04934c7c0a6"
 ---
 # Daemon Runtime Contract
 

@@ -7,7 +7,7 @@ The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file
 - **Root cause:** operators and automation otherwise need to construct local protocol requests themselves, and long-running jobs become unsafe when command parsing, daemon lifecycle, stream routing, and interruption behavior are implicit.
 - **Approach:** build a side-effect-free command tree, authenticate daemon-runtime, author-agent-transport, and canonical-JSON/`1.0.0`/limits/schema provenance, validate raw bytes before decoded shape and typed conversion, externalize complete over-inline maintenance bytes under an operation-free target-qualified association/URI without truncation, authenticate caller digest and read-start facts through target-and-identifier metadata lookup, make operation-artifact or maintenance-result publication the success commit, centralize daemon observation and lossless structured-failure rendering, and pin compiled-process ownership with exhaustive golden sessions and secret scans.
 - **Progress:** 20/20 tasks done; 0 blocked; 0 dropped.
-- **Integration:** `complete`; run `develop`; base `main` @ `8d286e88c06f91a1513834a4839ae36582212242`; validation base `95f1e298dbac69e2a37e48d338409fd7c1cf74d5`; mode `sequential`; final integration `1a592249115df391edac4d8f84fcb52262a3d36e`.
+- **Integration:** `complete`; run `develop`; base `main` @ `11c2e531d8a07a885321e7a09b1dccc623a733cf`; validation base `c69b1746debd9270e7ebea2b194f8f89461acd7f`; mode `sequential`; final integration `5e1b01614b98c7fc8d7993ee10bde26876a23c59`.
 - **Exceptions:**
   - **2502 needed the configuration crate the contract already allowed it.** Resolving a
     target is Plan 0002's selector and its closed diagnostic vocabulary; the dependency

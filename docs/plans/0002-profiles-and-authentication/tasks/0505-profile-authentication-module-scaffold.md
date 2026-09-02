@@ -38,7 +38,7 @@ touches:
   - crates/slingshot-development/tests/profile_authentication_module_scaffold.rs
   - "crates/slingshot-development/tests/fixtures/profile-authentication-module-scaffold/**"
 status: done
-merged_as: "520dc0bd3fdd02d6634178bfe85ca63bd6639168"
+merged_as: "d57afd030a22803346bef5f42b269d2cb0940dfe"
 ---
 # Profile And Authentication Module Scaffold
 
