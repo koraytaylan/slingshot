@@ -1,0 +1,65 @@
+#!/bin/sh
+# Write the changelog and this release's notes from the commit history.
+#
+# Every commit on a release branch carries a type and a scope naming the part of
+# the product the work landed in, so the notes are a grouping of the history
+# rather than a document anybody maintains by hand. cliff.toml holds the
+# grouping; this holds only the tool that applies it and where the two documents
+# land.
+#
+# The tool is pinned to one exact version, because a changelog assembled by a
+# different tool is a different document. It is deliberately not one of the
+# repository tools the local gate verifies: nothing a developer runs needs it,
+# and a gate that demanded it would refuse on every machine that had never cut a
+# release. An installed copy that already reports the pinned version is used as
+# it is, so a re-run of a release does not compile it again.
+
+set -eu
+
+DESTINATION=${1:-}
+CONFIGURATION=cliff.toml
+CHANGELOG_TOOL=git-cliff
+CHANGELOG_TOOL_VERSION=2.14.1
+TAG_REFERENCE=tag
+CHANGELOG=CHANGELOG.md
+RELEASE_NOTES=RELEASE_NOTES.md
+
+report_stage() {
+    printf '\n== %s ==\n' "$1"
+}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+reports_the_pinned_version() {
+    "$CHANGELOG_TOOL" --version 2>/dev/null \
+        | grep -qF "$CHANGELOG_TOOL $CHANGELOG_TOOL_VERSION"
+}
+
+[ -n "$DESTINATION" ] || report_refusal 'name the directory to write the documents to'
+[ -f "$CONFIGURATION" ] || report_refusal "$CONFIGURATION is not committed"
+
+report_stage 'the pinned changelog tool'
+if reports_the_pinned_version; then
+    printf 'verified %s %s\n' "$CHANGELOG_TOOL" "$CHANGELOG_TOOL_VERSION"
+else
+    cargo install --locked "$CHANGELOG_TOOL" --version "$CHANGELOG_TOOL_VERSION"
+fi
+reports_the_pinned_version \
+    || report_refusal "no tool here reports $CHANGELOG_TOOL $CHANGELOG_TOOL_VERSION"
+
+mkdir -p "$DESTINATION"
+
+report_stage 'the changelog over the whole history'
+"$CHANGELOG_TOOL" --output "$DESTINATION/$CHANGELOG"
+
+report_stage 'the notes for what this run publishes'
+if [ "${SLINGSHOT_RELEASE_REFERENCE_TYPE:-}" = "$TAG_REFERENCE" ]; then
+    "$CHANGELOG_TOOL" --latest --strip header --output "$DESTINATION/$RELEASE_NOTES"
+else
+    "$CHANGELOG_TOOL" --unreleased --strip header --output "$DESTINATION/$RELEASE_NOTES"
+fi
+
+printf '\n== %s and %s are written to %s ==\n' "$CHANGELOG" "$RELEASE_NOTES" "$DESTINATION"

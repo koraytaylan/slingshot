@@ -6,7 +6,8 @@
 # this run is bound to; the cache is prepared once, over the network, on
 # purpose; every row then builds twice offline from that cache and compares
 # bytes; and only the one attestation job holds a permission beyond reading
-# content.
+# content. The notes are assembled from the history in parallel with all of it,
+# because nothing they say depends on how a build turns out.
 name: release
 on:
   workflow_dispatch:
@@ -30,6 +31,27 @@ jobs:
           SLINGSHOT_RELEASE_REFERENCE_TYPE: ${{ github.ref_type }}
           SLINGSHOT_RELEASE_TAG: ${{ github.ref_name }}
         run: scripts/verify_release_version
+  release-notes:
+    name: the changelog and this release's notes
+    needs: release-version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          # The notes are the whole history grouped, and the tags are what tells
+          # one release from the one before it. A shallow checkout has neither.
+          fetch-depth: 0
+      - name: write the changelog and the notes from the history
+        env:
+          SLINGSHOT_RELEASE_REFERENCE_TYPE: ${{ github.ref_type }}
+        run: scripts/build_release_notes "$RUNNER_TEMP/notes"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/notes
   rustsec-owner-review:
     name: the same-release advisory review
     needs: release-version
