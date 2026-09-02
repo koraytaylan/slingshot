@@ -1,0 +1,44 @@
+#!/bin/sh
+# Check that the tag a release runs from names the version it publishes.
+#
+# A tag and a manifest are two places the same version is written, so they can
+# disagree quietly: the archives would carry one number while the reference a
+# reader cites carries another, and nothing notices until somebody downloads the
+# wrong thing. This refuses that before a single row builds, because every later
+# job in this release is expensive and none of them would catch it.
+#
+# A run started by hand names no tag. There is then nothing to disagree with, so
+# this reports the version the run publishes and stops there.
+
+set -eu
+
+MANIFEST=Cargo.toml
+TAG_REFERENCE=tag
+TAG_PREFIX=v
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+[ -f "$MANIFEST" ] || report_refusal "$MANIFEST is not here"
+
+DECLARED=$(grep '^version = ' "$MANIFEST" | head -n 1 | sed 's/^version = "//; s/"$//')
+[ -n "$DECLARED" ] || report_refusal "$MANIFEST declares no workspace version"
+
+REFERENCE_TYPE=${SLINGSHOT_RELEASE_REFERENCE_TYPE:-}
+if [ "$REFERENCE_TYPE" != "$TAG_REFERENCE" ]; then
+    printf 'no tag names this run; it publishes %s\n' "$DECLARED"
+    exit 0
+fi
+
+RELEASE_TAG=${SLINGSHOT_RELEASE_TAG:-}
+[ -n "$RELEASE_TAG" ] || report_refusal 'the provider reported a tag and then named none'
+
+TAGGED=${RELEASE_TAG#"$TAG_PREFIX"}
+[ "$TAGGED" != "$RELEASE_TAG" ] \
+    || report_refusal "$RELEASE_TAG does not begin with $TAG_PREFIX"
+[ "$TAGGED" = "$DECLARED" ] \
+    || report_refusal "$RELEASE_TAG names $TAGGED and the workspace declares $DECLARED, so one of them is untrue"
+
+printf 'the tag and the workspace both name %s\n' "$DECLARED"
