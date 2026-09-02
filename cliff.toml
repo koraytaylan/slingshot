@@ -41,6 +41,8 @@ footer = ""
 
 [git]
 conventional_commits = true
+# Which tags name a release, so the notes for one can be asked for by itself.
+tag_pattern = "v[0-9].*"
 filter_unconventional = false
 protect_breaking_commits = true
 # A commit that matches no parser below is not an entry, so the groups are the
