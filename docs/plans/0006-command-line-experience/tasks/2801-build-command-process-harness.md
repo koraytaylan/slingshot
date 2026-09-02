@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-test-support/tests/process_harness.rs
   - "crates/slingshot-test-support/tests/fixtures/process-harness/**"
 status: done
-merged_as: "f73b880bf55180d13a412e3756926c2083f02ed6"
+merged_as: "4348ae0659c0d1b6259feb05d875b961f3b7fc5d"
 ---
 # Build Command Process Harness
 

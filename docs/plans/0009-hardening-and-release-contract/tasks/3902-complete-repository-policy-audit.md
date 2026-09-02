@@ -21,7 +21,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
   - "crates/slingshot-development/tests/fixtures/source-policy/**"
 status: done
-merged_as: "5232f2ba08500dbeb1dafd90e58e502df76d8461"
+merged_as: "79b9fb896bdeb56156a6e89a8b4c69bd3f47e486"
 ---
 # Complete Repository Policy Audit
 

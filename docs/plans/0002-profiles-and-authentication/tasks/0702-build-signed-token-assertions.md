@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-agent-connection/tests/token_assertions.rs
   - crates/slingshot-test-support/fixtures/token-assertions/**
 status: done
-merged_as: "7b30fa68ae683d739b52c92138a22df49f92e7fa"
+merged_as: "76673afc60bb933ff81e8c0d9c8ac15352f7f092"
 ---
 # Build Signed Token Assertions
 

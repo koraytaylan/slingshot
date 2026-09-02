@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-daemon/tests/recovery_and_event_supervisor.rs
   - crates/slingshot-daemon/tests/operation_maintenance.rs
 status: done
-merged_as: "d8ca6e7faddd50ce887ee6fe65ed4314827e248d"
+merged_as: "f8cd0f352cc5a37361747d0b5995d68fd21c03b9"
 ---
 # Recovery and Event Supervisor
 

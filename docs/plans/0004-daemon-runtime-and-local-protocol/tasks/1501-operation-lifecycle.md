@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-domain/tests/operation_lifecycle.rs
   - "crates/slingshot-domain/tests/fixtures/operation_lifecycle/**"
 status: done
-merged_as: "1c791c7700912dfad1d088c31ebd389aee20eb74"
+merged_as: "23f8a5b41715fb7b493ba89cdfa20cdc34cd8258"
 ---
 # Operation Lifecycle
 

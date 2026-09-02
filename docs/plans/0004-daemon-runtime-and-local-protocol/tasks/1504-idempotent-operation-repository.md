@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-storage/tests/operation_repository/main.rs
   - crates/slingshot-storage/tests/operation_repository/recovery.rs
 status: done
-merged_as: "645aa971b8b6038f96a7f6734dc227b47a93e4b4"
+merged_as: "7b743b648d6f6eb83b7d80ae1a770bcb08b15272"
 ---
 # Idempotent Operation Repository
 

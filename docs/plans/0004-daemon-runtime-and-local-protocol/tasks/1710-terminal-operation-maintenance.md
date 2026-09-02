@@ -16,7 +16,7 @@ touches:
   - crates/slingshot-storage/src/maintenance.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
 status: done
-merged_as: "36ea21ce26ea604d9d6af5f06d32f5cb98ce522f"
+merged_as: "7072f6bf8ea972e2c989f5dbe7f9d4e88bf2fb67"
 ---
 # Terminal Operation Maintenance
 

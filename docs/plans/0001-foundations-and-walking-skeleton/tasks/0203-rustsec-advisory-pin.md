@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-development/tests/rustsec_advisory_pin.rs
   - "crates/slingshot-development/tests/fixtures/rustsec-advisory-pin/**"
 status: done
-merged_as: "a48e743cdc5c8597fd16809924ef813adf90c7c2"
+merged_as: "4d3a6e1c3ada6f6d76c5fff2ff3e5b34f4096805"
 ---
 # RustSec Advisory Pin
 

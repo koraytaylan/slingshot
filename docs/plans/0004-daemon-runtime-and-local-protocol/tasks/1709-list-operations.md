@@ -17,7 +17,7 @@ touches:
   - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
 status: done
-merged_as: "b8e22f149de4d1b3a1e544985d5b0ed2550cdb57"
+merged_as: "bf633111cc3c69909a5da70958d2e41e0d6918c3"
 ---
 # List Operations
 

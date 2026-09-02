@@ -14,7 +14,7 @@ touches:
   - policy/workspace-capabilities.toml
   - crates/slingshot-domain/tests/resource_mutation.rs
 status: done
-merged_as: "306545d6beb9bf51b5b7963cf7b4c3e9b5cff945"
+merged_as: "1335f4b1aa066ff3f4a91fdb38ddff63746b47fc"
 ---
 # Resource Mutation Results and Inline Binary
 

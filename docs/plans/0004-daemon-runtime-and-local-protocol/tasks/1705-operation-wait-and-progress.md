@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-daemon/src/operation_wait.rs
   - crates/slingshot-daemon/tests/operation_wait.rs
 status: done
-merged_as: "4b2b75641e31c1ddb092988db287e0e9df33eee8"
+merged_as: "f8b59d785f2b1a6dff4609354f463316ca306974"
 ---
 # Operation Wait And Progress
 

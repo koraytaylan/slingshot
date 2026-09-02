@@ -13,7 +13,7 @@ touches:
   - ARCHITECTURE.md
   - crates/slingshot-development/tests/product_documentation.rs
 status: done
-merged_as: "1c372afe92a5486b7f41ef2a9221280c8ec4d539"
+merged_as: "35a2eddfabc9b81367dc4bcbc4d462251aa6e868"
 ---
 # Project Documentation
 

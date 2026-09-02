@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-command-line/tests/output_rendering.rs
   - "crates/slingshot-command-line/tests/fixtures/machine-outcome-envelope/**"
 status: done
-merged_as: "921d79956679d22813edbfe743948a9e3b328769"
+merged_as: "706c1662295b60c243ccc7749f22add806e8df17"
 ---
 # Render Human And Machine Output
 

@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-daemon/src/local_server.rs
   - crates/slingshot-daemon/tests/local_server.rs
 status: done
-merged_as: "0e1157fc60d09c5d7a528bd9b5dacff7f2923253"
+merged_as: "310493c8f3a24d3d4189be0a1c91568f5ee1f2cd"
 ---
 # Daemon Local Server
 

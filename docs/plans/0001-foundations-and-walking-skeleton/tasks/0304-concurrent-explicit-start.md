@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-command-line/src/main.rs
   - crates/slingshot-command-line/tests/explicit_daemon_start.rs
 status: done
-merged_as: "3b1576d1a83e432277bbfd5533032def993245b9"
+merged_as: "e272b641efa12c737a2a0969a3e65fa753b6f18a"
 ---
 # Concurrent Explicit Start
 

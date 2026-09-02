@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/src/target_selection.rs
   - crates/slingshot-command-line/tests/target_selection.rs
 status: done
-merged_as: "1e029a33d7e47b7c09786d94f87400b1ec58a7dd"
+merged_as: "41a8db9fee7a2ff4abe5de2572697549eac149d1"
 ---
 # Resolve Command Targets
 

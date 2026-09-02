@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/finite-state-machine-process-harness/**
   - crates/slingshot-development/tests/finite_state_machine_process_harness.rs
 status: done
-merged_as: "aa2b7bce2f8a9bc66a36f7b3a41a505c0e0c0982"
+merged_as: "028f9fd942d6e2c2dce1d894f0ea5f43e1a3bcdf"
 ---
 # FSM Process Harness
 

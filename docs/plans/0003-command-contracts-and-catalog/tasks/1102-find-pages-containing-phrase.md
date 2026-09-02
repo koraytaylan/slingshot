@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-domain/tests/find_pages_containing_phrase.rs
   - crates/slingshot-domain/src/command/query_paths.rs
 status: done
-merged_as: "76c61f511a35cf39adf2c6922084fb14b7b46fe5"
+merged_as: "803f73264c8bd02335fd48c268a9a513111fb690"
 ---
 # Find Pages Containing a Phrase
 

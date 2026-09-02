@@ -14,7 +14,7 @@ touches:
   - scripts/run_fuzz_target
   - crates/slingshot-development/tests/configuration_fuzz_corpus.rs
 status: done
-merged_as: "ff3a0ed88a622ddee0015c121377fdd4a86b4ae0"
+merged_as: "80c8d5349287dbd581411ac5b31d4787dc48d4a3"
 ---
 # Configuration Parser Fuzzing
 

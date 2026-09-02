@@ -17,7 +17,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/protocol-compatibility/snapshot.json
   - examples/finite-state-machine/slingshot.handlers.template.json
 status: done
-merged_as: "80a50a59288f44d43e8328e045b303907a72defc"
+merged_as: "2ca4b05987bed0bc33874600e4d7939451e46d86"
 ---
 # Reference and Compatibility
 

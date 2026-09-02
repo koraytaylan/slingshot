@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/tests/command_reference.rs
   - docs/COMMANDS.md
 status: done
-merged_as: "1110ada1c74ecf96f7b03074b70d55b5550fc035"
+merged_as: "a64850ea1834f453997612886e745d4db7f1b18c"
 ---
 # Publish Command Reference
 

@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/finite-state-machine-success/**
   - crates/slingshot-development/tests/finite_state_machine_success.rs
 status: done
-merged_as: "337ad059b116f818fedc4fa4fb911bc1a5c56d4a"
+merged_as: "0e8315ab2903d2fbf5471861148407bbefd36e3b"
 ---
 # Successful Workflow Command
 

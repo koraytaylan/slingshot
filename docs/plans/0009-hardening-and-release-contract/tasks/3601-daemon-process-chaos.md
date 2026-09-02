@@ -28,7 +28,7 @@ touches:
   - crates/slingshot-development/src/main.rs
   - crates/slingshot-development/tests/daemon_process_chaos.rs
 status: done
-merged_as: "93a687d79b510a5a9952d6fe088f8ece85783d33"
+merged_as: "381d3ac61992b36afbbc51fe13490ca7e220b535"
 ---
 # Daemon Process Chaos
 

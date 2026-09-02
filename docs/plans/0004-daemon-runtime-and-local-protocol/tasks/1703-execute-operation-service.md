@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-daemon/tests/operation_submission.rs
   - crates/slingshot-development/tests/operation_submission_process.rs
 status: done
-merged_as: "ebc6914101ae72e75649a536b0ec77410bd8dab6"
+merged_as: "70d16a7ff0cba081c5c7b795c4aa3ab57f499d41"
 ---
 # Execute Operation Service
 

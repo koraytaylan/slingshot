@@ -15,7 +15,7 @@ touches:
   - crates/slingshot-command-line/src/operation_submission.rs
   - crates/slingshot-command-line/tests/operation_submission.rs
 status: done
-merged_as: "90edc7e5969d3e67675b1c7d2c7f30af99db938d"
+merged_as: "02b2a0a209e4519bb07db00bb5e07ae88a47ac37"
 ---
 # Submit And Detach Operations
 

@@ -52,7 +52,7 @@ touches:
   - crates/slingshot-development/tests/workspace_module_map.rs
   - "crates/slingshot-development/tests/fixtures/workspace-module-map/**"
 status: done
-merged_as: "9e30c149f64762b0be1020b423eafe8ac2284fd0"
+merged_as: "f6763c5c6995172e222fd59c952fc769189f3c9d"
 ---
 # Workspace Module Map
 

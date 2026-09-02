@@ -18,7 +18,7 @@ touches:
   - crates/slingshot-agent-protocol/tests/fixtures/agent-store-and-logical-execution/**
   - schemas/agent-protocol/job/**
 status: done
-merged_as: "40d9e106ea6a9ae11fa72fc0b2a3c03272ab6379"
+merged_as: "ab3c641805a880f6317f659c6d4a94abe2784da1"
 ---
 # Agent Store and Logical Execution Contract
 

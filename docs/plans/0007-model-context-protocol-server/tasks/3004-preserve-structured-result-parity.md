@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/result_projection.rs
   - crates/slingshot-command-line/tests/model_context_protocol_results.rs
 status: done
-merged_as: "4a5fad88020c3318c9dd61494514d8900563bad6"
+merged_as: "409644e37ddcd0733a20c1d6850ec932dcd4a131"
 ---
 # Preserve Structured Result Parity
 

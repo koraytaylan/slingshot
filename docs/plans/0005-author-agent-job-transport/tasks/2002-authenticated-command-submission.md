@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-agent-connection/tests/fixtures/command-submission/**
   - crates/slingshot-agent-connection/tests/command_submission.rs
 status: done
-merged_as: "8f90657f9736c483675bf361f6ef06ca30557457"
+merged_as: "48b8c80db5954d79d41955da86ddaa8bb6da20dc"
 ---
 # Authenticated Command Submission
 

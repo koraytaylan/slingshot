@@ -22,7 +22,7 @@ touches:
   - "crates/slingshot-development/tests/fixtures/release-attestation-policy/**"
   - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
 status: done
-merged_as: "d3d3f5631552e355bb32ddbeb9800dab01d0209a"
+merged_as: "159e414de56dcc2ecddcec4b5544642d44ccb064"
 ---
 # Owner-Confirmed Native Evidence Trust
 

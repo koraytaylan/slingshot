@@ -53,7 +53,7 @@ touches:
   - "crates/slingshot-development/tests/fixtures/daemon-runtime-module-scaffold/**"
   - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
 status: done
-merged_as: "8d86a5f0792c4f16f2ba80175f9d39f7f661db96"
+merged_as: "17bac5ae1667a27b39c07bd307c2dca207d2c5f0"
 ---
 # Daemon Runtime Module Scaffold
 

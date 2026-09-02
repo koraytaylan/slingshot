@@ -14,7 +14,7 @@ touches:
   - crates/slingshot-development/tests/workspace_capability_inventory.rs
   - "crates/slingshot-development/tests/fixtures/workspace-capability-inventory/**"
 status: done
-merged_as: "b53dd61dd50b6d967f0dfdbdd73964242841bd2a"
+merged_as: "a7061633e8dad8db834070c7f6eb2ec44be24060"
 ---
 # Workspace Capability Inventory
 

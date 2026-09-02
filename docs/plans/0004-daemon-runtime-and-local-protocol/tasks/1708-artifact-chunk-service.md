@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-daemon/tests/artifact_transfer.rs
   - "crates/slingshot-daemon/tests/fixtures/artifact-transfer/**"
 status: done
-merged_as: "0ebe98c93c6f7542eb3e2a84d7553c7fd3ac9b1b"
+merged_as: "4319305f4ea46a41dcec83598d2d153a57ee2e11"
 ---
 # Artifact Chunk Service
 

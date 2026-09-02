@@ -39,7 +39,7 @@ touches:
   - crates/slingshot-command-line/tests/command_line_module_scaffold.rs
   - "crates/slingshot-command-line/tests/fixtures/command-line-module-scaffold/**"
 status: done
-merged_as: "cb6cc3e7f3d2bb6c56eefbd8c8912af87d761edc"
+merged_as: "56bc2315b9f5c2538d9ba0c280f9ecae4f9b9697"
 ---
 # Command-Line Module Scaffold
 

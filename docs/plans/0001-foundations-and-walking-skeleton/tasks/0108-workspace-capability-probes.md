@@ -16,7 +16,7 @@ touches:
   - crates/slingshot-development/tests/workspace_capability_probes.rs
   - "crates/slingshot-development/tests/fixtures/workspace-capability-probes/**"
 status: done
-merged_as: "329c37209e48d127d4dce3511e8175bf83af9298"
+merged_as: "c830f500e50c9c8bb1dc47df711fdac6218e0c3b"
 ---
 # Workspace Capability Probes
 

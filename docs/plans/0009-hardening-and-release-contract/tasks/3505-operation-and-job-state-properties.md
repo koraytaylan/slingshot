@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-development/tests/fixtures/workspace-capability-inventory/consumer-capabilities.toml
   - "crates/slingshot-development/tests/fixtures/state-properties/**"
 status: done
-merged_as: "a607d6ad80baac460917fc68989f16b1a5beb0db"
+merged_as: "6d3dd105b8204db366049b0d56d84a9dc4349fea"
 ---
 # Operation And Job State Properties
 

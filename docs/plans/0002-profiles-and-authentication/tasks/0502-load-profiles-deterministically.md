@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-test-support/fixtures/profile-directories/duplicate-name/**
   - crates/slingshot-test-support/fixtures/profile-directories/ordered/**
 status: done
-merged_as: "ae71b0991e0699cef41decd7301ddc5b5c246c24"
+merged_as: "2337eba9382210d669adb801d826f9da92251d55"
 ---
 # Load Profiles Deterministically
 

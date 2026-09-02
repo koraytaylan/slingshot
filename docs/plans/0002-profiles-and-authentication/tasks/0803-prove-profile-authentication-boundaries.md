@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-development/tests/profile_authentication_boundaries.rs
   - docs/CONFIGURATION.md
 status: done
-merged_as: "3639385339740e4c76fd27387588595cef0475c1"
+merged_as: "b03cc281c93ea5ef9bd6a33012bf03338a3e2822"
 ---
 # Prove Profile Authentication Boundaries
 

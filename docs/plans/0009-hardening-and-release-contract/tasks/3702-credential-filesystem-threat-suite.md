@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-configuration/src/testing/credential_filesystem.rs
   - crates/slingshot-development/tests/credential_filesystem_threats.rs
 status: done
-merged_as: "a0266705e28991bbe46d62f2946330fa76372e6c"
+merged_as: "dff24aa9cca33bcd9321381428cd7d7eb4fbeffb"
 ---
 # Credential Filesystem Threat Suite
 

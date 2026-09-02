@@ -11,7 +11,7 @@ touches:
   - "crates/slingshot-development/tests/fixtures/configuration-compatibility/**"
   - "crates/slingshot-development/tests/fixtures/storage-compatibility/**"
 status: done
-merged_as: "80668f0f59b9bc49a1c43d7e30d45ef8392680f3"
+merged_as: "c60ca329c6785e095e9632b8afe50a4456a35923"
 ---
 # Configuration And Storage Compatibility
 

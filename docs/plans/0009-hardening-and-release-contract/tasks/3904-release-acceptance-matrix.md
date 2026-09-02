@@ -29,7 +29,7 @@ touches:
   - crates/slingshot-development/tests/github_workflow_contract.rs
   - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
 status: done
-merged_as: "7f47ab20bcf29299eef285a2b424ac0ddde53394"
+merged_as: "c728bb6791209bd39d47f088c81d168deec76787"
 ---
 # Release Acceptance Matrix
 

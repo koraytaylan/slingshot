@@ -15,7 +15,7 @@ touches:
   - deny.toml
   - scripts/quality
 status: done
-merged_as: "3b374c10adb78bacdec98ebe5f8fc37dbc32a643"
+merged_as: "6c8a7d98064d6256f1339064e50c772e3bd13257"
 ---
 # Quality Automation
 
