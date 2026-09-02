@@ -129,10 +129,19 @@ jobs:
           SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
         run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        id: provenance
         with:
           subject-path: ${{ runner.temp }}/release/*.tar.gz
           predicate-type: https://slsa.dev/provenance/v1
           predicate-path: ${{ runner.temp }}/release/evidence.toml
+      # The bundle is what lets somebody authenticate this archive without
+      # asking anyone. Left where the action wrote it, it would be reachable
+      # only by asking the provider for it later, which is the one thing
+      # offline verification must not have to do.
+      - name: keep the attestation beside what it attests
+        env:
+          SLINGSHOT_ATTESTATION_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: cp "$SLINGSHOT_ATTESTATION_BUNDLE" "$RUNNER_TEMP/release/attestation.jsonl"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: release-${{ matrix.triple }}
