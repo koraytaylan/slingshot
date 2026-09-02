@@ -1,0 +1,97 @@
+#!/bin/sh
+# Publish a release the operator has verified, from the operator's machine.
+#
+# Nothing in this repository's automation can publish. A job that could create a
+# release could also push to a branch, because the provider has no permission
+# that separates the two, so the release workflow ends at evidence and this is
+# the step that turns evidence into something a stranger can download.
+#
+# Every archive is authenticated before anything is uploaded, offline, against
+# the trust root committed here. The digest the rows built from is named by the
+# caller rather than read out of the evidence: a verifier that took its
+# expectations from the thing it verifies is not checking anything. The tag is
+# held to the version the workspace declares by the same script the release
+# workflow runs, so that rule lives in one place.
+#
+# The archives and their attestation bundles are published together. A bundle
+# nobody can reach is a claim nobody can check.
+
+set -eu
+
+# An option and the value beside it are two arguments.
+OPTION_AND_VALUE=2
+
+RELEASE_TAG=''
+EVIDENCE_DIRECTORY=''
+CACHE_DIGEST=''
+MANIFEST=Cargo.toml
+NOTES_PATH=release-notes/RELEASE_NOTES.md
+ARCHIVE_SUFFIX=.tar.gz
+BUNDLE_NAME=attestation.jsonl
+EVIDENCE_NAME=evidence.toml
+TAG_REFERENCE=tag
+
+report_stage() {
+    printf '\n== %s ==\n' "$1"
+}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --tag) RELEASE_TAG=$2; shift "$OPTION_AND_VALUE" ;;
+        --evidence) EVIDENCE_DIRECTORY=$2; shift "$OPTION_AND_VALUE" ;;
+        --cache-sha256) CACHE_DIGEST=$2; shift "$OPTION_AND_VALUE" ;;
+        *) report_refusal "$1 is not an option this publisher takes" ;;
+    esac
+done
+
+[ -n "$RELEASE_TAG" ] || report_refusal 'name the tag to publish'
+[ -n "$EVIDENCE_DIRECTORY" ] || report_refusal 'name the directory the run was downloaded to'
+[ -n "$CACHE_DIGEST" ] || report_refusal 'name the cache digest every row built from'
+[ -d "$EVIDENCE_DIRECTORY" ] || report_refusal "$EVIDENCE_DIRECTORY is not a directory"
+[ -f "$MANIFEST" ] || report_refusal "$MANIFEST is not here"
+
+NOTES=$EVIDENCE_DIRECTORY/$NOTES_PATH
+[ -f "$NOTES" ] || report_refusal "$NOTES is not among the downloaded artifacts"
+
+REPOSITORY=$(sed -n 's/^repository = "\(.*\)"$/\1/p' "$MANIFEST" | head -n 1)
+[ -n "$REPOSITORY" ] || report_refusal "$MANIFEST names no repository to publish to"
+
+report_stage 'the version this tag publishes'
+SLINGSHOT_RELEASE_REFERENCE_TYPE=$TAG_REFERENCE
+SLINGSHOT_RELEASE_TAG=$RELEASE_TAG
+export SLINGSHOT_RELEASE_REFERENCE_TYPE SLINGSHOT_RELEASE_TAG
+scripts/verify_release_version
+
+SOURCE_COMMIT=$(git rev-parse "$RELEASE_TAG^{commit}")
+
+report_stage 'every archive, against the reviewed root'
+set --
+for ROW in "$EVIDENCE_DIRECTORY"/*; do
+    [ -d "$ROW" ] || continue
+    ARCHIVE=$(find "$ROW" -maxdepth 1 -type f -name "*$ARCHIVE_SUFFIX" | head -n 1)
+    [ -n "$ARCHIVE" ] || continue
+    scripts/verify_release_artifacts \
+        --archive "$ARCHIVE" \
+        --attestation-bundle "$ROW/$BUNDLE_NAME" \
+        --evidence "$ROW/$EVIDENCE_NAME" \
+        --source-commit "$SOURCE_COMMIT" \
+        --cache-sha256 "$CACHE_DIGEST"
+    set -- "$@" "$ARCHIVE" "$ROW/$BUNDLE_NAME"
+done
+[ "$#" -gt 0 ] || report_refusal "no release archive is under $EVIDENCE_DIRECTORY"
+
+report_stage "publishing $RELEASE_TAG"
+if gh release view "$RELEASE_TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
+    gh release edit "$RELEASE_TAG" --repo "$REPOSITORY" --notes-file "$NOTES"
+    gh release upload "$RELEASE_TAG" --repo "$REPOSITORY" --clobber "$@"
+else
+    gh release create "$RELEASE_TAG" --repo "$REPOSITORY" \
+        --title "slingshot $RELEASE_TAG" --notes-file "$NOTES" --verify-tag "$@"
+fi
+
+printf '\n== %s is published, with every archive it was verified from ==\n' "$RELEASE_TAG"
