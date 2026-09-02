@@ -1,0 +1,61 @@
+# How a release changelog is generated from this repository's history.
+#
+# Every commit on a release branch is a conventional commit whose scope names
+# the part of the product the work landed in, so the changelog groups by type
+# and then by scope and needs no hand-written entry.
+#
+# The plan bookkeeping commits - the ones that record a task landing or move a
+# plan status - are the largest group on any branch here and none of them ship
+# anything, so they are dropped. They are dropped by scope rather than by type,
+# because a documentation commit that publishes a product reference is a real
+# entry and must survive.
+#
+# Generate a release with the version it is tagged as:
+#
+#     git cliff --tag v0.1.0 --output CHANGELOG.md
+
+[changelog]
+header = """
+# Changelog
+
+Every entry is one commit on the branch that produced this release. Scopes name
+the part of the product the work landed in.
+"""
+# Each group opens with a comment carrying its position, so the sections appear
+# in the order a reader wants them rather than the alphabetical order grouping
+# would otherwise impose. The template strips the comment before printing.
+#
+# Leading whitespace is significant: it is what nests each entry under its
+# scope, so the rendered body is not trimmed.
+body = """
+
+## {% if version %}{{ version | trim_start_matches(pat="v") }} - {{ timestamp | date(format="%Y-%m-%d") }}{% else %}Unreleased{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+
+{% for scope, scoped in commits | group_by(attribute="scope") %}- **{{ scope }}**
+{% for commit in scoped %}  - {{ commit.message | upper_first }}
+{% endfor %}{% endfor %}{% endfor %}"""
+trim = false
+footer = ""
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+protect_breaking_commits = true
+# A commit that matches no parser below is not an entry, so the groups are the
+# whole vocabulary rather than a subset of it.
+filter_commits = true
+topo_order = false
+sort_commits = "oldest"
+
+commit_parsers = [
+  { field = "scope", pattern = "^plan$", skip = true },
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Bug fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^refactor", group = "<!-- 3 -->Refactoring" },
+  { message = "^docs", group = "<!-- 4 -->Documentation" },
+  { message = "^test", group = "<!-- 5 -->Testing" },
+  { message = "^chore", group = "<!-- 6 -->Housekeeping" },
+]
