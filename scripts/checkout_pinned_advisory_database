@@ -31,7 +31,10 @@ COMMIT=$(grep '^commit = ' "$PIN" | sed 's/^commit = "//; s/"$//')
 printf 'this command reaches the network to fetch one pinned snapshot\n'
 git init --quiet "$DESTINATION"
 git -C "$DESTINATION" remote add origin "$ORIGIN"
-git -C "$DESTINATION" fetch --quiet --depth 1 origin "$COMMIT"
+# Not shallow. The pin is authenticated against a checkout, and a checkout
+# that cannot answer for its own history is one the verifier refuses, however
+# exactly its single commit matches.
+git -C "$DESTINATION" fetch --quiet origin "$COMMIT"
 git -C "$DESTINATION" checkout --quiet "$COMMIT"
 
 OBSERVED=$(git -C "$DESTINATION" rev-parse HEAD)

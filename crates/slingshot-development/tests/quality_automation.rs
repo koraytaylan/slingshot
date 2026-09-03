@@ -31,7 +31,7 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "cargo clippy $CARGO_GATE_SCOPE -- -D warnings",
     "cargo test $CARGO_GATE_SCOPE",
     "RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --all-features --no-deps",
-    "shellcheck --shell=sh scripts/quality",
+    "shellcheck --shell=sh scripts/*",
     "dependency-direction",
     "source-policy",
     "rustsec-advisory-pin",
@@ -134,6 +134,12 @@ fn the_gate_runs_every_required_command_over_the_whole_graph() {
     }
     assert!(!gate.contains("cargo update"), "the gate never changes the resolved graph");
     assert!(!gate.contains("git fetch"), "the gate never fetches");
+    // A stage that names one script reports on the file a reader has just read
+    // and leaves the release path unlinted, so naming one is itself the defect.
+    assert!(
+        !gate.contains("shellcheck --shell=sh scripts/quality"),
+        "the scripts stage lints one script rather than every script"
+    );
 }
 
 #[test]
