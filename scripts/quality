@@ -98,7 +98,10 @@ run_rust_gates() {
 
 run_repository_gates() {
     report_stage 'scripts'
-    shellcheck --shell=sh scripts/quality
+    # Every script here, not just this one. A gate that lints itself and nothing
+    # else reports on the file least likely to be wrong, and the release path is
+    # made of the others.
+    shellcheck --shell=sh scripts/*
     report_stage 'dependency direction'
     cargo run --locked --quiet --package slingshot-development -- dependency-direction
     report_stage 'source policy'

@@ -32,8 +32,12 @@ ADVISORY_TREE=$(grep '^tree = ' "$PIN" | sed 's/^tree = "//; s/"$//')
 ENVIRONMENT=$(grep '^environment = ' "$AUTHORITY" | sed 's/^environment = "//; s/"$//')
 POLICY_DIGEST=$(sha256sum "$AUTHORITY" | cut -d' ' -f1)
 
-printf '{"format":"slingshot.rustsec-owner-review-record/1",' > "$DESTINATION"
-printf '"advisory_commit":"%s","advisory_tree":"%s",' "$ADVISORY_COMMIT" "$ADVISORY_TREE" >> "$DESTINATION"
-printf '"environment":"%s","reviewer_policy_sha256":"%s",' "$ENVIRONMENT" "$POLICY_DIGEST" >> "$DESTINATION"
-printf '"source_commit":"%s","source_tree":"%s",' "$SLINGSHOT_REVIEW_SOURCE_COMMIT" "$SOURCE_TREE" >> "$DESTINATION"
-printf '"run":"%s","attempt":"%s"}\n' "$SLINGSHOT_REVIEW_RUN" "$SLINGSHOT_REVIEW_ATTEMPT" >> "$DESTINATION"
+# One record, written through one open. The fields are in the order the format
+# declares them, and nothing between them can leave a half-written record.
+{
+    printf '{"format":"slingshot.rustsec-owner-review-record/1",'
+    printf '"advisory_commit":"%s","advisory_tree":"%s",' "$ADVISORY_COMMIT" "$ADVISORY_TREE"
+    printf '"environment":"%s","reviewer_policy_sha256":"%s",' "$ENVIRONMENT" "$POLICY_DIGEST"
+    printf '"source_commit":"%s","source_tree":"%s",' "$SLINGSHOT_REVIEW_SOURCE_COMMIT" "$SOURCE_TREE"
+    printf '"run":"%s","attempt":"%s"}\n' "$SLINGSHOT_REVIEW_RUN" "$SLINGSHOT_REVIEW_ATTEMPT"
+} > "$DESTINATION"
