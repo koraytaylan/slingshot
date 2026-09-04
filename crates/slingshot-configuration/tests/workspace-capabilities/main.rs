@@ -14,7 +14,3 @@ mod secret_buffers;
 mod temporary_files;
 mod toml_documents;
 mod uniform_resource_locators;
-#[cfg(target_os = "windows")]
-mod windows_file_identity;
-#[cfg(target_os = "windows")]
-mod windows_security_identifiers;

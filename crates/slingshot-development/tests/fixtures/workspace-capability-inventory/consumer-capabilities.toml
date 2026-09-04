@@ -28,7 +28,7 @@ development = ["property-tests"]
 [[consumer]]
 name = "slingshot_configuration"
 package = "slingshot-configuration"
-normal = ["typed-errors", "serialization", "toml-documents", "uniform-resource-locators", "secret-buffers", "platform-directories", "base64-encoding", "descriptor-relative-filesystem", "posix-access-control-lists", "extended-access-control-lists", "windows-security-identifiers", "windows-file-identity", "operating-system-account-database", "secure-hash-digests", "certificate-record-decoding", "platform-trust-store-locations", "platform-trust-decisions-macos", "platform-trust-decisions-windows"]
+normal = ["typed-errors", "serialization", "toml-documents", "uniform-resource-locators", "secret-buffers", "platform-directories", "base64-encoding", "descriptor-relative-filesystem", "posix-access-control-lists", "extended-access-control-lists", "operating-system-account-database", "secure-hash-digests", "certificate-record-decoding", "platform-trust-store-locations", "platform-trust-decisions-macos"]
 build = []
 development = ["property-tests", "diagnostics", "diagnostics-subscriber"]
 
@@ -56,7 +56,7 @@ development = ["property-tests"]
 [[consumer]]
 name = "slingshot_agent_connection"
 package = "slingshot-agent-connection"
-normal = ["typed-errors", "serialization", "javascript-object-notation", "uniform-resource-locators", "byte-buffers", "asynchronous-runtime", "cancellation-tokens", "hypertext-transfer-protocol-types", "hypertext-transfer-protocol-engine", "hypertext-transfer-protocol-utilities", "hypertext-transfer-protocol-body", "transport-layer-security", "certificate-types", "asynchronous-transport-layer-security", "certificate-record-decoding", "diagnostics", "secure-hash-digests", "base64-encoding", "secret-buffers", "platform-trust-store-locations", "platform-trust-decisions-macos", "platform-trust-decisions-windows"]
+normal = ["typed-errors", "serialization", "javascript-object-notation", "uniform-resource-locators", "byte-buffers", "asynchronous-runtime", "cancellation-tokens", "hypertext-transfer-protocol-types", "hypertext-transfer-protocol-engine", "hypertext-transfer-protocol-utilities", "hypertext-transfer-protocol-body", "transport-layer-security", "certificate-types", "asynchronous-transport-layer-security", "certificate-record-decoding", "diagnostics", "secure-hash-digests", "base64-encoding", "secret-buffers", "platform-trust-store-locations", "platform-trust-decisions-macos"]
 build = []
 development = ["temporary-files", "property-tests"]
 
@@ -98,7 +98,7 @@ development = []
 [[consumer]]
 name = "slingshot_daemon::platform_runtime"
 package = "slingshot-daemon"
-normal = ["typed-errors", "asynchronous-runtime", "file-locks", "platform-directories", "secure-hash-digests", "hexadecimal-encoding", "random-values", "descriptor-relative-filesystem", "windows-process-creation-flags"]
+normal = ["typed-errors", "asynchronous-runtime", "file-locks", "platform-directories", "secure-hash-digests", "hexadecimal-encoding", "random-values", "descriptor-relative-filesystem"]
 build = []
 development = []
 
@@ -126,7 +126,7 @@ development = []
 [[consumer]]
 name = "slingshot_command_line::platform_runtime"
 package = "slingshot-command-line"
-normal = ["typed-errors", "file-locks", "platform-directories", "descriptor-relative-filesystem", "windows-process-creation-flags"]
+normal = ["typed-errors", "file-locks", "platform-directories", "descriptor-relative-filesystem"]
 build = []
 development = []
 

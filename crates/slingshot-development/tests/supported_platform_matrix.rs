@@ -9,8 +9,8 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use slingshot_development::supported_platform_matrix::{
-    self, MatrixFailure, PlatformObservations, SUPPORTED_TARGET_TRIPLES, SupportedPlatformMatrix,
-    UNTRUSTED_OBSERVATION_LABEL,
+    self, LINUX_TARGET_TRIPLE, MatrixFailure, PlatformObservations, SUPPORTED_TARGET_TRIPLES,
+    SupportedPlatformMatrix, UNTRUSTED_OBSERVATION_LABEL, WINDOWS_TARGET_TRIPLE,
 };
 
 /// Repository path of the abstract supported-target manifest.
@@ -73,7 +73,7 @@ fn committed_observations() -> PlatformObservations {
 }
 
 #[test]
-fn the_committed_matrix_declares_the_three_exact_abstract_rows() {
+fn the_committed_matrix_declares_the_exact_abstract_rows() {
     let matrix = committed_matrix();
     assert_eq!(supported_platform_matrix::validate_matrix(&matrix), Vec::<String>::new());
     let declared: Vec<&str> = matrix.target.iter().map(|row| row.triple.as_str()).collect();
@@ -88,8 +88,8 @@ fn every_row_pins_its_exact_executable_and_archive_layout() {
     let expected = [
         ("x86_64-unknown-linux-gnu", "", "tar.gz", "slingshot"),
         ("aarch64-apple-darwin", "", "tar.gz", "slingshot"),
-        ("x86_64-pc-windows-msvc", ".exe", "zip", "slingshot.exe"),
     ];
+    assert_eq!(matrix.target.len(), expected.len(), "a row is unpinned");
     for (row, (triple, suffix, profile, executable)) in matrix.target.iter().zip(expected) {
         assert_eq!(row.triple, triple);
         assert_eq!(row.executable_stem, "slingshot");
@@ -101,20 +101,20 @@ fn every_row_pins_its_exact_executable_and_archive_layout() {
 }
 
 #[test]
-fn the_windows_row_requires_named_pipe_remote_client_rejection() {
-    let matrix = committed_matrix();
-    let windows = matrix
-        .target
-        .iter()
-        .find(|row| row.triple == SUPPORTED_TARGET_TRIPLES[2])
-        .expect("the Windows row exists");
+fn a_rows_rules_outlive_the_matrix_claiming_that_row() {
+    // Windows is not a supported row today, and the rules it obeys are still
+    // here: they belong to the row rather than to the matrix, so the row can
+    // return without anyone reconstructing what it was held to.
+    let required = supported_platform_matrix::required_capabilities(WINDOWS_TARGET_TRIPLE);
     assert!(
-        windows.runtime_capabilities.iter().any(|value| value == WINDOWS_REMOTE_CLIENT_CAPABILITY),
-        "{:?}",
-        windows.runtime_capabilities
+        required.contains(&WINDOWS_REMOTE_CLIENT_CAPABILITY),
+        "the Windows row's remote-client rule went with the row: {required:?}"
     );
-    let required = supported_platform_matrix::required_capabilities(&windows.triple);
-    assert!(required.contains(&WINDOWS_REMOTE_CLIENT_CAPABILITY));
+    assert!(
+        !supported_platform_matrix::required_capabilities(LINUX_TARGET_TRIPLE)
+            .contains(&WINDOWS_REMOTE_CLIENT_CAPABILITY),
+        "a rule that belongs to one row reached another"
+    );
 }
 
 #[test]

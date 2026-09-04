@@ -27,6 +27,9 @@ use slingshot_domain::profile_authentication_contract::{
 /// Fixture that records the account sources and the answer categories.
 const POLICY_FIXTURE: &str = "tests/fixtures/configuration-root/account-policy.toml";
 
+/// The account-identity kinds this crate resolves, whichever rows are supported.
+const RESOLVED_IDENTITY_KINDS: [&str; 2] = ["unix-effective-user", "windows-process-token-user"];
+
 /// Source file the interface scans read.
 const ROOT_SOURCE: &str = "src/configuration_root.rs";
 
@@ -240,9 +243,15 @@ fn every_supported_row_resolves_through_the_interfaces_the_fixture_records() {
             row.target
         );
     }
+    // Every supported row records how its account is identified, and names a
+    // kind something resolves. Which kinds appear follows from which rows are
+    // supported, so naming a fixed pair here would assert a row back into
+    // existence after the matrix stopped claiming it.
     let kinds: Vec<&str> = policy.row.iter().map(|row| row.identity_kind.as_str()).collect();
-    assert!(kinds.contains(&"unix-effective-user"));
-    assert!(kinds.contains(&"windows-process-token-user"));
+    assert!(!kinds.is_empty(), "no supported row records how its account is identified");
+    for kind in &kinds {
+        assert!(RESOLVED_IDENTITY_KINDS.contains(kind), "{kind} is a kind nothing resolves");
+    }
 }
 
 #[test]

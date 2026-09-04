@@ -38,8 +38,5 @@ rustix.workspace = true
 [target.aarch64-apple-darwin.dependencies]
 rustix.workspace = true
 
-[target.x86_64-pc-windows-msvc.dependencies]
-windows-sys.workspace = true
-
 [lints]
 workspace = true

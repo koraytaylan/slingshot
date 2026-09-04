@@ -221,14 +221,6 @@ interface = ["security_framework::trust_settings::", "TrustSettingsForCertificat
 targets = ["aarch64-apple-darwin"]
 
 [[probe]]
-capability = "platform-trust-decisions-windows"
-package = "slingshot-agent-connection"
-module = "platform_trust_decisions_windows"
-kind = "normal"
-interface = ["schannel::cert_store::CertStore", "ValidUses::Oids", "to_der()"]
-targets = ["x86_64-pc-windows-msvc"]
-
-[[probe]]
 capability = "platform-trust-store-locations"
 package = "slingshot-agent-connection"
 module = "platform_trust_store_locations"
@@ -403,30 +395,6 @@ module = "unique_identifiers"
 kind = "normal"
 interface = ["uuid::Uuid", "Uuid::new_v4", "hyphenated()"]
 targets = []
-
-[[probe]]
-capability = "windows-file-identity"
-package = "slingshot-configuration"
-module = "windows_file_identity"
-kind = "normal"
-interface = ["winsafe::{HFILE, co}", "OPEN_REPARSE_POINT", "GetFileInformationByHandle()"]
-targets = ["x86_64-pc-windows-msvc"]
-
-[[probe]]
-capability = "windows-process-creation-flags"
-package = "slingshot-daemon"
-module = "windows_process_creation_flags"
-kind = "normal"
-interface = ["windows_sys::Win32::System::Threading", "DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP"]
-targets = ["x86_64-pc-windows-msvc"]
-
-[[probe]]
-capability = "windows-security-identifiers"
-package = "slingshot-configuration"
-module = "windows_security_identifiers"
-kind = "normal"
-interface = ["windows_permissions::wrappers::", "GetSecurityInfo", "dacl()"]
-targets = ["x86_64-pc-windows-msvc"]
 
 [[probe]]
 capability = "workflow-documents"
