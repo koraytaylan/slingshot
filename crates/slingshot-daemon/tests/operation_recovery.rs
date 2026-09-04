@@ -411,7 +411,9 @@ fn a_recovery_the_daemon_retries_itself_is_not_one_a_person_resumes() {
         repository
             .read_resume_receipt(
                 &digest,
+                &waiting.operation_identifier,
                 &source_fingerprint(
+                    &waiting.operation_identifier,
                     waiting.command_fingerprint.as_text(),
                     waiting.record.revision,
                     RecoveryCategory::EventReconnection,
@@ -426,15 +428,39 @@ fn a_recovery_the_daemon_retries_itself_is_not_one_a_person_resumes() {
 #[test]
 fn two_resumes_of_one_operation_at_different_points_are_two_sources() {
     let fingerprint = "f".repeat(DIGEST_CHARACTERS);
-    let first =
-        source_fingerprint(&fingerprint, RESUMED_FROM, RecoveryCategory::AmbiguousSubmission);
-    let same =
-        source_fingerprint(&fingerprint, RESUMED_FROM, RecoveryCategory::AmbiguousSubmission);
-    let later =
-        source_fingerprint(&fingerprint, RESUMED_LATER, RecoveryCategory::AmbiguousSubmission);
-    let other = source_fingerprint(&fingerprint, RESUMED_FROM, RecoveryCategory::OperationLookup);
+    let first = source_fingerprint(
+        "operation-a",
+        &fingerprint,
+        RESUMED_FROM,
+        RecoveryCategory::AmbiguousSubmission,
+    );
+    let same = source_fingerprint(
+        "operation-a",
+        &fingerprint,
+        RESUMED_FROM,
+        RecoveryCategory::AmbiguousSubmission,
+    );
+    let later = source_fingerprint(
+        "operation-a",
+        &fingerprint,
+        RESUMED_LATER,
+        RecoveryCategory::AmbiguousSubmission,
+    );
+    let other = source_fingerprint(
+        "operation-a",
+        &fingerprint,
+        RESUMED_FROM,
+        RecoveryCategory::OperationLookup,
+    );
+    let another_operation = source_fingerprint(
+        "operation-b",
+        &fingerprint,
+        RESUMED_FROM,
+        RecoveryCategory::AmbiguousSubmission,
+    );
 
     assert_eq!(first, same, "the same resume sent twice is one source");
     assert_ne!(first, later, "resuming from a later revision is another");
     assert_ne!(first, other, "and resuming another category is another again");
+    assert_ne!(first, another_operation, "and another operation has another receipt source");
 }
