@@ -66,6 +66,9 @@ pub enum DatabaseFailure {
     /// SQLite was initialized before the product could apply its global configuration.
     #[error("SQLite was initialized before the no-spill configuration could be applied: {0}")]
     InitializationRefused(String),
+    /// The pinned database directory contains an unexplained object or exceeds its byte budget.
+    #[error("the SQLite physical inventory is refused: {0}")]
+    PhysicalInventoryRefused(String),
     /// A setting did not read back as it was set.
     #[error("the setting {name} read back as {observed} rather than {expected}")]
     SettingMismatch {
@@ -133,6 +136,8 @@ pub struct OperationDatabase {
     connection: Connection,
     /// The verified directory whose descriptor keeps SQLite's object paths pinned.
     _state_root: Option<File>,
+    /// The named SQLite objects and physical byte limit for this file-backed database.
+    physical_inventory: Option<PhysicalInventory>,
 }
 
 impl OperationDatabase {
@@ -148,6 +153,8 @@ impl OperationDatabase {
     ) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let (state_root, pinned_path) = PinnedDatabasePath::open(path)?;
+        let physical_inventory = PhysicalInventory::new(pinned_path.clone())?;
+        physical_inventory.require_within_budget()?;
         let inspected = inspect_existing_schema(&pinned_path)?;
         let connection = Connection::open(&pinned_path).map_err(refused)?;
         if let Some(inspected) = inspected
@@ -157,11 +164,16 @@ impl OperationDatabase {
                 "the database changed between inspection and reopen".to_owned(),
             ));
         }
-        let database = Self { connection, _state_root: Some(state_root) };
+        let database = Self {
+            connection,
+            _state_root: Some(state_root),
+            physical_inventory: Some(physical_inventory),
+        };
         database.require_compile_options()?;
         database.apply_and_verify(settings)?;
         database.migrate()?;
         database.reconcile_abandoned_artifact_reservations()?;
+        database.reconcile_physical_inventory()?;
         database.install_authorizer()?;
         Ok(database)
     }
@@ -175,7 +187,7 @@ impl OperationDatabase {
     pub fn open_in_memory(settings: RequiredSettings) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let connection = Connection::open_in_memory().map_err(refused)?;
-        let database = Self { connection, _state_root: None };
+        let database = Self { connection, _state_root: None, physical_inventory: None };
         database.require_compile_options()?;
         database.apply_valued(settings)?;
         database.set_pragma("foreign_keys", "1")?;
@@ -298,6 +310,14 @@ impl OperationDatabase {
         Ok(())
     }
 
+    /// Refuses a restart whose named SQLite objects no longer match the physical contract.
+    fn reconcile_physical_inventory(&self) -> Result<(), DatabaseFailure> {
+        match &self.physical_inventory {
+            Some(inventory) => inventory.require_within_budget(),
+            None => Ok(()),
+        }
+    }
+
     /// Installs the final runtime guard after the reviewed setup and migrations.
     ///
     /// The authorizer runs while SQLite prepares a statement, before it can
@@ -305,8 +325,16 @@ impl OperationDatabase {
     fn install_authorizer(&self) -> Result<(), DatabaseFailure> {
         use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 
+        let physical_inventory = self.physical_inventory.clone();
         self.connection
-            .authorizer(Some(|context: AuthContext<'_>| match context.action {
+            .authorizer(Some(move |context: AuthContext<'_>| match context.action {
+                AuthAction::Insert { .. } | AuthAction::Update { .. }
+                    if physical_inventory
+                        .as_ref()
+                        .is_some_and(|inventory| !inventory.has_write_headroom()) =>
+                {
+                    Authorization::Deny
+                }
                 AuthAction::Attach { .. }
                 | AuthAction::Detach { .. }
                 | AuthAction::CreateIndex { .. }
@@ -389,6 +417,112 @@ fn configure_sqlite() -> Result<(), DatabaseFailure> {
         )));
     }
     Ok(())
+}
+
+/// The fixed SQLite object names that share one physical byte budget.
+#[derive(Debug, Clone)]
+struct PhysicalInventory {
+    /// The SQLite main database path resolved through the retained directory descriptor.
+    main: std::path::PathBuf,
+    /// The largest combined main, WAL, and shared-memory footprint the contract permits.
+    maximum_bytes: u64,
+}
+
+impl PhysicalInventory {
+    /// Builds one inventory from a pinned main-database path.
+    fn new(main: std::path::PathBuf) -> Result<Self, DatabaseFailure> {
+        let maximum_bytes =
+            DaemonRuntimeContract::embedded().formula("maximum_sqlite_physical_bytes");
+        if maximum_bytes == 0 {
+            return Err(DatabaseFailure::PhysicalInventoryRefused(
+                "the runtime contract names no SQLite physical byte budget".to_owned(),
+            ));
+        }
+        Ok(Self { main, maximum_bytes })
+    }
+
+    /// Requires all SQLite-named objects to be private regular files within the byte budget.
+    fn require_within_budget(&self) -> Result<(), DatabaseFailure> {
+        let total = self.measured_bytes()?;
+        if total > self.maximum_bytes {
+            return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
+                "{total} bytes exceeds the {} byte SQLite budget",
+                self.maximum_bytes
+            )));
+        }
+        Ok(())
+    }
+
+    /// Returns whether another largest permitted write can begin safely.
+    fn has_write_headroom(&self) -> bool {
+        let contract = DaemonRuntimeContract::embedded();
+        let required = contract.formula("maximum_sqlite_write_transaction_bytes").checked_add(
+            contract.formula("maximum_sqlite_write_transaction_write_ahead_log_bytes"),
+        );
+        self.measured_bytes()
+            .ok()
+            .zip(required)
+            .and_then(|(held, required)| held.checked_add(required))
+            .is_some_and(|needed| needed <= self.maximum_bytes)
+    }
+
+    /// Sums the closed set of SQLite object bytes, refusing undeclared names and links.
+    fn measured_bytes(&self) -> Result<u64, DatabaseFailure> {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let parent = self.main.parent().ok_or_else(|| {
+            DatabaseFailure::PhysicalInventoryRefused(
+                "the pinned database has no parent".to_owned(),
+            )
+        })?;
+        let main_name = self.main.file_name().and_then(|name| name.to_str()).ok_or_else(|| {
+            DatabaseFailure::PhysicalInventoryRefused(
+                "the pinned database has no UTF-8 name".to_owned(),
+            )
+        })?;
+        let permitted = [
+            main_name.to_owned(),
+            format!("{main_name}-wal"),
+            format!("{main_name}-shm"),
+            format!("{main_name}.replacement"),
+        ];
+        let mut total = 0_u64;
+        for entry in std::fs::read_dir(parent)
+            .map_err(|failure| DatabaseFailure::PhysicalInventoryRefused(failure.to_string()))?
+        {
+            let entry = entry.map_err(|failure| {
+                DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+            })?;
+            let name = entry.file_name();
+            let name = name.to_str().ok_or_else(|| {
+                DatabaseFailure::PhysicalInventoryRefused(
+                    "the database directory has a non-UTF-8 SQLite object name".to_owned(),
+                )
+            })?;
+            if !name.starts_with(main_name) {
+                continue;
+            }
+            if !permitted.iter().any(|permitted| permitted == name) {
+                return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
+                    "{name} is not a permitted SQLite object"
+                )));
+            }
+            let metadata = std::fs::symlink_metadata(entry.path()).map_err(|failure| {
+                DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+            })?;
+            if !metadata.is_file() || metadata.nlink() != 1 {
+                return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
+                    "{name} is not one private regular SQLite object"
+                )));
+            }
+            total = total.checked_add(metadata.len()).ok_or_else(|| {
+                DatabaseFailure::PhysicalInventoryRefused(
+                    "SQLite object lengths overflow".to_owned(),
+                )
+            })?;
+        }
+        Ok(total)
+    }
 }
 
 /// A database pathname resolved through an open, verified state-root directory.
@@ -658,5 +792,36 @@ mod tests {
             .expect("a WAL byte limit")
         );
         assert!(database.require_compile_options().is_ok());
+    }
+
+    #[test]
+    fn restart_refuses_an_uninventoried_sqlite_sidecar() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let path = root.path().join("operations.sqlite3");
+        drop(OperationDatabase::open(&path, settings()).expect("a migrated database"));
+        std::fs::write(root.path().join("operations.sqlite3-journal"), b"unexpected")
+            .expect("the adversarial sidecar exists");
+        let outcome = OperationDatabase::open(&path, settings());
+        assert!(
+            matches!(outcome, Err(super::DatabaseFailure::PhysicalInventoryRefused(_))),
+            "an undeclared SQLite sidecar is refused before service: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn restart_refuses_a_permitted_object_over_the_physical_budget() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let path = root.path().join("operations.sqlite3");
+        drop(OperationDatabase::open(&path, settings()).expect("a migrated database"));
+        let replacement = std::fs::File::create(root.path().join("operations.sqlite3.replacement"))
+            .expect("the adversarial replacement exists");
+        replacement
+            .set_len(DaemonRuntimeContract::embedded().formula("maximum_sqlite_physical_bytes") + 1)
+            .expect("a sparse over-budget fixture");
+        let outcome = OperationDatabase::open(&path, settings());
+        assert!(
+            matches!(outcome, Err(super::DatabaseFailure::PhysicalInventoryRefused(_))),
+            "an over-budget SQLite object is refused before service: {outcome:?}"
+        );
     }
 }
