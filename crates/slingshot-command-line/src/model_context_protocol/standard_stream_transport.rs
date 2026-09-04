@@ -25,6 +25,7 @@
 //! completed line before it parseable, which is what lets a client read
 //! everything that did arrive.
 
+use std::io::{self, BufRead};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -54,6 +55,57 @@ pub fn maximum_line_bytes() -> usize {
 pub fn maximum_nesting_depth() -> usize {
     usize::try_from(FoundationContract::embedded().framing.maximum_nesting_depth)
         .unwrap_or(usize::MAX)
+}
+
+/// What one bounded read from the protocol input found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BoundedLine {
+    /// A complete line, without its line-feed delimiter.
+    Line(Vec<u8>),
+    /// Input ended before another byte arrived.
+    End,
+    /// The reader consumed only the allowed lookahead and found it was too long.
+    TooLong(Vec<u8>),
+}
+
+/// Reads one standard-input line without allocating beyond the protocol limit.
+///
+/// A refusal consumes at most one byte beyond the declared payload bound and
+/// leaves the remaining hostile input unread. The caller must end the session
+/// after reporting that refusal: treating the remainder as another message
+/// would give one line two meanings.
+pub fn read_bounded_line(input: &mut dyn BufRead) -> io::Result<BoundedLine> {
+    let maximum = maximum_line_bytes();
+    let mut line = Vec::with_capacity(maximum.saturating_add(1));
+    loop {
+        let available = input.fill_buf()?;
+        if available.is_empty() {
+            return if line.is_empty() {
+                Ok(BoundedLine::End)
+            } else {
+                Ok(BoundedLine::Line(line))
+            };
+        }
+        let room = maximum.saturating_add(1).saturating_sub(line.len());
+        let taken = available.len().min(room);
+        let newline = available[..taken].iter().position(|byte| *byte == b'\n');
+        let copied = newline.map_or(taken, |at| at);
+        line.extend_from_slice(&available[..copied]);
+        input.consume(newline.map_or(taken, |at| at + 1));
+        if newline.is_some() {
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            return if line.len() <= maximum {
+                Ok(BoundedLine::Line(line))
+            } else {
+                Ok(BoundedLine::TooLong(line))
+            };
+        }
+        if line.len() > maximum {
+            return Ok(BoundedLine::TooLong(line));
+        }
+    }
 }
 
 /// How many lines the output queue holds before a producer is refused.
@@ -228,11 +280,13 @@ fn require_no_duplicate_member(text: &str) -> Result<(), MessageRefusal> {
 struct MemberScanner {
     /// One set of names per open object.
     open: Vec<std::collections::BTreeSet<String>>,
-    /// The string being read, when one is.
+    /// Every open object or array, including arrays between two objects.
+    depth: usize,
+    /// The raw JSON string body being read, when one is.
     reading: Option<String>,
     /// Whether the last character was an escape.
     escaped: bool,
-    /// The string that was read most recently.
+    /// The raw JSON string body that was read most recently.
     held: Option<String>,
 }
 
@@ -255,11 +309,21 @@ impl MemberScanner {
         }
         match character {
             '"' => self.reading = Some(String::new()),
-            '{' => self.open.push(std::collections::BTreeSet::new()),
+            '{' => {
+                self.open.push(std::collections::BTreeSet::new());
+                self.depth = self.depth.saturating_add(1);
+                self.require_depth()?;
+            }
+            '[' => {
+                self.depth = self.depth.saturating_add(1);
+                self.require_depth()?;
+            }
             '}' => {
                 self.open.pop();
+                self.depth = self.depth.saturating_sub(1);
                 self.held = None;
             }
+            ']' => self.depth = self.depth.saturating_sub(1),
             ':' => return self.name_a_member(),
             ',' => self.held = None,
             _ => {}
@@ -277,7 +341,12 @@ impl MemberScanner {
             return;
         }
         match character {
-            '\\' => self.escaped = true,
+            '\\' => {
+                if let Some(reading) = self.reading.as_mut() {
+                    reading.push(character);
+                }
+                self.escaped = true;
+            }
             '"' => self.held = self.reading.take(),
             other => {
                 if let Some(reading) = self.reading.as_mut() {
@@ -289,17 +358,24 @@ impl MemberScanner {
 
     /// Records the string just read as a member of the innermost object.
     fn name_a_member(&mut self) -> Result<(), MessageRefusal> {
-        let Some(name) = self.held.take() else {
+        let Some(raw_name) = self.held.take() else {
             return Ok(());
         };
         let Some(members) = self.open.last_mut() else {
             return Ok(());
         };
+        let name = serde_json::from_str::<String>(&format!("\"{raw_name}\""))
+            .map_err(|_| MessageRefusal::NotReadable)?;
         if members.insert(name.clone()) {
             Ok(())
         } else {
             Err(MessageRefusal::DuplicateMember(name))
         }
+    }
+
+    /// Refuses a container before a complete value tree can be constructed.
+    fn require_depth(&self) -> Result<(), MessageRefusal> {
+        if self.depth > maximum_nesting_depth() { Err(MessageRefusal::TooDeep) } else { Ok(()) }
     }
 }
 
