@@ -35,6 +35,7 @@ use slingshot_command_line::invocation::{
     EXPECTED_REVISION_OPTION, Invocation, LOCAL_LEAVES, METADATA_ONLY_LEAVES, Selection,
     TARGET_DIGEST_OPTION, requires_operation_key,
 };
+use slingshot_command_line::machine_outcome_envelope::{Interruption, MachineOutcomeEnvelope};
 use slingshot_command_line::target_selection::NamespacePair;
 use slingshot_domain::command::catalog::CommandCatalog;
 use slingshot_domain::profile::AdobeExperienceManagerDeployment;
@@ -329,7 +330,9 @@ struct Fakes {
     /// Whether an owner is serving.
     owner: Option<String>,
     /// Whether a signal arrived.
-    interrupted: bool,
+    interrupted: Cell<bool>,
+    /// Whether a refused hello is the moment a signal arrives.
+    interrupt_on_hello_failure: bool,
     /// What was reached.
     reached: Reached,
     /// Invocation identities the operation boundary received.
@@ -353,7 +356,8 @@ impl Default for Fakes {
                 operation_identifier: OPERATION_IDENTIFIER.to_owned(),
             },
             owner: Some(NONCE.to_owned()),
-            interrupted: false,
+            interrupted: Cell::new(false),
+            interrupt_on_hello_failure: false,
             reached: Reached::default(),
             operation_request_identifiers: RefCell::new(Vec::new()),
             invented_identifiers: Cell::new(0),
@@ -399,7 +403,7 @@ impl RequestIdentityBoundary for Fakes {
 
 impl SignalBoundary for Fakes {
     fn stop_requested(&self) -> bool {
-        self.interrupted
+        self.interrupted.get()
     }
 }
 
@@ -411,7 +415,15 @@ impl DaemonBoundary for Fakes {
 
     fn hello(&self, _namespace: &NamespacePair) -> Result<HelloResult, ExchangeFailure> {
         Reached::counted(&self.reached.daemon);
-        self.greeting.clone().ok_or_else(|| ExchangeFailure::Absent(ENDPOINT.to_owned()))
+        match &self.greeting {
+            Some(greeting) => Ok(greeting.clone()),
+            None => {
+                if self.interrupt_on_hello_failure {
+                    self.interrupted.set(true);
+                }
+                Err(ExchangeFailure::Absent(ENDPOINT.to_owned()))
+            }
+        }
     }
 
     fn stop(
@@ -566,10 +578,26 @@ fn one_invocation_produces_one_answer_and_one_exit() {
 
 #[test]
 fn an_interrupted_run_writes_no_answer_and_exits_one_hundred_and_thirty() {
-    let fakes = Fakes { interrupted: true, ..Fakes::default() };
+    let fakes = Fakes { interrupted: Cell::new(true), ..Fakes::default() };
     let completion = against(&fakes, Provenance::embedded(), &invoking("operation-list", &[]));
     assert_eq!(completion.exit, INTERRUPTED_EXIT);
     assert_eq!(fakes.reached.total(), 0, "an interrupted run reaches nothing");
+}
+
+#[test]
+fn an_interrupted_hello_retries_with_the_callers_durable_operation_key() {
+    let fakes = Fakes { greeting: None, interrupt_on_hello_failure: true, ..Fakes::default() };
+    let mut invocation = invoking("operation-list", &[]);
+    invocation.operation_key = Some("caller-operation-key".to_owned());
+    let completion = against(&fakes, Provenance::embedded(), &invocation);
+    assert_eq!(
+        completion.answer,
+        Answer::Envelope(Box::new(MachineOutcomeEnvelope::LocalApplicationError {
+            interruption: Interruption::PreReceipt {
+                retry_identifier: "caller-operation-key".to_owned(),
+            },
+        }))
+    );
 }
 
 #[test]

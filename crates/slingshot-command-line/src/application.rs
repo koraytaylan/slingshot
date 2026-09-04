@@ -605,7 +605,8 @@ impl CommandLineApplication<'_> {
         invocation: &Invocation,
         namespace: &NamespacePair,
     ) -> Result<HelloResult, RunRefusal> {
-        let phase = Phase::BeforeReceipt { retry_operation_identifier: self.request_identifier() };
+        let phase =
+            Phase::BeforeReceipt { retry_operation_identifier: self.retry_identifier(invocation) };
         let hello = self.reached(self.daemon.hello(namespace), &phase)?;
         let spoken = spoken_operation_version();
         let compatibility = operation_compatibility(
@@ -660,8 +661,11 @@ impl CommandLineApplication<'_> {
         namespace: &NamespacePair,
         hello: &HelloResult,
         request: OperationRequest,
+        retry_operation_identifier: &str,
     ) -> Result<OperationResponse, RunRefusal> {
-        let phase = Phase::BeforeReceipt { retry_operation_identifier: self.request_identifier() };
+        let phase = Phase::BeforeReceipt {
+            retry_operation_identifier: retry_operation_identifier.to_owned(),
+        };
         let envelope = OperationEnvelope {
             author_target_identity_digest: hello.author_target_identity_digest.clone(),
             daemon_runtime_contract_digest: hello.daemon_runtime_contract_digest.clone(),
@@ -711,6 +715,15 @@ impl CommandLineApplication<'_> {
                 .clone()
                 .unwrap_or_else(|| self.request_identity.invent_request_identifier())
         })
+    }
+
+    /// Returns the durable operation key to quote after an interrupted attempt.
+    ///
+    /// A caller's key has precedence: it may already identify an effect from a
+    /// prior attempt. Commands that safely generate a key instead use this
+    /// invocation's correlation identity, which is stable for the same reason.
+    fn retry_identifier(&self, invocation: &Invocation) -> String {
+        invocation.operation_key.clone().unwrap_or_else(|| self.request_identifier())
     }
 }
 
@@ -772,13 +785,14 @@ impl CommandLineApplication<'_> {
                 identifier
             })
             .map_err(|refusal| RunRefusal::Usage(refusal.to_string()))?;
+        let retry_operation_identifier = prepared.key_source.identifier().to_owned();
         let request = OperationRequest::Execute {
             command: serde_json::to_value(&prepared.command)
                 .map_err(|failure| RunRefusal::Local(failure.to_string()))?,
-            operation_identifier: prepared.key_source.identifier().to_owned(),
+            operation_identifier: retry_operation_identifier.clone(),
             workflow_correlation_identifier: None,
         };
-        let response = self.exchange(&namespace, &hello, request)?;
+        let response = self.exchange(&namespace, &hello, request, &retry_operation_identifier)?;
         match submitted(&response)? {
             Submission::Ended(completion) => Ok(*completion),
             Submission::Admitted(admitted) => {
@@ -807,7 +821,7 @@ impl CommandLineApplication<'_> {
         let request = OperationRequest::OperationStatus {
             operation_identifier: admitted.operation_identifier.clone(),
         };
-        let response = self.exchange(namespace, hello, request)?;
+        let response = self.exchange(namespace, hello, request, &admitted.operation_identifier)?;
         let OperationResponse::Status { operation_revision, .. } = response else {
             return self.resolved(
                 namespace,
@@ -852,7 +866,7 @@ impl CommandLineApplication<'_> {
         let request = OperationRequest::OperationStatus {
             operation_identifier: operation_identifier.to_owned(),
         };
-        match self.exchange(namespace, hello, request)? {
+        match self.exchange(namespace, hello, request, operation_identifier)? {
             OperationResponse::Status { operation_revision, .. } => Ok(operation_revision),
             other => Err(unreadable(&other)),
         }
@@ -882,7 +896,8 @@ impl CommandLineApplication<'_> {
             operation_identifier: required(invocation, OPERATION_IDENTIFIER_OPTION)?.to_owned(),
             replayed: false,
         };
-        let response = self.exchange(&namespace, &hello, request)?;
+        let response =
+            self.exchange(&namespace, &hello, request, &admitted.operation_identifier)?;
         self.resolved(&namespace, &hello, &response, &self.access(&namespace, &hello, &admitted))
     }
 
@@ -892,7 +907,7 @@ impl CommandLineApplication<'_> {
         let hello = self.owner(invocation, &namespace)?;
         let partition = expected_digest(invocation, &hello);
         let request = maintenance_request(invocation, &partition)?;
-        let response = self.exchange(&namespace, &hello, request)?;
+        let response = self.exchange(&namespace, &hello, request, &self.request_identifier())?;
         let context = AccessContext {
             author_target_identity_digest: partition,
             environment: namespace.environment.clone(),
