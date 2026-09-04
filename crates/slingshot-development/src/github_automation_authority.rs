@@ -351,7 +351,8 @@ pub fn require_covers(
 /// What one hosted run says about itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReportedRun {
-    /// The workflow path the provider says is running.
+    /// The workflow reference the provider says is running, which names the
+    /// repository it belongs to as well as the path inside it.
     pub workflow_path: String,
     /// The repository the provider says this is.
     pub repository: String,
@@ -403,9 +404,14 @@ pub fn require_authorized(
             });
         }
     }
-    if !reported.workflow_path.starts_with(authority.workflow_root.as_str()) {
+    // The provider reports a workflow reference that names the repository before
+    // the path, so the root alone is not a prefix of it. Requiring the whole
+    // opening establishes that the workflow is this repository's and that it
+    // lives where the owner said workflows live, rather than only the second.
+    let expected_workflow = format!("{expected_name}/{}", authority.workflow_root);
+    if !reported.workflow_path.starts_with(expected_workflow.as_str()) {
         return Err(AuthorityRefusal::RunUnauthorized {
-            expected: authority.workflow_root.clone(),
+            expected: expected_workflow,
             field: "workflow path",
             held: reported.workflow_path.clone(),
         });
