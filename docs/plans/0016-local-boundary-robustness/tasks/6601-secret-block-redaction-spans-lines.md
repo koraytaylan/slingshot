@@ -9,7 +9,7 @@ touches:
   - crates/slingshot-daemon/src/diagnostics.rs
   - crates/slingshot-daemon/tests/diagnostics.rs
   - crates/slingshot-daemon/tests/fixtures/diagnostics/redaction.jsonl
-status: planned
+status: completed
 merged_as: ""
 ---
 # Secret Block Redaction Spans Lines
