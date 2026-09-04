@@ -9,7 +9,7 @@ touches:
   - crates/slingshot-storage/src/database.rs
   - crates/slingshot-storage/src/lib.rs
   - crates/slingshot-storage/tests/migrations.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # SQLite Is Configured Before The First Connection
