@@ -47,6 +47,14 @@ incomplete-frame-read-idle-milliseconds = 2_000
 absolute-frame-completion-milliseconds = 10_000
 response-write-milliseconds = 5_000
 
+[standard-stream]
+# The Model Context Protocol server's bounded output ownership.
+maximum-queued-messages = 256
+maximum-queued-bytes = 8_388_608
+queue-pressure-milliseconds = 30_000
+write-milliseconds = 30_000
+shutdown-milliseconds = 10_000
+
 [startup]
 explicit-start-total-milliseconds = 30_000
 start-retry-maximum-delay-milliseconds = 100
