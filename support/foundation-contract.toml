@@ -46,6 +46,7 @@ initial-control-frame-milliseconds = 5_000
 incomplete-frame-read-idle-milliseconds = 2_000
 absolute-frame-completion-milliseconds = 10_000
 response-write-milliseconds = 5_000
+quiescent-connection-lease-milliseconds = 2_000
 
 [standard-stream]
 # The Model Context Protocol server's bounded output ownership.

@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-daemon/src/local_server.rs
   - crates/slingshot-daemon/tests/local_server.rs
   - crates/slingshot-development/tests/local_endpoint_threats.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # Idle Peers Cannot Own The Endpoint

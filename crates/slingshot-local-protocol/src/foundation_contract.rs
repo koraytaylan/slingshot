@@ -113,6 +113,8 @@ pub struct ServerLimits {
     pub absolute_frame_completion_milliseconds: u64,
     /// Deadline for writing one response.
     pub response_write_milliseconds: u64,
+    /// Longest an otherwise idle peer retains general connection capacity after a response.
+    pub quiescent_connection_lease_milliseconds: u64,
 }
 
 /// Capacity and deadlines of the standard-stream protocol boundary.
@@ -270,6 +272,10 @@ impl FoundationContract {
             ),
             ("server.response-write-milliseconds", self.server.response_write_milliseconds),
             (
+                "server.quiescent-connection-lease-milliseconds",
+                self.server.quiescent_connection_lease_milliseconds,
+            ),
+            (
                 "standard-stream.maximum-queued-messages",
                 u64::from(self.standard_stream.maximum_queued_messages),
             ),
@@ -363,6 +369,12 @@ impl ServerLimits {
     #[must_use]
     pub const fn response_write(&self) -> Duration {
         Duration::from_millis(self.response_write_milliseconds)
+    }
+
+    /// Returns the lease one quiescent post-response connection retains.
+    #[must_use]
+    pub const fn quiescent_connection_lease(&self) -> Duration {
+        Duration::from_millis(self.quiescent_connection_lease_milliseconds)
     }
 }
 
