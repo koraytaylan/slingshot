@@ -242,7 +242,7 @@ impl AccountResolver for OperatingSystemAccountResolver {
         let TokenInfo::User(user) = information else {
             return Err(unavailable());
         };
-        let identifier = user.User.Sid().map_err(|_| unavailable())?.to_string();
+        let identifier = user.User.Sid().ok_or_else(unavailable)?.to_string();
         let home = winsafe::SHGetKnownFolderPath(
             &co::KNOWNFOLDERID::Profile,
             co::KF::DEFAULT,
