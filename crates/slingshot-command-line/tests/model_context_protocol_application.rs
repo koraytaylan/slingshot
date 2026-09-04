@@ -18,18 +18,39 @@ use slingshot_command_line::model_context_protocol::current_stateless_revision::
 };
 use slingshot_command_line::model_context_protocol::legacy_initialized_revision::Lifecycle;
 use slingshot_command_line::model_context_protocol::standard_stream_transport::{
-    OutputFailure, SUPPORTED_REVISIONS,
+    LineSink, OutputFailure, SUPPORTED_REVISIONS, Written,
 };
 
 /// The revision the current era speaks.
 const CURRENT: &str = "2026-07-28";
 
+/// A writer that accepts each queued response in full.
+struct CompleteSink;
+
+impl LineSink for CompleteSink {
+    fn write_line(&mut self, _line: &str) -> Written {
+        Written::Complete
+    }
+}
+
+/// A writer that accepts no queued response.
+struct RefusingSink;
+
+impl LineSink for RefusingSink {
+    fn write_line(&mut self, _line: &str) -> Written {
+        Written::Refused
+    }
+}
+
 /// Returns the answer one line produced.
 fn answered(server: &mut ServerApplication, line: &str) -> Value {
-    match server.serve_line(line.as_bytes()) {
-        Served::Answered(held) => serde_json::from_str(&held).expect("an answer is one document"),
+    let answer = match server.serve_line(line.as_bytes()) {
+        Served::Answered(held) => held,
         other => panic!("{line} produced {other:?}"),
-    }
+    };
+    let mut sink = CompleteSink;
+    assert!(server.write_output(&mut sink), "the complete writer remains available");
+    serde_json::from_str(&answer).expect("an answer is one document")
 }
 
 #[test]
@@ -42,6 +63,20 @@ fn one_request_produces_one_answer_and_releases_one_reservation() {
     assert_eq!(answer["id"].as_str(), Some("one"));
     assert_eq!(answer["result"][COMPLETE_MEMBER].as_str(), Some("complete"));
     assert_eq!(server.active(), 0, "an answered request holds nothing");
+}
+
+#[test]
+fn a_refused_writer_never_acknowledges_the_response_it_did_not_take() {
+    let mut server = ServerApplication::new();
+    let line =
+        format!(r#"{{"id":"one","method":"ping","params":{{"protocolVersion":"{CURRENT}"}}}}"#);
+    assert!(matches!(server.serve_line(line.as_bytes()), Served::Answered(_)));
+    assert_eq!(server.active(), 1, "queueing is not acknowledgement");
+    let mut sink = RefusingSink;
+    assert!(!server.write_output(&mut sink), "the refused writer stops output");
+    assert_eq!(server.active(), 1, "the undelivered response remains active until shutdown");
+    assert!(server.finish(OutputFailure::SinkFailed).is_empty());
+    assert_eq!(server.active(), 0, "shutdown releases the request once");
 }
 
 #[test]

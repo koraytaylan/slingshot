@@ -55,7 +55,7 @@ use crate::invocation::{
 use crate::machine_readable_renderer;
 use crate::model_context_protocol::application::{Served, ServerApplication};
 use crate::model_context_protocol::standard_stream_transport::{
-    BoundedLine, OutputFailure, read_bounded_line,
+    BoundedLine, LineSink, OutputFailure, Written, read_bounded_line,
 };
 use crate::target_selection::NamespacePair;
 
@@ -88,6 +88,18 @@ const STOP_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis
 
 /// What an exchange reports when a signal ended it rather than an answer.
 const STOP_REQUESTED: &str = "the run was asked to stop while it was waiting";
+
+/// The process's only protocol-output writer.
+struct StandardOutputSink<'writer> {
+    /// The stream the protocol owns while it is served.
+    output: &'writer mut dyn Write,
+}
+
+impl LineSink for StandardOutputSink<'_> {
+    fn write_line(&mut self, line: &str) -> Written {
+        if writeln!(self.output, "{line}").is_ok() { Written::Complete } else { Written::Refused }
+    }
+}
 
 /// Identifier this executable puts on its retained control requests.
 const CONTROL_REQUEST_IDENTIFIER: &str = "command-line";
@@ -301,8 +313,9 @@ fn serve_protocol(
             Ok(BoundedLine::End) | Err(_) => break,
         };
         match server.serve_line(&line) {
-            Served::Answered(answer) => {
-                if writeln!(output, "{answer}").is_err() {
+            Served::Answered(_) => {
+                let mut sink = StandardOutputSink { output };
+                if !server.write_output(&mut sink) {
                     break;
                 }
             }
