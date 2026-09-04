@@ -124,14 +124,13 @@ impl<'database> PersistentCapacityAccount<'database> {
             committed_artifact_bytes: self
                 .count("measure the bytes this namespace's committed content occupies", &[])?,
             operation_rows: self.count("count this namespace's retained operation rows", &[])?,
-            reserved_artifact_bytes: self.reserved_bytes(),
+            reserved_artifact_bytes: self.reserved_bytes()?,
         })
     }
 
     /// Returns how many bytes reservations are holding.
-    fn reserved_bytes(&self) -> u64 {
+    fn reserved_bytes(&self) -> Result<u64, AccountingFailure> {
         self.count("measure this namespace's durable artifact reservations", &[])
-            .unwrap_or_default()
     }
 }
 
