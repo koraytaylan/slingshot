@@ -586,8 +586,16 @@ mod tests {
             "the authorizer refuses temporary database objects"
         );
         assert!(
+            database.connection().execute_batch("CREATE TABLE forbidden (value INTEGER)").is_err(),
+            "the authorizer refuses permanent schema changes after migration"
+        );
+        assert!(
             database.connection().execute_batch("PRAGMA temp_store_directory = '/tmp'").is_err(),
             "the authorizer refuses an ambient temporary-directory override"
+        );
+        assert!(
+            database.connection().execute_batch("PRAGMA user_version = 99").is_err(),
+            "the authorizer refuses write pragmas after migration"
         );
     }
 
