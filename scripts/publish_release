@@ -24,7 +24,9 @@ OPTION_AND_VALUE=2
 RELEASE_TAG=''
 EVIDENCE_DIRECTORY=''
 MANIFEST=Cargo.toml
+PLATFORM_AUTHORITY=support/platforms.toml
 NOTES_PATH=release-notes/RELEASE_NOTES.md
+ACCEPTANCE_PATH=release-acceptance/acceptance.json
 ARCHIVE_SUFFIX=.tar.gz
 BUNDLE_NAME=attestation.jsonl
 EVIDENCE_NAME=evidence.toml
@@ -51,9 +53,22 @@ done
 [ -n "$EVIDENCE_DIRECTORY" ] || report_refusal 'name the directory the run was downloaded to'
 [ -d "$EVIDENCE_DIRECTORY" ] || report_refusal "$EVIDENCE_DIRECTORY is not a directory"
 [ -f "$MANIFEST" ] || report_refusal "$MANIFEST is not here"
+[ -f "$PLATFORM_AUTHORITY" ] || report_refusal "$PLATFORM_AUTHORITY is not committed"
+
+report_stage 'the one revision publication may mutate'
+[ -z "$(git status --porcelain)" ] || report_refusal 'the verifier checkout is dirty'
+HEAD_COMMIT=$(git rev-parse 'HEAD^{commit}')
+LOCAL_TAG_COMMIT=$(git rev-parse "$RELEASE_TAG^{commit}") \
+    || report_refusal "$RELEASE_TAG is not a local annotated or lightweight tag"
+REMOTE_TAG_COMMIT=$(git ls-remote --exit-code origin "refs/tags/$RELEASE_TAG^{}" | awk 'NR == 1 { print $1 }') \
+    || report_refusal "$RELEASE_TAG has no peeled remote tag"
+[ "$HEAD_COMMIT" = "$LOCAL_TAG_COMMIT" ] && [ "$HEAD_COMMIT" = "$REMOTE_TAG_COMMIT" ] \
+    || report_refusal 'HEAD, local tag, and remote tag do not name one commit'
 
 NOTES=$EVIDENCE_DIRECTORY/$NOTES_PATH
 [ -f "$NOTES" ] || report_refusal "$NOTES is not among the downloaded artifacts"
+ACCEPTANCE=$EVIDENCE_DIRECTORY/$ACCEPTANCE_PATH
+[ -f "$ACCEPTANCE" ] || report_refusal "$ACCEPTANCE is not among the downloaded artifacts"
 
 REPOSITORY=$(sed -n 's/^repository = "\(.*\)"$/\1/p' "$MANIFEST" | head -n 1)
 [ -n "$REPOSITORY" ] || report_refusal "$MANIFEST names no repository to publish to"
@@ -64,10 +79,37 @@ SLINGSHOT_RELEASE_TAG=$RELEASE_TAG
 export SLINGSHOT_RELEASE_REFERENCE_TYPE SLINGSHOT_RELEASE_TAG
 scripts/verify_release_version
 
-SOURCE_COMMIT=$(git rev-parse "$RELEASE_TAG^{commit}")
+SOURCE_COMMIT=$HEAD_COMMIT
+SOURCE_TREE=$(git rev-parse "$SOURCE_COMMIT^{tree}")
+
+report_stage 'the retained acceptance decision'
+cargo run --locked --quiet -p slingshot-development -- \
+    verify-release-acceptance \
+    --manifest "$ACCEPTANCE" \
+    --reports-directory "$(dirname "$ACCEPTANCE")" \
+    --source-commit "$SOURCE_COMMIT" \
+    --source-tree "$SOURCE_TREE"
 
 STAGING=$(mktemp -d)
 trap 'rm -rf "$STAGING"' EXIT
+
+report_stage 'the complete supported archive set'
+EXPECTED_ROWS=$(sed -n 's/^triple = "\(.*\)"$/\1/p' "$PLATFORM_AUTHORITY")
+[ -n "$EXPECTED_ROWS" ] || report_refusal "$PLATFORM_AUTHORITY names no supported rows"
+for TRIPLE in $EXPECTED_ROWS; do
+    ROW=$EVIDENCE_DIRECTORY/release-$TRIPLE
+    [ -d "$ROW" ] || report_refusal "the supported $TRIPLE row is absent"
+    ARCHIVE_COUNT=$(find "$ROW" -maxdepth 1 -type f -name "*$ARCHIVE_SUFFIX" | wc -l | tr -d ' ')
+    [ "$ARCHIVE_COUNT" = 1 ] || report_refusal "$ROW holds $ARCHIVE_COUNT archives rather than one"
+done
+for ROW in "$EVIDENCE_DIRECTORY"/release-*; do
+    [ -d "$ROW" ] || continue
+    TRIPLE=${ROW#"$EVIDENCE_DIRECTORY/release-"}
+    case " $EXPECTED_ROWS " in
+        *" $TRIPLE "*) ;;
+        *) report_refusal "$ROW is not a supported release row" ;;
+    esac
+done
 
 report_stage 'every archive, against the reviewed root'
 set --
@@ -75,12 +117,9 @@ for ROW in "$EVIDENCE_DIRECTORY"/*; do
     [ -d "$ROW" ] || continue
     ARCHIVE=$(find "$ROW" -maxdepth 1 -type f -name "*$ARCHIVE_SUFFIX" | head -n 1)
     [ -n "$ARCHIVE" ] || continue
-    # Each row prepares its own cache, so the digest belongs to the row rather
-    # than to the release, and only the run that built it knows what it was.
-    # Until an acceptance manifest states these independently, this reads each
-    # row's own record: what that verifies is the archive against the evidence
-    # beside it, and the attestation above both, which is the check that
-    # establishes where an archive came from.
+    # The row evidence names the cache the archive was built from; the complete
+    # row-set preflight above keeps an archive from substituting for a missing
+    # supported row before this per-archive provenance verification begins.
     ROW_CACHE=$(sed -n 's/^cache-sha256 = "\(.*\)"$/\1/p' "$ROW/$EVIDENCE_NAME" | head -n 1)
     [ -n "$ROW_CACHE" ] || report_refusal "$ROW/$EVIDENCE_NAME records no cache digest"
     scripts/verify_release_artifacts \

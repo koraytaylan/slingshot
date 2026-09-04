@@ -9,8 +9,8 @@ touches:
   - crates/slingshot-development/tests/publish_release_refusals.rs
   - crates/slingshot-development/tests/fixtures/publish-release/runs.jsonl
   - scripts/publish_release
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # Publication Requires One Closed Release
 
