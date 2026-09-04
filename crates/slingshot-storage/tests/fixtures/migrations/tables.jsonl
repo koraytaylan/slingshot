@@ -5,6 +5,7 @@
 {"note": "durable holds for artifact bytes not yet committed", "table": "artifact_reservation"}
 {"note": "one identifier, and only one", "table": "installation"}
 {"note": "receipts partitioned by target", "table": "maintenance_application_receipt"}
+{"note": "durable cleanup work keyed by receipt and content digest", "table": "maintenance_artifact_cleanup_work"}
 {"note": "keyed by target and identifier, referencing no operation", "table": "maintenance_result_association"}
 {"note": "keyed by target and caller-chosen identifier", "table": "operation"}
 {"note": "one outstanding recovery per operation", "table": "recovery_fact"}

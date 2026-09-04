@@ -400,6 +400,24 @@ fn remove_and_record(
         });
     }
     for removal in &reviewed.removals {
+        let candidates = {
+            let mut prepared = transaction
+                .prepare(statement_text("list an operation's artifact cleanup candidates"))?;
+            let rows = prepared.query_map(
+                rusqlite::params![
+                    reviewed.author_target_identity_digest,
+                    removal.operation_identifier,
+                ],
+                |row| row.get::<_, String>(0),
+            )?;
+            rows.collect::<Result<Vec<String>, _>>()?
+        };
+        for candidate in candidates {
+            transaction.execute(
+                statement_text("record one maintenance artifact cleanup item"),
+                rusqlite::params![digest, reviewed.author_target_identity_digest, candidate],
+            )?;
+        }
         let changed = transaction.execute(
             statement_text("remove one terminal operation and everything hanging off it"),
             rusqlite::params![
@@ -498,7 +516,17 @@ fn receipt_with(
                 recorded_at_unix_milliseconds: u64::try_from(row.get::<_, i64>(0)?)
                     .unwrap_or_default(),
                 released_operation_rows: u64::try_from(row.get::<_, i64>(1)?).unwrap_or_default(),
-                stage: ReceiptStage::DatabaseApplied,
+                stage: match row.get::<_, String>(2)?.as_str() {
+                    "database_applied" => ReceiptStage::DatabaseApplied,
+                    "completed" => ReceiptStage::Completed,
+                    _ => {
+                        return Err(rusqlite::Error::InvalidColumnType(
+                            2,
+                            "stage".to_owned(),
+                            rusqlite::types::Type::Text,
+                        ));
+                    }
+                },
             })
         })
         .map(Some)
@@ -507,6 +535,47 @@ fn receipt_with(
             other => Err(RepositoryFailure::Statement(other)),
         })?;
     Ok(found)
+}
+
+/// Processes one receipt's durable cleanup journal until every safe candidate is gone.
+///
+/// A newly referenced candidate is deliberately retained for a later retry.
+pub fn complete_cleanup(
+    database: &OperationDatabase,
+    author_target_identity_digest: &str,
+    receipt_identifier: &str,
+) -> Result<ApplicationReceipt, RepositoryFailure> {
+    let mut prepared = database
+        .connection()
+        .prepare(statement_text("list one receipt's pending artifact cleanup work"))?;
+    let candidates = prepared
+        .query_map(rusqlite::params![author_target_identity_digest, receipt_identifier], |row| {
+            row.get::<_, String>(0)
+        })?
+        .collect::<Result<Vec<String>, _>>()?;
+    drop(prepared);
+    for candidate in candidates {
+        if release_if_unreferenced(database, &candidate)? {
+            database.connection().execute(
+                statement_text("remove one completed maintenance artifact cleanup item"),
+                rusqlite::params![author_target_identity_digest, receipt_identifier, candidate],
+            )?;
+        }
+    }
+    let pending: i64 = database.connection().query_row(
+        statement_text("count one receipt's pending artifact cleanup work"),
+        rusqlite::params![author_target_identity_digest, receipt_identifier],
+        |row| row.get(0),
+    )?;
+    if pending == 0 {
+        database.connection().execute(
+            statement_text("mark one maintenance receipt completed"),
+            rusqlite::params![author_target_identity_digest, receipt_identifier],
+        )?;
+    }
+    receipt(database, author_target_identity_digest, receipt_identifier)?.ok_or_else(|| {
+        RepositoryFailure::NoSuchOperation { identifier: receipt_identifier.to_owned() }
+    })
 }
 
 /// Removes one artifact's content, but only if nothing references it.
