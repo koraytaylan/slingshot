@@ -113,28 +113,54 @@ fn every_vector_keeps_what_is_worth_reading_and_loses_what_is_not() {
         } else {
             assert_eq!(redacted, original, "{}: an ordinary sentence changed", text(row, "note"));
         }
+        for secret in row["absent"].as_array().into_iter().flatten() {
+            let secret = secret.as_str().expect("a forbidden sentinel");
+            assert!(
+                !redacted.contains(secret),
+                "{}: {secret} survived in {redacted:?}",
+                text(row, "note")
+            );
+        }
+        for kept in row["keeps"].as_array().into_iter().flatten() {
+            let kept = kept.as_str().expect("a surrounding fragment");
+            assert!(
+                redacted.contains(kept),
+                "{}: {kept} disappeared in {redacted:?}",
+                text(row, "note")
+            );
+        }
     }
 }
 
 #[test]
 fn no_fixture_secret_survives_into_any_file_error_or_status() {
-    let (_directory, sink) = sink(small_bounds());
-    let secrets = [
+    let (_directory, sink) = sink(DiagnosticBounds { file_bytes: FILE_BYTES, ..small_bounds() });
+    let mut secrets: Vec<String> = [
         "eyJhbGciOi.secret.value",
         "p-8Kq2ZmXn",
         "hunter2",
         "ya29.A0ARrdaM",
         "MIIEvQIBADAN",
         "/home/someone/.config/slingshot/profiles.toml",
-    ];
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
     for row in rows() {
+        secrets.extend(
+            row["absent"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|secret| secret.as_str().expect("a forbidden sentinel").to_owned()),
+        );
         sink.record(text(&row, "text")).expect("a record");
     }
 
     let written = everything_written(&sink);
     for secret in secrets {
         assert!(
-            !written.contains(secret),
+            !written.contains(&secret),
             "{secret} reached a diagnostic file, which outlives the moment that produced it"
         );
     }
