@@ -32,7 +32,7 @@ const ABSENT: &str = include_str!("fixtures/migrations/absent-columns.jsonl");
 const CONSTRAINTS: &str = include_str!("fixtures/migrations/constraints.jsonl");
 
 /// The schema version this binary migrates to.
-const CURRENT_SCHEMA_VERSION: u32 = 4;
+const CURRENT_SCHEMA_VERSION: u32 = 5;
 
 /// A schema version no binary in this workspace applies.
 const NEWER_SCHEMA_VERSION: u32 = 99;
