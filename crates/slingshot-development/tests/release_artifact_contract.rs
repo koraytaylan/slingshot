@@ -106,6 +106,33 @@ fn ordinary(name: &str, decoded_bytes: u64) -> ArchiveEntry {
     ArchiveEntry { decoded_bytes, kind: EntryKind::OrdinaryFile, name: name.to_owned() }
 }
 
+/// Returns every archive profile the committed matrix produces.
+///
+/// Taken from the matrix rather than written down, so these cases cover exactly
+/// the archives a release of this revision writes. A profile no supported row
+/// declares is a profile this release does not produce, and asserting over it
+/// would be asserting over an archive nobody receives.
+fn declared_profiles() -> Vec<String> {
+    let mut profiles: Vec<String> =
+        matrix().target.iter().map(|row| row.archive_profile.clone()).collect();
+    profiles.sort_unstable();
+    profiles.dedup();
+    profiles
+}
+
+#[test]
+fn every_profile_a_row_declares_is_one_this_build_writes() {
+    // The packager knows both profiles whether or not a supported row currently
+    // produces each of them. What must never happen is the reverse: a row naming
+    // a profile nothing packs is a row whose archive never exists.
+    for profile in declared_profiles() {
+        assert!(
+            [TAR_PROFILE, ZIP_PROFILE].contains(&profile.as_str()),
+            "{profile} is not a profile this build writes"
+        );
+    }
+}
+
 /// Returns the members one row's archive holds.
 fn members_for(profile: &str) -> Vec<String> {
     matrix()
@@ -189,7 +216,8 @@ fn two_names_that_are_one_file_where_case_folds_are_refused() {
 
 #[test]
 fn an_archive_holds_exactly_what_its_row_declares_and_nothing_else() {
-    for profile in [TAR_PROFILE, ZIP_PROFILE] {
+    for profile in declared_profiles() {
+        let profile = profile.as_str();
         let members = members_for(profile);
         let entries: Vec<ArchiveEntry> = members.iter().map(|name| ordinary(name, 1)).collect();
         require_admissible(&entries, &members, 1).unwrap_or_else(|failure| panic!("{failure}"));
@@ -279,7 +307,8 @@ fn a_member_whose_bytes_changed_is_caught_by_the_manifest() {
 
 #[test]
 fn one_revision_produces_one_archive_whatever_the_machine_is_doing() {
-    for profile in [TAR_PROFILE, ZIP_PROFILE] {
+    for profile in declared_profiles() {
+        let profile = profile.as_str();
         let members = fixture_members(profile);
         let (first_root, first) = built("first", profile, &members);
         let (second_root, second) = built("second", profile, &members);
@@ -295,7 +324,8 @@ fn one_revision_produces_one_archive_whatever_the_machine_is_doing() {
 
 #[test]
 fn an_archive_this_build_writes_is_one_this_build_admits() {
-    for profile in [TAR_PROFILE, ZIP_PROFILE] {
+    for profile in declared_profiles() {
+        let profile = profile.as_str();
         let members = fixture_members(profile);
         let declared = members_for(profile);
         let (root, _) = built("survey", profile, &members);

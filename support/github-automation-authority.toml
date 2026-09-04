@@ -72,19 +72,3 @@ network-denial = "packet-filter-deny-non-loopback"
 network-denial-probe = "non-loopback-connect-refused"
 coordinator = false
 finite-state-machine = false
-
-[[row]]
-triple = "x86_64-pc-windows-msvc"
-runner-selector = "windows-2022"
-runner-class = "github-hosted"
-observed-image = "windows-2022"
-architecture = "x86_64"
-toolchain = "1.98.0"
-linker = "link.exe"
-system-root-or-software-development-kit = "windows-software-development-kit"
-source-protection = "digest_observation_only"
-source-protection-probe = "read-only-permission-bits-and-before-after-digest"
-network-denial = "windows-filtering-platform-deny-non-loopback"
-network-denial-probe = "non-loopback-connect-refused"
-coordinator = false
-finite-state-machine = false

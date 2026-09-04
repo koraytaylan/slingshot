@@ -10,8 +10,6 @@ mod hypertext_transfer_protocol_types;
 mod hypertext_transfer_protocol_utilities;
 #[cfg(target_os = "macos")]
 mod platform_trust_decisions_macos;
-#[cfg(target_os = "windows")]
-mod platform_trust_decisions_windows;
 #[cfg(target_os = "linux")]
 mod platform_trust_store_locations;
 mod secure_hash_digests;

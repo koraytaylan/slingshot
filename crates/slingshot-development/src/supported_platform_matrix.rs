@@ -37,17 +37,27 @@ pub const LICENCE_ARCHIVE_MEMBER: &str = "LICENSE";
 /// Archive member that carries the artifact checksums.
 pub const CHECKSUM_ARCHIVE_MEMBER: &str = "SHA256SUMS";
 
+/// The Linux row's triple.
+///
+/// Each row's triple is named rather than found by position in the supported
+/// list, because the rules a row obeys are a property of that row and outlive
+/// whether the matrix currently claims it. A row that leaves the matrix takes
+/// its evidence with it and leaves its rules where a later row is held to them.
+pub const LINUX_TARGET_TRIPLE: &str = "x86_64-unknown-linux-gnu";
+
+/// The macOS row's triple.
+pub const MACOS_TARGET_TRIPLE: &str = "aarch64-apple-darwin";
+
+/// The Windows row's triple.
+pub const WINDOWS_TARGET_TRIPLE: &str = "x86_64-pc-windows-msvc";
+
 /// Exact supported target triples, in manifest order.
-pub const SUPPORTED_TARGET_TRIPLES: &[&str] =
-    &["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"];
+pub const SUPPORTED_TARGET_TRIPLES: &[&str] = &[LINUX_TARGET_TRIPLE, MACOS_TARGET_TRIPLE];
 
 /// Operating system, architecture, executable suffix, and archive profile of
 /// each supported triple, in the same order as [`SUPPORTED_TARGET_TRIPLES`].
-const SUPPORTED_TARGET_LAYOUTS: &[(&str, &str, &str, &str)] = &[
-    ("linux", "x86_64", "", "tar.gz"),
-    ("macos", "aarch64", "", "tar.gz"),
-    ("windows", "x86_64", ".exe", "zip"),
-];
+const SUPPORTED_TARGET_LAYOUTS: &[(&str, &str, &str, &str)] =
+    &[("linux", "x86_64", "", "tar.gz"), ("macos", "aarch64", "", "tar.gz")];
 
 /// Provider-record trust decisions every row must expose without reduction.
 const PROVIDER_TRUST_CAPABILITIES: &[&str] = &[
@@ -243,11 +253,11 @@ pub struct CurrentNativeObservation {
 #[must_use]
 pub const fn current_target_triple() -> Option<&'static str> {
     if cfg!(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu")) {
-        Some(SUPPORTED_TARGET_TRIPLES[0])
+        Some(LINUX_TARGET_TRIPLE)
     } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        Some(SUPPORTED_TARGET_TRIPLES[1])
+        Some(MACOS_TARGET_TRIPLE)
     } else if cfg!(all(target_os = "windows", target_arch = "x86_64", target_env = "msvc")) {
-        Some(SUPPORTED_TARGET_TRIPLES[2])
+        Some(WINDOWS_TARGET_TRIPLE)
     } else {
         None
     }
@@ -273,11 +283,11 @@ pub fn parse_matrix(manifest: &str) -> Result<SupportedPlatformMatrix, MatrixFai
 #[must_use]
 pub fn required_capabilities(triple: &str) -> Vec<&'static str> {
     let mut required: Vec<&'static str> = PROVIDER_TRUST_CAPABILITIES.to_vec();
-    let windows = triple == SUPPORTED_TARGET_TRIPLES[2];
+    let windows = triple == WINDOWS_TARGET_TRIPLE;
     required.extend(if windows { WINDOWS_RUNTIME_CAPABILITIES } else { UNIX_RUNTIME_CAPABILITIES });
     required.extend(match triple {
-        value if value == SUPPORTED_TARGET_TRIPLES[0] => LINUX_FILESYSTEM_CAPABILITIES,
-        value if value == SUPPORTED_TARGET_TRIPLES[1] => MACOS_FILESYSTEM_CAPABILITIES,
+        value if value == LINUX_TARGET_TRIPLE => LINUX_FILESYSTEM_CAPABILITIES,
+        value if value == MACOS_TARGET_TRIPLE => MACOS_FILESYSTEM_CAPABILITIES,
         _ => WINDOWS_FILESYSTEM_CAPABILITIES,
     });
     required.extend(BUILD_POLICY_CAPABILITIES);
