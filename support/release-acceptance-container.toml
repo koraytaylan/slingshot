@@ -68,9 +68,14 @@ privileged = false
 # SLINGSHOT_ACCEPTANCE_SOURCE_COMMIT and SLINGSHOT_ACCEPTANCE_SOURCE_TREE are
 # the exact revision and tree the manifest is about, read on the host from the
 # checkout being accepted after it is confirmed clean.
-# SLINGSHOT_ACCEPTANCE_PROVIDER_RUN is which provider run produced the decision.
-# Only the provider can say that truthfully, so the host takes it from the one
-# variable a workflow job reports itself through and passes it on unchanged.
+# SLINGSHOT_ACCEPTANCE_PROVIDER_RUN is the workflow the provider ran, as the
+# provider itself names it, which is how a manifest from this release is told
+# from one produced anywhere else. Only the provider can say it truthfully, so
+# the host takes it from the one variable a workflow job reports itself through
+# and passes it on unchanged. It names the workflow rather than one execution of
+# it, which is the same thing this repository means everywhere else by a
+# reported run; which execution produced a manifest is answered by the run the
+# artifact was uploaded from.
 allowed = [
     "CARGO_HOME",
     "CARGO_TARGET_DIR",

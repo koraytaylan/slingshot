@@ -697,7 +697,9 @@ pub struct RunIdentity {
     pub source_commit: String,
     /// The exact tree that revision names.
     pub source_tree: String,
-    /// Which provider run produced it.
+    /// The workflow the provider ran, as the provider names it - the workflow
+    /// rather than one execution of it, which is what a reported run is
+    /// everywhere else here.
     pub provider_run: String,
 }
 
