@@ -19,6 +19,7 @@
 //! runtime or transport contract has moved cannot reach a versioned service by
 //! taking a path somebody forgot to guard.
 
+use std::cell::RefCell;
 use std::path::Path;
 
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
@@ -78,8 +79,10 @@ const SERVING_STATE: &str = "serving";
 /// What a probe reports when nothing owns the namespace.
 const ABSENT_STATE: &str = "absent";
 
-/// What every request identifier this build invents begins with.
-const REQUEST_IDENTIFIER_PREFIX: &str = "command-line-";
+thread_local! {
+    /// The one request identity every phase of the current invocation shares.
+    static INVOCATION_IDENTIFIER: RefCell<Option<String>> = const { RefCell::new(None) };
+}
 
 /// What is said when the owner speaks no version this build speaks.
 const NO_SHARED_VERSION: &str =
@@ -340,10 +343,10 @@ pub trait DaemonBoundary {
     ) -> Result<OperationResponse, ExchangeFailure>;
 }
 
-/// Reading the time, for the one identifier a run may have to invent.
-pub trait ClockBoundary {
-    /// Returns milliseconds since the epoch.
-    fn milliseconds_since_epoch(&self) -> u64;
+/// Inventing a collision-resistant identity for one command-line invocation.
+pub trait RequestIdentityBoundary {
+    /// Returns one new identity. The application shares it across the invocation's phases.
+    fn invent_request_identifier(&self) -> String;
 }
 
 /// Learning that somebody asked this run to stop.
@@ -443,8 +446,8 @@ impl RunRefusal {
 /// reaches none of them and that a configuration check reaches only the two it
 /// is allowed.
 pub struct CommandLineApplication<'boundaries> {
-    /// Reading the time.
-    pub clock: &'boundaries dyn ClockBoundary,
+    /// Inventing one identity for each invocation.
+    pub request_identity: &'boundaries dyn RequestIdentityBoundary,
     /// Reading configuration.
     pub configuration: &'boundaries dyn ConfigurationBoundary,
     /// Talking to a daemon.
@@ -474,7 +477,13 @@ impl CommandLineApplication<'_> {
     /// Runs one parsed invocation to exactly one completion.
     #[must_use]
     pub fn run(&self, invocation: &Invocation) -> Completion {
-        self.answer(invocation).unwrap_or_else(RunRefusal::completion)
+        let identity = self.request_identity.invent_request_identifier();
+        INVOCATION_IDENTIFIER.with(|current| {
+            let prior = current.replace(Some(identity));
+            let completion = self.answer(invocation).unwrap_or_else(RunRefusal::completion);
+            current.replace(prior);
+            completion
+        })
     }
 
     /// Returns what one invocation produced, or why it produced nothing.
@@ -696,7 +705,12 @@ impl CommandLineApplication<'_> {
 
     /// Returns the identifier this run puts on its request.
     fn request_identifier(&self) -> String {
-        format!("{REQUEST_IDENTIFIER_PREFIX}{}", self.clock.milliseconds_since_epoch())
+        INVOCATION_IDENTIFIER.with(|current| {
+            current
+                .borrow()
+                .clone()
+                .unwrap_or_else(|| self.request_identity.invent_request_identifier())
+        })
     }
 }
 
