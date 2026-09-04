@@ -268,6 +268,30 @@ fn no_spill_canary_leaves_no_temporary_database_files() {
 }
 
 #[test]
+fn runtime_authorizer_refuses_file_escaping_and_temporary_sql_before_effect() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let database = OperationDatabase::open(&root.path().join("operations.sqlite3"), settings())
+        .expect("a migrated database");
+    let attachment = root.path().join("attachment.sqlite3");
+    assert!(
+        database
+            .connection()
+            .execute("ATTACH DATABASE ? AS outside", [attachment.to_string_lossy()])
+            .is_err(),
+        "the authorizer refuses an attachment while SQLite prepares it"
+    );
+    assert!(!attachment.exists(), "the refused attachment creates no file");
+    assert!(
+        database.connection().execute_batch("CREATE TEMP TABLE forbidden (value INTEGER)").is_err(),
+        "the authorizer refuses temporary database objects"
+    );
+    assert!(
+        database.connection().execute_batch("PRAGMA temp_store_directory = '/tmp'").is_err(),
+        "the authorizer refuses an ambient temporary-directory override"
+    );
+}
+
+#[test]
 fn every_constraint_refuses_what_the_fixture_says_it_refuses() {
     for row in &rows(CONSTRAINTS) {
         let database = migrated();

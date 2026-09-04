@@ -161,6 +161,7 @@ impl OperationDatabase {
         database.apply_and_verify(settings)?;
         database.migrate()?;
         database.reconcile_abandoned_artifact_reservations()?;
+        database.install_authorizer()?;
         Ok(database)
     }
 
@@ -178,6 +179,7 @@ impl OperationDatabase {
         database.apply_valued(settings)?;
         database.set_pragma("foreign_keys", "1")?;
         database.migrate()?;
+        database.install_authorizer()?;
         Ok(database)
     }
 
@@ -285,6 +287,40 @@ impl OperationDatabase {
             .unwrap_or_else(|| panic!("the inventory names startup reservation reconciliation"));
         self.connection.execute(statement, []).map_err(refused)?;
         Ok(())
+    }
+
+    /// Installs the final runtime guard after the reviewed setup and migrations.
+    ///
+    /// The authorizer runs while SQLite prepares a statement, before it can
+    /// create an attachment, a temporary object, or load a native extension.
+    fn install_authorizer(&self) -> Result<(), DatabaseFailure> {
+        use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+
+        self.connection
+            .authorizer(Some(|context: AuthContext<'_>| match context.action {
+                AuthAction::Attach { .. }
+                | AuthAction::Detach { .. }
+                | AuthAction::CreateTempIndex { .. }
+                | AuthAction::CreateTempTable { .. }
+                | AuthAction::CreateTempTrigger { .. }
+                | AuthAction::CreateTempView { .. }
+                | AuthAction::DropTempIndex { .. }
+                | AuthAction::DropTempTable { .. }
+                | AuthAction::DropTempTrigger { .. }
+                | AuthAction::DropTempView { .. }
+                | AuthAction::CreateVtable { .. }
+                | AuthAction::DropVtable { .. }
+                // Parameterized ATTACH has no filename while SQLite prepares
+                // it, which rusqlite represents as an unknown action. Unknown
+                // authorizer codes are never safe to accept by default.
+                | AuthAction::Unknown { .. } => Authorization::Deny,
+                AuthAction::Pragma { pragma_name: "temp_store_directory", .. } => {
+                    Authorization::Deny
+                }
+                AuthAction::Function { function_name: "load_extension" } => Authorization::Deny,
+                _ => Authorization::Allow,
+            }))
+            .map_err(refused)
     }
 }
 
