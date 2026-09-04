@@ -33,7 +33,7 @@ use crate::model_context_protocol::legacy_initialized_revision::{
 use crate::model_context_protocol::progress_and_cancellation::ProgressRegistry;
 use crate::model_context_protocol::protocol_diagnostics::ProtocolDiagnosticSink;
 use crate::model_context_protocol::standard_stream_transport::{
-    Message, MessageRefusal, OutputFailure, OutputQueue, read_message,
+    LineSink, Message, MessageRefusal, OutputFailure, OutputQueue, read_message,
 };
 
 /// The error a request receives when this server is already as busy as it gets.
@@ -102,13 +102,37 @@ impl ServerApplication {
         self.diagnostics.dropped()
     }
 
+    /// Lets the sole standard-output writer drain queued complete responses.
+    ///
+    /// An active request is released only after its response has reached the
+    /// sink in full. A failed writer leaves the same one failure transition for
+    /// the caller to finish and never makes a queued answer look delivered.
+    pub fn write_output(&mut self, sink: &mut dyn LineSink) -> bool {
+        let acknowledged = self.output.acknowledged().len();
+        self.output.write_waiting(sink, std::time::Duration::ZERO);
+        let delivered: Vec<String> = self.output.acknowledged()[acknowledged..].to_vec();
+        for line in delivered {
+            if let Some(identifier) = serde_json::from_str::<Value>(&line)
+                .ok()
+                .and_then(|value| value["id"].as_str().map(str::to_owned))
+            {
+                self.active.acknowledged(&identifier);
+            }
+        }
+        self.output.accepts_more()
+    }
+
     /// Serves one line and returns what it produced.
     pub fn serve_line(&mut self, line: &[u8]) -> Served {
         if !self.output.accepts_more() {
             return Served::Finished;
         }
         match read_message(line) {
-            Err(refusal) => Served::Answered(self.unreadable(&refusal)),
+            Err(refusal) => {
+                let answer = self.unreadable(&refusal);
+                self.enqueue(&answer);
+                Served::Answered(answer)
+            }
             Ok(Message::Notification { method, parameters }) => {
                 self.notified(&method, &parameters);
                 Served::Silent
@@ -166,9 +190,15 @@ impl ServerApplication {
                 rendered_error_value(identifier, rendered)
             }
         };
-        self.output.enqueue(&line).ok();
-        self.active.acknowledged(identifier);
+        self.enqueue(&line);
         line
+    }
+
+    /// Queues one answer or makes output's single terminal transition.
+    fn enqueue(&mut self, line: &str) {
+        if self.output.enqueue(line).is_err() {
+            self.output.fail(OutputFailure::PressureExpired);
+        }
     }
 
     /// Returns what one request is answered with.
