@@ -423,6 +423,21 @@ fn a_gate_that_could_not_run_at_all_is_not_a_gate_that_held() {
 }
 
 #[test]
+fn a_run_that_held_fewer_gates_than_acceptance_has_agreed_about_nothing() {
+    let every = runs_refusing(&[]);
+    for count in 0..every.len() {
+        let manifest = conclude(&binding(), &every[..count]);
+        assert_eq!(
+            manifest.outcome,
+            REFUSED,
+            "{count} gates held out of {} and this run called the revision releasable",
+            every.len()
+        );
+    }
+    assert_eq!(conclude(&binding(), &every).outcome, RELEASABLE, "and all of them is all of them");
+}
+
+#[test]
 fn a_gate_is_recorded_by_what_its_own_run_concluded() {
     let root = workspace_root();
     let held = run_gate(&probe_gate(&["workspace-metadata"]), &root);
