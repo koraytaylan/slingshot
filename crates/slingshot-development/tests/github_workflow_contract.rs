@@ -379,10 +379,10 @@ fn the_release_reviews_the_advisory_pin_in_a_protected_environment_first() {
     );
     let (_, provenance) =
         named.iter().find(|(name, _)| name == ATTESTATION_JOB).expect("the build job");
-    assert_eq!(
-        provenance["needs"].as_str(),
-        Some("rustsec-owner-review"),
-        "and every build waits for it"
+    let needs = provenance["needs"].as_sequence().expect("every build waits for its inputs");
+    assert!(
+        needs.iter().any(|need| need.as_str() == Some("rustsec-owner-review")),
+        "and every build waits for the protected review"
     );
     let recorded = read_repository_file("scripts/record_rustsec_owner_review");
     for authored in ["date +", "$(date", "\"timestamp\"", "\"fresh\""] {
