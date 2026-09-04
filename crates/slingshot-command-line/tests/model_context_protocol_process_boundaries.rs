@@ -90,7 +90,7 @@ fn input_ending_finishes_the_server_cleanly_and_at_once() {
 
 #[test]
 fn a_newline_free_message_past_the_bound_receives_one_refusal_and_stops() {
-    let input = vec![b' '; maximum_line_bytes() + 4096];
+    let input = vec![b' '; maximum_line_bytes() + 1];
     let harness = ProcessHarness::new();
     let produced = harness
         .run_within(&product_executable(), &serving().reading(input), PROMPT_DEADLINE)

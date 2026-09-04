@@ -16,7 +16,7 @@ use slingshot_command_line::model_context_protocol::size_budget::{
     worst_case_message_of,
 };
 use slingshot_command_line::model_context_protocol::standard_stream_transport::{
-    MAXIMUM_QUEUED_BYTES, maximum_line_bytes,
+    maximum_line_bytes, maximum_queued_bytes,
 };
 
 /// Where the byte boundaries live.
@@ -81,7 +81,7 @@ fn an_envelope_leaves_room_for_the_message_that_carries_it() {
 fn the_worst_message_one_answer_produces_still_fits_what_is_written() {
     let worst = worst_case_message_of(MAXIMUM_MACHINE_OUTCOME_ENVELOPE_BYTES);
     assert_eq!(worst, WORST_CASE_MESSAGE_BYTES);
-    assert!(worst < MAXIMUM_QUEUED_BYTES as u64, "the queue would refuse its own largest answer");
+    assert!(worst < maximum_queued_bytes() as u64, "the queue would refuse its own largest answer");
     assert!(
         worst < maximum_line_bytes() as u64,
         "the transport would refuse to write its own largest answer"

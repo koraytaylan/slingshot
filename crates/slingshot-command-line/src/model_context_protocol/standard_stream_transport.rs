@@ -109,19 +109,33 @@ pub fn read_bounded_line(input: &mut dyn BufRead) -> io::Result<BoundedLine> {
 }
 
 /// How many lines the output queue holds before a producer is refused.
-pub const MAXIMUM_QUEUED_MESSAGES: usize = 256;
+pub fn maximum_queued_messages() -> usize {
+    usize::try_from(FoundationContract::embedded().standard_stream.maximum_queued_messages)
+        .unwrap_or(usize::MAX)
+}
 
 /// How many bytes the output queue holds before a producer is refused.
-pub const MAXIMUM_QUEUED_BYTES: usize = 8_388_608;
+pub fn maximum_queued_bytes() -> usize {
+    usize::try_from(FoundationContract::embedded().standard_stream.maximum_queued_bytes)
+        .unwrap_or(usize::MAX)
+}
 
 /// How long a producer waits for room in the queue before the transport fails.
-pub const QUEUE_PRESSURE_DEADLINE: Duration = Duration::from_secs(30);
+pub fn queue_pressure_deadline() -> Duration {
+    Duration::from_millis(
+        FoundationContract::embedded().standard_stream.queue_pressure_milliseconds,
+    )
+}
 
 /// How long one line may take to be written before the transport fails.
-pub const WRITE_DEADLINE: Duration = Duration::from_secs(30);
+pub fn write_deadline() -> Duration {
+    Duration::from_millis(FoundationContract::embedded().standard_stream.write_milliseconds)
+}
 
 /// How long cleanup may take after an output failure.
-pub const SHUTDOWN_DEADLINE: Duration = Duration::from_secs(10);
+pub fn shutdown_deadline() -> Duration {
+    Duration::from_millis(FoundationContract::embedded().standard_stream.shutdown_milliseconds)
+}
 
 /// Which revision a peer speaks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -423,7 +437,9 @@ pub trait LineSink {
 pub enum QueueRefusal {
     /// The queue holds as much as it may.
     #[error(
-        "the output queue holds {MAXIMUM_QUEUED_MESSAGES} messages or {MAXIMUM_QUEUED_BYTES} bytes"
+        "the output queue holds {} messages or {} bytes",
+        maximum_queued_messages(),
+        maximum_queued_bytes()
     )]
     Full,
     /// Output has failed, so nothing more is written.
@@ -537,8 +553,8 @@ impl OutputQueue {
         if line.len() > maximum_line_bytes() {
             return Err(QueueRefusal::TooLong(line.len()));
         }
-        if self.waiting.len() >= MAXIMUM_QUEUED_MESSAGES
-            || self.waiting_bytes + line.len() > MAXIMUM_QUEUED_BYTES
+        if self.waiting.len() >= maximum_queued_messages()
+            || self.waiting_bytes + line.len() > maximum_queued_bytes()
         {
             return Err(QueueRefusal::Full);
         }
@@ -555,7 +571,7 @@ impl OutputQueue {
     /// A wait past the deadline is an output failure rather than one refused
     /// message: a queue that has not drained in that long is not going to.
     pub fn waited_for_room(&mut self, waited: Duration) {
-        if waited >= QUEUE_PRESSURE_DEADLINE {
+        if waited >= queue_pressure_deadline() {
             self.fail(OutputFailure::PressureExpired);
         }
     }
@@ -569,7 +585,7 @@ impl OutputQueue {
         let mut written = 0;
         while let Some(queued) = self.waiting.pop_front() {
             self.waiting_bytes -= queued.line.len();
-            if each_took >= WRITE_DEADLINE {
+            if each_took >= write_deadline() {
                 self.fail(OutputFailure::WriteExpired);
                 return written;
             }

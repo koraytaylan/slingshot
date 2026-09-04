@@ -21,7 +21,7 @@
 //! answer to arrive.
 
 use crate::machine_outcome_envelope::MAXIMUM_MACHINE_OUTCOME_ENVELOPE_BYTES;
-use crate::model_context_protocol::standard_stream_transport::MAXIMUM_QUEUED_BYTES;
+use crate::model_context_protocol::standard_stream_transport::maximum_queued_bytes;
 
 /// The largest structured acknowledgement a workflow client accepts, in bytes.
 ///
@@ -51,9 +51,6 @@ pub const WORST_CASE_MESSAGE_BYTES: u64 = MAXIMUM_MACHINE_OUTCOME_ENVELOPE_BYTES
 
 /// An envelope leaves room for the message that carries it.
 const _: () = assert!(MAXIMUM_MACHINE_OUTCOME_ENVELOPE_BYTES < PINNED_ACKNOWLEDGEMENT_CAP);
-
-/// The worst message one answer produces still fits what the transport queues.
-const _: () = assert!(WORST_CASE_MESSAGE_BYTES < MAXIMUM_QUEUED_BYTES as u64);
 
 /// Where one answer is carried.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,5 +90,5 @@ pub fn worst_case_message_of(bytes: u64) -> u64 {
 #[must_use]
 pub fn is_carriable(bytes: u64) -> bool {
     carriage_of(bytes) == Carriage::Externalized
-        || worst_case_message_of(bytes) < MAXIMUM_QUEUED_BYTES as u64
+        || worst_case_message_of(bytes) < maximum_queued_bytes() as u64
 }
