@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-storage/src/artifact_store.rs
   - crates/slingshot-storage/migrations/**
   - crates/slingshot-daemon/tests/operation_maintenance.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # Artifact Cleanup Reaches A Durable Completion
