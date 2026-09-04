@@ -31,7 +31,7 @@ owner-identifier = 101099
 # this build refuses every hosted evidence claim rather than accepting one on
 # the strength of a name. `github-repository-review` verifies a named provider
 # response and emits the exact bytes to commit in its place.
-identifier = "unassigned"
+identifier = "1356816046"
 
 [release-review]
 # The protected environment the per-release RustSec review runs in, and the

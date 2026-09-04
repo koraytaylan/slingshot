@@ -6,11 +6,11 @@
 //! refused for its own reason - a display name that matches at a different
 //! identity, a runner nobody mapped, a claim nobody probed.
 //!
-//! The committed authority records no repository identity, because the
-//! repository does not exist at that address yet. Every hosted run is therefore
-//! refused, and a test says so out loud rather than leaving the reader to
-//! discover it: an authority with a hole in it that still admitted evidence
-//! would be worse than no authority at all.
+//! The committed authority records the repository's immutable identity,
+//! reviewed from a provider response rather than guessed. An authority with a
+//! hole in it still admits nothing, so that hole is constructed here rather
+//! than found: a rule proved only by the state the repository happened to be in
+//! stops being proved the moment the repository changes state.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -28,6 +28,9 @@ const FIXTURES: &str = "tests/fixtures/github-automation-authority";
 
 /// A reviewed repository identity, as one would be committed.
 const REVIEWED_IDENTIFIER: &str = "424242";
+
+/// What a fixture writes where the committed repository identity belongs.
+const IDENTIFIER_TOKEN: &str = "{identifier}";
 
 /// Returns the workspace root.
 fn workspace_root() -> PathBuf {
@@ -57,13 +60,21 @@ fn committed() -> GithubAutomationAuthority {
     parse_authority(&read_repository_file(AUTHORITY_PATH)).expect("the committed authority parses")
 }
 
-/// Returns the committed authority with a reviewed identity recorded.
+/// Returns the committed authority's text with one identity in place of the one
+/// it records.
+///
+/// The identity being replaced is read from the document rather than written
+/// down again, so every case below holds whatever this repository's own
+/// identifier is.
+fn with_identifier(identifier: &str) -> String {
+    let held = committed().repository.identifier;
+    read_repository_file(AUTHORITY_PATH)
+        .replace(&format!("identifier = \"{held}\""), &format!("identifier = \"{identifier}\""))
+}
+
+/// Returns the committed authority with a different reviewed identity recorded.
 fn reviewed() -> GithubAutomationAuthority {
-    let text = read_repository_file(AUTHORITY_PATH).replace(
-        &format!("identifier = \"{UNASSIGNED}\""),
-        &format!("identifier = \"{REVIEWED_IDENTIFIER}\""),
-    );
-    parse_authority(&text).expect("a reviewed identity parses")
+    parse_authority(&with_identifier(REVIEWED_IDENTIFIER)).expect("a reviewed identity parses")
 }
 
 /// Returns which refusal one failure is.
@@ -157,10 +168,16 @@ fn every_declared_change_to_the_authority_is_refused_for_its_own_reason() {
     assert!(!declared.is_empty());
     for row in declared {
         let name = row["name"].as_str().expect("a name");
-        let find = row["find"].as_str().expect("a find");
+        let find = row["find"]
+            .as_str()
+            .expect("a find")
+            .replace(IDENTIFIER_TOKEN, &committed().repository.identifier);
         let replace = row["replace"].as_str().expect("a replacement");
-        assert!(committed_text.contains(find), "{name}: the committed document has no {find:?}");
-        let altered = committed_text.replacen(find, replace, 1);
+        assert!(
+            committed_text.contains(find.as_str()),
+            "{name}: the committed document has no {find:?}"
+        );
+        let altered = committed_text.replacen(find.as_str(), replace, 1);
         let failure = parse_authority(&altered).expect_err(&format!("{name} was accepted"));
         assert_eq!(
             refusal_name(&failure),
@@ -171,9 +188,19 @@ fn every_declared_change_to_the_authority_is_refused_for_its_own_reason() {
 }
 
 #[test]
-fn no_hosted_run_authenticates_while_the_repository_has_no_identity() {
+fn the_committed_authority_names_the_repository_it_belongs_to() {
     let held = committed();
-    assert_eq!(held.repository.identifier, UNASSIGNED, "the repository does not exist yet");
+    assert_ne!(held.repository.identifier, UNASSIGNED, "the repository exists and is named");
+    held.repository
+        .identifier
+        .parse::<u64>()
+        .expect("an immutable identity is a number rather than a name");
+}
+
+#[test]
+fn no_hosted_run_authenticates_while_a_repository_has_no_identity() {
+    let held =
+        parse_authority(&with_identifier(UNASSIGNED)).expect("an unassigned document parses");
     for row in fixture_rows("reported-runs.jsonl") {
         let failure = require_authorized(&held, &reported(&row["run"]))
             .expect_err("an unassigned identity authorizes nothing");
