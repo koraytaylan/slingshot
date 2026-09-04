@@ -845,7 +845,7 @@ mod windows_policy {
             let list = descriptor.dacl().ok_or_else(refuse)?;
             let harmless = AccessRights::ReadControl | AccessRights::Synchronize;
             for index in 0..list.len() {
-                let entry = list.get_ace(index).map_err(|_| refuse())?;
+                let entry = list.get_ace(index).ok_or_else(refuse)?;
                 let allowed = match entry.ace_type() {
                     AceType::ACCESS_ALLOWED_ACE_TYPE => true,
                     AceType::ACCESS_DENIED_ACE_TYPE => false,
