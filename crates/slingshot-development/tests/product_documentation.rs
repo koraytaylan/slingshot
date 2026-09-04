@@ -193,6 +193,23 @@ fn workspace_package_metadata() -> BTreeSet<(String, Vec<String>, String, String
         .collect()
 }
 
+/// Returns target triples product prose names, including prose outside a table.
+fn documented_target_triples(document: &str) -> BTreeSet<String> {
+    document
+        .split(|character: char| {
+            !character.is_ascii_alphanumeric() && character != '_' && character != '-'
+        })
+        .filter(|candidate| {
+            let mut fields = candidate.split('-');
+            matches!(
+                fields.next(),
+                Some("x86_64" | "aarch64" | "arm" | "i686" | "powerpc" | "riscv64")
+            ) && fields.count() >= 2
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
 /// Runs the product executable inside a temporary runtime root.
 fn run_documented(root: &Path, action: &str) -> std::process::Output {
     Command::new(slingshot_development::cargo_executable())
@@ -303,7 +320,7 @@ fn every_documented_target_row_is_exactly_the_manifest_set() {
         );
         assert!(readme.contains(&documented), "the target table omits {documented}");
     }
-    let documented: BTreeSet<String> = readme
+    let table_rows: BTreeSet<String> = readme
         .lines()
         .skip_while(|line| *line != "## Supported targets")
         .skip(1)
@@ -312,7 +329,12 @@ fn every_documented_target_row_is_exactly_the_manifest_set() {
         .filter_map(|line| line.split("` | ").next())
         .map(str::to_owned)
         .collect();
-    assert_eq!(documented, declared, "the README names an undeclared target row");
+    assert_eq!(table_rows, declared, "the target table does not match the manifest");
+    assert_eq!(
+        documented_target_triples(&readme),
+        declared,
+        "the README names an undeclared target row in prose"
+    );
     assert!(readme.contains("untrusted_current_native_observation"));
     assert!(readme.contains("makes no aggregate claim across rows"));
 }
