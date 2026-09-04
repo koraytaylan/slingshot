@@ -88,9 +88,19 @@ impl InstallationState {
     /// where inventing a replacement would strand live subscriptions.
     #[must_use]
     pub fn state_root_occupied(&self) -> bool {
+        if self.take_lock().is_err() {
+            return true;
+        }
         std::fs::read_dir(&self.root)
-            .map(|entries| entries.flatten().next().is_some())
-            .unwrap_or(false)
+            .map(|entries| {
+                entries
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|entries| {
+                        entries.into_iter().any(|entry| entry.file_name() != LOCK_FILE_NAME)
+                    })
+                    .unwrap_or(true)
+            })
+            .unwrap_or(true)
     }
 
     /// Reads the record.
@@ -105,6 +115,7 @@ impl InstallationState {
     /// Returns [`InstallationStateFailure`] naming what was wrong, and reads
     /// nothing further once anything is.
     pub fn read(&self) -> Result<InstallationRecord, InstallationStateFailure> {
+        let _lock = self.take_lock()?;
         let path = self.record_path();
         let file = match open_without_following(&path) {
             Ok(file) => file,
