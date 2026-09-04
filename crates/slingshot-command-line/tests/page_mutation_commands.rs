@@ -102,6 +102,21 @@ fn property_document_file_reads_are_bounded_before_json_construction() {
 }
 
 #[test]
+fn property_document_duplicates_are_refused_before_a_value_is_selected() {
+    for document in [
+        r#"{"title":{"type":"string","value":"first"},"title":{"type":"string","value":"last"}}"#,
+        r#"{"title":{"type":"string","value":"first"},"t\u0069tle":{"type":"string","value":"last"}}"#,
+        r#"{"title":{"type":"string","value":"first","value":"last"}}"#,
+        r#"{"title":{"type":"string","value":"first","v\u0061lue":"last"}}"#,
+    ] {
+        assert!(
+            matches!(read_document(document), Err(PropertyDocumentRefusal::DuplicateMember { .. })),
+            "{document}"
+        );
+    }
+}
+
+#[test]
 fn a_page_creation_carries_every_value_it_was_given() {
     let built = build(&invocation(&[
         CREATE_PAGE,
