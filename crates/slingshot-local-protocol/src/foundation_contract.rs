@@ -115,6 +115,22 @@ pub struct ServerLimits {
     pub response_write_milliseconds: u64,
 }
 
+/// Capacity and deadlines of the standard-stream protocol boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct StandardStreamLimits {
+    /// Most complete responses held before the writer refuses more work.
+    pub maximum_queued_messages: u32,
+    /// Most response bytes held before the writer refuses more work.
+    pub maximum_queued_bytes: u32,
+    /// Longest wait for output capacity.
+    pub queue_pressure_milliseconds: u64,
+    /// Longest one response may take to write.
+    pub write_milliseconds: u64,
+    /// Longest output cleanup may take.
+    pub shutdown_milliseconds: u64,
+}
+
 /// Deadlines of the explicit daemon start protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -161,6 +177,8 @@ pub struct FoundationContract {
     pub namespace: NamespaceLimits,
     /// Local server capacity and deadlines.
     pub server: ServerLimits,
+    /// Standard-stream capacity and deadlines.
+    pub standard_stream: StandardStreamLimits,
     /// Explicit start deadlines.
     pub startup: StartupLimits,
     /// Shutdown deadlines.
@@ -251,6 +269,20 @@ impl FoundationContract {
                 self.server.absolute_frame_completion_milliseconds,
             ),
             ("server.response-write-milliseconds", self.server.response_write_milliseconds),
+            (
+                "standard-stream.maximum-queued-messages",
+                u64::from(self.standard_stream.maximum_queued_messages),
+            ),
+            (
+                "standard-stream.maximum-queued-bytes",
+                u64::from(self.standard_stream.maximum_queued_bytes),
+            ),
+            (
+                "standard-stream.queue-pressure-milliseconds",
+                self.standard_stream.queue_pressure_milliseconds,
+            ),
+            ("standard-stream.write-milliseconds", self.standard_stream.write_milliseconds),
+            ("standard-stream.shutdown-milliseconds", self.standard_stream.shutdown_milliseconds),
             (
                 "startup.explicit-start-total-milliseconds",
                 self.startup.explicit_start_total_milliseconds,

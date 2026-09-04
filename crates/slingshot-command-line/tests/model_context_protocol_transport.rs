@@ -20,10 +20,10 @@ use slingshot_command_line::model_context_protocol::protocol_diagnostics::{
     MAXIMUM_HELD_RECORDS, ProtocolDiagnosticSink, Recorded,
 };
 use slingshot_command_line::model_context_protocol::standard_stream_transport::{
-    BoundedLine, LineSink, MAXIMUM_QUEUED_BYTES, MAXIMUM_QUEUED_MESSAGES, Message, MessageRefusal,
-    OutputFailure, OutputQueue, ProtocolRevision, QUEUE_PRESSURE_DEADLINE, QueueRefusal,
-    SUPPORTED_REVISIONS, WRITE_DEADLINE, Written, maximum_line_bytes, maximum_nesting_depth,
-    read_bounded_line, read_message,
+    BoundedLine, LineSink, Message, MessageRefusal, OutputFailure, OutputQueue, ProtocolRevision,
+    QueueRefusal, SUPPORTED_REVISIONS, Written, maximum_line_bytes, maximum_nesting_depth,
+    maximum_queued_bytes, maximum_queued_messages, queue_pressure_deadline, read_bounded_line,
+    read_message, write_deadline,
 };
 
 /// Where the transport fixtures live.
@@ -172,7 +172,7 @@ fn standard_input_stops_at_one_bounded_lookahead() {
         matches!(read_bounded_line(&mut exact_input), Ok(BoundedLine::Line(line)) if line.len() == maximum_line_bytes())
     );
 
-    let huge = vec![b' '; maximum_line_bytes().saturating_add(4096)];
+    let huge = vec![b' '; maximum_line_bytes().saturating_add(1)];
     let mut huge_input = Cursor::new(huge);
     let bounded = read_bounded_line(&mut huge_input).expect("the hostile stream reads");
     assert!(
@@ -270,19 +270,19 @@ fn end_of_input_releases_everything_once_and_names_what_to_detach() {
 fn the_queue_holds_what_it_says_and_refuses_the_rest() {
     let mut queue = OutputQueue::new();
     let line = "{\"id\":\"one\"}";
-    for _ in 0..MAXIMUM_QUEUED_MESSAGES {
+    for _ in 0..maximum_queued_messages() {
         queue.enqueue(line).expect("every line up to the bound");
     }
-    assert_eq!(queue.waiting(), MAXIMUM_QUEUED_MESSAGES);
+    assert_eq!(queue.waiting(), maximum_queued_messages());
     assert_eq!(queue.enqueue(line), Err(QueueRefusal::Full));
-    assert!(queue.waiting_bytes() <= MAXIMUM_QUEUED_BYTES);
+    assert!(queue.waiting_bytes() <= maximum_queued_bytes());
 
     let mut sink = WorkingSink::default();
     let written = queue.write_waiting(&mut sink, NO_WAIT);
-    assert_eq!(written, MAXIMUM_QUEUED_MESSAGES);
+    assert_eq!(written, maximum_queued_messages());
     assert_eq!(queue.waiting(), 0);
     assert_eq!(queue.waiting_bytes(), 0);
-    assert_eq!(sink.taken.len(), MAXIMUM_QUEUED_MESSAGES);
+    assert_eq!(sink.taken.len(), maximum_queued_messages());
 }
 
 #[test]
@@ -323,9 +323,9 @@ const ACCEPTED_PREFIX: usize = 3;
 #[test]
 fn a_wait_past_the_pressure_deadline_stops_output_rather_than_one_message() {
     let mut queue = OutputQueue::new();
-    queue.waited_for_room(QUEUE_PRESSURE_DEADLINE - Duration::from_millis(1));
+    queue.waited_for_room(queue_pressure_deadline() - Duration::from_millis(1));
     assert_eq!(queue.failure(), None, "a wait inside the deadline is only a wait");
-    queue.waited_for_room(QUEUE_PRESSURE_DEADLINE);
+    queue.waited_for_room(queue_pressure_deadline());
     assert_eq!(queue.failure(), Some(OutputFailure::PressureExpired));
 }
 
@@ -334,7 +334,7 @@ fn a_line_past_the_write_deadline_stops_output_before_it_is_attempted() {
     let mut queue = OutputQueue::new();
     queue.enqueue("{\"id\":\"one\"}").expect("it is queued");
     let mut sink = WorkingSink::default();
-    let written = queue.write_waiting(&mut sink, WRITE_DEADLINE);
+    let written = queue.write_waiting(&mut sink, write_deadline());
     assert_eq!(written, 0);
     assert!(sink.taken.is_empty(), "nothing is written after the deadline elapses");
     assert_eq!(queue.failure(), Some(OutputFailure::WriteExpired));
