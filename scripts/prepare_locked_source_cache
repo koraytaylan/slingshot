@@ -109,6 +109,29 @@ mkdir -p "$OUTPUT_DIRECTORY"
 CARGO_HOME="$OUTPUT_DIRECTORY" cargo fetch --locked \
     || report_refusal 'the declared inputs could not be fetched'
 
+# The acceptance runs its gates inside a container it may not fetch, so the
+# image travels with everything else it is given. Only the coordinating row
+# carries it, because only that row's cache reaches the acceptance, and only
+# that row is a machine the runtime exists on. The image is acquired by its
+# digest, so what is saved is the image the contract named or nothing is.
+if [ "${SLINGSHOT_COORDINATOR:-}" = true ]; then
+    report_stage 'the image the acceptance runs in'
+    CONTAINER=support/release-acceptance-container.toml
+    [ -f "$CONTAINER" ] || report_refusal "$CONTAINER is not committed"
+    RUNTIME=$(sed -n 's/^name = "\(.*\)"$/\1/p' "$CONTAINER" | head -n 1)
+    REFERENCE=$(sed -n 's/^reference = "\([^:]*\).*"$/\1/p' "$CONTAINER" | head -n 1)
+    DIGEST=$(sed -n 's/^digest = "\(.*\)"$/\1/p' "$CONTAINER" | head -n 1)
+    [ -n "$RUNTIME" ] || report_refusal "$CONTAINER names no container runtime"
+    [ -n "$REFERENCE" ] || report_refusal "$CONTAINER names no image"
+    [ -n "$DIGEST" ] || report_refusal "$CONTAINER names no image digest"
+    printf 'this command reaches the network to acquire the pinned image\n'
+    "$RUNTIME" pull "$REFERENCE@$DIGEST" \
+        || report_refusal 'the pinned acceptance image could not be acquired'
+    "$RUNTIME" save --format oci-archive \
+        --output "$OUTPUT_DIRECTORY/coordinator-image" "$DIGEST" \
+        || report_refusal 'the pinned acceptance image could not be saved into the cache'
+fi
+
 report_stage 'the manifest'
 cargo run --locked --quiet -p slingshot-development -- \
     prepare-locked-source-cache --output-directory "$OUTPUT_DIRECTORY"
