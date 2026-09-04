@@ -211,7 +211,7 @@ impl OperationDatabase {
             .map_err(refused)?
             .collect::<Result<Vec<String>, _>>()
             .map_err(refused)?;
-        if !reported.iter().any(|option| option == REQUIRED_COMPILE_OPTION) {
+        if !reports_only_required_temp_store(&reported) {
             return Err(DatabaseFailure::CompileOptionRefused(REQUIRED_COMPILE_OPTION.to_owned()));
         }
         Ok(())
@@ -312,8 +312,7 @@ fn configure_sqlite() -> Result<(), DatabaseFailure> {
     if source.to_str().ok() != Some(REVIEWED_SQLITE_SOURCE_ID) {
         return Err(DatabaseFailure::RuntimeIdentityRefused(REVIEWED_SQLITE_LIBRARY));
     }
-    let temp_store = c"TEMP_STORE=3";
-    if unsafe { rusqlite::ffi::sqlite3_compileoption_used(temp_store.as_ptr()) } == 0 {
+    if !reports_only_required_temp_store_ffi() {
         return Err(DatabaseFailure::CompileOptionRefused(REQUIRED_COMPILE_OPTION.to_owned()));
     }
 
@@ -332,6 +331,26 @@ fn configure_sqlite() -> Result<(), DatabaseFailure> {
         )));
     }
     Ok(())
+}
+
+/// Returns whether compile-option output names exactly the required temp mode.
+fn reports_only_required_temp_store(reported: &[String]) -> bool {
+    reported.iter().any(|option| option == REQUIRED_COMPILE_OPTION)
+        && reported
+            .iter()
+            .filter(|option| option.starts_with("TEMP_STORE="))
+            .all(|option| option == REQUIRED_COMPILE_OPTION)
+}
+
+/// Reads the temporary-store build identity without opening a connection.
+#[allow(unsafe_code)]
+fn reports_only_required_temp_store_ffi() -> bool {
+    const TEMP_STORE_OPTIONS: [&std::ffi::CStr; 4] =
+        [c"TEMP_STORE=0", c"TEMP_STORE=1", c"TEMP_STORE=2", c"TEMP_STORE=3"];
+    TEMP_STORE_OPTIONS.iter().all(|option| {
+        let reported = unsafe { rusqlite::ffi::sqlite3_compileoption_used(option.as_ptr()) } != 0;
+        (*option == c"TEMP_STORE=3") == reported
+    })
 }
 
 /// Refuses a future schema through a read-only connection before any mutable open.
