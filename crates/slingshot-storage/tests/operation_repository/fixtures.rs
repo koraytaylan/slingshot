@@ -15,8 +15,7 @@ use slingshot_domain::operation::{
 };
 use slingshot_storage::database::{OperationDatabase, RequiredSettings};
 use slingshot_storage::operation_repository::{
-    AdmissionOutcome, AdmissionRequest, OperationRepository, OperationSummary, ResultDisposition,
-    ResumeOutcome,
+    AdmissionOutcome, AdmissionRequest, OperationRepository, OperationSummary, ResumeOutcome,
 };
 
 /// Bytes one page occupies, from the runtime contract.
@@ -246,18 +245,6 @@ pub fn recovering(
     attempt_count: u32,
 ) -> OperationFact {
     OperationFact::Recovery { recovery: recovery(category, evidence, attempt_count) }
-}
-
-/// Records where the fixture operation's result went.
-pub fn disposed(
-    store: &OperationRepository,
-    digest: &str,
-    revision: u64,
-    disposition: ResultDisposition,
-) -> OperationSummary {
-    store
-        .record_result_disposition(digest, OPERATION, revision, disposition)
-        .expect("a disposition")
 }
 
 /// Returns the source fingerprint one resume fixture is keyed by.

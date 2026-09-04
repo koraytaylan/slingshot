@@ -8,8 +8,8 @@
 
 use slingshot_domain::operation::{
     LifecycleFailure, OperationExecutionCertainty, OperationFact, OperationLifecycleState,
-    RecoveryCategory, RecoveryExecutionEvidence, TerminalFailure, TerminalFailureDisposition,
-    TerminalFailureKind,
+    RecoveryCategory, RecoveryExecutionEvidence, SuccessfulSettlement, TerminalFailure,
+    TerminalFailureDisposition, TerminalFailureKind,
 };
 use slingshot_storage::database::OperationDatabase;
 use slingshot_storage::operation_repository::{
@@ -124,6 +124,36 @@ fn settling_an_operation_clears_the_recovery_it_was_waiting_on() {
         Some(NOW + SETTLING_DELAY_MILLISECONDS),
         "and records when it ended"
     );
+}
+
+#[test]
+fn a_successful_settlement_clears_recovery_with_its_complete_result() {
+    let store = in_memory();
+    let digest = partition(FIRST_PRINCIPAL);
+    let admitted_revision = admitted(&store, &digest);
+    let waiting = applied(
+        &store,
+        &digest,
+        admitted_revision,
+        &recovering(RecoveryCategory::AmbiguousSubmission, SUBMISSION_UNKNOWN, 1),
+        NOW,
+    );
+    let settled = store
+        .settle_success(
+            &digest,
+            OPERATION,
+            &SuccessfulSettlement {
+                artifacts: Vec::new(),
+                inline_result: Some("{}".to_owned()),
+                expected_lifecycle_state: OperationLifecycleState::Queued,
+                expected_revision: waiting.record.revision,
+                settled_at_unix_milliseconds: SECOND_INSTANT,
+            },
+        )
+        .expect("one complete settlement");
+    assert_eq!(settled.record.lifecycle_state, OperationLifecycleState::Succeeded);
+    assert!(settled.record.outstanding_recovery.is_none(), "success clears recovery");
+    assert_eq!(settled.result_inline_bytes.as_deref(), Some("{}"));
 }
 
 #[test]

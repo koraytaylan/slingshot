@@ -83,7 +83,7 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         text: "SELECT caller_identity, command_fingerprint, command_wire_name, \
                       enqueue_sequence, installation_identifier, latest_progress, \
                       lifecycle_state, operation_revision, recorded_at_unix_milliseconds, \
-                      result_disposition, selected_environment_revision, \
+                      result_disposition, result_inline_bytes, selected_environment_revision, \
                       settled_at_unix_milliseconds, terminal_failure_disposition, \
                       terminal_failure_kind, terminal_failure_metadata, \
                       workflow_correlation_identifier \
@@ -140,12 +140,13 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         purpose: "record one folded operation under compare-and-set",
         text: "UPDATE operation \
                SET latest_progress = ?, lifecycle_state = ?, operation_revision = ?, \
-                   result_disposition = ?, settled_at_unix_milliseconds = ?, \
+                   result_disposition = ?, result_inline_bytes = ?, \
+                   settled_at_unix_milliseconds = ?, \
                    terminal_failure_disposition = ?, terminal_failure_kind = ?, \
                    terminal_failure_metadata = ? \
                WHERE author_target_identity_digest = ? AND operation_identifier = ? \
                  AND operation_revision = ?",
-        parameters: 11,
+        parameters: 12,
         maximum_rows: 0,
     },
     InventoriedStatement {

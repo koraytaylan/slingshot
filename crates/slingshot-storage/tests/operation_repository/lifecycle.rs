@@ -223,7 +223,7 @@ fn reopening_reconstructs_the_partition_in_the_order_its_callers_asked() {
 }
 
 #[test]
-fn a_result_disposition_is_recorded_under_compare_and_set() {
+fn a_complete_inline_result_settles_under_compare_and_set() {
     let store = in_memory();
     let digest = partition(FIRST_PRINCIPAL);
     let first = admitted(&store, &digest);
@@ -233,15 +233,33 @@ fn a_result_disposition_is_recorded_under_compare_and_set() {
         "an admitted operation has produced nothing yet"
     );
 
-    let inline = disposed(&store, &digest, first, ResultDisposition::Inline);
+    let inline = store
+        .settle_success(
+            &digest,
+            OPERATION,
+            &slingshot_domain::operation::SuccessfulSettlement {
+                artifacts: Vec::new(),
+                inline_result: Some("{}".to_owned()),
+                expected_lifecycle_state: OperationLifecycleState::Queued,
+                expected_revision: first,
+                settled_at_unix_milliseconds: NOW,
+            },
+        )
+        .expect("a complete settlement");
     assert_eq!(inline.result_disposition, Some(ResultDisposition::Inline));
     assert_eq!(inline.record.revision, first + 1, "recording where it went is one revision");
 
-    let again = disposed(&store, &digest, inline.record.revision, ResultDisposition::Inline);
-    assert_eq!(again, inline, "and saying it twice says it once");
-
-    let stale =
-        store.record_result_disposition(&digest, OPERATION, first, ResultDisposition::Artifact);
+    let stale = store.settle_success(
+        &digest,
+        OPERATION,
+        &slingshot_domain::operation::SuccessfulSettlement {
+            artifacts: Vec::new(),
+            inline_result: Some("{}".to_owned()),
+            expected_lifecycle_state: OperationLifecycleState::Queued,
+            expected_revision: first,
+            settled_at_unix_milliseconds: NOW,
+        },
+    );
     assert!(
         matches!(stale, Err(RepositoryFailure::RevisionMoved { .. })),
         "a stale writer cannot restate where the result went: {stale:?}"
