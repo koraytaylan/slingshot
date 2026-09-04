@@ -438,23 +438,34 @@ fn an_unresponsive_owned_child_ends_through_its_retained_handle() {
 /// A daemon that is there and silent is what makes an interrupt observable: the
 /// run gets past connecting and is waiting for an answer when the signal
 /// arrives, which is the phase the account it prints describes.
-fn silent_endpoint(address: &EndpointAddress) -> std::thread::JoinHandle<()> {
+fn silent_endpoint(
+    address: &EndpointAddress,
+) -> (std::thread::JoinHandle<()>, std::sync::mpsc::Receiver<()>) {
     let EndpointAddress::UnixDomainSocket(path) = address;
     let path = path.clone();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).expect("the endpoint directory exists");
     }
     let listener = std::os::unix::net::UnixListener::bind(&path).expect("the endpoint binds");
-    std::thread::spawn(move || {
+    let (announce, arrived) = std::sync::mpsc::channel();
+    let accepting = std::thread::spawn(move || {
         let mut held = Vec::new();
         while let Ok((stream, _)) = listener.accept() {
+            // Announced before the stream is held, so a run waiting for an
+            // answer is observable rather than assumed to have arrived by now.
+            let _ = announce.send(());
             held.push(stream);
         }
-    })
+    });
+    (accepting, arrived)
 }
 
 /// Runs one invocation against a silent endpoint and interrupts it.
-fn interrupted_session(root: &Path, arguments: &[String]) -> CapturedProcess {
+fn interrupted_session(
+    root: &Path,
+    arguments: &[String],
+    arrived: &std::sync::mpsc::Receiver<()>,
+) -> CapturedProcess {
     let words = [
         vec!["--runtime-root".to_owned(), root.to_string_lossy().into_owned()],
         arguments.to_vec(),
@@ -465,6 +476,12 @@ fn interrupted_session(root: &Path, arguments: &[String]) -> CapturedProcess {
     let mut child = harness
         .start_retained(&product_executable(), &ProcessRequest::new(&spoken))
         .expect("the child starts");
+    // The signal is delivered once the run has reached the endpoint and is
+    // waiting for an answer, which is the phase this scenario describes. Waiting
+    // a fixed span instead would be guessing how long a loaded machine takes to
+    // get there, and a machine slower than the guess receives the signal before
+    // the run can answer for it.
+    arrived.recv_timeout(SCENARIO_PATIENCE).expect("the run reaches the silent endpoint");
     if child.wait_within(SETTLING_DEADLINE).is_ok() {
         let finished = child.capture_within(SIGNAL_DEADLINE).unwrap_or_else(|_| {
             panic!("the child finished before the signal and could not be read")
@@ -494,10 +511,10 @@ fn an_interrupted_run_says_how_far_it_got_and_exits_one_hundred_and_thirty() {
     let namespace = namespace_of(root.path(), ENVIRONMENT);
     let address = endpoint::endpoint_address(&contract, root.path(), namespace.digest())
         .expect("the endpoint is named");
-    let listening = silent_endpoint(&address);
+    let (listening, arrived) = silent_endpoint(&address);
 
     for session in declared_sessions().iter().filter(|row| row.kind == AGAINST_SILENCE) {
-        let produced = interrupted_session(root.path(), &session.arguments);
+        let produced = interrupted_session(root.path(), &session.arguments, &arrived);
         assert_eq!(produced.status.code(), Some(INTERRUPTED), "{}", session.name);
         let (written, claim) = if session.arguments.iter().any(|word| word == "--machine") {
             (&produced.standard_error, "a machine run writes one envelope and nothing else")
