@@ -90,6 +90,17 @@ git diff --quiet HEAD || report_refusal 'the working tree differs from the commi
 SOURCE_COMMIT=$(git rev-parse HEAD)
 SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')
 
+report_stage 'the image the gates run in'
+# Loaded from what was transferred, never fetched. The contract names the member
+# the image travels as, and a cache without it is a cache this decision cannot
+# be made from - so this refuses rather than reaching for one.
+IMAGE_MEMBER=$(read_value local-oci-layout-member)
+[ -n "$IMAGE_MEMBER" ] || report_refusal "$CONTAINER names no image member"
+[ -f "$LOCKED_SOURCE_CACHE/$IMAGE_MEMBER" ] \
+    || report_refusal "the cache carries no $IMAGE_MEMBER, so the gates have nothing to run in"
+"$RUNTIME" load --input "$LOCKED_SOURCE_CACHE/$IMAGE_MEMBER" \
+    || report_refusal 'the transferred image could not be loaded'
+
 mkdir -p "$OUTPUT_DIRECTORY"
 report_stage 'every gate, inside the container'
 # Read-only inputs, no network, no capabilities, and one writable root. Every
