@@ -9,7 +9,7 @@ touches:
   - crates/slingshot-storage/src/database.rs
   - crates/slingshot-storage/src/sqlite_vfs.rs
   - crates/slingshot-storage/tests/migrations.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # SQLite File Policy Mediates Real Opens
