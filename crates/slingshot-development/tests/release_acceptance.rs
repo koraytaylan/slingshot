@@ -19,9 +19,10 @@ use slingshot_development::github_automation_authority::{AUTHORITY_PATH, parse_a
 use slingshot_development::release_acceptance::{
     AcceptanceGate, AcceptanceManifest, AcceptanceRefusal, CACHE_MOUNT, CONTAINER_PATH,
     FINITE_STATE_MACHINE_MOUNT, GateRun, GateSubject, HELD, MANIFEST_FORMAT, NETWORK_NONE,
-    PLATFORM_EVIDENCE_MOUNT, REFUSED, RELEASABLE, REQUIRED_GATES, REVIEW_RECORD_MOUNT, RunBinding,
-    RunIdentity, SCHEMA_PATH, conclude, parse_container, parse_manifest, require_complete,
-    require_revision, run_gate,
+    PLATFORM_EVIDENCE_MOUNT, PROVIDER_RUN_VARIABLE, REFUSED, RELEASABLE, REQUIRED_GATES,
+    REVIEW_RECORD_MOUNT, RunBinding, RunIdentity, SCHEMA_PATH, SOURCE_COMMIT_VARIABLE,
+    SOURCE_TREE_VARIABLE, conclude, parse_container, parse_manifest, require_complete,
+    require_revision, run_gate, told,
 };
 
 /// Where the fixtures live.
@@ -44,6 +45,18 @@ const PROVIDER_RUN: &str = ".github/workflows/release.yml@refs/heads/main";
 
 /// The row a fixture acceptance run was coordinated by.
 const COORDINATOR_ROW: &str = "x86_64-unknown-linux-gnu";
+
+/// Where the runner that starts the container lives.
+const RUNNER_PATH: &str = "scripts/release_acceptance";
+
+/// Where the module that makes the decision lives.
+const DECISION_PATH: &str = "crates/slingshot-development/src/release_acceptance.rs";
+
+/// Where the workflow that asks for the decision lives.
+const WORKFLOW_PATH: &str = ".github/workflows/release.yml";
+
+/// The variable a workflow job reports which run it is through.
+const REPORTED_WORKFLOW_VARIABLE: &str = "SLINGSHOT_REPORTED_WORKFLOW";
 
 /// Returns the workspace root.
 fn workspace_root() -> PathBuf {
@@ -462,4 +475,129 @@ fn every_gate_the_inventory_names_is_named_once_and_run_by_something() {
         assert!(!gate.arguments().is_empty(), "{} is run by nothing", gate.name);
     }
     assert_eq!(seen.len(), REQUIRED_GATES.len());
+}
+
+/// Returns everything one run is told about itself.
+fn everything_told() -> std::collections::BTreeMap<String, String> {
+    [
+        (SOURCE_COMMIT_VARIABLE, SOURCE_COMMIT),
+        (SOURCE_TREE_VARIABLE, SOURCE_COMMIT),
+        (PROVIDER_RUN_VARIABLE, PROVIDER_RUN),
+    ]
+    .into_iter()
+    .map(|(variable, held)| (variable.to_owned(), held.to_owned()))
+    .collect()
+}
+
+/// Returns every variable the runner tells the container.
+fn variables_the_runner_passes(runner: &str) -> Vec<String> {
+    runner
+        .split("--env ")
+        .skip(1)
+        .filter_map(|held| held.split('=').next())
+        .map(|held| held.trim().trim_matches('"').to_owned())
+        .collect()
+}
+
+#[test]
+fn everything_the_manifest_binds_arrives_through_the_declared_environment() {
+    let container = parse_container(&read_repository_file(CONTAINER_PATH)).expect("it parses");
+    let runner = read_repository_file(RUNNER_PATH);
+    let passed = variables_the_runner_passes(&runner);
+    for variable in [SOURCE_COMMIT_VARIABLE, SOURCE_TREE_VARIABLE, PROVIDER_RUN_VARIABLE] {
+        assert!(
+            container.environment.allowed.iter().any(|held| held == variable),
+            "the contract admits no {variable}, so the run would never have it"
+        );
+        assert!(
+            passed.iter().any(|held| held == variable),
+            "the contract admits {variable} and the invocation tells the container no such thing"
+        );
+    }
+    assert!(
+        runner.contains(&format!("{SOURCE_COMMIT_VARIABLE}=$SOURCE_COMMIT")),
+        "the revision told to the container is the one read from the checkout"
+    );
+    assert!(runner.contains(&format!("{SOURCE_TREE_VARIABLE}=$SOURCE_TREE")), "and so is the tree");
+}
+
+#[test]
+fn the_container_is_told_nothing_the_contract_does_not_admit() {
+    let container = parse_container(&read_repository_file(CONTAINER_PATH)).expect("it parses");
+    let passed = variables_the_runner_passes(&read_repository_file(RUNNER_PATH));
+    assert!(!passed.is_empty());
+    for variable in passed {
+        assert!(
+            container.environment.allowed.contains(&variable),
+            "the invocation tells the container {variable} and the contract admits no such thing"
+        );
+    }
+}
+
+#[test]
+fn a_run_told_nothing_about_itself_decides_nothing() {
+    let complete = everything_told();
+    told(&complete).expect("a run told everything knows what it is deciding");
+    for variable in [SOURCE_COMMIT_VARIABLE, SOURCE_TREE_VARIABLE, PROVIDER_RUN_VARIABLE] {
+        let mut absent = complete.clone();
+        absent.remove(variable);
+        let failure = told(&absent).expect_err("a run missing a value it binds decides nothing");
+        assert_eq!(refusal_name(&failure), "RunUnbound", "{failure}");
+        assert!(failure.to_string().contains(variable), "and the refusal names which: {failure}");
+
+        let mut blank = complete.clone();
+        blank.insert(variable.to_owned(), " ".to_owned());
+        let failure = told(&blank).expect_err("told a blank is told nothing");
+        assert_eq!(refusal_name(&failure), "RunUnbound", "{failure}");
+        assert!(failure.to_string().contains(variable), "{failure}");
+    }
+    assert!(
+        told(&std::collections::BTreeMap::new()).is_err(),
+        "and a run told nothing at all decides nothing at all"
+    );
+}
+
+#[test]
+fn nothing_the_manifest_binds_is_worked_out_from_the_containers_surroundings() {
+    let decision = read_repository_file(DECISION_PATH);
+    assert_eq!(
+        decision.matches("std::env::").count(),
+        1,
+        "the decision reads its environment in one place, or a value could come from another"
+    );
+    for inferred in ["rev-parse", "GITHUB_", "hostname", "SLINGSHOT_REPORTED_"] {
+        assert!(
+            !decision.contains(inferred),
+            "a run that could work {inferred} out could be persuaded it was a run it is not"
+        );
+    }
+    let runner = read_repository_file(RUNNER_PATH);
+    assert!(
+        runner.contains("SOURCE_COMMIT=$(git rev-parse HEAD)"),
+        "the revision is read on the host, from the checkout being accepted"
+    );
+    assert!(
+        runner.contains(&format!("PROVIDER_RUN=${{{REPORTED_WORKFLOW_VARIABLE}:-}}")),
+        "and the provider run comes from the one variable a run reports itself through"
+    );
+}
+
+#[test]
+fn the_run_that_asks_for_a_decision_says_which_run_it_is() {
+    let runner = read_repository_file(RUNNER_PATH);
+    assert!(
+        runner.contains(&format!("report_refusal 'set {REPORTED_WORKFLOW_VARIABLE}")),
+        "a host that reports no run is refused before a container starts"
+    );
+    let workflow = read_repository_file(WORKFLOW_PATH);
+    let asks = workflow.find(RUNNER_PATH).expect("the workflow asks for the decision");
+    let reports = workflow[..asks]
+        .rfind(REPORTED_WORKFLOW_VARIABLE)
+        .expect("the job that asks for the decision reports which run it is");
+    let step = workflow[..asks].rfind("      - name:").unwrap_or_default();
+    assert!(
+        reports > step,
+        "the step that asks for the decision reports the run itself, and an environment does not \
+         travel between steps"
+    );
 }
