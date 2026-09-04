@@ -343,12 +343,13 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
-        purpose: "read one recovery-resume receipt by its source fingerprint",
+        purpose: "read one recovery-resume receipt by operation and source fingerprint",
         text: "SELECT applied_operation_revision, operation_identifier, \
                       recorded_at_unix_milliseconds, selected_environment_revision \
                FROM recovery_resume_receipt \
-               WHERE author_target_identity_digest = ? AND source_fingerprint = ?",
-        parameters: 2,
+               WHERE author_target_identity_digest = ? AND operation_identifier = ? \
+                 AND source_fingerprint = ?",
+        parameters: 3,
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {

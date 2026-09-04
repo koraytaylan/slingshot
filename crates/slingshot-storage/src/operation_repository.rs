@@ -889,9 +889,12 @@ impl OperationRepository {
         now_unix_milliseconds: u64,
     ) -> Result<ResumeOutcome, RepositoryFailure> {
         let transaction = write_transaction(self.database.connection())?;
-        if let Some(held) =
-            Self::receipt_within(&transaction, author_target_identity_digest, source_fingerprint)?
-        {
+        if let Some(held) = Self::receipt_within(
+            &transaction,
+            author_target_identity_digest,
+            operation_identifier,
+            source_fingerprint,
+        )? {
             transaction.commit()?;
             return Ok(ResumeOutcome::Replayed(Box::new(held)));
         }
@@ -907,11 +910,15 @@ impl OperationRepository {
                 source_fingerprint,
             ],
         )?;
-        let written =
-            Self::receipt_within(&transaction, author_target_identity_digest, source_fingerprint)?
-                .ok_or_else(|| RepositoryFailure::NoSuchOperation {
-                    identifier: operation_identifier.to_owned(),
-                })?;
+        let written = Self::receipt_within(
+            &transaction,
+            author_target_identity_digest,
+            operation_identifier,
+            source_fingerprint,
+        )?
+        .ok_or_else(|| RepositoryFailure::NoSuchOperation {
+            identifier: operation_identifier.to_owned(),
+        })?;
         transaction.commit()?;
         Ok(ResumeOutcome::Applied(Box::new(written)))
     }
@@ -944,11 +951,13 @@ impl OperationRepository {
     pub fn read_resume_receipt(
         &self,
         author_target_identity_digest: &str,
+        operation_identifier: &str,
         source_fingerprint: &str,
     ) -> Result<Option<RecoveryResumeReceipt>, RepositoryFailure> {
         Self::receipt_within(
             self.database.connection(),
             author_target_identity_digest,
+            operation_identifier,
             source_fingerprint,
         )
     }
@@ -957,13 +966,19 @@ impl OperationRepository {
     fn receipt_within(
         connection: &rusqlite::Connection,
         author_target_identity_digest: &str,
+        operation_identifier: &str,
         source_fingerprint: &str,
     ) -> Result<Option<RecoveryResumeReceipt>, RepositoryFailure> {
-        let mut prepared = connection
-            .prepare(statement("read one recovery-resume receipt by its source fingerprint"))?;
+        let mut prepared = connection.prepare(statement(
+            "read one recovery-resume receipt by operation and source fingerprint",
+        ))?;
         let row = prepared
             .query_row(
-                rusqlite::params![author_target_identity_digest, source_fingerprint],
+                rusqlite::params![
+                    author_target_identity_digest,
+                    operation_identifier,
+                    source_fingerprint
+                ],
                 |row| Ok(Self::receipt_from(row, source_fingerprint)),
             )
             .optional()?;

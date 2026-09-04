@@ -286,7 +286,7 @@ fn one_resume_source_commits_one_receipt_and_replays_it_afterwards() {
         "the committed receipt, not a fresh one built from what was asked"
     );
     assert_eq!(
-        store.read_resume_receipt(&digest, &source(1)).expect("a read").as_ref(),
+        store.read_resume_receipt(&digest, OPERATION, &source(1)).expect("a read").as_ref(),
         Some(&applied),
         "and the receipt reads back the same either way"
     );
@@ -345,7 +345,7 @@ fn one_operation_holds_the_receipts_it_may_and_refuses_the_next() {
         "one source beyond the bound is refused: {over:?}"
     );
     assert!(
-        store.read_resume_receipt(&digest, &source(allowed)).expect("a read").is_none(),
+        store.read_resume_receipt(&digest, OPERATION, &source(allowed)).expect("a read").is_none(),
         "and wrote nothing"
     );
     let replay = receipted(&store, &digest, 0, 1, NOW);
@@ -370,7 +370,7 @@ fn concurrent_identical_resume_requests_commit_one_receipt() {
 
     let store = repository(&path);
     assert!(
-        store.read_resume_receipt(&digest, &source(1)).expect("a read").is_some(),
+        store.read_resume_receipt(&digest, OPERATION, &source(1)).expect("a read").is_some(),
         "and it is there afterwards"
     );
 }

@@ -110,11 +110,12 @@ pub enum ResumeFailure {
 /// different sources - and the same resume sent twice is one.
 #[must_use]
 pub fn source_fingerprint(
+    operation_identifier: &str,
     command_fingerprint: &str,
     expected_revision: u64,
     category: RecoveryCategory,
 ) -> String {
-    format!("{command_fingerprint}:{expected_revision}:{category:?}")
+    format!("{operation_identifier}:{command_fingerprint}:{expected_revision}:{category:?}")
 }
 
 /// Resumes one paused operation, or says why it did not.
@@ -145,13 +146,16 @@ pub fn resume(
         }));
     };
     let source = source_fingerprint(
+        &request.operation_identifier,
         summary.command_fingerprint.as_text(),
         request.expected_revision,
         request.expected_recovery_category,
     );
-    if let Some(held) =
-        repository.read_resume_receipt(&request.author_target_identity_digest, &source)?
-    {
+    if let Some(held) = repository.read_resume_receipt(
+        &request.author_target_identity_digest,
+        &request.operation_identifier,
+        &source,
+    )? {
         return Ok(ResumeResponse::Replayed(Box::new(held)));
     }
     if let Err(refusal) = require_resumable(&summary, request) {
