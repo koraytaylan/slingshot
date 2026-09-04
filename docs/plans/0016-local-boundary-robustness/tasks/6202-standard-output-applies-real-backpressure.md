@@ -11,8 +11,8 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/standard_stream_transport.rs
   - crates/slingshot-command-line/tests/model_context_protocol_transport.rs
   - crates/slingshot-command-line/tests/model_context_protocol_process_boundaries.rs
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # Standard Output Applies Real Backpressure
 
