@@ -316,6 +316,73 @@ fn publication_happens_once_and_never_over_something_that_is_already_there() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn competing_publishers_and_a_destination_link_never_replace_a_users_file() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let destination = directory.path().join("artifact.zip");
+    let redirected = directory.path().join("user-file.zip");
+    std::fs::write(&redirected, b"user bytes").expect("the user file writes");
+    std::os::unix::fs::symlink(&redirected, &destination).expect("the destination link exists");
+    let linked_staging = directory.path().join("linked.slingshot-partial");
+    std::fs::write(&linked_staging, b"verified bytes").expect("the staging file writes");
+    assert_eq!(
+        publish(&linked_staging, &destination),
+        Err(DownloadRefusal::DestinationOccupied),
+        "a link is an occupied destination, never a route to its target"
+    );
+    assert_eq!(std::fs::read(&redirected).expect("the user file reads"), b"user bytes");
+    std::fs::remove_file(&destination).expect("the test link is removed");
+
+    let first = directory.path().join("first.slingshot-partial");
+    let second = directory.path().join("second.slingshot-partial");
+    std::fs::write(&first, b"first verified bytes").expect("the first staging file writes");
+    std::fs::write(&second, b"second verified bytes").expect("the second staging file writes");
+    std::thread::scope(|threads| {
+        let one = threads.spawn(|| publish(&first, &destination));
+        let two = threads.spawn(|| publish(&second, &destination));
+        let outcomes = [
+            one.join().expect("the first publisher returns"),
+            two.join().expect("the second publisher returns"),
+        ];
+        assert_eq!(
+            outcomes.iter().filter(|outcome| outcome.is_ok()).count(),
+            1,
+            "one publisher wins"
+        );
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|outcome| matches!(outcome, Err(DownloadRefusal::DestinationOccupied)))
+                .count(),
+            1,
+            "the other loses without an overwrite"
+        );
+    });
+    let published = std::fs::read(&destination).expect("one completed file is visible");
+    assert!(published == b"first verified bytes" || published == b"second verified bytes");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_preplaced_lock_link_or_hardlink_is_never_opened_or_removed() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let protected = directory.path().join("protected");
+    std::fs::write(&protected, b"protected bytes").expect("the protected file writes");
+    let symlink = directory.path().join("symlink.slingshot-lock");
+    std::os::unix::fs::symlink(&protected, &symlink).expect("the lock link exists");
+    assert!(matches!(StagingLock::take(&symlink), Err(LockRefusal::Held)));
+    assert_eq!(std::fs::read(&protected).expect("the protected file reads"), b"protected bytes");
+
+    let hardlink = directory.path().join("hardlink.slingshot-lock");
+    std::fs::hard_link(&protected, &hardlink).expect("the lock hardlink exists");
+    assert!(matches!(StagingLock::take(&hardlink), Err(LockRefusal::Held)));
+    assert_eq!(
+        std::fs::read(&protected).expect("the protected file still reads"),
+        b"protected bytes"
+    );
+}
+
 #[test]
 fn a_rerun_does_only_what_is_left_and_re_renders_a_publication_it_already_made() {
     assert_eq!(prior_work(None, false), PriorWork::None);

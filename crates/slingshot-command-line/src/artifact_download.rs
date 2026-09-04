@@ -188,8 +188,58 @@ pub fn publish(
     staging: &std::path::Path,
     destination: &std::path::Path,
 ) -> Result<(), DownloadRefusal> {
-    if destination.symlink_metadata().is_ok() {
-        return Err(DownloadRefusal::DestinationOccupied);
+    publish_no_replace(staging, destination)
+}
+
+/// Publishes through the operating system's atomic no-replace primitive.
+///
+/// A prior existence check is intentionally absent: checking and then renaming
+/// is the race this adapter exists to remove. Both names are resolved against
+/// the same retained directory handle, and the staged file is synchronized
+/// before its name can become visible to the caller.
+#[cfg(target_os = "linux")]
+fn publish_no_replace(
+    staging: &std::path::Path,
+    destination: &std::path::Path,
+) -> Result<(), DownloadRefusal> {
+    use rustix::fs::{Mode, OFlags, RenameFlags, openat, renameat_with};
+
+    let directory = destination.parent().ok_or(DownloadRefusal::DestinationUnusable)?;
+    if staging.parent() != Some(directory) {
+        return Err(DownloadRefusal::DestinationUnusable);
     }
-    std::fs::rename(staging, destination).map_err(|_| DownloadRefusal::DestinationUnusable)
+    let staging_name = staging.file_name().ok_or(DownloadRefusal::DestinationUnusable)?;
+    let destination_name = destination.file_name().ok_or(DownloadRefusal::DestinationUnusable)?;
+    let held = std::fs::File::open(directory).map_err(|_| DownloadRefusal::DestinationUnusable)?;
+    let staged = openat(
+        &held,
+        staging_name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|_| DownloadRefusal::DestinationUnusable)?;
+    let staged = std::fs::File::from(staged);
+    if !staged.metadata().map_err(|_| DownloadRefusal::DestinationUnusable)?.is_file() {
+        return Err(DownloadRefusal::DestinationUnusable);
+    }
+    staged.sync_all().map_err(|_| DownloadRefusal::DestinationUnusable)?;
+    renameat_with(&held, staging_name, &held, destination_name, RenameFlags::NOREPLACE).map_err(
+        |failure| {
+            if failure == rustix::io::Errno::EXIST {
+                DownloadRefusal::DestinationOccupied
+            } else {
+                DownloadRefusal::DestinationUnusable
+            }
+        },
+    )?;
+    held.sync_all().map_err(|_| DownloadRefusal::DestinationUnusable)
+}
+
+/// Refuses publication where this build cannot prove an atomic no-replace rename.
+#[cfg(not(target_os = "linux"))]
+fn publish_no_replace(
+    _staging: &std::path::Path,
+    _destination: &std::path::Path,
+) -> Result<(), DownloadRefusal> {
+    Err(DownloadRefusal::DestinationUnusable)
 }

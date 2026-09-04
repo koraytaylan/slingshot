@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/artifact_staging_lock.rs
   - crates/slingshot-command-line/src/platform_runtime/**
   - crates/slingshot-command-line/tests/operation_observation.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # Download Publication Never Replaces
