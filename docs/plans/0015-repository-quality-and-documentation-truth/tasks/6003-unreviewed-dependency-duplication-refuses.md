@@ -11,8 +11,8 @@ touches:
   - support/dependency-duplicate-exceptions.toml
   - crates/slingshot-development/tests/toolchain_and_dependency_policy.rs
   - crates/slingshot-development/tests/fixtures/dependency-policy/graphs.jsonl
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # Unreviewed Dependency Duplication Refuses
 
