@@ -50,7 +50,11 @@ privileged = false
 [environment]
 # Nothing is inherited. The allowlist is what the run has, and a variable that
 # is not here does not exist inside.
-allowed = ["HOME", "PATH", "SLINGSHOT_ACCEPTANCE_OUTPUT", "TMPDIR"]
+# RUSTUP_TOOLCHAIN names the toolchain the image already carries. Without it the
+# toolchain file is read inside the container and its components are looked for
+# on a network that is deliberately absent, so the gates would refuse for the
+# isolation working rather than for anything about this revision.
+allowed = ["HOME", "PATH", "RUSTUP_TOOLCHAIN", "SLINGSHOT_ACCEPTANCE_OUTPUT", "TMPDIR"]
 
 [mounts]
 # Inputs are read-only and remounting is denied, so a descendant that tried to
