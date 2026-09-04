@@ -122,6 +122,9 @@ jobs:
       SLINGSHOT_REPORTED_OWNER_IDENTIFIER: ${{ github.repository_owner_id }}
       SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
       SLINGSHOT_REPORTED_RUNNER: ${{ matrix.runner }}
+      # Only the coordinating row's cache reaches the acceptance, so only that
+      # row carries the image the acceptance runs its gates in.
+      SLINGSHOT_COORDINATOR: ${{ matrix.coordinator }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
