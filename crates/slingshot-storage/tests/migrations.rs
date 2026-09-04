@@ -155,6 +155,27 @@ fn a_schema_newer_than_this_binary_is_refused_without_being_touched() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_symlinked_state_root_is_refused_before_sqlite_opens_it() {
+    use std::os::unix::fs::symlink;
+
+    let real_root = tempfile::tempdir().expect("a state root");
+    let link_holder = tempfile::tempdir().expect("a link holder");
+    let linked_root = link_holder.path().join("state-root-link");
+    symlink(real_root.path(), &linked_root).expect("the root link exists");
+
+    let outcome = OperationDatabase::open(&linked_root.join("operations.sqlite3"), settings());
+    assert!(
+        matches!(outcome, Err(DatabaseFailure::Refused(_))),
+        "a state-root symlink must not become SQLite's parent directory: {outcome:?}"
+    );
+    assert!(
+        std::fs::read_dir(real_root.path()).expect("the real root reads").next().is_none(),
+        "refusal happens before SQLite creates a database in the link target"
+    );
+}
+
 #[test]
 fn every_setting_is_read_back_rather_than_wished_for() {
     let root = tempfile::tempdir().expect("a temporary directory");

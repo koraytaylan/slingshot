@@ -21,6 +21,7 @@
 //! guessing.
 
 use std::ffi::CStr;
+use std::fs::File;
 use std::sync::OnceLock;
 
 use rusqlite::{Connection, OpenFlags};
@@ -129,6 +130,8 @@ impl RequiredSettings {
 pub struct OperationDatabase {
     /// The connection this daemon owns.
     connection: Connection,
+    /// The verified directory whose descriptor keeps SQLite's object paths pinned.
+    _state_root: Option<File>,
 }
 
 impl OperationDatabase {
@@ -143,16 +146,17 @@ impl OperationDatabase {
         settings: RequiredSettings,
     ) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
-        let inspected = inspect_existing_schema(path)?;
-        let connection = Connection::open(path).map_err(refused)?;
+        let (state_root, pinned_path) = PinnedDatabasePath::open(path)?;
+        let inspected = inspect_existing_schema(&pinned_path)?;
+        let connection = Connection::open(&pinned_path).map_err(refused)?;
         if let Some(inspected) = inspected
-            && file_snapshot(path)? != inspected
+            && file_snapshot(&pinned_path)? != inspected
         {
             return Err(DatabaseFailure::Refused(
                 "the database changed between inspection and reopen".to_owned(),
             ));
         }
-        let database = Self { connection };
+        let database = Self { connection, _state_root: Some(state_root) };
         database.require_compile_options()?;
         database.apply_and_verify(settings)?;
         database.migrate()?;
@@ -169,7 +173,7 @@ impl OperationDatabase {
     pub fn open_in_memory(settings: RequiredSettings) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let connection = Connection::open_in_memory().map_err(refused)?;
-        let database = Self { connection };
+        let database = Self { connection, _state_root: None };
         database.require_compile_options()?;
         database.apply_valued(settings)?;
         database.set_pragma("foreign_keys", "1")?;
@@ -331,6 +335,76 @@ fn configure_sqlite() -> Result<(), DatabaseFailure> {
         )));
     }
     Ok(())
+}
+
+/// A database pathname resolved through an open, verified state-root directory.
+///
+/// Linux resolves `/proc/self/fd/<directory-fd>/name` through that descriptor,
+/// not by looking up the original directory pathname again.  Keeping the file
+/// alive in [`OperationDatabase`] therefore pins the main database and SQLite's
+/// `-wal` and `-shm` sidecars to the verified directory across a pathname swap.
+#[cfg(target_os = "linux")]
+struct PinnedDatabasePath;
+
+#[cfg(target_os = "linux")]
+impl PinnedDatabasePath {
+    /// Opens the containing directory without following it and returns its pinned child path.
+    fn open(path: &std::path::Path) -> Result<(File, std::path::PathBuf), DatabaseFailure> {
+        use rustix::fs::{Mode, OFlags, open};
+        use std::os::fd::AsRawFd as _;
+        use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+        let root = path.parent().ok_or_else(|| {
+            DatabaseFailure::Refused("the database path has no state-root directory".to_owned())
+        })?;
+        let name = path.file_name().and_then(|name| name.to_str()).ok_or_else(|| {
+            DatabaseFailure::Refused("the database name is not valid UTF-8".to_owned())
+        })?;
+        if name.is_empty() || name.contains(['/', '\\', '?', '#', '%']) {
+            return Err(DatabaseFailure::Refused(
+                "the database name is not one literal state-root child".to_owned(),
+            ));
+        }
+        let descriptor = open(
+            root,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?;
+        let root = File::from(descriptor);
+        let metadata =
+            root.metadata().map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?;
+        if !metadata.is_dir() || metadata.uid() != uzers::get_current_uid() {
+            return Err(DatabaseFailure::Refused(
+                "the state-root directory is not a directory owned by this user".to_owned(),
+            ));
+        }
+        root.set_permissions(std::fs::Permissions::from_mode(0o700))
+            .map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?;
+        if root.metadata().map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?.mode()
+            & 0o077
+            != 0
+        {
+            return Err(DatabaseFailure::Refused(
+                "the state-root directory could not be made private".to_owned(),
+            ));
+        }
+        let descriptor = root.as_raw_fd();
+        Ok((root, std::path::PathBuf::from(format!("/proc/self/fd/{descriptor}/{name}"))))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+struct PinnedDatabasePath;
+
+#[cfg(not(target_os = "linux"))]
+impl PinnedDatabasePath {
+    /// Refuses rather than silently falling back to an unpinned default path.
+    fn open(_path: &std::path::Path) -> Result<(File, std::path::PathBuf), DatabaseFailure> {
+        Err(DatabaseFailure::Refused(
+            "this build has no pinned-directory SQLite open layer".to_owned(),
+        ))
+    }
 }
 
 /// Returns whether compile-option output names exactly the required temp mode.
