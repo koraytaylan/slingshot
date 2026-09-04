@@ -108,8 +108,10 @@ jobs:
         include:
           - runner: ubuntu-24.04
             triple: x86_64-unknown-linux-gnu
+            coordinator: true
           - runner: macos-14
             triple: aarch64-apple-darwin
+            coordinator: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -133,6 +135,15 @@ jobs:
           SLINGSHOT_ROW: ${{ matrix.triple }}
           SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
         run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
+      # The acceptance runs offline from the cache the coordinator row built
+      # from, on a different machine. A cache prepared again there would be a
+      # second cache, and the whole point of preparing one is that every row and
+      # the decision about them read the same bytes.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: matrix.coordinator
+        with:
+          name: locked-source-cache
+          path: ${{ runner.temp }}/cache
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         id: provenance
         with:
@@ -169,7 +180,7 @@ jobs:
       - name: check out the exact pinned advisory snapshot
         run: scripts/checkout_pinned_advisory_database "$RUNNER_TEMP/advisory-db"
       - name: decide whether this revision is releasable
-        run: scripts/release_acceptance --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine" --rustsec-advisory-database "$RUNNER_TEMP/advisory-db" --rustsec-owner-review-record "$RUNNER_TEMP/evidence/rustsec-owner-review-record/review-record.json" --locked-source-cache "$RUNNER_TEMP/cache" --platform-evidence-directory "$RUNNER_TEMP/evidence" --output-directory "$RUNNER_TEMP/acceptance"
+        run: scripts/release_acceptance --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine" --rustsec-advisory-database "$RUNNER_TEMP/advisory-db" --rustsec-owner-review-record "$RUNNER_TEMP/evidence/rustsec-owner-review-record/review-record.json" --locked-source-cache "$RUNNER_TEMP/evidence/locked-source-cache" --platform-evidence-directory "$RUNNER_TEMP/evidence" --output-directory "$RUNNER_TEMP/acceptance"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: release-acceptance
