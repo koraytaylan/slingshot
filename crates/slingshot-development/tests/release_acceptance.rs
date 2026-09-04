@@ -18,11 +18,11 @@ use serde_json::{Value, json};
 use slingshot_development::github_automation_authority::{AUTHORITY_PATH, parse_authority};
 use slingshot_development::release_acceptance::{
     AcceptanceGate, AcceptanceManifest, AcceptanceRefusal, CACHE_MOUNT, CONTAINER_PATH,
-    FINITE_STATE_MACHINE_MOUNT, GateRun, GateSubject, HELD, MANIFEST_FORMAT, NETWORK_NONE,
-    PLATFORM_EVIDENCE_MOUNT, PROVIDER_RUN_VARIABLE, REFUSED, RELEASABLE, REQUIRED_GATES,
-    REVIEW_RECORD_MOUNT, RunBinding, RunIdentity, SCHEMA_PATH, SOURCE_COMMIT_VARIABLE,
-    SOURCE_TREE_VARIABLE, conclude, parse_container, parse_manifest, require_complete,
-    require_revision, run_gate, told,
+    FINITE_STATE_MACHINE_MOUNT, GateRun, GateSubject, HELD, MANIFEST_FILE_NAME, MANIFEST_FORMAT,
+    NETWORK_NONE, PLATFORM_EVIDENCE_MOUNT, PROVIDER_RUN_VARIABLE, REFUSED, RELEASABLE,
+    REQUIRED_GATES, REVIEW_RECORD_MOUNT, RUN_COMMAND, RunBinding, RunIdentity, SCHEMA_PATH,
+    SOURCE_COMMIT_VARIABLE, SOURCE_TREE_VARIABLE, conclude, digest_of_tree, parse_container,
+    parse_manifest, require_complete, require_revision, run_gate, told,
 };
 
 /// Where the fixtures live.
@@ -325,6 +325,36 @@ fn acceptance_prepares_nothing_and_says_so_when_something_is_missing() {
         runner.contains("git diff --quiet HEAD"),
         "and a tree that differs from the commit is refused before a gate runs"
     );
+    assert!(
+        runner.contains("git ls-files --others --exclude-standard"),
+        "and so is a checkout holding a file the commit being accepted does not"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn evidence_that_points_somewhere_else_is_refused_rather_than_digested() {
+    /// Returns a fresh scratch root named for one assertion.
+    fn scratch_named(named: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("acceptance-{named}-{}", std::process::id()));
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).expect("the scratch root is created");
+        root
+    }
+
+    let root = scratch_named("evidence");
+    std::fs::write(root.join("record.json"), b"{}").expect("a file is written");
+    let bound = digest_of_tree(&root).expect("a directory of files digests to something");
+    assert_eq!(bound.len(), DIGEST_CHARACTERS);
+
+    let elsewhere = scratch_named("elsewhere");
+    std::os::unix::fs::symlink(&elsewhere, root.join("pointed")).expect("a link is made");
+    let failure = digest_of_tree(&root).expect_err("a link to a directory is not a file");
+    assert_eq!(refusal_name(&failure), "Unreadable", "{failure}");
+    assert!(
+        failure.to_string().contains("points at a directory"),
+        "and the refusal says what it is rather than how reading it went wrong: {failure}"
+    );
 }
 
 #[test]
@@ -364,10 +394,18 @@ fn the_gates_run_inside_the_container_and_the_host_starts_nothing_after_it() {
         inside.contains("SLINGSHOT_ACCEPTANCE_OUTPUT"),
         "and write into the one root that leaves the container"
     );
-    let runner = read_repository_file("scripts/release_acceptance");
+    assert!(
+        inside.contains(RUN_COMMAND),
+        "the gates script invokes some command other than the one that decides"
+    );
+    let runner = read_repository_file(RUNNER_PATH);
     let container = runner.find("run --rm").expect("it starts the container");
     let manifest = runner.find("verify-release-acceptance").expect("it verifies the manifest");
     assert!(container < manifest, "the manifest is read after the run that produced it");
+    assert!(
+        runner.contains(MANIFEST_FILE_NAME),
+        "the host verifies a manifest under a name no run writes one under"
+    );
     assert!(
         !runner.contains("scripts/quality"),
         "the host runs no gate of its own after the container exits"

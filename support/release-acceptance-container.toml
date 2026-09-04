@@ -58,12 +58,13 @@ privileged = false
 # revision resolves against already is; CARGO_TARGET_DIR names the temporary
 # filesystem, because the source is mounted read-only and a build writes.
 #
-# The last three are what the decision is told about its own run. A container
-# with no network, no history, and no provider cannot find out which revision it
-# is deciding or which run asked it to, and that is deliberate: a run that could
-# work those out could be persuaded it was a run it is not. So each arrives
-# named, from the host that read it, and a run told none of them refuses rather
-# than deciding about whatever it guessed.
+# The three SLINGSHOT_ACCEPTANCE_SOURCE and PROVIDER entries are what the
+# decision is told about its own run. A container with no network, no history,
+# and no provider cannot find out which revision it is deciding or which run
+# asked it to, and that is deliberate: a run that could work those out could be
+# persuaded it was a run it is not. So each arrives named, from the host that
+# read it, and a run missing any one of them refuses rather than deciding about
+# whatever it guessed.
 # SLINGSHOT_ACCEPTANCE_SOURCE_COMMIT and SLINGSHOT_ACCEPTANCE_SOURCE_TREE are
 # the exact revision and tree the manifest is about, read on the host from the
 # checkout being accepted after it is confirmed clean.
