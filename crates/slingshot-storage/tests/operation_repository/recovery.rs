@@ -210,9 +210,8 @@ fn the_stored_terminal_disposition_is_the_domain_s_own_encoding_and_nothing_more
         applied(&store, &digest, first, &fact, NOW);
     }
 
-    let database = OperationDatabase::open(&path, settings()).expect("a database");
-    let (kind, disposition): (String, String) = database
-        .connection()
+    let (kind, disposition): (String, String) = rusqlite::Connection::open(&path)
+        .expect("a fixture connection")
         .query_row(
             "SELECT terminal_failure_kind, terminal_failure_disposition FROM operation \
              WHERE author_target_identity_digest = ? AND operation_identifier = ?",
@@ -238,8 +237,8 @@ fn a_row_that_bypassed_the_domain_is_refused_rather_than_decoded() {
         admitted(&store, &digest);
     }
     let database = OperationDatabase::open(&path, settings()).expect("a database");
-    database
-        .connection()
+    rusqlite::Connection::open(&path)
+        .expect("a fixture connection")
         .execute(
             "INSERT INTO recovery_fact \
              (attempt_count, author_target_identity_digest, category, evidence_certainty, \
