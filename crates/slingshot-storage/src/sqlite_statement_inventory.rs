@@ -559,24 +559,26 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
     InventoriedStatement {
         purpose: "measure one subscription's retained events",
         text: "SELECT COUNT(*), COALESCE(SUM(event_bytes), 0) FROM subscription_event \
-               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ?",
-        parameters: 2,
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
+                 AND agent_event_store_generation = ?",
+        parameters: 3,
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
         purpose: "compact one subscription's events below a position",
         text: "DELETE FROM subscription_event \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
-                 AND cursor < ?",
-        parameters: 3,
+                 AND agent_event_store_generation = ? AND cursor < ?",
+        parameters: 4,
         maximum_rows: 0,
     },
     InventoriedStatement {
         purpose: "record one subscription's compaction floor",
         text: "UPDATE subscription_ledger \
                SET compacted_below_cursor = ?, event_bytes = ?, event_rows = ? \
-               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ?",
-        parameters: 5,
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
+                 AND agent_event_store_generation = ?",
+        parameters: 6,
         maximum_rows: 0,
     },
     InventoriedStatement {

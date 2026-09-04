@@ -21,7 +21,8 @@ use slingshot_domain::persistent_capacity::PersistentCapacityPolicy;
 use slingshot_domain::remote_job::{AgentJobState, JobEventSequence, RemoteJobObservation};
 use slingshot_storage::agent_job_repository::{
     AgentCapacityBounds, AgentJobRepository, AgentRepositoryFailure, AgentSubmission,
-    PHYSICAL_JOBS_PER_SUBMISSION, SubmissionContracts, SubmissionIdentity, SubmissionOutcome,
+    BYTES_PER_EVENT, PHYSICAL_JOBS_PER_SUBMISSION, SubmissionContracts, SubmissionIdentity,
+    SubmissionOutcome,
 };
 use slingshot_storage::agent_subscription_ledger::{
     AgentSubscriptionLedger, EventFact, LedgerOutcome,
@@ -600,6 +601,21 @@ fn a_reset_cannot_regress_or_replace_a_newer_generation() {
     let held = ledger.read_subscription(TARGET, SUBSCRIPTION).expect("reads").expect("held");
     assert_eq!(held.agent_event_store_generation, LATER_GENERATION);
     assert_eq!(held.cursor.as_deref(), Some("cursor-0100"));
+}
+
+#[test]
+fn an_oversized_first_event_is_refused_without_advancing_the_ledger() {
+    let ledger = ledger();
+    let mut oversized = fact("cursor-0001", "contents-one");
+    oversized.event_bytes = BYTES_PER_EVENT + 1;
+    assert!(matches!(
+        ledger.record_event(TARGET, SUBSCRIPTION, &oversized, NOW),
+        Err(AgentRepositoryFailure::EventTooLarge { .. })
+    ));
+    let held = ledger.read_subscription(TARGET, SUBSCRIPTION).expect("reads").expect("held");
+    assert_eq!(held.event_rows, 0);
+    assert_eq!(held.event_bytes, 0);
+    assert!(held.cursor.is_none());
 }
 
 #[test]
