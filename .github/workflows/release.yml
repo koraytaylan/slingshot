@@ -112,6 +112,16 @@ jobs:
           - runner: macos-14
             triple: aarch64-apple-darwin
             coordinator: false
+    # How this run reports itself, said once for the row. The packager answers
+    # for the authority again before it builds, because the build is what the
+    # evidence is about, and a step that answers for a run has to be able to say
+    # which run it is. An environment does not travel between steps.
+    env:
+      SLINGSHOT_REPORTED_REPOSITORY: ${{ github.repository }}
+      SLINGSHOT_REPORTED_REPOSITORY_IDENTIFIER: ${{ github.repository_id }}
+      SLINGSHOT_REPORTED_OWNER_IDENTIFIER: ${{ github.repository_owner_id }}
+      SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
+      SLINGSHOT_REPORTED_RUNNER: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -121,12 +131,6 @@ jobs:
           name: rustsec-owner-review-record
           path: ${{ runner.temp }}/review
       - name: validate the committed authority against what this run reports
-        env:
-          SLINGSHOT_REPORTED_REPOSITORY: ${{ github.repository }}
-          SLINGSHOT_REPORTED_REPOSITORY_IDENTIFIER: ${{ github.repository_id }}
-          SLINGSHOT_REPORTED_OWNER_IDENTIFIER: ${{ github.repository_owner_id }}
-          SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
-          SLINGSHOT_REPORTED_RUNNER: ${{ matrix.runner }}
         run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
       # The cache is built from three verified inputs, and this row starts with
       # none of them: the machine is new, and nothing but the review record
