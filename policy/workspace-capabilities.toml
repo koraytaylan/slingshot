@@ -11,7 +11,11 @@
 
 format = "slingshot.workspace-capabilities/1"
 minimum-rust-version = "1.98.0"
-supported-targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+# The targets this workspace resolves, probes, and holds dependencies for. An
+# assertion keeps this equal to the rows support/platforms.toml claims, so a
+# target leaves both together: a capability probed for a row no release produces
+# would be evidence for an archive nobody receives.
+supported-targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
 
 [[capability]]
 name = "asynchronous-runtime"
@@ -305,17 +309,6 @@ kinds = ["normal"]
 owners = ["slingshot-agent-connection", "slingshot-configuration"]
 
 [[capability]]
-name = "platform-trust-decisions-windows"
-purpose = "Enumerate provider records with their valid uses and the distrusted store."
-package = "schannel"
-version = "0.1.29"
-default-features = true
-features = []
-targets = ["x86_64-pc-windows-msvc"]
-kinds = ["normal"]
-owners = ["slingshot-agent-connection", "slingshot-configuration"]
-
-[[capability]]
 name = "platform-trust-store-locations"
 purpose = "Locate the platform server-authentication root bundle without merging it into a client."
 package = "openssl-probe"
@@ -564,39 +557,6 @@ features = ["v4", "serde"]
 targets = []
 kinds = ["normal"]
 owners = ["slingshot-agent-protocol", "slingshot-domain", "slingshot-storage"]
-
-[[capability]]
-name = "windows-file-identity"
-purpose = "Read reparse evidence, link count, volume serial number, and the file identifier from a handle."
-package = "winsafe"
-version = "0.0.28"
-default-features = false
-features = ["advapi", "kernel", "shell"]
-targets = ["x86_64-pc-windows-msvc"]
-kinds = ["normal"]
-owners = ["slingshot-configuration"]
-
-[[capability]]
-name = "windows-process-creation-flags"
-purpose = "Name the detached creation flags a child process is started with."
-package = "windows-sys"
-version = "0.61.2"
-default-features = true
-features = ["Win32_System_Threading"]
-targets = ["x86_64-pc-windows-msvc"]
-kinds = ["normal"]
-owners = ["slingshot-command-line", "slingshot-daemon"]
-
-[[capability]]
-name = "windows-security-identifiers"
-purpose = "Read security identifiers, security descriptors, and discretionary access-control entries."
-package = "windows-permissions"
-version = "0.2.4"
-default-features = true
-features = []
-targets = ["x86_64-pc-windows-msvc"]
-kinds = ["normal"]
-owners = ["slingshot-configuration"]
 
 [[capability]]
 name = "workflow-documents"

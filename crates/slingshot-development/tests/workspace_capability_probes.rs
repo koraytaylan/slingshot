@@ -16,7 +16,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use slingshot_development::supported_platform_matrix::{
-    SUPPORTED_TARGET_TRIPLES, UNTRUSTED_OBSERVATION_LABEL, current_target_triple,
+    LINUX_TARGET_TRIPLE, MACOS_TARGET_TRIPLE, SUPPORTED_TARGET_TRIPLES,
+    UNTRUSTED_OBSERVATION_LABEL, current_target_triple,
 };
 
 /// Repository path of the capability policy.
@@ -162,8 +163,8 @@ fn target_predicate(targets: &[String]) -> Option<String> {
     let systems: BTreeSet<&str> = targets
         .iter()
         .map(|triple| match triple.as_str() {
-            value if value == SUPPORTED_TARGET_TRIPLES[0] => "linux",
-            value if value == SUPPORTED_TARGET_TRIPLES[1] => "macos",
+            value if value == LINUX_TARGET_TRIPLE => "linux",
+            value if value == MACOS_TARGET_TRIPLE => "macos",
             _ => "windows",
         })
         .collect();

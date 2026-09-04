@@ -10,7 +10,7 @@ The workspace already declares the capability that answers three of the four. It
 
 That leaves a real architectural question rather than a substitution. The identity has to come from the same handle the content is read through and the same handle the owner and permissions are checked on - that sameness is the whole point of the check, because two handles opened a moment apart are two chances for the object to have been swapped. Today the content and the security check share a standard-library handle, and the capability that can report identity opens its own. One of those has to give.
 
-Until it does, the release matrix claims a row it cannot build.
+Until it does, the release cannot claim the row, and it no longer does. Removing it from the matrix took the row's dependencies with it, because the capability inventory is held equal to the matrix by assertion: a capability probed for a row no release produces would be evidence for an archive nobody receives. So this plan restores four capability rows, their consumers, and the manifest entries behind them alongside the code that uses them - the `#[cfg(windows)]` source is still here and still says what it needs.
 
 ## In scope
 

@@ -15,7 +15,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use crate::supported_platform_matrix::{
-    SUPPORTED_TARGET_TRIPLES, SupportedTarget, UNTRUSTED_OBSERVATION_LABEL,
+    SUPPORTED_TARGET_TRIPLES, SupportedTarget, UNTRUSTED_OBSERVATION_LABEL, WINDOWS_TARGET_TRIPLE,
 };
 
 /// Schema every report is shaped by, embedded at compile time.
@@ -156,7 +156,7 @@ pub fn decide_ownership(observation: &RuntimeObservation) -> OwnershipDecision {
 /// Returns the endpoint kind one row requires.
 #[must_use]
 pub fn required_endpoint_kind(triple: &str) -> &'static str {
-    if triple == SUPPORTED_TARGET_TRIPLES[2] { WINDOWS_ENDPOINT_KIND } else { UNIX_ENDPOINT_KIND }
+    if triple == WINDOWS_TARGET_TRIPLE { WINDOWS_ENDPOINT_KIND } else { UNIX_ENDPOINT_KIND }
 }
 
 /// Reports every requirement one observation fails for its row.
@@ -208,7 +208,7 @@ fn evaluate_remote_client_policy(
     row: &SupportedTarget,
     observation: &RuntimeObservation,
 ) -> Vec<String> {
-    let windows = row.triple == SUPPORTED_TARGET_TRIPLES[2];
+    let windows = row.triple == WINDOWS_TARGET_TRIPLE;
     match (windows, observation.remote_clients_rejected) {
         (true, Some(true)) | (false, None) => Vec::new(),
         (true, Some(false)) => {

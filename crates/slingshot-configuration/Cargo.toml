@@ -37,10 +37,5 @@ security-framework.workspace = true
 uzers.workspace = true
 xattr.workspace = true
 
-[target.x86_64-pc-windows-msvc.dependencies]
-schannel.workspace = true
-windows-permissions.workspace = true
-winsafe.workspace = true
-
 [lints]
 workspace = true

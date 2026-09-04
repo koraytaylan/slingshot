@@ -10,6 +10,6 @@
 {"name": "an-unprobed-source-protection", "find": "source-protection-probe = \"read-only-permission-bits-and-before-after-digest\"", "replace": "source-protection-probe = \"\"", "refusal": "ValueUnacceptable"}
 {"name": "an-unprobed-network-denial", "find": "network-denial-probe = \"non-loopback-connect-refused\"", "replace": "network-denial-probe = \"\"", "refusal": "ValueUnacceptable"}
 {"name": "a-duplicated-runner", "find": "runner-selector = \"macos-14\"", "replace": "runner-selector = \"ubuntu-24.04\"", "refusal": "RowRepeated"}
-{"name": "two-coordinators", "find": "coordinator = false\nfinite-state-machine = false\n\n[[row]]\ntriple = \"x86_64-pc-windows-msvc\"", "replace": "coordinator = true\nfinite-state-machine = false\n\n[[row]]\ntriple = \"x86_64-pc-windows-msvc\"", "refusal": "ExclusiveRole"}
+{"name": "two-coordinators", "find": "coordinator = false", "replace": "coordinator = true", "refusal": "ExclusiveRole"}
 {"name": "no-compatible-row", "find": "finite-state-machine = true", "replace": "finite-state-machine = false", "refusal": "ExclusiveRole"}
 {"name": "an-invented-identifier", "find": "identifier = \"{identifier}\"", "replace": "identifier = \"not-a-number\"", "refusal": "ValueUnacceptable"}

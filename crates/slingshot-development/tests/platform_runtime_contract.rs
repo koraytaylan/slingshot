@@ -20,8 +20,8 @@ use slingshot_development::platform_runtime_contract::{
     UntrustedRuntimeReport,
 };
 use slingshot_development::supported_platform_matrix::{
-    self, SUPPORTED_TARGET_TRIPLES, SupportedPlatformMatrix, UNTRUSTED_OBSERVATION_LABEL,
-    current_target_triple,
+    self, LINUX_TARGET_TRIPLE, SUPPORTED_TARGET_TRIPLES, SupportedPlatformMatrix,
+    UNTRUSTED_OBSERVATION_LABEL, WINDOWS_TARGET_TRIPLE, current_target_triple,
 };
 use slingshot_local_protocol::foundation_contract::FoundationContract;
 use slingshot_test_support::supervised_child::{Disposition, SupervisedChild, SupervisionFailure};
@@ -291,7 +291,7 @@ fn the_report_schema_and_the_report_shape_declare_the_same_members() {
         source_revision: "unknown".to_owned(),
         matrix_digest: "0".repeat(RENDERED_DIGEST_LENGTH),
         contract_digest: "0".repeat(RENDERED_DIGEST_LENGTH),
-        triple: SUPPORTED_TARGET_TRIPLES[0].to_owned(),
+        triple: LINUX_TARGET_TRIPLE.to_owned(),
         operating_system: "linux".to_owned(),
         architecture: "x86_64".to_owned(),
         outcomes: Vec::new(),
@@ -317,7 +317,7 @@ fn a_report_describes_one_row_and_records_every_behavior_once() {
         source_revision: "unknown".to_owned(),
         matrix_digest: "0".repeat(RENDERED_DIGEST_LENGTH),
         contract_digest: "0".repeat(RENDERED_DIGEST_LENGTH),
-        triple: current.unwrap_or(SUPPORTED_TARGET_TRIPLES[0]).to_owned(),
+        triple: current.unwrap_or(LINUX_TARGET_TRIPLE).to_owned(),
         operating_system: std::env::consts::OS.to_owned(),
         architecture: std::env::consts::ARCH.to_owned(),
         outcomes: platform_runtime_contract::REPORTED_BEHAVIORS
@@ -694,12 +694,12 @@ fn prove_supervision(contract: &FoundationContract, root: &Path) {
 
 /// Returns the remote-client decision this environment's row records.
 fn remote_client_decision() -> Option<bool> {
-    if current_target_triple() == Some(SUPPORTED_TARGET_TRIPLES[2]) { Some(true) } else { None }
+    if current_target_triple() == Some(WINDOWS_TARGET_TRIPLE) { Some(true) } else { None }
 }
 
 /// Records the remote-client behavior for the row this environment is.
 fn remote_client_outcome(current: &str) -> ReportedOutcome {
-    if current == SUPPORTED_TARGET_TRIPLES[2] {
+    if current == WINDOWS_TARGET_TRIPLE {
         not_run(
             "windows-remote-client-refusal",
             "no explicit remote-client fixture is available in this environment",

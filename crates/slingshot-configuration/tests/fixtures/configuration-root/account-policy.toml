@@ -25,12 +25,6 @@ identity_kind = "unix-effective-user"
 account_source = "uzers::get_effective_uid"
 home_source = "uzers::get_user_by_uid"
 
-[[row]]
-target = "x86_64-pc-windows-msvc"
-identity_kind = "windows-process-token-user"
-account_source = "co::TOKEN_INFORMATION_CLASS::User"
-home_source = "co::KNOWNFOLDERID::Profile"
-
 [[answer]]
 name = "absolute-home"
 outcome = "accepted"
