@@ -234,6 +234,10 @@ impl OperationDatabase {
             .limit("maximum_sqlite_write_ahead_log_frames")
             .to_string();
         self.set_pragma("wal_autocheckpoint", &frames)?;
+        let wal_bytes = DaemonRuntimeContract::embedded()
+            .formula("maximum_sqlite_write_ahead_log_bytes")
+            .to_string();
+        self.set_pragma("journal_size_limit", &wal_bytes)?;
         Ok(())
     }
 
@@ -645,6 +649,13 @@ mod tests {
                 DaemonRuntimeContract::embedded().limit("maximum_sqlite_write_ahead_log_frames")
             )
             .expect("a frame limit")
+        );
+        assert_eq!(
+            read_integer("journal_size_limit"),
+            i64::try_from(
+                DaemonRuntimeContract::embedded().formula("maximum_sqlite_write_ahead_log_bytes")
+            )
+            .expect("a WAL byte limit")
         );
         assert!(database.require_compile_options().is_ok());
     }
