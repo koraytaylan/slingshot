@@ -198,8 +198,22 @@ pub fn preview(
     before_unix_milliseconds: u64,
     limit: u64,
 ) -> Result<TerminalMaintenanceManifest, RepositoryFailure> {
-    let mut prepared = database
-        .connection()
+    preview_with(
+        database.connection(),
+        author_target_identity_digest,
+        before_unix_milliseconds,
+        limit,
+    )
+}
+
+/// Re-derives a maintenance manifest from one connection or transaction.
+fn preview_with(
+    connection: &rusqlite::Connection,
+    author_target_identity_digest: &str,
+    before_unix_milliseconds: u64,
+    limit: u64,
+) -> Result<TerminalMaintenanceManifest, RepositoryFailure> {
+    let mut prepared = connection
         .prepare(statement_text("select one target's operations that ended before a cutoff"))?;
     let rows = prepared.query_map(
         rusqlite::params![
@@ -220,7 +234,7 @@ pub fn preview(
     let removals = rows.collect::<Result<Vec<ProposedRemoval>, _>>()?;
     Ok(TerminalMaintenanceManifest {
         agent_removals: proposed_agent_removals(
-            database,
+            connection,
             author_target_identity_digest,
             before_unix_milliseconds,
             limit,
@@ -230,7 +244,7 @@ pub fn preview(
         limit,
         removals,
         retired_subscriptions: retirable_subscriptions(
-            database,
+            connection,
             author_target_identity_digest,
             limit,
         )?,
@@ -239,12 +253,11 @@ pub fn preview(
 
 /// Returns the remote submissions the same window would remove.
 fn proposed_agent_removals(
-    database: &OperationDatabase,
+    connection: &rusqlite::Connection,
     author_target_identity_digest: &str,
     before_unix_milliseconds: u64,
     limit: u64,
 ) -> Result<Vec<ProposedAgentRemoval>, RepositoryFailure> {
-    let connection = database.connection();
     let mut prepared = connection
         .prepare(statement_text("select the agent submissions one maintenance run would remove"))?;
     let rows = prepared.query_map(
@@ -266,11 +279,10 @@ fn proposed_agent_removals(
 
 /// Returns the subscriptions no retained submission still needs.
 fn retirable_subscriptions(
-    database: &OperationDatabase,
+    connection: &rusqlite::Connection,
     author_target_identity_digest: &str,
     limit: u64,
 ) -> Result<Vec<String>, RepositoryFailure> {
-    let connection = database.connection();
     let mut prepared = connection
         .prepare(statement_text("select the subscriptions no retained agent submission needs"))?;
     let rows = prepared.query_map(
@@ -293,6 +305,9 @@ pub fn maximum_removals() -> u64 {
 /// Reason a maintenance run could not be applied.
 #[derive(Debug, thiserror::Error)]
 pub enum MaintenanceFailure {
+    /// SQLite refused the transactional maintenance operation.
+    #[error("the database refused: {0}")]
+    Statement(#[from] rusqlite::Error),
     /// The manifest being applied is not the one that was reviewed.
     #[error(
         "the reviewed manifest digest is {reviewed}, and this target's rows now digest to {current}"
@@ -347,9 +362,6 @@ pub fn apply(
     now_unix_milliseconds: u64,
 ) -> Result<ApplyOutcome, MaintenanceFailure> {
     let digest = reviewed.digest();
-    if let Some(held) = receipt(database, &reviewed.author_target_identity_digest, &digest)? {
-        return Ok(ApplyOutcome::Replayed(Box::new(held)));
-    }
     let allowed = maximum_removals();
     if reviewed.released_operation_rows() > allowed {
         return Err(MaintenanceFailure::TooManyRemovals {
@@ -357,26 +369,7 @@ pub fn apply(
             wanted: reviewed.released_operation_rows(),
         });
     }
-    let current = preview(
-        database,
-        &reviewed.author_target_identity_digest,
-        reviewed.before_unix_milliseconds,
-        reviewed.limit,
-    )?;
-    if current.digest() != digest {
-        return Err(MaintenanceFailure::ManifestChanged {
-            current: current.digest(),
-            reviewed: digest,
-        });
-    }
-    remove_and_record(database, reviewed, &digest, now_unix_milliseconds)?;
-    Ok(ApplyOutcome::Applied(Box::new(ApplicationReceipt {
-        application_receipt_identifier: digest,
-        author_target_identity_digest: reviewed.author_target_identity_digest.clone(),
-        recorded_at_unix_milliseconds: now_unix_milliseconds,
-        released_operation_rows: reviewed.released_operation_rows(),
-        stage: ReceiptStage::DatabaseApplied,
-    })))
+    remove_and_record(database, reviewed, &digest, now_unix_milliseconds)
 }
 
 /// Removes every listed operation and commits the receipt, together.
@@ -385,27 +378,63 @@ fn remove_and_record(
     reviewed: &TerminalMaintenanceManifest,
     digest: &str,
     now_unix_milliseconds: u64,
-) -> Result<(), RepositoryFailure> {
+) -> Result<ApplyOutcome, MaintenanceFailure> {
     let connection = database.connection();
     let transaction =
         rusqlite::Transaction::new_unchecked(connection, rusqlite::TransactionBehavior::Immediate)?;
+    if let Some(held) = receipt_with(&transaction, &reviewed.author_target_identity_digest, digest)?
+    {
+        transaction.commit()?;
+        return Ok(ApplyOutcome::Replayed(Box::new(held)));
+    }
+    let current = preview_with(
+        &transaction,
+        &reviewed.author_target_identity_digest,
+        reviewed.before_unix_milliseconds,
+        reviewed.limit,
+    )?;
+    if current.digest() != digest {
+        return Err(MaintenanceFailure::ManifestChanged {
+            current: current.digest(),
+            reviewed: digest.to_owned(),
+        });
+    }
     for removal in &reviewed.removals {
-        transaction.execute(
+        let changed = transaction.execute(
             statement_text("remove one terminal operation and everything hanging off it"),
-            rusqlite::params![reviewed.author_target_identity_digest, removal.operation_identifier],
+            rusqlite::params![
+                reviewed.author_target_identity_digest,
+                removal.operation_identifier,
+                i64::try_from(removal.operation_revision).unwrap_or(i64::MAX),
+                i64::try_from(removal.settled_at_unix_milliseconds).unwrap_or(i64::MAX),
+            ],
         )?;
+        if changed != 1 {
+            return Err(MaintenanceFailure::ManifestChanged {
+                current: current.digest(),
+                reviewed: digest.to_owned(),
+            });
+        }
     }
     for removal in &reviewed.agent_removals {
-        transaction.execute(
+        let changed = transaction.execute(
             statement_text("remove one ended agent submission"),
             rusqlite::params![
                 reviewed.author_target_identity_digest,
-                removal.agent_operation_identifier
+                removal.agent_operation_identifier,
+                removal.submitted_command_digest,
+                removal.terminal_disposition,
             ],
         )?;
+        if changed != 1 {
+            return Err(MaintenanceFailure::ManifestChanged {
+                current: current.digest(),
+                reviewed: digest.to_owned(),
+            });
+        }
     }
     for subscription in &reviewed.retired_subscriptions {
-        transaction.execute(
+        let changed = transaction.execute(
             statement_text("retire one subscription no retained agent submission needs"),
             rusqlite::params![
                 reviewed.author_target_identity_digest,
@@ -413,6 +442,12 @@ fn remove_and_record(
                 reviewed.author_target_identity_digest
             ],
         )?;
+        if changed != 1 {
+            return Err(MaintenanceFailure::ManifestChanged {
+                current: current.digest(),
+                reviewed: digest.to_owned(),
+            });
+        }
     }
     transaction.execute(
         statement_text("record one maintenance-application receipt"),
@@ -420,11 +455,18 @@ fn remove_and_record(
             digest,
             reviewed.author_target_identity_digest,
             i64::try_from(now_unix_milliseconds).unwrap_or(i64::MAX),
+            i64::try_from(reviewed.released_operation_rows()).unwrap_or(i64::MAX),
             digest,
         ],
     )?;
     transaction.commit()?;
-    Ok(())
+    Ok(ApplyOutcome::Applied(Box::new(ApplicationReceipt {
+        application_receipt_identifier: digest.to_owned(),
+        author_target_identity_digest: reviewed.author_target_identity_digest.clone(),
+        recorded_at_unix_milliseconds: now_unix_milliseconds,
+        released_operation_rows: reviewed.released_operation_rows(),
+        stage: ReceiptStage::DatabaseApplied,
+    })))
 }
 
 /// Returns one target's receipt for `digest`, when it has one.
@@ -437,9 +479,17 @@ pub fn receipt(
     author_target_identity_digest: &str,
     digest: &str,
 ) -> Result<Option<ApplicationReceipt>, RepositoryFailure> {
-    let mut prepared = database
-        .connection()
-        .prepare(statement_text("read one target's maintenance-application receipt"))?;
+    receipt_with(database.connection(), author_target_identity_digest, digest)
+}
+
+/// Reads one application receipt through a connection or active transaction.
+fn receipt_with(
+    connection: &rusqlite::Connection,
+    author_target_identity_digest: &str,
+    digest: &str,
+) -> Result<Option<ApplicationReceipt>, RepositoryFailure> {
+    let mut prepared =
+        connection.prepare(statement_text("read one target's maintenance-application receipt"))?;
     let found = prepared
         .query_row(rusqlite::params![author_target_identity_digest, digest], |row| {
             Ok(ApplicationReceipt {
@@ -447,7 +497,7 @@ pub fn receipt(
                 author_target_identity_digest: author_target_identity_digest.to_owned(),
                 recorded_at_unix_milliseconds: u64::try_from(row.get::<_, i64>(0)?)
                     .unwrap_or_default(),
-                released_operation_rows: 0,
+                released_operation_rows: u64::try_from(row.get::<_, i64>(1)?).unwrap_or_default(),
                 stage: ReceiptStage::DatabaseApplied,
             })
         })
