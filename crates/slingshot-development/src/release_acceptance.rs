@@ -22,9 +22,14 @@
 //! different defects with one consequence, and each is refused by name so that
 //! whoever reads the refusal knows which it was.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use sha2::Digest as _;
+
+use crate::cargo_executable;
 
 /// Where the isolation contract lives.
 pub const CONTAINER_PATH: &str = "support/release-acceptance-container.toml";
@@ -47,25 +52,243 @@ pub const DROP_EVERYTHING: &str = "ALL";
 /// What a pinned image digest begins with.
 const DIGEST_PREFIX: &str = "sha256:";
 
+/// Where the container mounts the cache every gate resolves against.
+pub const CACHE_MOUNT: &str = "/cache";
+
+/// Where the container mounts the verified pinned external source.
+pub const FINITE_STATE_MACHINE_MOUNT: &str = "/finite-state-machine";
+
+/// Where the container mounts the authenticated platform evidence.
+pub const PLATFORM_EVIDENCE_MOUNT: &str = "/platform-evidence";
+
+/// Where the container mounts the same-run owner review record.
+pub const REVIEW_RECORD_MOUNT: &str = "/review-record.json";
+
+/// What a run writes its decision as.
+pub const MANIFEST_FILE_NAME: &str = "acceptance.json";
+
+/// What a run writes one gate's report as, after the gate's own name.
+pub const REPORT_FILE_SUFFIX: &str = ".report";
+
+/// The package that carries this repository's own commands.
+const DEVELOPMENT_PACKAGE: &str = "slingshot-development";
+
+/// The package that owns the command contract.
+const DOMAIN_PACKAGE: &str = "slingshot-domain";
+
+/// Cargo's subcommand that runs one of this repository's own commands.
+const RUN_SUBCOMMAND: &str = "run";
+
+/// Cargo's subcommand that runs one integration target.
+const TEST_SUBCOMMAND: &str = "test";
+
+/// Cargo's flag that refuses to change the committed lockfile.
+const LOCKED_FLAG: &str = "--locked";
+
+/// Cargo's flag that refuses to change the lockfile or the cache.
+const FROZEN_FLAG: &str = "--frozen";
+
+/// Cargo's flag that refuses the network.
+const OFFLINE_FLAG: &str = "--offline";
+
+/// Cargo's flag that keeps a gate's report to what the gate itself wrote.
+const QUIET_FLAG: &str = "--quiet";
+
+/// Cargo's flag that names a package.
+const PACKAGE_FLAG: &str = "--package";
+
+/// Cargo's flag that names one integration target.
+const TEST_TARGET_FLAG: &str = "--test";
+
+/// What separates Cargo's own arguments from the ones it passes on.
+const ARGUMENT_SEPARATOR: &str = "--";
+
+/// What separates a path from its content in a tree digest.
+const TREE_DIGEST_SEPARATOR: u8 = 0;
+
+/// What running one gate is.
+///
+/// Three kinds, because a gate is one of three things and nothing else: a
+/// command this repository carries, one package's integration target, or a
+/// script this repository commits. Naming the kind rather than the whole
+/// invocation keeps the flags that make a gate offline in one place, where
+/// they cannot be forgotten from a row somebody adds later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GateSubject {
+    /// A command this repository's own executable carries.
+    RepositoryCommand(&'static [&'static str]),
+    /// One package's integration target.
+    IntegrationTarget {
+        /// Which package owns it.
+        package: &'static str,
+        /// Which target it is.
+        target: &'static str,
+    },
+    /// A script this repository commits.
+    Script {
+        /// Which script it is, relative to the source root.
+        path: &'static str,
+        /// What the script is given.
+        arguments: &'static [&'static str],
+    },
+}
+
+/// One gate one acceptance run holds, and what holding it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AcceptanceGate {
+    /// Which gate it is.
+    pub name: &'static str,
+    /// What running it is.
+    pub subject: GateSubject,
+}
+
+impl AcceptanceGate {
+    /// Returns the program that runs this gate.
+    ///
+    /// Cargo exports its own path while it runs, and every gate is started by a
+    /// run of this executable that Cargo itself began, so a Cargo gate uses
+    /// that same Cargo rather than whichever one a search path finds first. A
+    /// script gate is a file of the source being decided, so it is resolved
+    /// against that source and against nothing else.
+    #[must_use]
+    pub fn program(&self, source_root: &Path) -> PathBuf {
+        match self.subject {
+            GateSubject::Script { path, .. } => source_root.join(path),
+            GateSubject::RepositoryCommand(_) | GateSubject::IntegrationTarget { .. } => {
+                cargo_executable()
+            }
+        }
+    }
+
+    /// Returns the arguments this gate is run with.
+    ///
+    /// Every Cargo gate is locked, frozen, and offline. The container has no
+    /// network, so a gate that tried to resolve anything would refuse for the
+    /// isolation working rather than for anything about this revision.
+    #[must_use]
+    pub fn arguments(&self) -> Vec<String> {
+        let owned = |held: Vec<&str>| held.into_iter().map(str::to_owned).collect();
+        match self.subject {
+            GateSubject::RepositoryCommand(passed) => {
+                let mut held = vec![
+                    RUN_SUBCOMMAND,
+                    LOCKED_FLAG,
+                    FROZEN_FLAG,
+                    OFFLINE_FLAG,
+                    QUIET_FLAG,
+                    PACKAGE_FLAG,
+                    DEVELOPMENT_PACKAGE,
+                    ARGUMENT_SEPARATOR,
+                ];
+                held.extend_from_slice(passed);
+                owned(held)
+            }
+            GateSubject::IntegrationTarget { package, target } => owned(vec![
+                TEST_SUBCOMMAND,
+                LOCKED_FLAG,
+                FROZEN_FLAG,
+                OFFLINE_FLAG,
+                PACKAGE_FLAG,
+                package,
+                TEST_TARGET_FLAG,
+                target,
+            ]),
+            GateSubject::Script { arguments, .. } => owned(arguments.to_vec()),
+        }
+    }
+}
+
 /// Every gate one acceptance run holds, in the order it holds them.
 ///
 /// Ordered rather than merely enumerated, because the order is part of the
 /// answer: source policy before anything is built from the source, the
 /// contracts before the things that consume them, and the compatibility gate
 /// last because it is the only one that runs another project's code.
-pub const REQUIRED_GATES: &[&str] = &[
-    "source-policy",
-    "dependency-direction",
-    "workspace-module-map",
-    "release-metadata",
-    "release-attestation-policy",
-    "locked-source-cache",
-    "command-contract",
-    "protocol-compatibility",
-    "configuration-and-storage-compatibility",
-    "platform-runtime",
-    "release-artifact-contract",
-    "finite-state-machine-compatibility",
+pub const REQUIRED_GATES: &[AcceptanceGate] = &[
+    AcceptanceGate {
+        name: "source-policy",
+        subject: GateSubject::RepositoryCommand(&["source-policy"]),
+    },
+    AcceptanceGate {
+        name: "dependency-direction",
+        subject: GateSubject::RepositoryCommand(&["dependency-direction"]),
+    },
+    AcceptanceGate {
+        name: "workspace-module-map",
+        subject: GateSubject::IntegrationTarget {
+            package: DEVELOPMENT_PACKAGE,
+            target: "workspace_module_map",
+        },
+    },
+    AcceptanceGate {
+        name: "release-metadata",
+        subject: GateSubject::IntegrationTarget {
+            package: DEVELOPMENT_PACKAGE,
+            target: "release_metadata",
+        },
+    },
+    AcceptanceGate {
+        name: "release-attestation-policy",
+        subject: GateSubject::IntegrationTarget {
+            package: DEVELOPMENT_PACKAGE,
+            target: "release_attestation_policy",
+        },
+    },
+    AcceptanceGate {
+        name: "locked-source-cache",
+        subject: GateSubject::RepositoryCommand(&[
+            "verify-locked-source-cache",
+            "--cache-set",
+            CACHE_MOUNT,
+        ]),
+    },
+    AcceptanceGate {
+        name: "command-contract",
+        subject: GateSubject::IntegrationTarget {
+            package: DOMAIN_PACKAGE,
+            target: "command_contract_limits",
+        },
+    },
+    AcceptanceGate {
+        name: "protocol-compatibility",
+        subject: GateSubject::IntegrationTarget {
+            package: DEVELOPMENT_PACKAGE,
+            target: "protocol_compatibility",
+        },
+    },
+    AcceptanceGate {
+        name: "configuration-and-storage-compatibility",
+        subject: GateSubject::IntegrationTarget {
+            package: DEVELOPMENT_PACKAGE,
+            target: "configuration_and_storage_compatibility",
+        },
+    },
+    AcceptanceGate {
+        name: "platform-runtime",
+        subject: GateSubject::IntegrationTarget {
+            package: DEVELOPMENT_PACKAGE,
+            target: "platform_runtime_contract",
+        },
+    },
+    AcceptanceGate {
+        name: "release-artifact-contract",
+        subject: GateSubject::IntegrationTarget {
+            package: DEVELOPMENT_PACKAGE,
+            target: "release_artifact_contract",
+        },
+    },
+    AcceptanceGate {
+        name: "finite-state-machine-compatibility",
+        subject: GateSubject::Script {
+            path: "scripts/check_finite_state_machine_compatibility",
+            arguments: &[
+                "--finite-state-machine-source",
+                FINITE_STATE_MACHINE_MOUNT,
+                "--cargo-home-seed",
+                CACHE_MOUNT,
+            ],
+        },
+    },
 ];
 
 /// The isolation one acceptance run happens inside.
@@ -180,7 +403,7 @@ pub struct RuntimePolicy {
 }
 
 /// One gate's outcome inside an acceptance run.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GateOutcome {
     /// Which gate it is.
@@ -192,7 +415,7 @@ pub struct GateOutcome {
 }
 
 /// What one acceptance run concluded.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AcceptanceManifest {
     /// Which row coordinated it.
@@ -220,8 +443,25 @@ pub struct AcceptanceManifest {
 /// What a gate that held is written as.
 pub const HELD: &str = "held";
 
+/// What a gate that did not hold, and a revision that is not releasable, is
+/// written as.
+///
+/// One word for both, because there is nothing between them: a gate that
+/// refused makes the revision unreleasable, and a gate that could not be run at
+/// all refused as surely as one that ran and said no.
+pub const REFUSED: &str = "refused";
+
 /// What a revision that may be released is written as.
 pub const RELEASABLE: &str = "releasable";
+
+/// The variable the exact revision being decided arrives in.
+pub const SOURCE_COMMIT_VARIABLE: &str = "SLINGSHOT_ACCEPTANCE_SOURCE_COMMIT";
+
+/// The variable the exact tree that revision names arrives in.
+pub const SOURCE_TREE_VARIABLE: &str = "SLINGSHOT_ACCEPTANCE_SOURCE_TREE";
+
+/// The variable the provider run that produced the decision arrives in.
+pub const PROVIDER_RUN_VARIABLE: &str = "SLINGSHOT_ACCEPTANCE_PROVIDER_RUN";
 
 /// Why an acceptance run, or the isolation behind it, is refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -271,6 +511,12 @@ pub enum AcceptanceRefusal {
     /// The manifest concluded something its gates do not support.
     #[error("this manifest concludes {0} on evidence that does not support it")]
     OutcomeUnsupported(String),
+    /// The run was told nothing about what it is deciding.
+    #[error("{0} says which run this is, and this run was told no such thing")]
+    RunUnbound(String),
+    /// What the run decided could not be written down.
+    #[error("this decision could not be written: {0}")]
+    Unwritable(String),
 }
 
 /// Returns the isolation contract one document carries.
@@ -386,7 +632,7 @@ pub fn parse_manifest(text: &str) -> Result<AcceptanceManifest, AcceptanceRefusa
 pub fn require_complete(manifest: &AcceptanceManifest) -> Result<(), AcceptanceRefusal> {
     let mut seen = BTreeSet::new();
     for recorded in &manifest.gates {
-        if !REQUIRED_GATES.contains(&recorded.name.as_str()) {
+        if !REQUIRED_GATES.iter().any(|required| required.name == recorded.name) {
             return Err(AcceptanceRefusal::GateUnknown(recorded.name.clone()));
         }
         if !seen.insert(recorded.name.clone()) {
@@ -394,15 +640,15 @@ pub fn require_complete(manifest: &AcceptanceManifest) -> Result<(), AcceptanceR
         }
     }
     for required in REQUIRED_GATES {
-        if !seen.contains(*required) {
-            return Err(AcceptanceRefusal::GateMissing((*required).to_owned()));
+        if !seen.contains(required.name) {
+            return Err(AcceptanceRefusal::GateMissing(required.name.to_owned()));
         }
     }
     for (position, required) in REQUIRED_GATES.iter().enumerate() {
         let recorded = &manifest.gates[position];
-        if recorded.name != *required {
+        if recorded.name != required.name {
             return Err(AcceptanceRefusal::GateOutOfOrder {
-                expected: (*required).to_owned(),
+                expected: required.name.to_owned(),
                 held: recorded.name.clone(),
             });
         }
@@ -432,4 +678,281 @@ pub fn require_revision(
         });
     }
     Ok(())
+}
+
+/// What one run was told about itself.
+///
+/// Three values, and none of them discoverable from inside. A container with no
+/// network, no history, and no provider is exactly a place where a revision
+/// cannot be worked out, which is the point: a run that could work out which
+/// revision it was could be persuaded it was a different one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunIdentity {
+    /// The exact revision it is about.
+    pub source_commit: String,
+    /// The exact tree that revision names.
+    pub source_tree: String,
+    /// Which provider run produced it.
+    pub provider_run: String,
+}
+
+/// What one run binds its decision to.
+///
+/// What the run was told, beside what it read for itself from the inputs the
+/// container mounted. The digests are the second kind: a decision that named an
+/// input without saying which bytes it read would bind nothing at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunBinding {
+    /// Which row coordinated it.
+    pub coordinator_row: String,
+    /// What the isolation contract digests to.
+    pub isolation_sha256: String,
+    /// What the platform evidence digests to.
+    pub platform_evidence_sha256: String,
+    /// What the review record every input is bound to digests to.
+    pub rustsec_review_record_sha256: String,
+    /// What the run was told about itself.
+    pub identity: RunIdentity,
+}
+
+/// What running one gate produced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GateRun {
+    /// Which gate it is.
+    pub name: String,
+    /// Whether the gate itself concluded that it held.
+    pub held: bool,
+    /// Everything the gate wrote, which is what its digest is over.
+    pub report: Vec<u8>,
+}
+
+/// Returns the variables this run has.
+///
+/// Read once, into a value a caller holds, so that what the decision was told
+/// is something that can be handed to it and inspected rather than something
+/// fetched again at each use from a place no assertion can reach.
+#[must_use]
+pub fn environment() -> BTreeMap<String, String> {
+    std::env::vars().collect()
+}
+
+/// Returns what one run was told about itself.
+///
+/// A variable that is absent and one that is present and blank are the same
+/// thing said two ways, and both are a run that was told nothing.
+///
+/// # Errors
+///
+/// Returns [`AcceptanceRefusal::RunUnbound`] naming a value the run was not
+/// told, starting with the revision, because a decision that guessed its
+/// revision would be a decision about something else.
+pub fn told(environment: &BTreeMap<String, String>) -> Result<RunIdentity, AcceptanceRefusal> {
+    let read = |variable: &str| {
+        environment
+            .get(variable)
+            .map(|held| held.trim().to_owned())
+            .filter(|held| !held.is_empty())
+            .ok_or_else(|| AcceptanceRefusal::RunUnbound(variable.to_owned()))
+    };
+    Ok(RunIdentity {
+        source_commit: read(SOURCE_COMMIT_VARIABLE)?,
+        source_tree: read(SOURCE_TREE_VARIABLE)?,
+        provider_run: read(PROVIDER_RUN_VARIABLE)?,
+    })
+}
+
+/// Returns what one sequence of bytes digests to.
+#[must_use]
+pub fn digest_of_bytes(bytes: &[u8]) -> String {
+    hex::encode(sha2::Sha256::digest(bytes))
+}
+
+/// Returns what every file under one directory digests to, together.
+///
+/// Sorted by relative path, with each path fed in beside what its own bytes
+/// digest to, so that a file added, removed, renamed, or moved changes the
+/// answer. This is not the cache surveyor: that one leaves out the manifest it
+/// writes from what it measures, and evidence has nothing left out of it.
+///
+/// # Errors
+///
+/// Returns [`AcceptanceRefusal::Unreadable`] naming the first thing under the
+/// directory this decision cannot read or cannot name.
+pub fn digest_of_tree(root: &Path) -> Result<String, AcceptanceRefusal> {
+    let mut relatives = Vec::new();
+    collect_files(root, root, &mut relatives)?;
+    relatives.sort();
+    let mut digest = sha2::Sha256::new();
+    for relative in &relatives {
+        let held = read_bytes(&root.join(relative))?;
+        digest.update(relative.as_bytes());
+        digest.update([TREE_DIGEST_SEPARATOR]);
+        digest.update(digest_of_bytes(&held).as_bytes());
+    }
+    Ok(hex::encode(digest.finalize()))
+}
+
+/// Collects every file under `directory`, named relative to `root`.
+fn collect_files(
+    root: &Path,
+    directory: &Path,
+    collected: &mut Vec<String>,
+) -> Result<(), AcceptanceRefusal> {
+    let listing =
+        std::fs::read_dir(directory).map_err(|failure| unreadable(directory, &failure))?;
+    for entry in listing {
+        let entry = entry.map_err(|failure| unreadable(directory, &failure))?;
+        let path = entry.path();
+        let kind = entry.file_type().map_err(|failure| unreadable(&path, &failure))?;
+        if kind.is_dir() {
+            collect_files(root, &path, collected)?;
+            continue;
+        }
+        let relative = path.strip_prefix(root).unwrap_or(&path);
+        let Some(named) = relative.to_str() else {
+            return Err(AcceptanceRefusal::Unreadable(format!(
+                "{} is not a path this decision can name",
+                relative.display()
+            )));
+        };
+        collected.push(named.to_owned());
+    }
+    Ok(())
+}
+
+/// Returns one input's bytes.
+fn read_bytes(path: &Path) -> Result<Vec<u8>, AcceptanceRefusal> {
+    std::fs::read(path).map_err(|failure| unreadable(path, &failure))
+}
+
+/// Returns the refusal for a path this decision was given and cannot read.
+fn unreadable(path: &Path, failure: &std::io::Error) -> AcceptanceRefusal {
+    AcceptanceRefusal::Unreadable(format!("{}: {failure}", path.display()))
+}
+
+/// Runs one gate and returns what it concluded.
+///
+/// A gate that could not be started at all did not hold, and the report says
+/// why it could not. There is no third answer: a run that recorded "could not
+/// run" as anything but a refusal would let a missing tool, a target nobody
+/// spelled right, or an input the container was never given read as evidence
+/// about this revision.
+#[must_use]
+pub fn run_gate(gate: &AcceptanceGate, source_root: &Path) -> GateRun {
+    let program = gate.program(source_root);
+    let started = Command::new(&program).args(gate.arguments()).current_dir(source_root).output();
+    match started {
+        Ok(finished) => {
+            let mut report = finished.stdout;
+            report.extend_from_slice(&finished.stderr);
+            GateRun { name: gate.name.to_owned(), held: finished.status.success(), report }
+        }
+        Err(failure) => GateRun {
+            name: gate.name.to_owned(),
+            held: false,
+            report: format!("{} could not be started: {failure}\n", program.display()).into_bytes(),
+        },
+    }
+}
+
+/// Returns what one run of the gates concluded.
+///
+/// Every gate that ran is recorded, whichever way it went. A run that stopped
+/// at the first refusal would leave the gates after it absent, and a manifest
+/// with a gate absent is refused for the one that is missing rather than for
+/// the one that refused - which tells whoever reads it the wrong thing.
+#[must_use]
+pub fn conclude(binding: &RunBinding, runs: &[GateRun]) -> AcceptanceManifest {
+    let gates: Vec<GateOutcome> = runs
+        .iter()
+        .map(|run| GateOutcome {
+            name: run.name.clone(),
+            outcome: if run.held { HELD } else { REFUSED }.to_owned(),
+            report_sha256: digest_of_bytes(&run.report),
+        })
+        .collect();
+    let unanimous = gates.iter().all(|recorded| recorded.outcome == HELD);
+    AcceptanceManifest {
+        coordinator_row: binding.coordinator_row.clone(),
+        format: MANIFEST_FORMAT.to_owned(),
+        gates,
+        isolation_sha256: binding.isolation_sha256.clone(),
+        outcome: if unanimous { RELEASABLE } else { REFUSED }.to_owned(),
+        platform_evidence_sha256: binding.platform_evidence_sha256.clone(),
+        provider_run: binding.identity.provider_run.clone(),
+        rustsec_review_record_sha256: binding.rustsec_review_record_sha256.clone(),
+        source_commit: binding.identity.source_commit.clone(),
+        source_tree: binding.identity.source_tree.clone(),
+    }
+}
+
+/// Returns what this run binds its decision to.
+///
+/// # Errors
+///
+/// Returns [`AcceptanceRefusal::RunUnbound`] when the run was told nothing
+/// about itself and [`AcceptanceRefusal`] otherwise naming the input the
+/// container was given that could not be read.
+pub fn bind(source_root: &Path) -> Result<RunBinding, AcceptanceRefusal> {
+    // What the run was told, before anything it has to read. A run that does
+    // not know which revision it is about has nothing to learn from the inputs,
+    // and saying so first is the refusal that explains itself.
+    let identity = told(&environment())?;
+    let isolation = read_bytes(&source_root.join(CONTAINER_PATH))?;
+    let held = parse_container(&String::from_utf8_lossy(&isolation))?;
+    Ok(RunBinding {
+        coordinator_row: held.coordinator.triple,
+        isolation_sha256: digest_of_bytes(&isolation),
+        platform_evidence_sha256: digest_of_tree(Path::new(PLATFORM_EVIDENCE_MOUNT))?,
+        rustsec_review_record_sha256: digest_of_bytes(&read_bytes(Path::new(REVIEW_RECORD_MOUNT))?),
+        identity,
+    })
+}
+
+/// Runs every gate, records what each concluded, and returns the decision.
+///
+/// The reports are written beside the manifest as they are produced, because a
+/// manifest that digests a report nobody kept binds a document that cannot be
+/// read back.
+///
+/// # Errors
+///
+/// Returns [`AcceptanceRefusal`] when the run was told nothing about itself,
+/// when an input the container was given cannot be read, or when a report
+/// cannot be written beside the decision.
+pub fn decide(
+    source_root: &Path,
+    destination: &Path,
+) -> Result<AcceptanceManifest, AcceptanceRefusal> {
+    let binding = bind(source_root)?;
+    let mut runs = Vec::with_capacity(REQUIRED_GATES.len());
+    for gate in REQUIRED_GATES {
+        let run = run_gate(gate, source_root);
+        let report = destination.join(format!("{}{REPORT_FILE_SUFFIX}", run.name));
+        std::fs::write(&report, &run.report).map_err(|failure| {
+            AcceptanceRefusal::Unwritable(format!("{}: {failure}", report.display()))
+        })?;
+        runs.push(run);
+    }
+    Ok(conclude(&binding, &runs))
+}
+
+/// Writes what one run decided and returns where it was written.
+///
+/// # Errors
+///
+/// Returns [`AcceptanceRefusal::Unwritable`] when the decision cannot be
+/// rendered or cannot be written where it belongs.
+pub fn record(
+    manifest: &AcceptanceManifest,
+    destination: &Path,
+) -> Result<PathBuf, AcceptanceRefusal> {
+    let path = destination.join(MANIFEST_FILE_NAME);
+    let mut rendered = serde_json::to_string_pretty(manifest)
+        .map_err(|failure| AcceptanceRefusal::Unwritable(failure.to_string()))?;
+    rendered.push('\n');
+    std::fs::write(&path, rendered).map_err(|failure| {
+        AcceptanceRefusal::Unwritable(format!("{}: {failure}", path.display()))
+    })?;
+    Ok(path)
 }
