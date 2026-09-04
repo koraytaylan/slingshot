@@ -679,4 +679,11 @@ fn the_run_that_asks_for_a_decision_says_which_run_it_is() {
         "the step that asks for the decision reports the run itself, and an environment does not \
          travel between steps"
     );
+    let kept = workflow[asks..].find("if: always()").expect("the decision is kept");
+    let elsewhere = workflow[asks..].find("name: release-acceptance").expect("it is kept as this");
+    assert!(
+        kept < elsewhere,
+        "a refused revision is when the reports are worth reading, and this run keeps them only \
+         when every gate held"
+    );
 }
