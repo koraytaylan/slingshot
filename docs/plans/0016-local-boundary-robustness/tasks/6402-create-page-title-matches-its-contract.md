@@ -11,8 +11,8 @@ touches:
   - crates/slingshot-command-line/src/commands/page_mutation.rs
   - crates/slingshot-command-line/tests/page_mutation_commands.rs
   - crates/slingshot-domain/tests/command_contract_limits.rs
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # Create Page Title Matches Its Contract
 

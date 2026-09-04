@@ -9,6 +9,7 @@
 //! claims no effect.
 
 use serde_json::Value;
+use slingshot_domain::command::command_identity::CommandContract;
 use slingshot_domain::command::create_page::{
     CreatePageCommand, CreatePageRefusal, CreatePageResult, MutationCheckpoint, MutationFailure,
     PAGE_CONTENT_CHILD, PAGE_PRIMARY_NODE_TYPE, PAGE_TITLE_PROPERTY, ReconciledOutcome,
@@ -24,6 +25,26 @@ const FAILURES: &str = include_str!("fixtures/commands/create_page/failures.json
 
 /// Reconciliation vectors this test reads.
 const RECONCILIATION: &str = include_str!("fixtures/commands/create_page/reconciliation.jsonl");
+
+/// Returns the title bound every create-page boundary shares.
+fn maximum_page_title_bytes() -> usize {
+    usize::try_from(CommandContract::embedded().limit("maximum_page_title_bytes"))
+        .expect("the title bound fits")
+}
+
+#[test]
+fn serde_refuses_a_create_page_title_one_unicode_byte_past_its_contract() {
+    let exact = "é".repeat(maximum_page_title_bytes() / 2);
+    let exact_document = format!(
+        r#"{{"page_name":"page","parent_path":"/content","template_path":"/apps/t","title":"{exact}"}}"#
+    );
+    assert!(serde_json::from_str::<CreatePageCommand>(&exact_document).is_ok());
+    let oversized = format!("{exact}é");
+    let oversized_document = format!(
+        r#"{{"page_name":"page","parent_path":"/content","template_path":"/apps/t","title":"{oversized}"}}"#
+    );
+    assert!(serde_json::from_str::<CreatePageCommand>(&oversized_document).is_err());
+}
 
 /// Reads one row's string member.
 fn text<'row>(row: &'row Value, member: &str) -> &'row str {

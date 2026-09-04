@@ -782,7 +782,7 @@ fn action_body(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> O
                 "page_name": nonempty_string(limits.limit("maximum_page_name_bytes")),
                 "parent_path": repository_path(limits),
                 "template_path": repository_path(limits),
-                "title": bounded_string(limits.limit("maximum_property_string_bytes")),
+                "title": bounded_string(limits.limit("maximum_page_title_bytes")),
                 "initial_properties": mutation_properties(limits),
             },
         }),

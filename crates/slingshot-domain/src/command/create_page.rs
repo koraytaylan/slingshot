@@ -32,6 +32,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::command::command_identity::CommandContract;
+use crate::command::find_pages_containing_phrase::PageTitle;
 use crate::command::property_value::PropertyValue;
 use crate::command::repository_path::{PageName, RepositoryName, RepositoryPath};
 
@@ -205,7 +206,7 @@ pub struct CreatePageCommand {
     /// Template to create it from.
     pub template_path: RepositoryPath,
     /// Title to write to its content resource.
-    pub title: String,
+    pub title: PageTitle,
 }
 
 impl CreatePageCommand {
