@@ -355,13 +355,23 @@ fn evidence_that_points_somewhere_else_is_refused_rather_than_digested() {
     assert_eq!(bound.len(), DIGEST_CHARACTERS);
 
     let elsewhere = scratch_named("elsewhere");
-    std::os::unix::fs::symlink(&elsewhere, root.join("pointed")).expect("a link is made");
-    let failure = digest_of_tree(&root).expect_err("a link to a directory is not a file");
-    assert_eq!(refusal_name(&failure), "Unreadable", "{failure}");
-    assert!(
-        failure.to_string().contains("points at a directory"),
-        "and the refusal says what it is rather than how reading it went wrong: {failure}"
-    );
+    std::fs::write(elsewhere.join("record.json"), b"{}").expect("a file is written");
+    for (named, target) in [
+        ("pointed-at-a-directory", elsewhere.clone()),
+        ("pointed-at-a-file", elsewhere.join("record.json")),
+    ] {
+        let link = root.join(named);
+        std::fs::remove_file(&link).ok();
+        std::os::unix::fs::symlink(&target, &link).expect("a link is made");
+        let failure = digest_of_tree(&root).expect_err("evidence that points elsewhere is not it");
+        assert_eq!(refusal_name(&failure), "Unreadable", "{named}: {failure}");
+        assert!(
+            failure.to_string().contains("points somewhere else"),
+            "{named}: the refusal says what it is rather than how reading it went: {failure}"
+        );
+        std::fs::remove_file(&link).expect("the link is removed");
+    }
+    assert_eq!(digest_of_tree(&root).expect("and what is left digests"), bound);
 }
 
 #[test]
