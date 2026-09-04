@@ -1,0 +1,166 @@
+# Exact reviewed duplicate versions, partitioned by independently locked graph.
+# Each exemption expires when either its named versions or its introducing path
+# changes; the development contract compares this document to both locks.
+format = "slingshot.dependency-duplicate-exceptions/1"
+
+[product]
+cargo-deny-skip = ["base64@0.22.1", "darling@0.20.11", "darling_core@0.20.11", "darling_macro@0.20.11", "getrandom@0.2.17", "hashbrown@0.16.1", "syn@2.0.119", "untrusted@0.7.1", "windows-sys@0.52.0"]
+
+[fuzz]
+cargo-deny-skip = ["base64@0.22.1", "getrandom@0.2.17", "hashbrown@0.16.1", "syn@2.0.119", "untrusted@0.7.1", "windows-sys@0.52.0"]
+
+# The graph/package/version tuple is the identity. `paths` identifies the
+# reviewed introducer, and `review` makes every entry explicitly renewable.
+[[exception]]
+graph = "product"
+package = "base64"
+versions = ["0.22.1", "0.23.1"]
+paths = ["jsonwebtoken -> base64", "slingshot-domain -> base64"]
+reason = "jsonwebtoken has not converged"
+owner = "repository-owner"
+review = "remove when jsonwebtoken converges"
+[[exception]]
+graph = "product"
+package = "darling"
+versions = ["0.20.11", "0.24.1"]
+paths = ["serde_with -> darling", "schemars -> darling"]
+reason = "macro ecosystems have independent releases"
+owner = "repository-owner"
+review = "remove when macro dependencies converge"
+[[exception]]
+graph = "product"
+package = "darling_core"
+versions = ["0.20.11", "0.24.1"]
+paths = ["serde_with -> darling_core", "schemars -> darling_core"]
+reason = "paired with darling"
+owner = "repository-owner"
+review = "remove with darling"
+[[exception]]
+graph = "product"
+package = "darling_macro"
+versions = ["0.20.11", "0.24.1"]
+paths = ["serde_with -> darling_macro", "schemars -> darling_macro"]
+reason = "paired with darling"
+owner = "repository-owner"
+review = "remove with darling"
+[[exception]]
+graph = "product"
+package = "getrandom"
+versions = ["0.2.17", "0.3.4", "0.4.3"]
+paths = ["ring -> getrandom", "uuid -> getrandom", "rand -> getrandom"]
+reason = "cryptography and rand release lines differ"
+owner = "repository-owner"
+review = "remove when upstream converges"
+[[exception]]
+graph = "product"
+package = "hashbrown"
+versions = ["0.16.1", "0.17.1"]
+paths = ["rsqlite-vfs -> hashbrown", "indexmap -> hashbrown"]
+reason = "storage and protocol dependencies differ"
+owner = "repository-owner"
+review = "remove when upstream converges"
+[[exception]]
+graph = "product"
+package = "r-efi"
+versions = ["5.3.0", "6.0.0"]
+paths = ["getrandom -> r-efi", "rustix -> r-efi"]
+reason = "target-only upstream divergence"
+owner = "repository-owner"
+review = "remove when target dependencies converge"
+[[exception]]
+graph = "product"
+package = "rand"
+versions = ["0.9.5", "0.10.2"]
+paths = ["jsonwebtoken -> rand", "slingshot-daemon -> rand"]
+reason = "upstream release line divergence"
+owner = "repository-owner"
+review = "remove when jsonwebtoken converges"
+[[exception]]
+graph = "product"
+package = "rand_core"
+versions = ["0.6.4", "0.9.5", "0.10.1"]
+paths = ["jsonwebtoken -> rand_core", "rand -> rand_core", "chacha20 -> rand_core"]
+reason = "upstream release line divergence"
+owner = "repository-owner"
+review = "remove when rand users converge"
+[[exception]]
+graph = "product"
+package = "syn"
+versions = ["2.0.119", "3.0.4"]
+paths = ["serde_derive -> syn", "clap_derive -> syn"]
+reason = "proc-macro release lines differ"
+owner = "repository-owner"
+review = "remove when macros converge"
+[[exception]]
+graph = "product"
+package = "untrusted"
+versions = ["0.7.1", "0.9.0"]
+paths = ["aws-lc-rs -> untrusted", "ring -> untrusted"]
+reason = "cryptography backend transition"
+owner = "repository-owner"
+review = "remove when crypto dependencies converge"
+[[exception]]
+graph = "product"
+package = "windows-sys"
+versions = ["0.52.0", "0.61.2"]
+paths = ["ring -> windows-sys", "tokio -> windows-sys"]
+reason = "target-only upstream divergence"
+owner = "repository-owner"
+review = "remove when target dependencies converge"
+
+[[exception]]
+graph = "fuzz"
+package = "base64"
+versions = ["0.22.1", "0.23.1"]
+paths = ["jsonwebtoken -> base64", "slingshot-domain -> base64"]
+reason = "inherits product graph"
+owner = "repository-owner"
+review = "remove when product converges"
+[[exception]]
+graph = "fuzz"
+package = "getrandom"
+versions = ["0.2.17", "0.4.3"]
+paths = ["ring -> getrandom", "rand -> getrandom"]
+reason = "inherits product graph"
+owner = "repository-owner"
+review = "remove when product converges"
+[[exception]]
+graph = "fuzz"
+package = "hashbrown"
+versions = ["0.16.1", "0.17.1"]
+paths = ["rsqlite-vfs -> hashbrown", "indexmap -> hashbrown"]
+reason = "inherits product graph"
+owner = "repository-owner"
+review = "remove when product converges"
+[[exception]]
+graph = "fuzz"
+package = "rand_core"
+versions = ["0.6.4", "0.10.1"]
+paths = ["jsonwebtoken -> rand_core", "chacha20 -> rand_core"]
+reason = "inherits product graph"
+owner = "repository-owner"
+review = "remove when product converges"
+[[exception]]
+graph = "fuzz"
+package = "syn"
+versions = ["2.0.119", "3.0.4"]
+paths = ["serde_derive -> syn", "clap_derive -> syn"]
+reason = "inherits product graph"
+owner = "repository-owner"
+review = "remove when product converges"
+[[exception]]
+graph = "fuzz"
+package = "untrusted"
+versions = ["0.7.1", "0.9.0"]
+paths = ["aws-lc-rs -> untrusted", "ring -> untrusted"]
+reason = "inherits product graph"
+owner = "repository-owner"
+review = "remove when product converges"
+[[exception]]
+graph = "fuzz"
+package = "windows-sys"
+versions = ["0.52.0", "0.61.2"]
+paths = ["ring -> windows-sys", "tokio -> windows-sys"]
+reason = "inherits product graph"
+owner = "repository-owner"
+review = "remove when product converges"

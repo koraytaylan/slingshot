@@ -37,7 +37,7 @@ allow = [
 confidence-threshold = 0.93
 
 [bans]
-multiple-versions = "warn"
+multiple-versions = "deny"
 # A dependency without a version is refused, except a path dependency inside
 # this workspace, whose version is the workspace's own.
 wildcards = "deny"
