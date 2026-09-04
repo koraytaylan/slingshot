@@ -50,9 +50,14 @@ pub const SECRET_NAMES: &[&str] = &[
     "token",
 ];
 
-/// Openings of a block whose whole content is secret.
-pub const SECRET_BLOCK_OPENINGS: &[&str] =
-    &["-----BEGIN PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----", "Bearer "];
+/// PEM markers whose complete bounded blocks are secrets.
+pub const SECRET_BLOCKS: &[(&str, &str)] = &[
+    ("-----BEGIN PRIVATE KEY-----", "-----END PRIVATE KEY-----"),
+    ("-----BEGIN RSA PRIVATE KEY-----", "-----END RSA PRIVATE KEY-----"),
+];
+
+/// Prefix of an inline credential whose value ends at whitespace.
+const BEARER_PREFIX: &str = "Bearer ";
 
 /// Characters that can separate a secret's name from its value.
 const NAME_SEPARATORS: &[char] = &['=', ':'];
@@ -124,18 +129,37 @@ pub fn redact(text: &str) -> String {
     redact_paths(&without_named)
 }
 
-/// Replaces everything from a secret block's opening to the end of its word.
+/// Replaces complete PEM blocks and one bearer credential without crossing text after it.
 fn redact_blocks(text: &str) -> String {
-    let mut held = text.to_owned();
-    for opening in SECRET_BLOCK_OPENINGS {
-        while let Some(start) = held.find(opening) {
-            let after = start + opening.len();
-            let end =
-                held[after..].find(char::is_whitespace).map_or(held.len(), |offset| after + offset);
-            held.replace_range(start..end, REDACTION);
+    let mut redacted = String::new();
+    let mut remaining = text;
+    loop {
+        let pem = SECRET_BLOCKS.iter().filter_map(|(opening, closing)| {
+            remaining.find(opening).map(|start| (start, *opening, Some(*closing)))
+        });
+        let bearer = remaining.find(BEARER_PREFIX).map(|start| (start, BEARER_PREFIX, None));
+        let Some((start, opening, closing)) = pem.chain(bearer).min_by_key(|(start, _, _)| *start)
+        else {
+            redacted.push_str(remaining);
+            return redacted;
+        };
+        redacted.push_str(&remaining[..start]);
+        let after_opening = &remaining[start + opening.len()..];
+        let consumed = match closing {
+            Some(closing) => after_opening
+                .find(closing)
+                .map_or(remaining.len() - start, |offset| opening.len() + offset + closing.len()),
+            None => {
+                opening.len()
+                    + after_opening.find(char::is_whitespace).unwrap_or(after_opening.len())
+            }
+        };
+        redacted.push_str(REDACTION);
+        remaining = &remaining[start + consumed..];
+        if remaining.is_empty() {
+            return redacted;
         }
     }
-    held
 }
 
 /// Replaces the value following any name this module treats as a secret.
