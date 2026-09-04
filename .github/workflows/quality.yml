@@ -38,6 +38,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: install the tools the gate verifies before it verifies them
+        run: scripts/install_pinned_repository_tools
       - name: check out the exact pinned advisory snapshot
         run: scripts/checkout_pinned_advisory_database "$RUNNER_TEMP/advisory-db"
       - name: run the gate
