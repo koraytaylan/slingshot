@@ -6,6 +6,7 @@
 name: platform-runtime
 on:
   push:
+  pull_request:
 permissions:
   contents: read
 # The Windows row builds a dependency whose assembly is normally produced by
@@ -41,7 +42,7 @@ jobs:
           SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
           SLINGSHOT_REPORTED_RUNNER: ${{ matrix.runner }}
         run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
-      - name: run the platform and runtime suites for this row
+      - name: run the complete native repository gate for this row
         env:
           SLINGSHOT_AUTOMATION_ROW: ${{ matrix.triple }}
-        run: cargo test --locked -p slingshot-development --test platform_runtime_contract
+        run: scripts/platform_quality

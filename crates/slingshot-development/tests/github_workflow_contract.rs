@@ -283,6 +283,43 @@ fn the_native_matrix_is_exactly_the_rows_the_authority_maps() {
         Some(false),
         "one row failing hides nothing about the others"
     );
+    assert!(
+        document["on"].as_mapping().is_some_and(
+            |triggers| triggers.contains_key(&Value::String("pull_request".to_owned()))
+        ),
+        "every supported native row gates pull requests as well as pushes"
+    );
+    let native_steps = steps(job);
+    let native_invocations: Vec<&str> = native_steps
+        .iter()
+        .filter_map(|step| step["run"].as_str())
+        .filter(|run| run.contains("scripts/platform_quality"))
+        .collect();
+    assert_eq!(
+        native_invocations,
+        vec!["scripts/platform_quality"],
+        "the native job invokes exactly the argument-free repository-local gate"
+    );
+    let gate = read_repository_file("scripts/platform_quality");
+    for required in [
+        "cargo check --locked --offline --workspace --all-targets --all-features",
+        "cargo test --locked --offline --workspace --all-targets --all-features",
+        "this gate takes no arguments",
+    ] {
+        assert!(gate.contains(required), "the native gate omits {required}");
+    }
+    for narrower in ["platform_runtime_contract", "--exact", "--skip"] {
+        assert!(
+            !native_invocations[0].contains(narrower),
+            "the workflow substitutes the narrower {narrower} check"
+        );
+    }
+    assert!(
+        workspace_root()
+            .join("crates/slingshot-configuration/tests/macos_native_sentinel.rs")
+            .is_file(),
+        "a macOS-only sentinel outside platform_runtime_contract is compiled by the gate"
+    );
 }
 
 /// The action that attests, which composes the provenance itself.
