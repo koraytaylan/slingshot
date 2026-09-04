@@ -153,6 +153,7 @@ impl InstallationState {
     /// Returns [`InstallationStateFailure::FilesystemRefused`] when any step
     /// refuses, leaving the published record as it was.
     pub fn replace(&self, record: &InstallationRecord) -> Result<(), InstallationStateFailure> {
+        let _lock = self.take_lock()?;
         let refused = |failure: std::io::Error| {
             InstallationStateFailure::FilesystemRefused(failure.to_string())
         };
@@ -166,6 +167,31 @@ impl InstallationState {
         drop(file);
         std::fs::rename(&staging, self.record_path()).map_err(refused)?;
         synchronize_directory(&self.root)
+    }
+
+    /// Takes the one cross-process ledger lock for a replacement transaction.
+    fn take_lock(&self) -> Result<std::fs::File, InstallationStateFailure> {
+        use fs4::FileExt;
+        #[cfg(unix)]
+        use std::os::unix::fs::OpenOptionsExt as _;
+
+        let mut options = std::fs::OpenOptions::new();
+        options.create(true).read(true).write(true);
+        #[cfg(unix)]
+        options.mode(0o600).custom_flags(no_follow());
+        let lock = options
+            .open(self.lock_path())
+            .map_err(|failure| InstallationStateFailure::FilesystemRefused(failure.to_string()))?;
+        let metadata = lock
+            .metadata()
+            .map_err(|failure| InstallationStateFailure::FilesystemRefused(failure.to_string()))?;
+        if !metadata.is_file() {
+            return Err(InstallationStateFailure::NotAPlainFile);
+        }
+        require_current_user_only(&metadata)?;
+        FileExt::lock(&lock)
+            .map_err(|failure| InstallationStateFailure::FilesystemRefused(failure.to_string()))?;
+        Ok(lock)
     }
 }
 
@@ -228,10 +254,13 @@ fn create_private(path: &Path) -> Result<std::fs::File, InstallationStateFailure
 #[cfg(unix)]
 fn open_without_following(path: &Path) -> Result<std::fs::File, std::io::Error> {
     use std::os::unix::fs::OpenOptionsExt as _;
-    const LINUX_NOFOLLOW: i32 = 0o400_000;
-    const DARWIN_NOFOLLOW: i32 = 0x0010_0000;
-    let nofollow = if cfg!(target_os = "linux") { LINUX_NOFOLLOW } else { DARWIN_NOFOLLOW };
-    std::fs::OpenOptions::new().read(true).custom_flags(nofollow).open(path)
+    std::fs::OpenOptions::new().read(true).custom_flags(no_follow()).open(path)
+}
+
+/// Returns the platform's open flag that refuses the target of a symbolic link.
+#[cfg(unix)]
+const fn no_follow() -> i32 {
+    if cfg!(target_os = "linux") { 0o400_000 } else { 0x0010_0000 }
 }
 
 /// Opens one record on platforms without Unix link semantics.

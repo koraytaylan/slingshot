@@ -2243,6 +2243,7 @@ dependencies = [
 name = "slingshot-storage"
 version = "0.1.0"
 dependencies = [
+ "fs4",
  "hex",
  "proptest",
  "rusqlite",

@@ -8,6 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+fs4.workspace = true
 hex.workspace = true
 slingshot-domain.workspace = true
 rusqlite.workspace = true
