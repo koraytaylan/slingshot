@@ -163,6 +163,11 @@ jobs:
         with:
           name: locked-source-cache
           path: ${{ runner.temp }}/cache
+          # A cargo home keeps the index metadata that makes offline resolution
+          # possible under a hidden directory, and this transfer drops hidden
+          # files unless told otherwise. A cache that arrives without them is a
+          # cache that resolves nothing, which is what it is carried for.
+          include-hidden-files: true
       # The provenance is the provider's own statement about this build, not a
       # document this repository writes. The attestation policy reads the
       # builder identity and the workflow this ran as out of it, and only the
