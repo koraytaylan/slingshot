@@ -54,7 +54,9 @@ use crate::invocation::{
 };
 use crate::machine_readable_renderer;
 use crate::model_context_protocol::application::{Served, ServerApplication};
-use crate::model_context_protocol::standard_stream_transport::OutputFailure;
+use crate::model_context_protocol::standard_stream_transport::{
+    BoundedLine, OutputFailure, read_bounded_line,
+};
 use crate::target_selection::NamespacePair;
 
 /// Exit status of a command that finished.
@@ -292,14 +294,13 @@ fn serve_protocol(
     diagnostics: &mut dyn Write,
 ) -> i32 {
     let mut server = ServerApplication::new();
-    let mut line = String::new();
     loop {
-        line.clear();
-        match input.read_line(&mut line) {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {}
-        }
-        match server.serve_line(line.trim_end().as_bytes()) {
+        let (line, terminal) = match read_bounded_line(input) {
+            Ok(BoundedLine::Line(line)) => (line, false),
+            Ok(BoundedLine::TooLong(line)) => (line, true),
+            Ok(BoundedLine::End) | Err(_) => break,
+        };
+        match server.serve_line(&line) {
             Served::Answered(answer) => {
                 if writeln!(output, "{answer}").is_err() {
                     break;
@@ -307,6 +308,9 @@ fn serve_protocol(
             }
             Served::Silent => {}
             Served::Finished => break,
+        }
+        if terminal {
+            break;
         }
     }
     let detached = server.finish(OutputFailure::SinkFailed);
