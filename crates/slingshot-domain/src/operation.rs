@@ -327,6 +327,72 @@ pub enum ResultDisposition {
     Artifact,
 }
 
+/// One verified artifact occupying a successful operation's declared slot.
+///
+/// The bytes themselves have already passed through the artifact store. This
+/// is the immutable, content-addressed description that a success settlement
+/// commits with the operation that produced it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProducedArtifact {
+    /// The deterministic identifier the artifact store assigned.
+    pub artifact_identifier: String,
+    /// The command-declared slot this artifact fills.
+    pub artifact_slot: String,
+    /// Exactly how many verified bytes the artifact holds.
+    pub byte_length: u64,
+    /// The content digest of those bytes.
+    pub content_digest: String,
+    /// The artifact's bounded media type.
+    pub media_type: String,
+}
+
+/// The complete immutable value committed when an operation succeeds.
+///
+/// A success has exactly one representation: canonical inline bytes, or one
+/// or more verified artifacts. The expected lifecycle and revision make a
+/// stale executor lose before it can publish any part of that result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuccessfulSettlement {
+    /// Verified artifact descriptions, when the result is artifact-backed.
+    pub artifacts: Vec<ProducedArtifact>,
+    /// Canonical inline result bytes, when the result is inline.
+    pub inline_result: Option<String>,
+    /// The lifecycle state the executor observed before settlement.
+    pub expected_lifecycle_state: OperationLifecycleState,
+    /// The revision the executor observed before settlement.
+    pub expected_revision: u64,
+    /// The instant at which this complete success settled.
+    pub settled_at_unix_milliseconds: u64,
+}
+
+impl SuccessfulSettlement {
+    /// Returns the sole disposition this complete result represents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SettlementFailure::MixedResults`] when both representations
+    /// are supplied, or [`SettlementFailure::MissingResult`] when neither is.
+    pub fn disposition(&self) -> Result<ResultDisposition, SettlementFailure> {
+        match (self.inline_result.is_some(), self.artifacts.is_empty()) {
+            (true, true) => Ok(ResultDisposition::Inline),
+            (false, false) => Ok(ResultDisposition::Artifact),
+            (true, false) => Err(SettlementFailure::MixedResults),
+            (false, true) => Err(SettlementFailure::MissingResult),
+        }
+    }
+}
+
+/// Why a purported successful settlement cannot be one immutable result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SettlementFailure {
+    /// Inline bytes and artifacts are two representations, not two parts.
+    #[error("a successful result is inline bytes or artifacts, never both")]
+    MixedResults,
+    /// A success must leave a readable immutable result.
+    #[error("a successful result needs inline bytes or at least one artifact")]
+    MissingResult,
+}
+
 /// What one operation is, as of one revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationRecord {

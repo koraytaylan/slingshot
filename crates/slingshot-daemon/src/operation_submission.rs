@@ -22,12 +22,11 @@
 
 use slingshot_domain::command_fingerprint::{CommandFingerprint, FingerprintInput};
 use slingshot_domain::operation::{
-    OperationFact, RecoveryCategory, RecoveryExecutionEvidence, RecoveryFact,
+    OperationFact, RecoveryCategory, RecoveryExecutionEvidence, RecoveryFact, SuccessfulSettlement,
 };
 use slingshot_domain::operation_executor::OperationExecutorOutcome;
 use slingshot_storage::operation_repository::{
     AdmissionOutcome, AdmissionRequest, OperationRepository, OperationSummary, RepositoryFailure,
-    ResultDisposition,
 };
 
 /// What a client asked this daemon to run, and who it thinks it is asking.
@@ -193,29 +192,18 @@ pub fn settle(
     let digest = &summary.author_target_identity_digest;
     let identifier = &summary.operation_identifier;
     match outcome {
-        OperationExecutorOutcome::Succeeded { artifacts, inline_result } => {
-            let disposition = if inline_result.is_some() && artifacts.is_empty() {
-                ResultDisposition::Inline
-            } else {
-                ResultDisposition::Artifact
-            };
-            let settled = repository.apply(
+        OperationExecutorOutcome::Succeeded { artifacts, inline_result } => repository
+            .settle_success(
                 digest,
                 identifier,
-                summary.record.revision,
-                &OperationFact::Lifecycle {
-                    lifecycle_state:
-                        slingshot_domain::operation::OperationLifecycleState::Succeeded,
+                &SuccessfulSettlement {
+                    artifacts: artifacts.clone(),
+                    inline_result: inline_result.clone(),
+                    expected_lifecycle_state: summary.record.lifecycle_state,
+                    expected_revision: summary.record.revision,
+                    settled_at_unix_milliseconds: now_unix_milliseconds,
                 },
-                now_unix_milliseconds,
-            )?;
-            repository.record_result_disposition(
-                digest,
-                identifier,
-                settled.record.revision,
-                disposition,
-            )
-        }
+            ),
         OperationExecutorOutcome::TerminalFailure { failure } => repository.apply(
             digest,
             identifier,

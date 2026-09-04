@@ -20,6 +20,7 @@
 //! reporting progress is that somebody might be watching - not that somebody
 //! must be.
 
+pub use crate::operation::ProducedArtifact;
 use crate::operation::{RecoveryFact, TerminalFailure};
 
 /// Which operation is being run, and on whose behalf.
@@ -35,25 +36,6 @@ pub struct ExecutionIdentity {
     pub author_target_identity_digest: String,
     /// The identifier its caller chose.
     pub operation_identifier: String,
-}
-
-/// One artifact an execution produced.
-///
-/// Metadata only. The bytes reached the store through the store's own
-/// interface, and what crosses this boundary is the verified description of
-/// where they ended up - never a path, and never the bytes again.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProducedArtifact {
-    /// The deterministic artifact identifier.
-    pub artifact_identifier: String,
-    /// The command-declared slot it fills.
-    pub artifact_slot: String,
-    /// Exactly how many bytes it holds.
-    pub byte_length: u64,
-    /// The digest of those bytes.
-    pub content_digest: String,
-    /// The bounded media type.
-    pub media_type: String,
 }
 
 /// How an execution ended, or failed to end.

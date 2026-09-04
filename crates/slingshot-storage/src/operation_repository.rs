@@ -21,9 +21,9 @@ use slingshot_domain::command_fingerprint::{
 use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
 use slingshot_domain::installation::InstallationIdentifier;
 use slingshot_domain::operation::{
-    LifecycleFailure, OperationFact, OperationLifecycleState, OperationRecord, RecoveryCategory,
-    RecoveryExecutionEvidence, RecoveryFact, TerminalFailure, TerminalFailureDisposition,
-    TerminalFailureKind,
+    LifecycleFailure, OperationFact, OperationLifecycleState, OperationRecord, ProducedArtifact,
+    RecoveryCategory, RecoveryExecutionEvidence, RecoveryFact, SettlementFailure,
+    SuccessfulSettlement, TerminalFailure, TerminalFailureDisposition, TerminalFailureKind,
 };
 pub use slingshot_domain::operation::{RecoveryResumeReceipt, ResultDisposition};
 
@@ -84,9 +84,20 @@ pub enum RepositoryFailure {
         /// Revision the row holds.
         stored: u64,
     },
+    /// The lifecycle the settlement observed has since changed.
+    #[error("the operation lifecycle moved: expected {expected:?}, stored {stored:?}")]
+    LifecycleMoved {
+        /// Lifecycle the settlement was formed against.
+        expected: OperationLifecycleState,
+        /// Lifecycle observed inside its transaction.
+        stored: OperationLifecycleState,
+    },
     /// The fact does not belong to the operation as it stands.
     #[error(transparent)]
     Lifecycle(#[from] LifecycleFailure),
+    /// The complete result does not have one valid representation.
+    #[error(transparent)]
+    Settlement(#[from] SettlementFailure),
     /// A bounded text arrived longer than its bound.
     #[error("{field} holds {actual} bytes, and the contract allows {allowed}")]
     TooLong {
@@ -102,6 +113,16 @@ pub enum RepositoryFailure {
     ReceiptsExhausted {
         /// How many it may hold.
         allowed: u64,
+    },
+    /// One digest was already recorded with a different verified byte length.
+    #[error("artifact {digest} is {stored} bytes, not the {provided} bytes supplied")]
+    ArtifactLengthConflict {
+        /// Content digest whose immutable metadata conflicted.
+        digest: String,
+        /// Length already recorded for the digest.
+        stored: u64,
+        /// Length the settlement supplied.
+        provided: u64,
     },
     /// The namespace could not take more, or could not be counted.
     #[error(transparent)]
@@ -240,6 +261,8 @@ pub struct OperationSummary {
     pub recorded_at_unix_milliseconds: u64,
     /// Where its result went, once it has one.
     pub result_disposition: Option<ResultDisposition>,
+    /// Canonical inline result bytes, when the result is inline.
+    pub result_inline_bytes: Option<String>,
     /// The environment revision it was admitted against.
     pub selected_environment_revision: String,
     /// When it settled, if it has.
@@ -577,6 +600,7 @@ impl OperationRepository {
         let fingerprint: String = row.get("command_fingerprint")?;
         let installation: String = row.get("installation_identifier")?;
         let disposition: Option<String> = row.get("result_disposition")?;
+        let inline_result: Option<String> = row.get("result_inline_bytes")?;
         let settled: Option<i64> = row.get("settled_at_unix_milliseconds")?;
         let record = OperationRecord {
             latest_progress: row.get("latest_progress")?,
@@ -615,6 +639,7 @@ impl OperationRepository {
             result_disposition: disposition
                 .map(|spelling| decode_word::<ResultDisposition>("result_disposition", &spelling))
                 .transpose()?,
+            result_inline_bytes: inline_result,
             selected_environment_revision: row.get("selected_environment_revision")?,
             settled_at_unix_milliseconds: settled
                 .map(|value| {
@@ -697,6 +722,115 @@ impl OperationRepository {
         )
     }
 
+    /// Commits a complete successful result and its terminal lifecycle together.
+    ///
+    /// The operation, verified artifact associations, result representation,
+    /// settlement time, and recovery clearing share one immediate transaction.
+    /// Consequently a reader sees either the prior recoverable operation or a
+    /// complete success, never a terminal row awaiting a second result write.
+    pub fn settle_success(
+        &self,
+        author_target_identity_digest: &str,
+        operation_identifier: &str,
+        settlement: &SuccessfulSettlement,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        let disposition = settlement.disposition()?;
+        if let Some(inline) = &settlement.inline_result {
+            require_within("inline result", "maximum_inline_machine_result_bytes", inline)?;
+        }
+        let transaction = write_transaction(self.database.connection())?;
+        let stored =
+            self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
+        require_revision(&stored, settlement.expected_revision)?;
+        if stored.record.lifecycle_state != settlement.expected_lifecycle_state {
+            return Err(RepositoryFailure::LifecycleMoved {
+                expected: settlement.expected_lifecycle_state,
+                stored: stored.record.lifecycle_state,
+            });
+        }
+        let folded = stored.record.fold(&OperationFact::Lifecycle {
+            lifecycle_state: OperationLifecycleState::Succeeded,
+        })?;
+        let folded = OperationRecord { outstanding_recovery: None, ..folded };
+        for artifact in &settlement.artifacts {
+            self.write_settled_artifact(
+                &transaction,
+                author_target_identity_digest,
+                operation_identifier,
+                artifact,
+                settlement.settled_at_unix_milliseconds,
+            )?;
+        }
+        let carried = OperationSummary {
+            result_disposition: Some(disposition),
+            result_inline_bytes: settlement.inline_result.clone(),
+            ..stored.clone()
+        };
+        self.write_folded(
+            &transaction,
+            &carried,
+            &folded,
+            Some(settlement.settled_at_unix_milliseconds),
+        )?;
+        let current =
+            self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
+        transaction.commit()?;
+        Ok(current)
+    }
+
+    /// Writes one already-verified artifact association inside a success transaction.
+    fn write_settled_artifact(
+        &self,
+        transaction: &rusqlite::Transaction<'_>,
+        author_target_identity_digest: &str,
+        operation_identifier: &str,
+        artifact: &ProducedArtifact,
+        now_unix_milliseconds: u64,
+    ) -> Result<(), RepositoryFailure> {
+        let byte_length = i64::try_from(artifact.byte_length).unwrap_or(i64::MAX);
+        let existing: Option<i64> = transaction
+            .query_row(
+                statement("read one artifact blob's recorded length"),
+                rusqlite::params![artifact.content_digest],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(existing) = existing {
+            let stored = u64::try_from(existing).map_err(|_| RepositoryFailure::NotDecodable {
+                column: "artifact_blob.byte_length",
+                detail: format!("{existing} is below zero"),
+            })?;
+            if stored != artifact.byte_length {
+                return Err(RepositoryFailure::ArtifactLengthConflict {
+                    digest: artifact.content_digest.clone(),
+                    stored,
+                    provided: artifact.byte_length,
+                });
+            }
+        }
+        transaction.execute(
+            statement("record one artifact's content, once per digest"),
+            rusqlite::params![
+                byte_length,
+                artifact.content_digest,
+                i64::try_from(now_unix_milliseconds).unwrap_or(i64::MAX),
+            ],
+        )?;
+        transaction.execute(
+            statement("associate one artifact with the operation slot it fills"),
+            rusqlite::params![
+                artifact.artifact_identifier,
+                artifact.artifact_slot,
+                author_target_identity_digest,
+                byte_length,
+                artifact.content_digest,
+                artifact.media_type,
+                operation_identifier,
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Runs one compare-and-set write, whatever the write turns out to be.
     ///
     /// Reading the row, holding the caller to its revision, and reading back
@@ -775,6 +909,7 @@ impl OperationRepository {
                 encode_word(&folded.lifecycle_state)?,
                 i64::try_from(folded.revision).unwrap_or(i64::MAX),
                 stored.result_disposition.map(|held| encode_word(&held)).transpose()?,
+                stored.result_inline_bytes,
                 settled_at_unix_milliseconds.map(|at| i64::try_from(at).unwrap_or(i64::MAX)),
                 terminal.map(|failure| encode(&failure.disposition)).transpose()?,
                 terminal.map(|failure| encode_word(&failure.kind)).transpose()?,
@@ -827,41 +962,6 @@ impl OperationRepository {
             ],
         )?;
         Ok(())
-    }
-
-    /// Records where an operation's result went, under compare-and-set.
-    ///
-    /// Separate from the lifecycle: reaching `Succeeded` says the work
-    /// happened, this says where what it produced can be found.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`RepositoryFailure`] for a missing row, a stale revision, or a
-    /// database refusal.
-    pub fn record_result_disposition(
-        &self,
-        author_target_identity_digest: &str,
-        operation_identifier: &str,
-        expected_revision: u64,
-        disposition: ResultDisposition,
-    ) -> Result<OperationSummary, RepositoryFailure> {
-        self.mutate(
-            author_target_identity_digest,
-            operation_identifier,
-            expected_revision,
-            |stored| {
-                if stored.result_disposition == Some(disposition) {
-                    return Ok(None);
-                }
-                let advanced = OperationRecord {
-                    revision: stored.record.revision + 1,
-                    ..stored.record.clone()
-                };
-                let carried =
-                    OperationSummary { result_disposition: Some(disposition), ..stored.clone() };
-                Ok(Some((carried, advanced, stored.settled_at_unix_milliseconds)))
-            },
-        )
     }
 
     /// Returns every operation in one partition, in the order it arrived.
