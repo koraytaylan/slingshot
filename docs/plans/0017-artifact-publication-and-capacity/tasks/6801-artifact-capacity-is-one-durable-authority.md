@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-daemon/src/operation/artifact_completion.rs
   - crates/slingshot-storage/tests/persistent_capacity/**
   - crates/slingshot-storage/tests/artifact_store/**
-status: planned
+status: completed
 merged_as: ""
 ---
 # Artifact Capacity Is One Durable Authority

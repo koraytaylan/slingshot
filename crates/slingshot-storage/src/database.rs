@@ -32,6 +32,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("../migrations/0001-operations.sql")),
     (2, include_str!("../migrations/0002-agent-jobs.sql")),
     (3, include_str!("../migrations/0003-execution-fence.sql")),
+    (4, include_str!("../migrations/0004-artifact-reservations.sql")),
 ];
 
 /// Compile option that would make the temporary-storage pragma a dead letter.
@@ -136,6 +137,7 @@ impl OperationDatabase {
         database.require_compile_options()?;
         database.apply_and_verify(settings)?;
         database.migrate()?;
+        database.reconcile_abandoned_artifact_reservations()?;
         Ok(database)
     }
 
@@ -248,6 +250,17 @@ impl OperationDatabase {
                 ))
                 .map_err(refused)?;
         }
+        Ok(())
+    }
+
+    /// Releases reservations left by a process that did not finish an installation.
+    fn reconcile_abandoned_artifact_reservations(&self) -> Result<(), DatabaseFailure> {
+        let statement = crate::sqlite_statement_inventory::STATEMENTS
+            .iter()
+            .find(|held| held.purpose == "reconcile abandoned artifact reservations at startup")
+            .map(|held| held.text)
+            .unwrap_or_else(|| panic!("the inventory names startup reservation reconciliation"));
+        self.connection.execute(statement, []).map_err(refused)?;
         Ok(())
     }
 }

@@ -220,6 +220,30 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
+        purpose: "measure this namespace's durable artifact reservations",
+        text: "SELECT COALESCE(SUM(byte_length), 0) FROM artifact_reservation",
+        parameters: 0,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "hold one artifact reservation durably",
+        text: "INSERT INTO artifact_reservation (byte_length) VALUES (?)",
+        parameters: 1,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "release one durable artifact reservation",
+        text: "DELETE FROM artifact_reservation WHERE ticket = ?",
+        parameters: 1,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "reconcile abandoned artifact reservations at startup",
+        text: "DELETE FROM artifact_reservation",
+        parameters: 0,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
         purpose: "read one artifact blob's recorded length",
         text: "SELECT byte_length FROM artifact_blob WHERE content_digest = ?",
         parameters: 1,
