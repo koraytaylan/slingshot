@@ -10,6 +10,7 @@
 set -eu
 
 TOOL_MANIFEST=support/repository-tools.toml
+DEPENDENCY_DUPLICATE_EXCEPTIONS=support/dependency-duplicate-exceptions.toml
 CARGO_GATE_SCOPE='--locked --workspace --all-targets --all-features'
 SCRATCH=''
 
@@ -115,13 +116,26 @@ run_dependency_policy() {
         report_refusal 'fuzz/rust-toolchain.toml names no dated nightly toolchain'
     fi
     shasum -a 256 Cargo.toml Cargo.lock fuzz/Cargo.toml fuzz/Cargo.lock fuzz/rust-toolchain.toml > "$SCRATCH/locked-graphs.before"
-    cargo deny --locked --offline --all-features check --disable-fetch --config "$SCRATCH/deny.toml" all
+    render_duplicate_config product "$SCRATCH/product-deny.toml"
+    cargo deny --locked --offline --all-features check --disable-fetch --config "$SCRATCH/product-deny.toml" all
     # Fuzzing is intentionally a separately locked nightly workspace.  It is
     # not a reason for its executable dependency graph to escape the source,
     # license, advisory, yanked, or registry policy above.
-    cargo +"$fuzz_toolchain" deny --manifest-path fuzz/Cargo.toml --locked --offline --all-features check --disable-fetch --config "$SCRATCH/deny.toml" all
+    render_duplicate_config fuzz "$SCRATCH/fuzz-deny.toml"
+    cargo +"$fuzz_toolchain" deny --manifest-path fuzz/Cargo.toml --locked --offline --all-features check --disable-fetch --config "$SCRATCH/fuzz-deny.toml" all
     shasum -a 256 Cargo.toml Cargo.lock fuzz/Cargo.toml fuzz/Cargo.lock fuzz/rust-toolchain.toml > "$SCRATCH/locked-graphs.after"
     cmp -s "$SCRATCH/locked-graphs.before" "$SCRATCH/locked-graphs.after" || report_refusal 'dependency policy changed a locked graph input'
+}
+
+render_duplicate_config() {
+    graph=$1
+    destination=$2
+    skip_file="$SCRATCH/$graph-duplicate-skips.toml"
+    sed -n "/^\[$graph\]$/,/^\[/ { s/^cargo-deny-skip = /skip = /p; }" "$DEPENDENCY_DUPLICATE_EXCEPTIONS" > "$skip_file"
+    if [ ! -s "$skip_file" ]; then
+        report_refusal "$DEPENDENCY_DUPLICATE_EXCEPTIONS names no $graph duplicate exceptions"
+    fi
+    sed "/^allow-wildcard-paths = true$/r $skip_file" "$SCRATCH/deny.toml" > "$destination"
 }
 
 main() {
