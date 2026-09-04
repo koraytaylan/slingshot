@@ -208,7 +208,9 @@ fn an_admission_that_does_not_commit_leaves_no_row_at_all() {
     let digest = partition(FIRST_PRINCIPAL);
     {
         let database = OperationDatabase::open(&path, settings()).expect("a database");
-        let transaction = database.connection().unchecked_transaction().expect("a transaction");
+        drop(database);
+        let fixture = rusqlite::Connection::open(&path).expect("a fixture connection");
+        let transaction = fixture.unchecked_transaction().expect("a transaction");
         transaction
             .execute(
                 "INSERT INTO operation \

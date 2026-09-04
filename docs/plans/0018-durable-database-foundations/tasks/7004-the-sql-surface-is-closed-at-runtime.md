@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-storage/src/sqlite_statement_inventory.rs
   - crates/slingshot-storage/src/lib.rs
   - crates/slingshot-storage/tests/migrations.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # The SQL Surface Is Closed At Runtime

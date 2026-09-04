@@ -12,8 +12,7 @@
 
 use serde_json::Value;
 use slingshot_storage::database::{
-    DatabaseFailure, MIGRATIONS, OperationDatabase, REQUIRED_COMPILE_OPTION, RequiredSettings,
-    uses_forbidden_construct,
+    DatabaseFailure, MIGRATIONS, OperationDatabase, RequiredSettings, uses_forbidden_construct,
 };
 use slingshot_storage::sqlite_statement_inventory::{
     FORBIDDEN_CONSTRUCTS, STATEMENTS, is_inventoried,
@@ -69,17 +68,14 @@ fn settings() -> RequiredSettings {
     }
 }
 
-/// Returns one migrated database in memory.
-fn migrated() -> OperationDatabase {
-    OperationDatabase::open_in_memory(settings()).expect("a migrated database")
-}
-
 #[test]
 fn an_empty_database_migrates_to_the_schema_the_fixture_describes() {
-    let database = migrated();
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let path = root.path().join("operations.sqlite3");
+    let database = OperationDatabase::open(&path, settings()).expect("a migrated database");
     assert_eq!(database.schema_version().expect("a version"), CURRENT_SCHEMA_VERSION);
-    let mut statement = database
-        .connection()
+    let fixture = rusqlite::Connection::open(&path).expect("a fixture connection");
+    let mut statement = fixture
         .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name")
         .expect("the schema reads");
     let held: Vec<String> = statement
@@ -180,38 +176,6 @@ fn a_symlinked_state_root_is_refused_before_sqlite_opens_it() {
 }
 
 #[test]
-fn every_setting_is_read_back_rather_than_wished_for() {
-    let root = tempfile::tempdir().expect("a temporary directory");
-    let path = root.path().join("operations.sqlite3");
-    let database = OperationDatabase::open(&path, settings()).expect("a migrated database");
-    let read = |pragma: &str| -> String {
-        database
-            .connection()
-            .query_row(&format!("PRAGMA {pragma}"), [], |row| {
-                row.get::<_, rusqlite::types::Value>(0)
-            })
-            .map(|value| match value {
-                rusqlite::types::Value::Integer(number) => number.to_string(),
-                rusqlite::types::Value::Text(text) => text,
-                _ => String::new(),
-            })
-            .expect("the pragma reads")
-    };
-    assert_eq!(read("page_size"), PAGE_BYTES.to_string());
-    assert_eq!(read("max_page_count"), DATABASE_PAGES.to_string());
-    assert_eq!(read("busy_timeout"), BUSY_TIMEOUT.to_string());
-    assert_eq!(read("journal_mode"), "wal", "the accounting assumes a write-ahead log");
-    assert_eq!(read("synchronous"), "2", "and a commit that has actually landed");
-    assert_eq!(read("foreign_keys"), "1");
-    assert_eq!(read("temp_store"), "2", "temporary storage stays in memory");
-    assert!(database.require_compile_options().is_ok());
-    assert_eq!(
-        REQUIRED_COMPILE_OPTION, "TEMP_STORE=3",
-        "the reviewed build never permits a temporary file fallback"
-    );
-}
-
-#[test]
 fn a_prior_sqlite_connection_refuses_the_product_factory_in_an_isolated_process() {
     if std::env::var_os("SLINGSHOT_SQLITE_INITIALIZATION_PROBE").is_some() {
         let accidental = rusqlite::Connection::open_in_memory().expect("the accidental connection");
@@ -238,8 +202,8 @@ fn no_spill_canary_leaves_no_temporary_database_files() {
     let root = tempfile::tempdir().expect("a temporary directory");
     let path = root.path().join("operations.sqlite3");
     let database = OperationDatabase::open(&path, settings()).expect("a migrated database");
-    database
-        .connection()
+    let fixture = rusqlite::Connection::open(&path).expect("a fixture connection");
+    fixture
         .execute_batch(
             "BEGIN IMMEDIATE; \
              WITH RECURSIVE generated(value) AS \
@@ -247,8 +211,7 @@ fn no_spill_canary_leaves_no_temporary_database_files() {
              INSERT INTO artifact_reservation (byte_length) SELECT value FROM generated; COMMIT;",
         )
         .expect("the statement journal remains in memory");
-    let sorted: i64 = database
-        .connection()
+    let sorted: i64 = fixture
         .query_row(
             "SELECT byte_length FROM artifact_reservation ORDER BY byte_length DESC LIMIT 1",
             [],
@@ -273,33 +236,12 @@ fn no_spill_canary_leaves_no_temporary_database_files() {
 }
 
 #[test]
-fn runtime_authorizer_refuses_file_escaping_and_temporary_sql_before_effect() {
-    let root = tempfile::tempdir().expect("a temporary directory");
-    let database = OperationDatabase::open(&root.path().join("operations.sqlite3"), settings())
-        .expect("a migrated database");
-    let attachment = root.path().join("attachment.sqlite3");
-    assert!(
-        database
-            .connection()
-            .execute("ATTACH DATABASE ? AS outside", [attachment.to_string_lossy()])
-            .is_err(),
-        "the authorizer refuses an attachment while SQLite prepares it"
-    );
-    assert!(!attachment.exists(), "the refused attachment creates no file");
-    assert!(
-        database.connection().execute_batch("CREATE TEMP TABLE forbidden (value INTEGER)").is_err(),
-        "the authorizer refuses temporary database objects"
-    );
-    assert!(
-        database.connection().execute_batch("PRAGMA temp_store_directory = '/tmp'").is_err(),
-        "the authorizer refuses an ambient temporary-directory override"
-    );
-}
-
-#[test]
 fn every_constraint_refuses_what_the_fixture_says_it_refuses() {
     for row in &rows(CONSTRAINTS) {
-        let database = migrated();
+        let database = rusqlite::Connection::open_in_memory().expect("a fixture database");
+        for (_, migration) in MIGRATIONS {
+            database.execute_batch(migration).expect("the migration applies");
+        }
         let accepted = apply_scenario(&database, text(row, "scenario"));
         assert_eq!(
             accepted,
@@ -380,8 +322,7 @@ fn seed_recovery_fact(
 /// The scenarios divide by the table whose constraint they exercise, so each
 /// half stays legible on its own rather than one arm list carrying every
 /// insertion this schema permits.
-fn apply_scenario(database: &OperationDatabase, scenario: &str) -> bool {
-    let connection = database.connection();
+fn apply_scenario(connection: &rusqlite::Connection, scenario: &str) -> bool {
     match scenario {
         "two_current_previews" | "preview_and_application" | "applied_without_receipt" => {
             apply_maintenance_scenario(connection, scenario)

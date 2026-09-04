@@ -152,8 +152,8 @@ fn identical_content_from_two_operations_records_one_blob() {
 
     associations.associate(&digest, "operation-1", &first, NOW).expect("an association");
     associations.associate(&digest, "operation-1", &second, NOW).expect("another association");
-    let blobs: i64 = held
-        .connection()
+    let blobs: i64 = rusqlite::Connection::open(operations.path().join("operations.sqlite3"))
+        .expect("a fixture connection")
         .query_row("SELECT COUNT(*) FROM artifact_blob", [], |row| row.get(0))
         .expect("a count");
     assert_eq!(blobs, 1, "one digest is one blob, however many slots point at it");

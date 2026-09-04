@@ -84,9 +84,13 @@ fn admission(digest: &str, operation: &str) -> AdmissionRequest {
 }
 
 /// Writes one operation row straight into the table this counts.
-fn seed_operation(database: &slingshot_storage::database::OperationDatabase, index: usize) {
-    database
-        .connection()
+fn seed_operation(database: &TestDatabase, index: usize) {
+    seed_operation_connection(&database.fixture_connection(), index);
+}
+
+/// Writes one operation through a fixture-only connection.
+fn seed_operation_connection(connection: &rusqlite::Connection, index: usize) {
+    connection
         .execute(
             "INSERT INTO operation \
              (author_target_identity, author_target_identity_digest, canonical_command, \
@@ -105,13 +109,13 @@ fn seed_operation(database: &slingshot_storage::database::OperationDatabase, ind
 }
 
 /// Writes one blob straight into the table whose lengths this sums.
-fn seed_blob(
-    database: &slingshot_storage::database::OperationDatabase,
-    digest: &str,
-    byte_length: u64,
-) {
-    database
-        .connection()
+fn seed_blob(database: &TestDatabase, digest: &str, byte_length: u64) {
+    seed_blob_connection(&database.fixture_connection(), digest, byte_length);
+}
+
+/// Writes one artifact blob through a fixture-only connection.
+fn seed_blob_connection(connection: &rusqlite::Connection, digest: &str, byte_length: u64) {
+    connection
         .execute(
             "INSERT INTO artifact_blob (byte_length, content_digest, \
              recorded_at_unix_milliseconds) VALUES (?, ?, ?)",
@@ -125,9 +129,9 @@ fn seed_blob(
 }
 
 /// Writes one resume receipt straight into the table this counts.
-fn seed_resume_receipt(database: &slingshot_storage::database::OperationDatabase, index: u64) {
+fn seed_resume_receipt(database: &TestDatabase, index: u64) {
     database
-        .connection()
+        .fixture_connection()
         .execute(
             "INSERT INTO recovery_resume_receipt \
              (applied_operation_revision, author_target_identity_digest, operation_identifier, \
@@ -295,8 +299,9 @@ fn reopening_reconstructs_every_count_and_no_reservation() {
         let held = slingshot_storage::database::OperationDatabase::open(&path, settings())
             .expect("a database");
         let account = account(&held, small_policy());
-        seed_operation(&held, 0);
-        seed_blob(&held, &digest, SMALL_INDIVIDUAL_BYTES);
+        let fixture = rusqlite::Connection::open(&path).expect("a fixture connection");
+        seed_operation_connection(&fixture, 0);
+        seed_blob_connection(&fixture, &digest, SMALL_INDIVIDUAL_BYTES);
         account.reserve_artifact(None, SMALL_INDIVIDUAL_BYTES).expect("a reservation in progress");
     }
 
