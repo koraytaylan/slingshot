@@ -234,6 +234,20 @@ fn a_record_link_or_an_oversized_record_is_refused_before_parsing() {
     assert!(matches!(state.read(), Err(InstallationStateFailure::Unreadable(_))));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_lock_link_cannot_redirect_a_ledger_replacement() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let state = InstallationState::at(root.path());
+    let protected = root.path().join("protected-lock-target");
+    write_private(&protected, b"protected lock target");
+    std::os::unix::fs::symlink(&protected, state.lock_path()).expect("the lock link exists");
+    let refused = state.replace(&InstallationRecord::new(identifier('f')));
+    assert!(matches!(refused, Err(InstallationStateFailure::FilesystemRefused(_))));
+    assert_eq!(std::fs::read(&protected).expect("the target reads"), b"protected lock target");
+    assert!(matches!(state.read(), Err(InstallationStateFailure::Absent)));
+}
+
 #[test]
 fn a_record_from_another_format_is_refused() {
     let root = tempfile::tempdir().expect("a temporary directory");

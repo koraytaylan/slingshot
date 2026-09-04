@@ -8,7 +8,7 @@ gated: false
 touches:
   - crates/slingshot-storage/src/installation_state.rs
   - crates/slingshot-storage/tests/installation_state.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # Installation State Is One Locked Ledger
