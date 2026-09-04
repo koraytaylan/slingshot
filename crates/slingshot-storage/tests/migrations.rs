@@ -12,7 +12,7 @@
 
 use serde_json::Value;
 use slingshot_storage::database::{
-    DatabaseFailure, MIGRATIONS, OperationDatabase, REFUSED_COMPILE_OPTION, RequiredSettings,
+    DatabaseFailure, MIGRATIONS, OperationDatabase, REQUIRED_COMPILE_OPTION, RequiredSettings,
     uses_forbidden_construct,
 };
 use slingshot_storage::sqlite_statement_inventory::{
@@ -182,8 +182,67 @@ fn every_setting_is_read_back_rather_than_wished_for() {
     assert_eq!(read("temp_store"), "2", "temporary storage stays in memory");
     assert!(database.require_compile_options().is_ok());
     assert_eq!(
-        REFUSED_COMPILE_OPTION, "TEMP_STORE=0",
-        "the build that would make reading the pragma back mean nothing"
+        REQUIRED_COMPILE_OPTION, "TEMP_STORE=3",
+        "the reviewed build never permits a temporary file fallback"
+    );
+}
+
+#[test]
+fn a_prior_sqlite_connection_refuses_the_product_factory_in_an_isolated_process() {
+    if std::env::var_os("SLINGSHOT_SQLITE_INITIALIZATION_PROBE").is_some() {
+        let accidental = rusqlite::Connection::open_in_memory().expect("the accidental connection");
+        drop(accidental);
+        let outcome = OperationDatabase::open_in_memory(settings());
+        assert!(
+            matches!(outcome, Err(DatabaseFailure::InitializationRefused(_))),
+            "a late initializer must refuse rather than use an unconfigured SQLite process: {outcome:?}"
+        );
+        return;
+    }
+
+    let status = std::process::Command::new(std::env::current_exe().expect("the test executable"))
+        .arg("--exact")
+        .arg("a_prior_sqlite_connection_refuses_the_product_factory_in_an_isolated_process")
+        .env("SLINGSHOT_SQLITE_INITIALIZATION_PROBE", "1")
+        .status()
+        .expect("the isolated initialization probe starts");
+    assert!(status.success(), "the isolated late-initialization probe refused correctly");
+}
+
+#[test]
+fn no_spill_canary_leaves_no_temporary_database_files() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let path = root.path().join("operations.sqlite3");
+    let database = OperationDatabase::open(&path, settings()).expect("a migrated database");
+    database
+        .connection()
+        .execute_batch(
+            "CREATE TABLE spill_canary (value INTEGER NOT NULL); \
+             BEGIN IMMEDIATE; \
+             WITH RECURSIVE generated(value) AS \
+               (VALUES(1) UNION ALL SELECT value + 1 FROM generated WHERE value < 5000) \
+             INSERT INTO spill_canary SELECT value FROM generated; \
+             UPDATE spill_canary SET value = -value; COMMIT;",
+        )
+        .expect("the statement journal remains in memory");
+    let sorted: i64 = database
+        .connection()
+        .query_row("SELECT value FROM spill_canary ORDER BY value LIMIT 1", [], |row| row.get(0))
+        .expect("a sort remains in memory");
+    assert_eq!(sorted, -5000);
+    drop(database);
+
+    let names: Vec<String> = std::fs::read_dir(root.path())
+        .expect("the database directory reads")
+        .map(|entry| entry.expect("one entry").file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        names.iter().all(|name| {
+            name == "operations.sqlite3"
+                || name == "operations.sqlite3-wal"
+                || name == "operations.sqlite3-shm"
+        }),
+        "the sort and statement-journal canary created an unexpected temporary file: {names:?}"
     );
 }
 

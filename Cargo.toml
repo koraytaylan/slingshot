@@ -84,4 +84,4 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [workspace.lints.rust]
 missing_docs = "deny"
-unsafe_code = "forbid"
+unsafe_code = "deny"
