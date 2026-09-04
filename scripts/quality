@@ -110,7 +110,18 @@ run_repository_gates() {
 
 run_dependency_policy() {
     report_stage 'dependency policy'
-    cargo deny --offline --all-features check --disable-fetch --config "$SCRATCH/deny.toml" all
+    fuzz_toolchain=$(sed -n 's/^channel = "\(nightly-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)"$/\1/p' fuzz/rust-toolchain.toml)
+    if [ -z "$fuzz_toolchain" ]; then
+        report_refusal 'fuzz/rust-toolchain.toml names no dated nightly toolchain'
+    fi
+    shasum -a 256 Cargo.toml Cargo.lock fuzz/Cargo.toml fuzz/Cargo.lock fuzz/rust-toolchain.toml > "$SCRATCH/locked-graphs.before"
+    cargo deny --locked --offline --all-features check --disable-fetch --config "$SCRATCH/deny.toml" all
+    # Fuzzing is intentionally a separately locked nightly workspace.  It is
+    # not a reason for its executable dependency graph to escape the source,
+    # license, advisory, yanked, or registry policy above.
+    cargo +"$fuzz_toolchain" deny --manifest-path fuzz/Cargo.toml --locked --offline --all-features check --disable-fetch --config "$SCRATCH/deny.toml" all
+    shasum -a 256 Cargo.toml Cargo.lock fuzz/Cargo.toml fuzz/Cargo.lock fuzz/rust-toolchain.toml > "$SCRATCH/locked-graphs.after"
+    cmp -s "$SCRATCH/locked-graphs.before" "$SCRATCH/locked-graphs.after" || report_refusal 'dependency policy changed a locked graph input'
 }
 
 main() {

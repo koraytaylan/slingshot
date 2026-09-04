@@ -10,8 +10,8 @@ touches:
   - deny.toml
   - crates/slingshot-development/tests/toolchain_and_dependency_policy.rs
   - crates/slingshot-development/tests/fixtures/dependency-policy/graphs.jsonl
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # The Fuzz Graph Cannot Bypass Policy
 
