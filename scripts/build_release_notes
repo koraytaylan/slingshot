@@ -7,19 +7,17 @@
 # grouping; this holds only the tool that applies it and where the two documents
 # land.
 #
-# The tool is pinned to one exact version, because a changelog assembled by a
-# different tool is a different document. It is deliberately not one of the
-# repository tools the local gate verifies: nothing a developer runs needs it,
-# and a gate that demanded it would refuse on every machine that had never cut a
-# release. An installed copy that already reports the pinned version is used as
-# it is, so a re-run of a release does not compile it again.
+# The tool is pinned to one exact version and archive digest, because a
+# changelog assembled by different bytes is a different document. Release-note
+# assembly always authenticates its committed archive before it extracts or
+# executes it; an ambient executable is not evidence of its provenance.
 
 set -eu
 
 DESTINATION=${1:-}
+MANIFEST=support/repository-tools.toml
 CONFIGURATION=cliff.toml
 CHANGELOG_TOOL=git-cliff
-CHANGELOG_TOOL_VERSION=2.14.1
 TAG_REFERENCE=tag
 CHANGELOG=CHANGELOG.md
 RELEASE_NOTES=RELEASE_NOTES.md
@@ -38,17 +36,35 @@ reports_the_pinned_version() {
         | grep -qF "$CHANGELOG_TOOL $CHANGELOG_TOOL_VERSION"
 }
 
+pinned_field() {
+    awk -v name="$1" -v field="$2" '
+        $0 == "[[tool]]" { found = 0 }
+        $0 == "name = \"" name "\"" { found = 1; next }
+        found && $0 ~ "^" field " = " {
+            sub("^[^=]*= \"", ""); sub("\"$", ""); print; exit
+        }
+    ' "$MANIFEST"
+}
+
 [ -n "$DESTINATION" ] || report_refusal 'name the directory to write the documents to'
 [ -f "$CONFIGURATION" ] || report_refusal "$CONFIGURATION is not committed"
+[ -f "$MANIFEST" ] || report_refusal "$MANIFEST is not committed"
+CHANGELOG_TOOL_VERSION=$(pinned_field "$CHANGELOG_TOOL" version)
+CHANGELOG_ARCHIVE=$(pinned_field "$CHANGELOG_TOOL" linux-archive)
+CHANGELOG_DIGEST=$(pinned_field "$CHANGELOG_TOOL" linux-sha256)
+[ -n "$CHANGELOG_TOOL_VERSION" ] && [ -n "$CHANGELOG_ARCHIVE" ] && [ -n "$CHANGELOG_DIGEST" ] \
+    || report_refusal "$MANIFEST names no complete Linux identity for $CHANGELOG_TOOL"
 
 report_stage 'the pinned changelog tool'
-if reports_the_pinned_version; then
-    printf 'verified %s %s\n' "$CHANGELOG_TOOL" "$CHANGELOG_TOOL_VERSION"
-else
-    cargo install --locked "$CHANGELOG_TOOL" --version "$CHANGELOG_TOOL_VERSION"
-fi
-reports_the_pinned_version \
-    || report_refusal "no tool here reports $CHANGELOG_TOOL $CHANGELOG_TOOL_VERSION"
+WORKING=$(mktemp -d)
+trap 'rm -rf "$WORKING"' EXIT
+curl --silent --show-error --fail --location --output "$WORKING/$CHANGELOG_ARCHIVE" \
+    "https://github.com/orhun/git-cliff/releases/download/v$CHANGELOG_TOOL_VERSION/$CHANGELOG_ARCHIVE"
+printf '%s  %s\n' "$CHANGELOG_DIGEST" "$WORKING/$CHANGELOG_ARCHIVE" | sha256sum --check --status \
+    || report_refusal "$CHANGELOG_ARCHIVE does not match its manifest digest"
+tar -xzf "$WORKING/$CHANGELOG_ARCHIVE" -C "$WORKING"
+CHANGELOG_TOOL="$WORKING/git-cliff-$CHANGELOG_TOOL_VERSION/git-cliff"
+reports_the_pinned_version || report_refusal "the authenticated archive does not report $CHANGELOG_TOOL_VERSION"
 
 mkdir -p "$DESTINATION"
 
