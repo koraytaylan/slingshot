@@ -59,6 +59,12 @@ pub enum PropertyDocumentRefusal {
     /// It nests deeper than the vocabulary has meaning for.
     #[error("a property document nests at most {MAXIMUM_DEPTH} deep, and this nests further")]
     TooDeep,
+    /// An object gives one semantic member name more than once.
+    #[error("{named} is given twice")]
+    DuplicateMember {
+        /// The decoded member name that has no unambiguous value.
+        named: String,
+    },
     /// It carries a member this build does not know.
     #[error("{named} is not a member a property entry carries")]
     SurplusMember {
@@ -94,11 +100,58 @@ pub enum PropertyDocumentRefusal {
 ///
 /// Returns [`PropertyDocumentRefusal`] naming the first thing that is wrong.
 pub fn parse(text: &str) -> Result<BTreeMap<String, PropertyValue>, PropertyDocumentRefusal> {
+    require_unique_members(text)?;
     let document: Value =
         serde_json::from_str(text).map_err(|_| PropertyDocumentRefusal::NotAnObject)?;
     require_bounded_depth(&document, MAXIMUM_DEPTH)?;
     let object = document.as_object().ok_or(PropertyDocumentRefusal::NotAnObject)?;
     object.iter().map(|(named, entry)| Ok((named.clone(), property(entry)?))).collect()
+}
+
+/// Rejects duplicate decoded member names before a map can choose a winner.
+fn require_unique_members(text: &str) -> Result<(), PropertyDocumentRefusal> {
+    let mut objects: Vec<BTreeMap<String, ()>> = Vec::new();
+    let mut raw = None::<String>;
+    let mut escaped = false;
+    let mut held = None::<String>;
+    for character in text.chars() {
+        if let Some(reading) = raw.as_mut() {
+            if escaped {
+                reading.push(character);
+                escaped = false;
+            } else {
+                match character {
+                    '\\' => {
+                        reading.push(character);
+                        escaped = true;
+                    }
+                    '"' => held = raw.take(),
+                    other => reading.push(other),
+                }
+            }
+            continue;
+        }
+        match character {
+            '"' => raw = Some(String::new()),
+            '{' => objects.push(BTreeMap::new()),
+            '}' => {
+                objects.pop();
+                held = None;
+            }
+            ':' => {
+                let Some(raw_name) = held.take() else { continue };
+                let name = serde_json::from_str::<String>(&format!("\"{raw_name}\""))
+                    .map_err(|_| PropertyDocumentRefusal::NotAnObject)?;
+                let Some(members) = objects.last_mut() else { continue };
+                if members.insert(name.clone(), ()).is_some() {
+                    return Err(PropertyDocumentRefusal::DuplicateMember { named: name });
+                }
+            }
+            ',' => held = None,
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// Returns the properties one file holds.
