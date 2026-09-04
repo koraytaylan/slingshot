@@ -1,5 +1,8 @@
 //! The values and helpers both halves of this suite are built from.
 
+use std::ops::Deref;
+use std::path::PathBuf;
+
 use serde_json::Value;
 use slingshot_domain::persistent_capacity::PersistentCapacityPolicy;
 use slingshot_storage::database::{OperationDatabase, RequiredSettings};
@@ -45,9 +48,37 @@ pub fn settings() -> RequiredSettings {
     }
 }
 
-/// Returns one migrated database held in memory.
-pub fn database() -> OperationDatabase {
-    OperationDatabase::open_in_memory(settings()).expect("a database")
+/// A file-backed database and the directory that keeps its fixture path alive.
+pub struct TestDatabase {
+    /// The production database exercised by the test.
+    database: OperationDatabase,
+    /// The isolated fixture directory that owns the database path.
+    _directory: tempfile::TempDir,
+    /// The path a fixture-only setup connection may open.
+    path: PathBuf,
+}
+
+impl TestDatabase {
+    /// Opens a separate raw connection only for deliberately corrupting setup fixtures.
+    pub fn fixture_connection(&self) -> rusqlite::Connection {
+        rusqlite::Connection::open(&self.path).expect("a fixture connection")
+    }
+}
+
+impl Deref for TestDatabase {
+    type Target = OperationDatabase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.database
+    }
+}
+
+/// Returns one migrated database under an isolated fixture directory.
+pub fn database() -> TestDatabase {
+    let directory = tempfile::tempdir().expect("a fixture directory");
+    let path = directory.path().join("operations.sqlite3");
+    let database = OperationDatabase::open(&path, settings()).expect("a database");
+    TestDatabase { database, _directory: directory, path }
 }
 
 /// Returns the accounting for `database`, under a policy of the caller's choosing.

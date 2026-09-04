@@ -188,7 +188,7 @@ impl OperationDatabase {
     /// Borrowed rather than handed over: a connection that escaped this crate
     /// would be one nobody could hold to the inventory.
     #[must_use]
-    pub fn connection(&self) -> &Connection {
+    pub(crate) fn connection(&self) -> &Connection {
         &self.connection
     }
 
@@ -550,4 +550,81 @@ fn render_value(value: rusqlite::types::Value) -> String {
 /// Returns one SQLite refusal as this crate's failure.
 fn refused(failure: rusqlite::Error) -> DatabaseFailure {
     DatabaseFailure::Refused(failure.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OperationDatabase, RequiredSettings};
+
+    fn settings() -> RequiredSettings {
+        RequiredSettings {
+            page_bytes: 4096,
+            database_pages: 262_144,
+            busy_timeout_milliseconds: 5000,
+        }
+    }
+
+    #[test]
+    fn authorizer_refuses_file_escaping_and_temporary_sql_before_effect() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let database = OperationDatabase::open(&root.path().join("operations.sqlite3"), settings())
+            .expect("a migrated database");
+        let attachment = root.path().join("attachment.sqlite3");
+        assert!(
+            database
+                .connection()
+                .execute("ATTACH DATABASE ? AS outside", [attachment.to_string_lossy()])
+                .is_err(),
+            "the authorizer refuses an attachment while SQLite prepares it"
+        );
+        assert!(!attachment.exists(), "the refused attachment creates no file");
+        assert!(
+            database
+                .connection()
+                .execute_batch("CREATE TEMP TABLE forbidden (value INTEGER)")
+                .is_err(),
+            "the authorizer refuses temporary database objects"
+        );
+        assert!(
+            database.connection().execute_batch("PRAGMA temp_store_directory = '/tmp'").is_err(),
+            "the authorizer refuses an ambient temporary-directory override"
+        );
+    }
+
+    #[test]
+    fn settings_are_read_back_on_the_product_connection() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let settings = settings();
+        let database = OperationDatabase::open(&root.path().join("operations.sqlite3"), settings)
+            .expect("a migrated database");
+        let read_integer = |pragma: &str| {
+            database
+                .connection()
+                .query_row(&format!("PRAGMA {pragma}"), [], |row| row.get::<_, i64>(0))
+                .expect("the pragma reads")
+        };
+        let read_text = |pragma: &str| {
+            database
+                .connection()
+                .query_row(&format!("PRAGMA {pragma}"), [], |row| row.get::<_, String>(0))
+                .expect("the pragma reads")
+        };
+        assert_eq!(
+            read_integer("page_size"),
+            i64::try_from(settings.page_bytes).expect("a page count")
+        );
+        assert_eq!(
+            read_integer("max_page_count"),
+            i64::try_from(settings.database_pages).expect("a page count")
+        );
+        assert_eq!(
+            read_integer("busy_timeout"),
+            i64::try_from(settings.busy_timeout_milliseconds).expect("a timeout")
+        );
+        assert_eq!(read_text("journal_mode"), "wal");
+        assert_eq!(read_integer("synchronous"), 2);
+        assert_eq!(read_integer("foreign_keys"), 1);
+        assert_eq!(read_integer("temp_store"), 2);
+        assert!(database.require_compile_options().is_ok());
+    }
 }
