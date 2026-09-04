@@ -56,13 +56,19 @@ ROOT=$(sed -n 's/^path = "\(.*\)"$/\1/p' "$POLICY" | head -n 1)
 IDENTITY=$(sed -n 's/^source-repository-uri = "\(.*\)"$/\1/p' "$POLICY")
 ISSUER=$(sed -n 's/^oidc-issuer = "\(.*\)"$/\1/p' "$POLICY")
 
+# Naming a trusted root is what makes this offline: the verifier reads the root
+# committed here and asks nothing of anyone. The pinned client has no separate
+# option for it, and one it does not have is one it cannot obey.
 report_stage 'the attestation, offline, against the reviewed root'
+# The identity a certificate carries is the workflow that signed, not the
+# repository it signed for, so the repository is what the signer is held to and
+# the workflow is required to be one of that repository's own.
 gh attestation verify "$ARCHIVE" \
     --bundle "$BUNDLE" \
     --custom-trusted-root "$ROOT" \
-    --cert-identity "$IDENTITY" \
+    --repo "${IDENTITY#https://github.com/}" \
+    --cert-identity-regex "^$IDENTITY/" \
     --cert-oidc-issuer "$ISSUER" \
-    --offline \
     || report_refusal 'the attestation did not authenticate, so nothing it carries is evidence'
 
 report_stage 'the archive and the evidence it carries'
