@@ -68,6 +68,55 @@ fn identical_content_becomes_one_addressed_artifact() {
 }
 
 #[test]
+fn corrupt_digest_named_content_is_refused_instead_of_deduplicated() {
+    let (directory, store) = store();
+    let first = store
+        .install(
+            &request(&partition(FIRST_PRINCIPAL), "operation-1", "content_package"),
+            &mut content("one-octet").as_slice(),
+        )
+        .expect("the initial artifact installs");
+    let destination = directory.path().join("content").join(&first.content_digest);
+    std::fs::write(&destination, b"corrupt bytes").expect("the corrupt preexistence writes");
+    let refused = store.install(
+        &request(&partition(SECOND_PRINCIPAL), "operation-2", "content_package"),
+        &mut content("one-octet").as_slice(),
+    );
+    assert!(
+        matches!(
+            refused,
+            Err(ArtifactFailure::DigestMismatch { .. } | ArtifactFailure::LengthMismatch { .. })
+        ),
+        "a digest-shaped name is not evidence its bytes are valid: {refused:?}"
+    );
+    assert_eq!(std::fs::read(&destination).expect("the conflict remains"), b"corrupt bytes");
+}
+
+#[test]
+fn concurrent_identical_installations_publish_one_verified_content_file() {
+    let (directory, store) = store();
+    let first_request = request(&partition(FIRST_PRINCIPAL), "operation-1", "content_package");
+    let other_request = request(&partition(SECOND_PRINCIPAL), "operation-2", "content_package");
+    let one = content("one-octet");
+    let two = one.clone();
+    std::thread::scope(|threads| {
+        let first = threads.spawn(|| store.install(&first_request, &mut one.as_slice()));
+        let second = threads.spawn(|| store.install(&other_request, &mut two.as_slice()));
+        let first = first.join().expect("the first installer returns").expect("the first installs");
+        let second =
+            second.join().expect("the second installer returns").expect("the second installs");
+        assert_eq!(first.content_digest, second.content_digest);
+    });
+    assert_eq!(
+        std::fs::read_dir(directory.path().join("content"))
+            .expect("the content directory reads")
+            .count(),
+        1,
+        "the two publishers retain one digest-addressed file"
+    );
+}
+
+#[test]
 fn an_interrupted_installation_leaves_something_nothing_reads() {
     /// A reader that stops part way, the way an interrupted transfer does.
     struct Interrupted {
