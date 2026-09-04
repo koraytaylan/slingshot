@@ -99,6 +99,11 @@ pub enum LockRefusal {
 pub struct StagingLock {
     /// The file the lock is held on.
     file: std::fs::File,
+    /// The pathname removed only after it is proven to remain this lock.
+    path: std::path::PathBuf,
+    /// Stable Unix identity of the exclusively created file.
+    #[cfg(unix)]
+    identity: (u64, u64),
 }
 
 impl StagingLock {
@@ -113,15 +118,39 @@ impl StagingLock {
     /// Returns [`LockRefusal::Held`] or [`LockRefusal::Unavailable`].
     pub fn take(path: &std::path::Path) -> Result<Self, LockRefusal> {
         use fs4::FileExt;
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .open(path)
-            .map_err(|_| LockRefusal::Unavailable)?;
+        #[cfg(unix)]
+        use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _};
+
+        let mut options = std::fs::OpenOptions::new();
+        options.create_new(true).read(true).write(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let file = options.open(path).map_err(|failure| {
+            if failure.kind() == std::io::ErrorKind::AlreadyExists {
+                LockRefusal::Held
+            } else {
+                LockRefusal::Unavailable
+            }
+        })?;
+        #[cfg(unix)]
+        let identity = {
+            let metadata = file.metadata().map_err(|_| LockRefusal::Unavailable)?;
+            let private = metadata.is_file()
+                && metadata.uid() == rustix::process::getuid().as_raw()
+                && metadata.mode() & 0o077 == 0
+                && metadata.nlink() == 1;
+            if !private {
+                return Err(LockRefusal::Unavailable);
+            }
+            (metadata.dev(), metadata.ino())
+        };
         match FileExt::try_lock(&file) {
-            Ok(()) => Ok(Self { file }),
+            Ok(()) => Ok(Self {
+                file,
+                path: path.to_path_buf(),
+                #[cfg(unix)]
+                identity,
+            }),
             Err(_) => Err(LockRefusal::Held),
         }
     }
@@ -137,5 +166,19 @@ impl Drop for StagingLock {
     fn drop(&mut self) {
         use fs4::FileExt;
         FileExt::unlock(&self.file).ok();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+            let remains_this_lock = std::fs::symlink_metadata(&self.path).is_ok_and(|metadata| {
+                metadata.is_file()
+                    && metadata.dev() == self.identity.0
+                    && metadata.ino() == self.identity.1
+            });
+            if remains_this_lock {
+                std::fs::remove_file(&self.path).ok();
+            }
+        }
+        #[cfg(not(unix))]
+        std::fs::remove_file(&self.path).ok();
     }
 }
