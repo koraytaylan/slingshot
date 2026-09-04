@@ -81,8 +81,6 @@ report_stage 'the isolation contract'
 cargo run --locked --quiet -p slingshot-development -- release-acceptance-container
 
 RUNTIME=$(read_value name)
-IMAGE_REFERENCE=$(read_value reference | sed 's/:[^:/]*$//')
-IMAGE_DIGEST=$(read_value digest)
 IMAGE_USER=$(read_value user)
 command -v "$RUNTIME" >/dev/null 2>&1 || report_refusal "$RUNTIME is not on this machine, and acceptance runs nowhere else"
 
@@ -94,14 +92,16 @@ SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')
 report_stage 'the image the gates run in'
 # Loaded from what was transferred, never fetched. The contract names the member
 # the image travels as, and a cache without it is a cache this decision cannot
-# be made from - so this refuses rather than reaching for one.
+# be made from - so this refuses rather than reaching for one. Which image that
+# member holds was decided where it was acquired, by digest; here it is one more
+# member of a cache whose manifest this decision has already verified.
 IMAGE_MEMBER=$(read_value local-oci-layout-member)
 [ -n "$IMAGE_MEMBER" ] || report_refusal "$CONTAINER names no image member"
-[ -n "$IMAGE_REFERENCE" ] || report_refusal "$CONTAINER names no image"
 [ -f "$LOCKED_SOURCE_CACHE/$IMAGE_MEMBER" ] \
     || report_refusal "the cache carries no $IMAGE_MEMBER, so the gates have nothing to run in"
-"$RUNTIME" load --input "$LOCKED_SOURCE_CACHE/$IMAGE_MEMBER" \
-    || report_refusal 'the transferred image could not be loaded'
+LOADED=$("$RUNTIME" load --input "$LOCKED_SOURCE_CACHE/$IMAGE_MEMBER" \
+    | sed -n 's/^Loaded image: //p' | head -n 1)
+[ -n "$LOADED" ] || report_refusal 'the transferred image could not be loaded'
 
 mkdir -p "$OUTPUT_DIRECTORY"
 report_stage 'every gate, inside the container'
@@ -123,7 +123,7 @@ report_stage 'every gate, inside the container'
     --volume "$OUTPUT_DIRECTORY:/acceptance-output" \
     --workdir /slingshot \
     --env SLINGSHOT_ACCEPTANCE_OUTPUT=/acceptance-output \
-    "$IMAGE_REFERENCE@$IMAGE_DIGEST" \
+    "$LOADED" \
     scripts/run_acceptance_gates \
     || report_refusal 'a gate refused inside the container, so this revision is not releasable'
 
