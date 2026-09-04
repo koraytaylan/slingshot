@@ -81,6 +81,7 @@ report_stage 'the isolation contract'
 cargo run --locked --quiet -p slingshot-development -- release-acceptance-container
 
 RUNTIME=$(read_value name)
+IMAGE_REFERENCE=$(read_value reference | sed 's/:[^:/]*$//')
 IMAGE_DIGEST=$(read_value digest)
 IMAGE_USER=$(read_value user)
 command -v "$RUNTIME" >/dev/null 2>&1 || report_refusal "$RUNTIME is not on this machine, and acceptance runs nowhere else"
@@ -96,6 +97,7 @@ report_stage 'the image the gates run in'
 # be made from - so this refuses rather than reaching for one.
 IMAGE_MEMBER=$(read_value local-oci-layout-member)
 [ -n "$IMAGE_MEMBER" ] || report_refusal "$CONTAINER names no image member"
+[ -n "$IMAGE_REFERENCE" ] || report_refusal "$CONTAINER names no image"
 [ -f "$LOCKED_SOURCE_CACHE/$IMAGE_MEMBER" ] \
     || report_refusal "the cache carries no $IMAGE_MEMBER, so the gates have nothing to run in"
 "$RUNTIME" load --input "$LOCKED_SOURCE_CACHE/$IMAGE_MEMBER" \
@@ -121,7 +123,7 @@ report_stage 'every gate, inside the container'
     --volume "$OUTPUT_DIRECTORY:/acceptance-output" \
     --workdir /slingshot \
     --env SLINGSHOT_ACCEPTANCE_OUTPUT=/acceptance-output \
-    "$IMAGE_DIGEST" \
+    "$IMAGE_REFERENCE@$IMAGE_DIGEST" \
     scripts/run_acceptance_gates \
     || report_refusal 'a gate refused inside the container, so this revision is not releasable'
 

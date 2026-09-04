@@ -127,8 +127,11 @@ if [ "${SLINGSHOT_COORDINATOR:-}" = true ]; then
     printf 'this command reaches the network to acquire the pinned image\n'
     "$RUNTIME" pull "$REFERENCE@$DIGEST" \
         || report_refusal 'the pinned acceptance image could not be acquired'
+    # Saved under the name it was acquired by. A manifest digest is what an
+    # image is, not what the runtime holding it calls it, so asking for the
+    # digest alone asks for something the machine has never heard of.
     "$RUNTIME" save --format oci-archive \
-        --output "$OUTPUT_DIRECTORY/coordinator-image" "$DIGEST" \
+        --output "$OUTPUT_DIRECTORY/coordinator-image" "$REFERENCE@$DIGEST" \
         || report_refusal 'the pinned acceptance image could not be saved into the cache'
 fi
 
