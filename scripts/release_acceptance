@@ -45,6 +45,12 @@ read_value() {
     sed -n "s/^$1 = \"\(.*\)\"$/\1/p" "$CONTAINER" | head -n 1
 }
 
+# The contract states a size as a number rather than as text, so reading one as
+# text finds nothing and reports the contract as silent about a value it states.
+read_number() {
+    sed -n "s/^$1 = \([0-9][0-9]*\)$/\1/p" "$CONTAINER" | head -n 1
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --finite-state-machine-source)
@@ -116,7 +122,7 @@ report_stage 'every gate, inside the container'
 # root that cannot be written to is not a root that nothing needs to write near:
 # the pinned toolchain writes while it confirms itself, and the gates write what
 # they are told to write. Everything else stays read-only.
-TEMPORARY_BYTES=$(read_value temporary-filesystem-bytes)
+TEMPORARY_BYTES=$(read_number temporary-filesystem-bytes)
 [ -n "$TEMPORARY_BYTES" ] || report_refusal "$CONTAINER declares no temporary filesystem"
 "$RUNTIME" run --rm \
     --tmpfs "/tmp:size=$TEMPORARY_BYTES" \
