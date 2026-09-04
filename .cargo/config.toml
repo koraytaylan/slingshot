@@ -1,0 +1,5 @@
+[env]
+# `libsqlite3-sys` builds the reviewed bundled SQLite source.  Its upstream
+# default leaves temporary storage selectable at runtime; this product does
+# not permit a temporary file fallback, so make that source identity explicit.
+CFLAGS = { value = "-DSQLITE_TEMP_STORE=3", force = true }

@@ -20,6 +20,9 @@
 //! about those rows this one does not, and migrating them backwards would be
 //! guessing.
 
+use std::ffi::CStr;
+use std::sync::OnceLock;
+
 use rusqlite::{Connection, OpenFlags};
 
 use crate::sqlite_statement_inventory::FORBIDDEN_CONSTRUCTS;
@@ -35,15 +38,16 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (4, include_str!("../migrations/0004-artifact-reservations.sql")),
 ];
 
-/// Compile option that would make the temporary-storage pragma a dead letter.
-///
-/// `SQLITE_TEMP_STORE=0` forces temporary tables, sorts, and transient indexes
-/// onto disk and makes `PRAGMA temp_store` unable to override it. The pinned
-/// bundled build reports no `TEMP_STORE` option at all, which is its default of
-/// one: the pragma governs, and the pragma is read back on every connection.
-/// So the check is that the build is not the one where that reading-back would
-/// mean nothing.
-pub const REFUSED_COMPILE_OPTION: &str = "TEMP_STORE=0";
+/// The one temporary-storage mode the reviewed SQLite build may report.
+pub const REQUIRED_COMPILE_OPTION: &str = "TEMP_STORE=3";
+
+/// The vendored library and source identity reviewed with this binary.
+pub const REVIEWED_SQLITE_LIBRARY: &str = "rusqlite 0.40.2 / libsqlite3-sys 0.38.2 (bundled)";
+/// The SQLite version number in that reviewed vendored source.
+pub const REVIEWED_SQLITE_VERSION: i32 = 3_053_002;
+/// The SQLite source identifier in that reviewed vendored source.
+pub const REVIEWED_SQLITE_SOURCE_ID: &str =
+    "2026-06-03 19:12:13 d6e03d8c777cfa2d35e3b60d8ec3e0187f3e9f99d8e2ee9cac695fd6fcdf1a24";
 
 /// Reason a database could not be opened.
 #[derive(Debug, thiserror::Error)]
@@ -51,9 +55,15 @@ pub enum DatabaseFailure {
     /// SQLite refused something.
     #[error("the database refused: {0}")]
     Refused(String),
-    /// The build reports a compile option this daemon cannot work under.
-    #[error("the pinned build reports {0}, which no pragma can override")]
+    /// The process SQLite library differs from the reviewed library identity.
+    #[error("the SQLite runtime is not the reviewed {0}")]
+    RuntimeIdentityRefused(&'static str),
+    /// The process SQLite library reports a compile option this daemon cannot work under.
+    #[error("the SQLite runtime does not report the required {0}")]
     CompileOptionRefused(String),
+    /// SQLite was initialized before the product could apply its global configuration.
+    #[error("SQLite was initialized before the no-spill configuration could be applied: {0}")]
+    InitializationRefused(String),
     /// A setting did not read back as it was set.
     #[error("the setting {name} read back as {observed} rather than {expected}")]
     SettingMismatch {
@@ -132,6 +142,7 @@ impl OperationDatabase {
         path: &std::path::Path,
         settings: RequiredSettings,
     ) -> Result<Self, DatabaseFailure> {
+        initialize_sqlite()?;
         let inspected = inspect_existing_schema(path)?;
         let connection = Connection::open(path).map_err(refused)?;
         if let Some(inspected) = inspected
@@ -156,6 +167,7 @@ impl OperationDatabase {
     /// Returns [`DatabaseFailure`] on the same grounds as [`Self::open`],
     /// except that an in-memory database keeps its own journalling mode.
     pub fn open_in_memory(settings: RequiredSettings) -> Result<Self, DatabaseFailure> {
+        initialize_sqlite()?;
         let connection = Connection::open_in_memory().map_err(refused)?;
         let database = Self { connection };
         database.require_compile_options()?;
@@ -186,13 +198,12 @@ impl OperationDatabase {
             .map_err(refused)
     }
 
-    /// Requires the pinned build to be one where the pragmas mean something.
+    /// Requires the opened connection to report the exact reviewed compile option.
     ///
     /// # Errors
     ///
-    /// Returns [`DatabaseFailure::CompileOptionRefused`] for a build compiled
-    /// to force temporary storage onto disk, where verifying the pragma would
-    /// verify nothing.
+    /// This is defense in depth for a connection supplied by the product
+    /// factory: global initialization checks the same option before opening it.
     pub fn require_compile_options(&self) -> Result<(), DatabaseFailure> {
         let mut statement = self.connection.prepare("PRAGMA compile_options").map_err(refused)?;
         let reported: Vec<String> = statement
@@ -200,8 +211,8 @@ impl OperationDatabase {
             .map_err(refused)?
             .collect::<Result<Vec<String>, _>>()
             .map_err(refused)?;
-        if reported.iter().any(|option| option == REFUSED_COMPILE_OPTION) {
-            return Err(DatabaseFailure::CompileOptionRefused(REFUSED_COMPILE_OPTION.to_owned()));
+        if !reported.iter().any(|option| option == REQUIRED_COMPILE_OPTION) {
+            return Err(DatabaseFailure::CompileOptionRefused(REQUIRED_COMPILE_OPTION.to_owned()));
         }
         Ok(())
     }
@@ -271,6 +282,56 @@ impl OperationDatabase {
         self.connection.execute(statement, []).map_err(refused)?;
         Ok(())
     }
+}
+
+/// Establishes the only SQLite process configuration this product permits.
+///
+/// `sqlite3_config` deliberately runs before `sqlite3_initialize`: SQLite
+/// refuses it after even one accidental connection.  `OnceLock` preserves the
+/// first result, including a refusal, so a caller can never turn a partly
+/// configured process into a usable one by retrying.
+fn initialize_sqlite() -> Result<(), DatabaseFailure> {
+    static INITIALIZATION: OnceLock<Result<(), String>> = OnceLock::new();
+    INITIALIZATION
+        .get_or_init(|| configure_sqlite().map_err(|failure| failure.to_string()))
+        .as_ref()
+        .map_err(|failure| DatabaseFailure::InitializationRefused(failure.clone()))
+        .copied()
+}
+
+/// Checks the linked source and configures it before SQLite initializes.
+#[allow(unsafe_code)]
+fn configure_sqlite() -> Result<(), DatabaseFailure> {
+    // These FFI calls cannot initialize SQLite.  Checking them first ensures a
+    // different library is refused before a connection factory is reachable.
+    let version = unsafe { rusqlite::ffi::sqlite3_libversion_number() };
+    if version != REVIEWED_SQLITE_VERSION {
+        return Err(DatabaseFailure::RuntimeIdentityRefused(REVIEWED_SQLITE_LIBRARY));
+    }
+    let source = unsafe { CStr::from_ptr(rusqlite::ffi::sqlite3_sourceid()) };
+    if source.to_str().ok() != Some(REVIEWED_SQLITE_SOURCE_ID) {
+        return Err(DatabaseFailure::RuntimeIdentityRefused(REVIEWED_SQLITE_LIBRARY));
+    }
+    let temp_store = c"TEMP_STORE=3";
+    if unsafe { rusqlite::ffi::sqlite3_compileoption_used(temp_store.as_ptr()) } == 0 {
+        return Err(DatabaseFailure::CompileOptionRefused(REQUIRED_COMPILE_OPTION.to_owned()));
+    }
+
+    let configured = unsafe {
+        rusqlite::ffi::sqlite3_config(rusqlite::ffi::SQLITE_CONFIG_STMTJRNL_SPILL, -1_i32)
+    };
+    if configured != rusqlite::ffi::SQLITE_OK {
+        return Err(DatabaseFailure::InitializationRefused(format!(
+            "sqlite3_config(SQLITE_CONFIG_STMTJRNL_SPILL, -1) returned {configured}"
+        )));
+    }
+    let initialized = unsafe { rusqlite::ffi::sqlite3_initialize() };
+    if initialized != rusqlite::ffi::SQLITE_OK {
+        return Err(DatabaseFailure::InitializationRefused(format!(
+            "sqlite3_initialize returned {initialized}"
+        )));
+    }
+    Ok(())
 }
 
 /// Refuses a future schema through a read-only connection before any mutable open.
