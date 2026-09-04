@@ -1,0 +1,86 @@
+#!/bin/sh
+# Install the external executables the gate verifies, at the versions it pins.
+#
+# The gate refuses to run until every tool on this machine reports its pinned
+# version, which is right: a check run by a different tool is a different check.
+# A hosted runner starts with none of them, or with whichever versions its image
+# happened to carry, so something has to put the pinned ones there before the
+# gate is asked to hold. That is this.
+#
+# Every version is read from the manifest rather than written down again, so
+# there is still exactly one place that says which tool this repository runs.
+# Each tool is verified after it is installed by the same check the gate uses,
+# because an install that reported success is not the same as a tool that
+# answers correctly.
+#
+# This installs for one platform, the one the hosted gate runs on. A developer
+# follows the manifest's own instructions instead.
+
+set -eu
+
+MANIFEST=support/repository-tools.toml
+PLATFORM=x86_64-unknown-linux-gnu
+CARGO_DENY=cargo-deny
+SHELLCHECK=shellcheck
+GITHUB_CLI=gh
+
+report_stage() {
+    printf '\n== %s ==\n' "$1"
+}
+
+report_refusal() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 1
+}
+
+# Returns the pinned version of one tool the manifest names.
+pinned_version() {
+    awk -v name="$1" '
+        $0 == "name = \"" name "\"" { found = 1; next }
+        found && /^version = / { gsub(/^version = "|"$/, ""); print; exit }
+    ' "$MANIFEST"
+}
+
+# Refuses unless the named tool answers with the version the manifest pins.
+require_reported_version() {
+    "$1" --version 2>/dev/null | grep -qF "$2" \
+        || report_refusal "$1 does not report $2 after being installed"
+    printf 'verified %s %s\n' "$1" "$2"
+}
+
+[ -f "$MANIFEST" ] || report_refusal "$MANIFEST is not committed"
+[ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ] \
+    || report_refusal "this installs for $PLATFORM; follow $MANIFEST elsewhere"
+
+DESTINATION=${CARGO_HOME:-$HOME/.cargo}/bin
+mkdir -p "$DESTINATION"
+WORKING=$(mktemp -d)
+trap 'rm -rf "$WORKING"' EXIT
+
+report_stage 'the pinned dependency-policy tool'
+DENY_VERSION=$(pinned_version "$CARGO_DENY")
+[ -n "$DENY_VERSION" ] || report_refusal "$MANIFEST pins no $CARGO_DENY version"
+cargo install --locked "$CARGO_DENY" --version "$DENY_VERSION"
+require_reported_version "cargo-deny" "$CARGO_DENY $DENY_VERSION"
+
+report_stage 'the pinned script linter'
+SHELLCHECK_VERSION=$(pinned_version "$SHELLCHECK")
+[ -n "$SHELLCHECK_VERSION" ] || report_refusal "$MANIFEST pins no $SHELLCHECK version"
+SHELLCHECK_ARCHIVE="shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"
+curl --silent --show-error --fail --location --output "$WORKING/$SHELLCHECK_ARCHIVE" \
+    "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/$SHELLCHECK_ARCHIVE"
+tar -xJf "$WORKING/$SHELLCHECK_ARCHIVE" -C "$WORKING"
+install "$WORKING/shellcheck-v$SHELLCHECK_VERSION/shellcheck" "$DESTINATION/shellcheck"
+require_reported_version "shellcheck" "version: $SHELLCHECK_VERSION"
+
+report_stage 'the pinned provider client'
+GITHUB_CLI_VERSION=$(pinned_version "$GITHUB_CLI")
+[ -n "$GITHUB_CLI_VERSION" ] || report_refusal "$MANIFEST pins no $GITHUB_CLI version"
+GITHUB_CLI_ARCHIVE="gh_${GITHUB_CLI_VERSION}_linux_amd64.tar.gz"
+curl --silent --show-error --fail --location --output "$WORKING/$GITHUB_CLI_ARCHIVE" \
+    "https://github.com/cli/cli/releases/download/v$GITHUB_CLI_VERSION/$GITHUB_CLI_ARCHIVE"
+tar -xzf "$WORKING/$GITHUB_CLI_ARCHIVE" -C "$WORKING"
+install "$WORKING/gh_${GITHUB_CLI_VERSION}_linux_amd64/bin/gh" "$DESTINATION/gh"
+require_reported_version "gh" "gh version $GITHUB_CLI_VERSION"
+
+printf '\n== every tool the gate verifies reports its pinned version ==\n'
