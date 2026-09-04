@@ -23,6 +23,11 @@ REVIEW_RECORD=''
 LOCKED_SOURCE_CACHE=''
 PLATFORM_EVIDENCE=''
 OUTPUT_DIRECTORY=''
+# Which provider run this decision belongs to. Only the provider can say that
+# truthfully, and this repository hears it in exactly one place: the variable a
+# workflow job reports itself through. It is passed on unchanged rather than
+# worked out here, and a run that reports none is refused below.
+PROVIDER_RUN=${SLINGSHOT_REPORTED_WORKFLOW:-}
 
 report_stage() {
     printf '\n== %s ==\n' "$1"
@@ -75,6 +80,7 @@ done
 [ -n "$LOCKED_SOURCE_CACHE" ] || report_refusal 'name the verified coordinator cache member'
 [ -n "$PLATFORM_EVIDENCE" ] || report_refusal 'name the authenticated platform evidence'
 [ -n "$OUTPUT_DIRECTORY" ] || report_refusal 'name a new directory to write the manifest into'
+[ -n "$PROVIDER_RUN" ] || report_refusal 'set SLINGSHOT_REPORTED_WORKFLOW to the run this decision belongs to'
 require_absolute_directory "$FINITE_STATE_MACHINE_SOURCE"
 require_absolute_directory "$RUSTSEC_ADVISORY_DATABASE"
 require_absolute_directory "$LOCKED_SOURCE_CACHE"
@@ -130,6 +136,11 @@ report_stage 'every gate, inside the container'
 # root that cannot be written to is not a root that nothing needs to write near:
 # the pinned toolchain writes while it confirms itself, and the gates write what
 # they are told to write. Everything else stays read-only.
+#
+# The revision, the tree, and the provider run are told to the container here
+# and nowhere else. None of them can be found from inside it, which is the whole
+# reason each is passed in by name: what a run cannot work out for itself, it
+# also cannot be tricked into working out wrongly.
 TEMPORARY_BYTES=$(read_number temporary-filesystem-bytes)
 # The toolchain this workspace pins, read from where it is pinned. The image
 # carries exactly it, and naming it stops the toolchain file being resolved
@@ -159,6 +170,9 @@ PINNED_TOOLCHAIN=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml | he
     --volume "$BUILD_ROOT:/acceptance-build:U" \
     --workdir /slingshot \
     --env SLINGSHOT_ACCEPTANCE_OUTPUT=/acceptance-output \
+    --env "SLINGSHOT_ACCEPTANCE_SOURCE_COMMIT=$SOURCE_COMMIT" \
+    --env "SLINGSHOT_ACCEPTANCE_SOURCE_TREE=$SOURCE_TREE" \
+    --env "SLINGSHOT_ACCEPTANCE_PROVIDER_RUN=$PROVIDER_RUN" \
     "$LOADED" \
     scripts/run_acceptance_gates \
     || report_refusal 'a gate refused inside the container, so this revision is not releasable'

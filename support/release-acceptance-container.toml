@@ -57,6 +57,19 @@ privileged = false
 # CARGO_HOME names the transferred cache, which is where every dependency this
 # revision resolves against already is; CARGO_TARGET_DIR names the temporary
 # filesystem, because the source is mounted read-only and a build writes.
+#
+# The last three are what the decision is told about its own run. A container
+# with no network, no history, and no provider cannot find out which revision it
+# is deciding or which run asked it to, and that is deliberate: a run that could
+# work those out could be persuaded it was a run it is not. So each arrives
+# named, from the host that read it, and a run told none of them refuses rather
+# than deciding about whatever it guessed.
+# SLINGSHOT_ACCEPTANCE_SOURCE_COMMIT and SLINGSHOT_ACCEPTANCE_SOURCE_TREE are
+# the exact revision and tree the manifest is about, read on the host from the
+# checkout being accepted after it is confirmed clean.
+# SLINGSHOT_ACCEPTANCE_PROVIDER_RUN is which provider run produced the decision.
+# Only the provider can say that truthfully, so the host takes it from the one
+# variable a workflow job reports itself through and passes it on unchanged.
 allowed = [
     "CARGO_HOME",
     "CARGO_TARGET_DIR",
@@ -64,6 +77,9 @@ allowed = [
     "PATH",
     "RUSTUP_TOOLCHAIN",
     "SLINGSHOT_ACCEPTANCE_OUTPUT",
+    "SLINGSHOT_ACCEPTANCE_PROVIDER_RUN",
+    "SLINGSHOT_ACCEPTANCE_SOURCE_COMMIT",
+    "SLINGSHOT_ACCEPTANCE_SOURCE_TREE",
     "TMPDIR",
 ]
 
