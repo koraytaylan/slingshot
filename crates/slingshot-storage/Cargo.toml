@@ -19,9 +19,11 @@ tracing.workspace = true
 uuid.workspace = true
 
 [target.x86_64-unknown-linux-gnu.dependencies]
+rustix.workspace = true
 uzers.workspace = true
 
 [target.aarch64-apple-darwin.dependencies]
+rustix.workspace = true
 uzers.workspace = true
 
 [dev-dependencies]

@@ -158,6 +158,9 @@ pub enum ArtifactFailure {
     /// There is no such artifact.
     #[error("no artifact holds the content {0}")]
     NoSuchContent(String),
+    /// A concurrent publisher made the digest name visible first.
+    #[error("content {0} was published concurrently")]
+    ContentAlreadyPresent(String),
 }
 
 /// Returns a filesystem refusal as this module's failure.
@@ -436,12 +439,72 @@ fn open_without_following(path: &Path) -> Result<std::fs::File, ArtifactFailure>
 /// Synchronizes one directory so a rename inside it is durable.
 fn synchronize_directory(directory: &Path) -> Result<(), ArtifactFailure> {
     let handle = std::fs::File::open(directory).map_err(refused)?;
-    // Not every filesystem supports synchronizing a directory, and where it is
-    // unsupported the rename is already durable. Refusing there would refuse a
-    // correct write.
+    // Some platforms explicitly report that directory synchronization is not
+    // supported. Every other failure means durability is unknown and must be
+    // reported rather than silently converted into success.
     match handle.sync_all() {
-        Ok(()) | Err(_) => Ok(()),
+        Ok(()) => Ok(()),
+        Err(failure) if failure.kind() == std::io::ErrorKind::InvalidInput => Ok(()),
+        Err(failure) => Err(refused(failure)),
     }
+}
+
+/// Links verified staged bytes into a digest name without replacing an arrival.
+#[cfg(target_os = "linux")]
+fn publish_staged_no_replace(
+    content: &Path,
+    staging: &Path,
+    content_digest: &str,
+) -> Result<(), ArtifactFailure> {
+    use rustix::fs::{AtFlags, CWD, Mode, OFlags, linkat, openat};
+    use std::os::fd::AsRawFd as _;
+    use std::os::unix::fs::MetadataExt as _;
+
+    let staging_name = staging.file_name().ok_or_else(|| {
+        ArtifactFailure::FilesystemRefused("the staging path has no file name".to_owned())
+    })?;
+    let held = std::fs::File::open(content).map_err(refused)?;
+    let staged = openat(
+        &held,
+        staging_name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|failure| ArtifactFailure::FilesystemRefused(failure.to_string()))?;
+    let staged = std::fs::File::from(staged);
+    let snapshot = HandleSnapshot::of(&staged)?;
+    if staged.metadata().map_err(refused)?.nlink() != 1 {
+        return Err(ArtifactFailure::NotPrivate);
+    }
+    staged.sync_all().map_err(refused)?;
+    let retained = format!("/proc/self/fd/{}", staged.as_raw_fd());
+    match linkat(CWD, retained, &held, content_digest, AtFlags::SYMLINK_FOLLOW) {
+        Ok(()) => {}
+        Err(failure) if failure == rustix::io::Errno::EXIST => {
+            return Err(ArtifactFailure::ContentAlreadyPresent(content_digest.to_owned()));
+        }
+        Err(failure) => return Err(ArtifactFailure::FilesystemRefused(failure.to_string())),
+    }
+    let still_staged = std::fs::symlink_metadata(staging).is_ok_and(|current| {
+        let (device, number) = file_identity(&current);
+        current.is_file() && device == snapshot.device && number == snapshot.number
+    });
+    if still_staged {
+        std::fs::remove_file(staging).map_err(refused)?;
+    }
+    Ok(())
+}
+
+/// Refuses platforms that cannot prove atomic no-replace publication.
+#[cfg(not(target_os = "linux"))]
+fn publish_staged_no_replace(
+    _content: &Path,
+    _staging: &Path,
+    _content_digest: &str,
+) -> Result<(), ArtifactFailure> {
+    Err(ArtifactFailure::FilesystemRefused(
+        "this platform has no verified no-replace publication primitive".to_owned(),
+    ))
 }
 
 /// The artifact store, rooted at one directory.
@@ -494,7 +557,7 @@ impl ArtifactStore {
         request.require_bounded()?;
         let staging = self.content.join(format!("{}{STAGING_SUFFIX}", uuid::Uuid::new_v4()));
         let (content_digest, byte_length) = self.stream_into(&staging, source)?;
-        self.publish(&staging, &content_digest)?;
+        self.publish(&staging, &content_digest, byte_length)?;
         Ok(ArtifactMetadata {
             artifact_identifier: ArtifactIdentifier::derive(
                 &request.installation_identifier,
@@ -539,14 +602,49 @@ impl ArtifactStore {
     }
 
     /// Publishes one staged file as the content it turned out to hold.
-    fn publish(&self, staging: &Path, content_digest: &str) -> Result<(), ArtifactFailure> {
+    fn publish(
+        &self,
+        staging: &Path,
+        content_digest: &str,
+        byte_length: u64,
+    ) -> Result<(), ArtifactFailure> {
         let destination = self.content.join(content_digest);
-        if destination.exists() {
+        if destination.symlink_metadata().is_ok() {
+            self.require_existing(&destination, content_digest, byte_length)?;
             std::fs::remove_file(staging).map_err(refused)?;
             return Ok(());
         }
-        std::fs::rename(staging, &destination).map_err(refused)?;
+        match publish_staged_no_replace(&self.content, staging, content_digest) {
+            Ok(()) => {}
+            Err(ArtifactFailure::ContentAlreadyPresent(_)) => {
+                self.require_existing(&destination, content_digest, byte_length)?;
+                std::fs::remove_file(staging).map_err(refused)?;
+            }
+            Err(failure) => return Err(failure),
+        }
         synchronize_directory(&self.content)
+    }
+
+    /// Requires an existing digest-named file to be the verified bytes.
+    fn require_existing(
+        &self,
+        destination: &Path,
+        content_digest: &str,
+        byte_length: u64,
+    ) -> Result<(), ArtifactFailure> {
+        let mut existing = open_without_following(destination)?;
+        HandleSnapshot::of(&existing)?;
+        let (digest, length) = measure(&mut existing)?;
+        if length != byte_length {
+            return Err(ArtifactFailure::LengthMismatch { actual: length, expected: byte_length });
+        }
+        if digest != content_digest {
+            return Err(ArtifactFailure::DigestMismatch {
+                actual: digest,
+                expected: content_digest.to_owned(),
+            });
+        }
+        Ok(())
     }
 
     /// Decides where one canonical structured result goes, and puts it there.

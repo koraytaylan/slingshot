@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-storage/tests/artifact_store/installation.rs
   - crates/slingshot-storage/tests/artifact_store/fixtures.rs
   - crates/slingshot-storage/tests/artifact_store/verification.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # The Artifact Store Publishes Verified Bytes
