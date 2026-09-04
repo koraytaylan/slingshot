@@ -313,6 +313,52 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: 0,
     },
     InventoriedStatement {
+        purpose: "list one receipt's pending artifact cleanup work",
+        text: "SELECT content_digest FROM maintenance_artifact_cleanup_work \
+               WHERE author_target_identity_digest = ? AND application_receipt_identifier = ? \
+               ORDER BY content_digest",
+        parameters: 2,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
+        purpose: "remove one completed maintenance artifact cleanup item",
+        text: "DELETE FROM maintenance_artifact_cleanup_work \
+               WHERE author_target_identity_digest = ? AND application_receipt_identifier = ? \
+                 AND content_digest = ?",
+        parameters: 3,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "count one receipt's pending artifact cleanup work",
+        text: "SELECT COUNT(*) FROM maintenance_artifact_cleanup_work \
+               WHERE author_target_identity_digest = ? AND application_receipt_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "mark one maintenance receipt completed",
+        text: "UPDATE maintenance_application_receipt SET stage = 'completed' \
+               WHERE author_target_identity_digest = ? AND application_receipt_identifier = ? \
+                 AND stage = 'database_applied'",
+        parameters: 2,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "list an operation's artifact cleanup candidates",
+        text: "SELECT content_digest FROM artifact_association \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
+        purpose: "record one maintenance artifact cleanup item",
+        text: "INSERT OR IGNORE INTO maintenance_artifact_cleanup_work \
+               (application_receipt_identifier, author_target_identity_digest, content_digest) \
+               VALUES (?, ?, ?)",
+        parameters: 3,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
         purpose: "count what still references one artifact's content",
         text: "SELECT (SELECT COUNT(*) FROM artifact_association WHERE content_digest = ?) \
                       + (SELECT COUNT(*) FROM maintenance_result_association \
@@ -328,7 +374,7 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
     },
     InventoriedStatement {
         purpose: "read one target's maintenance-application receipt",
-        text: "SELECT recorded_at_unix_milliseconds, released_operation_rows, \
+        text: "SELECT recorded_at_unix_milliseconds, released_operation_rows, stage, \
                       reviewed_manifest_digest \
                FROM maintenance_application_receipt \
                WHERE author_target_identity_digest = ? AND application_receipt_identifier = ?",
