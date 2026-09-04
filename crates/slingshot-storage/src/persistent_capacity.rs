@@ -24,8 +24,6 @@
 //! report, with what is held and what would release some, not a licence to
 //! destroy the record of work that happened.
 
-use std::sync::Mutex;
-
 use slingshot_domain::persistent_capacity::{
     CapacityFacts, CapacityRefusal, PersistentCapacityPolicy,
 };
@@ -53,9 +51,6 @@ pub enum AccountingFailure {
     /// A stored count is not one.
     #[error("a stored count is {0}, which is not a count")]
     NotACount(i64),
-    /// A thread failed while holding the reservations.
-    #[error("the reservations cannot be read, because a holder of them failed")]
-    LockPoisoned,
 }
 
 /// Returns a database refusal as this module's failure.
@@ -90,17 +85,13 @@ pub struct PersistentCapacityAccount<'database> {
     database: &'database OperationDatabase,
     /// The bounds this namespace is held to.
     policy: PersistentCapacityPolicy,
-    /// Reservations for installations in progress.
-    reservations: Mutex<Vec<ArtifactReservation>>,
-    /// The next reservation's ticket.
-    next_ticket: Mutex<u64>,
 }
 
 impl<'database> PersistentCapacityAccount<'database> {
     /// Returns the accounting for the namespace `database` holds.
     #[must_use]
     pub fn new(database: &'database OperationDatabase, policy: PersistentCapacityPolicy) -> Self {
-        Self { database, policy, reservations: Mutex::new(Vec::new()), next_ticket: Mutex::new(1) }
+        Self { database, policy }
     }
 
     /// Returns the bounds this namespace is held to.
@@ -139,9 +130,7 @@ impl<'database> PersistentCapacityAccount<'database> {
 
     /// Returns how many bytes reservations are holding.
     fn reserved_bytes(&self) -> u64 {
-        self.reservations
-            .lock()
-            .map(|held| held.iter().map(|reservation| reservation.byte_length).sum())
+        self.count("measure this namespace's durable artifact reservations", &[])
             .unwrap_or_default()
     }
 }
@@ -262,18 +251,32 @@ impl PersistentCapacityAccount<'_> {
         }
         let committed =
             self.count("measure the bytes this namespace's committed content occupies", &[])?;
-        let mut held = self.reservations.lock().map_err(|_| AccountingFailure::LockPoisoned)?;
+        let reserved = self.count("measure this namespace's durable artifact reservations", &[])?;
         let facts = CapacityFacts {
-            held: committed
-                .saturating_add(held.iter().map(|reservation| reservation.byte_length).sum()),
+            held: committed.saturating_add(reserved),
             limit: self.policy.committed_plus_reserved_artifact_bytes,
             wanted: byte_length,
         };
         if !facts.fits() {
             return Err(CapacityRefusal::ArtifactBytes { facts }.into());
         }
-        let reservation = ArtifactReservation { byte_length, ticket: self.claim_ticket() };
-        held.push(reservation);
+        let reserved_length = i64::try_from(byte_length).map_err(|_| {
+            AccountingFailure::DatabaseRefused(
+                "the reservation length exceeds SQLite's integer range".to_owned(),
+            )
+        })?;
+        self.database
+            .connection()
+            .execute(
+                statement("hold one artifact reservation durably"),
+                rusqlite::params![reserved_length],
+            )
+            .map_err(refused)?;
+        let ticket =
+            u64::try_from(self.database.connection().last_insert_rowid()).map_err(|_| {
+                AccountingFailure::DatabaseRefused("the reservation ticket is negative".to_owned())
+            })?;
+        let reservation = ArtifactReservation { byte_length, ticket };
         Ok(Some(reservation))
     }
 
@@ -282,9 +285,16 @@ impl PersistentCapacityAccount<'_> {
     /// An installation that was abandoned held bytes it never used, and holding
     /// them afterwards would refuse work for space nothing occupies.
     pub fn release(&self, reservation: ArtifactReservation) {
-        if let Ok(mut held) = self.reservations.lock() {
-            held.retain(|holding| holding.ticket != reservation.ticket);
-        }
+        let Ok(ticket) = i64::try_from(reservation.ticket) else {
+            return;
+        };
+        self.database
+            .connection()
+            .execute(
+                statement("release one durable artifact reservation"),
+                rusqlite::params![ticket],
+            )
+            .ok();
     }
 
     /// Converts one reservation into committed usage.
@@ -313,17 +323,5 @@ impl PersistentCapacityAccount<'_> {
         found
             .map(|length| u64::try_from(length).map_err(|_| AccountingFailure::NotACount(length)))
             .transpose()
-    }
-
-    /// Returns the next reservation's ticket.
-    fn claim_ticket(&self) -> u64 {
-        self.next_ticket
-            .lock()
-            .map(|mut next| {
-                let ticket = *next;
-                *next = next.saturating_add(1);
-                ticket
-            })
-            .unwrap_or_default()
     }
 }

@@ -2,6 +2,7 @@
 {"note": "several physical Sling jobs may carry one logical submission", "table": "agent_physical_job"}
 {"note": "one artifact per operation and slot", "table": "artifact_association"}
 {"note": "content addressed once per digest", "table": "artifact_blob"}
+{"note": "durable holds for artifact bytes not yet committed", "table": "artifact_reservation"}
 {"note": "one identifier, and only one", "table": "installation"}
 {"note": "receipts partitioned by target", "table": "maintenance_application_receipt"}
 {"note": "keyed by target and identifier, referencing no operation", "table": "maintenance_result_association"}
