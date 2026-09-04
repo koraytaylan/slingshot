@@ -284,6 +284,33 @@ async fn an_established_idle_connection_has_no_incomplete_frame_deadline() {
     finish(daemon).await;
 }
 
+#[tokio::test]
+async fn concatenated_requests_have_one_ordered_response_each() {
+    let contract = FoundationContract::embedded();
+    let root = temporary_runtime_root("c");
+    let daemon = start_daemon(&root, ENVIRONMENT).await;
+    let mut stream = connect(&daemon.address).await;
+    let mut requests = Vec::new();
+    for identifier in ["first", "second", "third"] {
+        requests.extend(frame(&contract, identifier, PING_METHOD, serde_json::json!({})));
+    }
+    stream.write_all(&requests).await.expect("all requests arrive in one write");
+
+    let mut reader = local_server::FrameReader::new();
+    for identifier in ["first", "second", "third"] {
+        let payload = reader
+            .read(&mut stream, &contract, identifier == "first")
+            .await
+            .expect("the response reads")
+            .expect("the response is complete");
+        let response: ControlResponse =
+            serde_json::from_slice(&payload).expect("the response parses");
+        assert_eq!(response.request_identifier, identifier);
+        assert_eq!(response.outcome, ResponseOutcome::Success);
+    }
+    finish(daemon).await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn every_incomplete_peer_closes_at_its_declared_deadline_and_releases_capacity() {
     let contract = FoundationContract::embedded();

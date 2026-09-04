@@ -324,30 +324,76 @@ pub async fn read_frame<Stream>(
 where
     Stream: AsyncRead + Unpin,
 {
-    let mut buffer = Vec::new();
-    let mut chunk = [0_u8; CONNECTION_READ_CHUNK_BYTES];
-    let mut frame_started: Option<Instant> = None;
-    loop {
-        let progress = framing::progress(&contract.framing, &buffer)?;
-        if let FrameProgress::Complete { declared } = progress {
-            let start = contract.framing.length_prefix_bytes as usize;
-            return Ok(Some(buffer[start..start + declared].to_vec()));
+    FrameReader::new().read(stream, contract, first_frame).await
+}
+
+/// One connection's retained framed-input state.
+///
+/// A transport read is not a message boundary. Keeping bytes after the first
+/// complete frame is what makes a connection's behavior independent of whether
+/// the operating system delivered one frame, several frames, or a fragment.
+#[derive(Debug, Default)]
+pub struct FrameReader {
+    /// Bytes received for this connection that no frame has consumed yet.
+    buffer: Vec<u8>,
+    /// When the currently incomplete frame first received transport progress.
+    frame_started: Option<Instant>,
+}
+
+impl FrameReader {
+    /// Returns an empty reader for one accepted connection.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Reads the next frame while retaining all later buffered frames.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same bounded transport, framing, and deadline failures as
+    /// [`read_frame`], without awaiting a read when a complete frame is
+    /// already buffered.
+    pub async fn read<Stream>(
+        &mut self,
+        stream: &mut Stream,
+        contract: &FoundationContract,
+        first_frame: bool,
+    ) -> Result<Option<Vec<u8>>, ConnectionFailure>
+    where
+        Stream: AsyncRead + Unpin,
+    {
+        let mut chunk = [0_u8; CONNECTION_READ_CHUNK_BYTES];
+        loop {
+            let progress = framing::progress(&contract.framing, &self.buffer)?;
+            if let FrameProgress::Complete { declared } = progress {
+                let start = contract.framing.length_prefix_bytes as usize;
+                let end = start + declared;
+                let payload = self.buffer[start..end].to_vec();
+                self.buffer.drain(..end);
+                self.frame_started = (!self.buffer.is_empty()).then(Instant::now);
+                return Ok(Some(payload));
+            }
+            let deadline = read_deadline(contract, progress, first_frame, self.frame_started);
+            let read = match deadline {
+                Some((stage, deadline)) => tokio::time::timeout(deadline, stream.read(&mut chunk))
+                    .await
+                    .map_err(|_| ConnectionFailure::DeadlineElapsed { stage, deadline })?,
+                None => stream.read(&mut chunk).await,
+            };
+            let read = read.map_err(|failure| ConnectionFailure::Transport(failure.to_string()))?;
+            if read == 0 {
+                return if self.buffer.is_empty() {
+                    Ok(None)
+                } else {
+                    Err(ConnectionFailure::Truncated)
+                };
+            }
+            if self.frame_started.is_none() {
+                self.frame_started = Some(Instant::now());
+            }
+            self.buffer.extend_from_slice(&chunk[..read]);
         }
-        let deadline = read_deadline(contract, progress, first_frame, frame_started);
-        let read = match deadline {
-            Some((stage, deadline)) => tokio::time::timeout(deadline, stream.read(&mut chunk))
-                .await
-                .map_err(|_| ConnectionFailure::DeadlineElapsed { stage, deadline })?,
-            None => stream.read(&mut chunk).await,
-        };
-        let read = read.map_err(|failure| ConnectionFailure::Transport(failure.to_string()))?;
-        if read == 0 {
-            return if buffer.is_empty() { Ok(None) } else { Err(ConnectionFailure::Truncated) };
-        }
-        if frame_started.is_none() {
-            frame_started = Some(Instant::now());
-        }
-        buffer.extend_from_slice(&chunk[..read]);
     }
 }
 
@@ -390,8 +436,9 @@ where
 {
     let contract = service.contract();
     let mut first_frame = true;
+    let mut reader = FrameReader::new();
     loop {
-        let Some(payload) = read_frame(stream, contract, first_frame).await? else {
+        let Some(payload) = reader.read(stream, contract, first_frame).await? else {
             return Ok(false);
         };
         first_frame = false;
