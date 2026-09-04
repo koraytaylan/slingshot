@@ -19,6 +19,7 @@ use slingshot_domain::command::component_resource_type::ComponentResourceType;
 use slingshot_domain::command::create_page::{
     CreatePageCommand, MutationProperties, PAGE_TITLE_PROPERTY,
 };
+use slingshot_domain::command::find_pages_containing_phrase::PageTitle;
 use slingshot_domain::command::repository_path::{
     ComponentName, PageName, RepositoryPath, RepositoryRelativePath,
 };
@@ -72,7 +73,8 @@ fn build_page(invocation: &Invocation) -> Result<Command, RequestRefusal> {
         .map_err(|_| RequestRefusal::ValueUnusable { named: NAME_OPTION.to_owned() })?;
     let template_path = RepositoryPath::parse(required(invocation, TEMPLATE_OPTION)?)
         .map_err(|_| RequestRefusal::ValueUnusable { named: TEMPLATE_OPTION.to_owned() })?;
-    let title = required(invocation, TITLE_OPTION)?.to_owned();
+    let title = PageTitle::new(required(invocation, TITLE_OPTION)?)
+        .map_err(|_| RequestRefusal::ValueUnusable { named: TITLE_OPTION.to_owned() })?;
     Ok(Command::CreatePage(CreatePageCommand {
         initial_properties: properties(invocation, &[PAGE_TITLE_PROPERTY])?,
         page_name,
