@@ -152,6 +152,9 @@ pub enum AgentRepositoryFailure {
         /// What the caller named.
         identifier: String,
     },
+    /// A generation-fenced subscription operation observed a moved ledger.
+    #[error("the subscription ledger changed before this operation could commit")]
+    SubscriptionMoved,
     /// Something already holds that name and is not the same work.
     #[error("that name already names different work in this partition")]
     Conflicted,

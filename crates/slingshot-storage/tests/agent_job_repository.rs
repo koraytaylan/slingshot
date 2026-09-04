@@ -171,7 +171,13 @@ fn running(sequence: u64, attempt: u64, progress: u64) -> RemoteJobObservation {
 
 /// Returns one event fact at `cursor`.
 fn fact(cursor: &str, digest: &str) -> EventFact {
+    fact_in(GENERATION, cursor, digest)
+}
+
+/// Returns one event fact in the specified event-store generation.
+fn fact_in(generation: u64, cursor: &str, digest: &str) -> EventFact {
     EventFact {
+        agent_event_store_generation: generation,
         agent_operation_identifier: None,
         canonical_digest: digest.to_owned(),
         cursor: cursor.to_owned(),
@@ -478,7 +484,16 @@ fn a_captured_high_water_position_is_the_only_way_out_of_a_disagreement() {
         .record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-other"), NOW)
         .expect("a conflict");
     ledger
-        .install_high_water(TARGET, SUBSCRIPTION, LATER_GENERATION, "cursor-0100", "contents-high")
+        .install_high_water(
+            TARGET,
+            SUBSCRIPTION,
+            GENERATION,
+            Some("cursor-0005"),
+            Some("cursor-0005"),
+            LATER_GENERATION,
+            "cursor-0100",
+            "contents-high",
+        )
         .expect("a reset heals it");
     let row = ledger.read_subscription(TARGET, SUBSCRIPTION);
     let row = row.expect("reads").expect("it is there");
@@ -488,9 +503,103 @@ fn a_captured_high_water_position_is_the_only_way_out_of_a_disagreement() {
     assert_eq!(row.unresolved_incident, None);
     assert_eq!(row.unresolved_incident_count, 0);
     assert!(matches!(
-        ledger.install_high_water(TARGET, "another-subscription", GENERATION, "c", "d"),
+        ledger.install_high_water(
+            TARGET,
+            "another-subscription",
+            GENERATION,
+            None,
+            None,
+            LATER_GENERATION,
+            "c",
+            "d",
+        ),
         Err(AgentRepositoryFailure::NoSuchSubscription { .. })
     ));
+}
+
+#[test]
+fn an_old_generation_cannot_mutate_a_reset_ledger_and_a_new_one_reuses_its_cursor() {
+    let ledger = ledger();
+    ledger
+        .record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-old"), NOW)
+        .expect("the old stream advances");
+    ledger
+        .record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-conflict"), NOW)
+        .expect("the disagreement is recorded");
+    ledger
+        .install_high_water(
+            TARGET,
+            SUBSCRIPTION,
+            GENERATION,
+            Some("cursor-0005"),
+            Some("cursor-0005"),
+            LATER_GENERATION,
+            "cursor-0000",
+            "contents-reset",
+        )
+        .expect("the fenced reset wins");
+    assert_eq!(
+        ledger
+            .record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "old-late"), NOW)
+            .expect("an old event is classified"),
+        LedgerOutcome::GenerationMismatch,
+        "an old live stream cannot touch the new ledger"
+    );
+    assert_eq!(
+        ledger
+            .record_event(
+                TARGET,
+                SUBSCRIPTION,
+                &fact_in(LATER_GENERATION, "cursor-0005", "contents-new"),
+                NOW,
+            )
+            .expect("the new stream reuses its cursor"),
+        LedgerOutcome::Advanced,
+        "cursor identity is generation-scoped"
+    );
+    let held = ledger.read_subscription(TARGET, SUBSCRIPTION).expect("reads").expect("held");
+    assert_eq!(held.agent_event_store_generation, LATER_GENERATION);
+    assert_eq!(held.cursor.as_deref(), Some("cursor-0005"));
+    assert_eq!(held.event_rows, 1, "reset removed the old generation's retained events");
+}
+
+#[test]
+fn a_reset_cannot_regress_or_replace_a_newer_generation() {
+    let ledger = ledger();
+    ledger
+        .record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-old"), NOW)
+        .expect("the old stream advances");
+    ledger
+        .record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-conflict"), NOW)
+        .expect("the disagreement is recorded");
+    ledger
+        .install_high_water(
+            TARGET,
+            SUBSCRIPTION,
+            GENERATION,
+            Some("cursor-0005"),
+            Some("cursor-0005"),
+            LATER_GENERATION,
+            "cursor-0100",
+            "contents-new",
+        )
+        .expect("the first reset wins");
+    assert!(matches!(
+        ledger.install_high_water(
+            TARGET,
+            SUBSCRIPTION,
+            GENERATION,
+            Some("cursor-0005"),
+            Some("cursor-0005"),
+            GENERATION,
+            "cursor-regressed",
+            "contents-regressed",
+        ),
+        Err(AgentRepositoryFailure::SubscriptionMoved)
+    ));
+    let held = ledger.read_subscription(TARGET, SUBSCRIPTION).expect("reads").expect("held");
+    assert_eq!(held.agent_event_store_generation, LATER_GENERATION);
+    assert_eq!(held.cursor.as_deref(), Some("cursor-0100"));
 }
 
 #[test]
