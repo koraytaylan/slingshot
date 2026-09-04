@@ -8,8 +8,8 @@ gated: false
 touches:
   - crates/slingshot-daemon/src/local_server.rs
   - crates/slingshot-daemon/tests/ping_service.rs
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # One Frame Reader Lives With The Connection
 
