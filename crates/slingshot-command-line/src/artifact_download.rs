@@ -193,16 +193,18 @@ pub fn publish(
 
 /// Publishes through the operating system's atomic no-replace primitive.
 ///
-/// A prior existence check is intentionally absent: checking and then renaming
-/// is the race this adapter exists to remove. Both names are resolved against
-/// the same retained directory handle, and the staged file is synchronized
-/// before its name can become visible to the caller.
+/// A prior existence check is intentionally absent: checking and then naming
+/// is the race this adapter exists to remove. The destination is resolved
+/// against a retained directory handle, while the staged bytes are published
+/// from their already-open authenticated handle after synchronization.
 #[cfg(target_os = "linux")]
 fn publish_no_replace(
     staging: &std::path::Path,
     destination: &std::path::Path,
 ) -> Result<(), DownloadRefusal> {
-    use rustix::fs::{Mode, OFlags, RenameFlags, openat, renameat_with};
+    use rustix::fs::{AtFlags, CWD, Mode, OFlags, linkat, openat};
+    use std::os::fd::AsRawFd as _;
+    use std::os::unix::fs::MetadataExt as _;
 
     let directory = destination.parent().ok_or(DownloadRefusal::DestinationUnusable)?;
     if staging.parent() != Some(directory) {
@@ -219,11 +221,13 @@ fn publish_no_replace(
     )
     .map_err(|_| DownloadRefusal::DestinationUnusable)?;
     let staged = std::fs::File::from(staged);
-    if !staged.metadata().map_err(|_| DownloadRefusal::DestinationUnusable)?.is_file() {
+    let identity = staged.metadata().map_err(|_| DownloadRefusal::DestinationUnusable)?;
+    if !identity.is_file() || identity.nlink() != 1 {
         return Err(DownloadRefusal::DestinationUnusable);
     }
     staged.sync_all().map_err(|_| DownloadRefusal::DestinationUnusable)?;
-    renameat_with(&held, staging_name, &held, destination_name, RenameFlags::NOREPLACE).map_err(
+    let retained_handle = format!("/proc/self/fd/{}", staged.as_raw_fd());
+    linkat(CWD, retained_handle, &held, destination_name, AtFlags::SYMLINK_FOLLOW).map_err(
         |failure| {
             if failure == rustix::io::Errno::EXIST {
                 DownloadRefusal::DestinationOccupied
@@ -232,6 +236,13 @@ fn publish_no_replace(
             }
         },
     )?;
+    let staged_name_still_names_the_verified_file =
+        std::fs::symlink_metadata(staging).is_ok_and(|current| {
+            current.is_file() && current.dev() == identity.dev() && current.ino() == identity.ino()
+        });
+    if staged_name_still_names_the_verified_file {
+        std::fs::remove_file(staging).map_err(|_| DownloadRefusal::DestinationUnusable)?;
+    }
     held.sync_all().map_err(|_| DownloadRefusal::DestinationUnusable)
 }
 
