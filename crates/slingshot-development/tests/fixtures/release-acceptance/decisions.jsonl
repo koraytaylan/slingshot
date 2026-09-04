@@ -1,0 +1,16 @@
+# What one acceptance run decided, and what the verifier then reads back out of it.
+#
+# Each row is one run of every gate. The gates named in `refused` did not hold
+# and every other gate did. `outcome` is what the manifest that run writes must
+# conclude; `refusal` is what the existing verifier must refuse that manifest
+# for, empty when it must accept it; `names` is the gate the refusal has to name
+# so that whoever reads it knows which gate stopped the release.
+#
+# The manifest was specified before anything produced one, so the producer is
+# held to the specification here rather than the other way round.
+{"name": "every gate holds", "refused": [], "outcome": "releasable", "refusal": "", "names": ""}
+{"name": "the first gate refuses", "refused": ["source-policy"], "outcome": "refused", "refusal": "GateRefused", "names": "source-policy"}
+{"name": "a gate in the middle refuses", "refused": ["command-contract"], "outcome": "refused", "refusal": "GateRefused", "names": "command-contract"}
+{"name": "the last gate refuses", "refused": ["finite-state-machine-compatibility"], "outcome": "refused", "refusal": "GateRefused", "names": "finite-state-machine-compatibility"}
+{"name": "the gate that runs another project's code refuses", "refused": ["finite-state-machine-compatibility", "platform-runtime"], "outcome": "refused", "refusal": "GateRefused", "names": "platform-runtime"}
+{"name": "every gate refuses", "refused": ["source-policy", "dependency-direction", "workspace-module-map", "release-metadata", "release-attestation-policy", "locked-source-cache", "command-contract", "protocol-compatibility", "configuration-and-storage-compatibility", "platform-runtime", "release-artifact-contract", "finite-state-machine-compatibility"], "outcome": "refused", "refusal": "GateRefused", "names": "source-policy"}
