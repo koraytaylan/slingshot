@@ -10,6 +10,7 @@
 //! handlers agree on, and a list either of them could restate is a list they
 //! can disagree about.
 
+use std::io::Cursor;
 use std::time::Duration;
 
 use slingshot_command_line::model_context_protocol::active_request_registry::{
@@ -19,10 +20,10 @@ use slingshot_command_line::model_context_protocol::protocol_diagnostics::{
     MAXIMUM_HELD_RECORDS, ProtocolDiagnosticSink, Recorded,
 };
 use slingshot_command_line::model_context_protocol::standard_stream_transport::{
-    LineSink, MAXIMUM_QUEUED_BYTES, MAXIMUM_QUEUED_MESSAGES, Message, MessageRefusal,
+    BoundedLine, LineSink, MAXIMUM_QUEUED_BYTES, MAXIMUM_QUEUED_MESSAGES, Message, MessageRefusal,
     OutputFailure, OutputQueue, ProtocolRevision, QUEUE_PRESSURE_DEADLINE, QueueRefusal,
     SUPPORTED_REVISIONS, WRITE_DEADLINE, Written, maximum_line_bytes, maximum_nesting_depth,
-    read_message,
+    read_bounded_line, read_message,
 };
 
 /// Where the transport fixtures live.
@@ -161,6 +162,39 @@ fn a_line_past_a_bound_is_refused_before_it_is_parsed() {
     assert_eq!(read_message(nested.as_bytes()), Err(MessageRefusal::TooDeep));
 
     assert_eq!(read_message(&[0xff, 0xfe]), Err(MessageRefusal::EncodingInvalid));
+}
+
+#[test]
+fn standard_input_stops_at_one_bounded_lookahead() {
+    let exact = vec![b' '; maximum_line_bytes()];
+    let mut exact_input = Cursor::new([exact, vec![b'\n']].concat());
+    assert!(
+        matches!(read_bounded_line(&mut exact_input), Ok(BoundedLine::Line(line)) if line.len() == maximum_line_bytes())
+    );
+
+    let huge = vec![b' '; maximum_line_bytes().saturating_add(4096)];
+    let mut huge_input = Cursor::new(huge);
+    let bounded = read_bounded_line(&mut huge_input).expect("the hostile stream reads");
+    assert!(
+        matches!(bounded, BoundedLine::TooLong(line) if line.len() == maximum_line_bytes() + 1)
+    );
+    assert_eq!(
+        huge_input.position(),
+        u64::try_from(maximum_line_bytes() + 1).expect("the limit fits")
+    );
+}
+
+#[test]
+fn semantic_duplicate_member_names_are_refused_before_dispatch() {
+    for duplicate in [
+        r#"{"id":"one","method":"tools/list","\u0069d":"two"}"#,
+        r#"{"\uD83D\uDE80":1,"method":"tools/list","🚀":2}"#,
+    ] {
+        assert!(
+            matches!(read_message(duplicate.as_bytes()), Err(MessageRefusal::DuplicateMember(_))),
+            "{duplicate}"
+        );
+    }
 }
 
 #[test]

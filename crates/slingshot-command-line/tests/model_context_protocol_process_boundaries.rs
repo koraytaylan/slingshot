@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use serde_json::Value;
+use slingshot_command_line::model_context_protocol::standard_stream_transport::maximum_line_bytes;
 use slingshot_test_support::process_harness::{
     DeliverableSignal, ExecutablePath, ProcessHarness, ProcessRequest,
 };
@@ -85,6 +86,21 @@ fn input_ending_finishes_the_server_cleanly_and_at_once() {
         .expect("the server finishes when its input ends");
     assert!(produced.status.success());
     assert!(produced.standard_output.is_empty(), "nothing was asked, so nothing is answered");
+}
+
+#[test]
+fn a_newline_free_message_past_the_bound_receives_one_refusal_and_stops() {
+    let input = vec![b' '; maximum_line_bytes() + 4096];
+    let harness = ProcessHarness::new();
+    let produced = harness
+        .run_within(&product_executable(), &serving().reading(input), PROMPT_DEADLINE)
+        .expect("the bounded refusal ends the server");
+    assert!(produced.status.success());
+    let answers: Vec<&str> = produced.standard_output.lines().collect();
+    assert_eq!(answers.len(), 1, "the unread remainder is not another message");
+    let refusal: Value =
+        serde_json::from_str(answers[0]).expect("the refusal is one protocol line");
+    assert_eq!(refusal["error"]["code"], -32_600);
 }
 
 #[test]
