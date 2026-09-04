@@ -29,17 +29,8 @@
 use crate::author_agent_operation_executor::{AuthorAgentOperationExecutor, AuthorPorts};
 use slingshot_storage::database::{DatabaseFailure, OperationDatabase, RequiredSettings};
 use slingshot_storage::installation_state::InstallationStateFailure;
-use slingshot_storage::sqlite_statement_inventory::statement_text;
 
 use crate::runtime_namespace::{NamespaceFailure, PersistentTargetPaths, RuntimeNamespace};
-
-/// Purpose of the statement the cross-partition audit runs.
-///
-/// The text lives in the storage inventory, which is the one place a statement
-/// exists; the question is asked here, because auditing is what startup does
-/// and not what a repository does.
-pub const UNFINISHED_PARTITIONS_STATEMENT: &str =
-    "list every partition holding work that has not ended";
 
 /// What this daemon selected, and therefore what it will serve.
 ///
@@ -231,17 +222,12 @@ pub fn unfinished_partitions(
 ) -> Result<Vec<UnfinishedPartition>, StartupRefusal> {
     let unavailable =
         || StartupRefusal::InvariantUnavailable { invariant: "cross-partition audit" };
-    let mut prepared = database
-        .connection()
-        .prepare(statement_text(UNFINISHED_PARTITIONS_STATEMENT))
-        .map_err(|_| unavailable())?;
-    let rows = prepared
-        .query_map([], |row| {
-            Ok(UnfinishedPartition {
-                author_target_identity_digest: row.get(0)?,
-                selected_environment_revision: row.get(1)?,
+    database.unfinished_partitions().map_err(|_| unavailable()).map(|partitions| {
+        partitions
+            .into_iter()
+            .map(|(author_target_identity_digest, selected_environment_revision)| {
+                UnfinishedPartition { author_target_identity_digest, selected_environment_revision }
             })
-        })
-        .map_err(|_| unavailable())?;
-    rows.collect::<Result<Vec<UnfinishedPartition>, _>>().map_err(|_| unavailable())
+            .collect()
+    })
 }
