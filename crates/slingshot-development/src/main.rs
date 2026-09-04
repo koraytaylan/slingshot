@@ -601,6 +601,14 @@ fn package_release_artifacts(
         toml::to_string_pretty(&evidence).map_err(|failure| refuse(failure.to_string()))?;
     std::fs::write(destination.join("evidence.toml"), rendered)
         .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))?;
+    // The same evidence, in the shape the provider's attestation carries. The
+    // repository reads its own contracts as TOML and the attestation predicate
+    // is JSON, so the one value is rendered twice rather than written twice:
+    // two documents authored separately could disagree, and these cannot.
+    let attested =
+        serde_json::to_string_pretty(&evidence).map_err(|failure| refuse(failure.to_string()))?;
+    std::fs::write(destination.join("evidence.json"), attested)
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))?;
     writeln!(output, "{} holds {} members", archive.display(), built.len())
         .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
 }
