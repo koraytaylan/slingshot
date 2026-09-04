@@ -94,9 +94,38 @@ jobs:
         with:
           name: rustsec-owner-review-record
           path: ${{ runner.temp }}/review-record.json
+  locked-source-cache:
+    name: the one locked source cache
+    needs: rustsec-owner-review
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      SLINGSHOT_COORDINATOR: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: rustsec-owner-review-record
+          path: ${{ runner.temp }}/review
+      - name: check out the pinned external source
+        run: scripts/checkout_pinned_finite_state_machine "$RUNNER_TEMP/finite-state-machine"
+      - name: check out the exact pinned advisory snapshot
+        run: scripts/checkout_pinned_advisory_database "$RUNNER_TEMP/advisory-db"
+      - name: build the pinned coverage-fuzzing tool once
+        run: scripts/prepare_coverage_fuzzing_tool --output "$RUNNER_TEMP/coverage-bundle" --host x86_64-unknown-linux-gnu
+      - name: prepare the one cache every row builds from
+        run: scripts/prepare_locked_source_cache --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine" --rustsec-advisory-database "$RUNNER_TEMP/advisory-db" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --coverage-fuzzing-tool-bundle "$RUNNER_TEMP/coverage-bundle" --output-directory "$RUNNER_TEMP/cache"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: locked-source-cache
+          path: ${{ runner.temp }}/cache
+          include-hidden-files: true
   release-binary-provenance:
     name: the archives and their provenance
-    needs: rustsec-owner-review
+    needs: [rustsec-owner-review, locked-source-cache]
     runs-on: ${{ matrix.runner }}
     permissions:
       attestations: write
@@ -122,9 +151,6 @@ jobs:
       SLINGSHOT_REPORTED_OWNER_IDENTIFIER: ${{ github.repository_owner_id }}
       SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
       SLINGSHOT_REPORTED_RUNNER: ${{ matrix.runner }}
-      # Only the coordinating row's cache reaches the acceptance, so only that
-      # row carries the image the acceptance runs its gates in.
-      SLINGSHOT_COORDINATOR: ${{ matrix.coordinator }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -133,41 +159,17 @@ jobs:
         with:
           name: rustsec-owner-review-record
           path: ${{ runner.temp }}/review
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: locked-source-cache
+          path: ${{ runner.temp }}/cache
       - name: validate the committed authority against what this run reports
         run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
-      # The cache is built from three verified inputs, and this row starts with
-      # none of them: the machine is new, and nothing but the review record
-      # arrives as an artifact. Each is checked out or built here, against the
-      # pin that names it, before anything is packed into a cache.
-      - name: check out the pinned external source
-        run: scripts/checkout_pinned_finite_state_machine "$RUNNER_TEMP/finite-state-machine"
-      - name: check out the exact pinned advisory snapshot
-        run: scripts/checkout_pinned_advisory_database "$RUNNER_TEMP/advisory-db"
-      - name: build the pinned coverage-fuzzing tool for this row
-        env:
-          SLINGSHOT_ROW: ${{ matrix.triple }}
-        run: scripts/prepare_coverage_fuzzing_tool --output "$RUNNER_TEMP/coverage-bundle" --host "$SLINGSHOT_ROW"
-      - name: prepare the cache this row builds from
-        run: scripts/prepare_locked_source_cache --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine" --rustsec-advisory-database "$RUNNER_TEMP/advisory-db" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --coverage-fuzzing-tool-bundle "$RUNNER_TEMP/coverage-bundle" --output-directory "$RUNNER_TEMP/cache"
       - name: build this row twice and compare the bytes
         env:
           SLINGSHOT_ROW: ${{ matrix.triple }}
           SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
         run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
-      # The acceptance runs offline from the cache the coordinator row built
-      # from, on a different machine. A cache prepared again there would be a
-      # second cache, and the whole point of preparing one is that every row and
-      # the decision about them read the same bytes.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: matrix.coordinator
-        with:
-          name: locked-source-cache
-          path: ${{ runner.temp }}/cache
-          # A cargo home keeps the index metadata that makes offline resolution
-          # possible under a hidden directory, and this transfer drops hidden
-          # files unless told otherwise. A cache that arrives without them is a
-          # cache that resolves nothing, which is what it is carried for.
-          include-hidden-files: true
       # The provenance is the provider's own statement about this build, not a
       # document this repository writes. The attestation policy reads the
       # builder identity and the workflow this ran as out of it, and only the

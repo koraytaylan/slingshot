@@ -15,8 +15,8 @@ touches:
   - crates/slingshot-development/tests/release_input_cache.rs
   - crates/slingshot-development/tests/release_acceptance.rs
   - crates/slingshot-development/tests/fixtures/release-input-cache/cache-manifests.jsonl
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # Every Declared Release Cache Input Is Bound
 
