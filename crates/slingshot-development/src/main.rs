@@ -47,7 +47,10 @@ const CONTAINER_COMMAND: &str = "release-acceptance-container";
 const VERIFY_ACCEPTANCE_COMMAND: &str = "verify-release-acceptance";
 
 /// Name of the command that decides one revision inside the container.
-const RUN_ACCEPTANCE_COMMAND: &str = "run-release-acceptance";
+///
+/// Read from the library, because the script inside the container invokes this
+/// name and a second spelling of it here could disagree with that one quietly.
+const RUN_ACCEPTANCE_COMMAND: &str = release_acceptance::RUN_COMMAND;
 
 /// Option naming where the decision and its reports are written.
 const RUN_ACCEPTANCE_OPTION: &str = "--output-directory";

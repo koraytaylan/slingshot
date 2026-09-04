@@ -98,6 +98,12 @@ command -v "$RUNTIME" >/dev/null 2>&1 || report_refusal "$RUNTIME is not on this
 
 report_stage 'the source tree'
 git diff --quiet HEAD || report_refusal 'the working tree differs from the commit being accepted'
+# A tracked file that differs is not the only way the checkout can be something
+# other than the tree the decision names. The source is mounted whole, so an
+# untracked file is read by every gate and is in no tree at all - which would
+# make this a decision about something the manifest cannot describe.
+[ -z "$(git ls-files --others --exclude-standard)" ] \
+    || report_refusal 'the checkout holds files the commit being accepted does not'
 SOURCE_COMMIT=$(git rev-parse HEAD)
 SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')
 
@@ -175,7 +181,7 @@ PINNED_TOOLCHAIN=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml | he
     --env "SLINGSHOT_ACCEPTANCE_PROVIDER_RUN=$PROVIDER_RUN" \
     "$LOADED" \
     scripts/run_acceptance_gates \
-    || report_refusal 'a gate refused inside the container, so this revision is not releasable'
+    || report_refusal 'the gates could not be run to a decision inside the container'
 
 report_stage 'the acceptance manifest'
 cargo run --locked --quiet -p slingshot-development -- \
