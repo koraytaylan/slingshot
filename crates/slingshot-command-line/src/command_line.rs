@@ -23,7 +23,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use slingshot_configuration::profile_loader::{
     ConfigurationDiagnostic, DiagnosticSourceClass, DiagnosticStage, LoadedProfiles,
@@ -38,8 +37,8 @@ use slingshot_local_protocol::message::{OperationEnvelope, OperationResponse};
 use slingshot_local_protocol::ping::STOP_METHOD;
 
 use crate::application::{
-    Answer, ClockBoundary, CommandLineApplication, Completion, ConfigurationBoundary,
-    DaemonBoundary, FilesystemBoundary, NetworkBoundary, ProcessBoundary, Provenance,
+    Answer, CommandLineApplication, Completion, ConfigurationBoundary, DaemonBoundary,
+    FilesystemBoundary, NetworkBoundary, ProcessBoundary, Provenance, RequestIdentityBoundary,
     SignalBoundary,
 };
 use crate::configuration_check::{self, CheckReport};
@@ -249,7 +248,7 @@ fn complete(invocation: &Invocation, executable: &Path) -> Completion {
             };
         }
     };
-    let clock = ProductClock;
+    let request_identity = ProductRequestIdentity;
     let configuration = ProductConfiguration;
     let filesystem = ProductFilesystem;
     let network = ProductNetwork;
@@ -261,7 +260,7 @@ fn complete(invocation: &Invocation, executable: &Path) -> Completion {
         runtime_root: runtime_root.clone(),
     };
     let application = CommandLineApplication {
-        clock: &clock,
+        request_identity: &request_identity,
         configuration: &configuration,
         daemon: &daemon,
         filesystem: &filesystem,
@@ -402,16 +401,13 @@ fn serve(options: &[String], diagnostics: &mut dyn Write) -> i32 {
 
 // ------------------------------------------------------- the real boundaries
 
-/// The wall clock.
+/// The product's collision-resistant invocation identity generator.
 #[derive(Debug)]
-struct ProductClock;
+struct ProductRequestIdentity;
 
-impl ClockBoundary for ProductClock {
-    fn milliseconds_since_epoch(&self) -> u64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
-            .unwrap_or_default()
+impl RequestIdentityBoundary for ProductRequestIdentity {
+    fn invent_request_identifier(&self) -> String {
+        format!("command-line-{}", uuid::Uuid::new_v4())
     }
 }
 

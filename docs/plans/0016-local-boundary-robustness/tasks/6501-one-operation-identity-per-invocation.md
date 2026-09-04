@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-command-line/src/command_line.rs
   - crates/slingshot-command-line/tests/application_dispatch.rs
   - crates/slingshot-command-line/tests/exits_and_interrupts.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # One Operation Identity Per Invocation
