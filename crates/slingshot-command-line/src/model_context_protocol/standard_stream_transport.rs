@@ -449,13 +449,24 @@ pub enum OutputFailure {
 #[derive(Debug, Default)]
 pub struct OutputQueue {
     /// Lines waiting to be written, in the order they were taken.
-    waiting: std::collections::VecDeque<String>,
+    waiting: std::collections::VecDeque<QueuedLine>,
     /// How many bytes are waiting.
     waiting_bytes: usize,
     /// Why writing stopped, once it has.
     failure: Option<OutputFailure>,
     /// Identifiers whose lines have been written in full.
     acknowledged: Vec<String>,
+    /// Request identities whose responses reached the sink in full.
+    acknowledged_requests: Vec<String>,
+}
+
+/// One complete line and the request it settles, when it is a response.
+#[derive(Debug)]
+struct QueuedLine {
+    /// The serialized protocol line.
+    line: String,
+    /// The active request released only on full delivery.
+    acknowledged_request: Option<String>,
 }
 
 impl OutputQueue {
@@ -489,6 +500,12 @@ impl OutputQueue {
         &self.acknowledged
     }
 
+    /// Returns request identities whose responses reached the sink in full.
+    #[must_use]
+    pub fn acknowledged_requests(&self) -> &[String] {
+        &self.acknowledged_requests
+    }
+
     /// Takes one complete line from a producer.
     ///
     /// # Errors
@@ -496,6 +513,24 @@ impl OutputQueue {
     /// Returns [`QueueRefusal`] when output has failed, the queue is full, or
     /// the line is longer than this transport writes.
     pub fn enqueue(&mut self, line: &str) -> Result<(), QueueRefusal> {
+        self.enqueue_line(line, None)
+    }
+
+    /// Takes one complete response and remembers which active request it settles.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueueRefusal`] when output cannot take the response.
+    pub fn enqueue_response(&mut self, identifier: &str, line: &str) -> Result<(), QueueRefusal> {
+        self.enqueue_line(line, Some(identifier))
+    }
+
+    /// Applies the shared line and capacity checks before queueing one value.
+    fn enqueue_line(
+        &mut self,
+        line: &str,
+        acknowledged_request: Option<&str>,
+    ) -> Result<(), QueueRefusal> {
         if self.failure.is_some() {
             return Err(QueueRefusal::Stopped);
         }
@@ -508,7 +543,10 @@ impl OutputQueue {
             return Err(QueueRefusal::Full);
         }
         self.waiting_bytes += line.len();
-        self.waiting.push_back(line.to_owned());
+        self.waiting.push_back(QueuedLine {
+            line: line.to_owned(),
+            acknowledged_request: acknowledged_request.map(str::to_owned),
+        });
         Ok(())
     }
 
@@ -529,16 +567,19 @@ impl OutputQueue {
     /// gets every completed line and one invalid suffix at the end.
     pub fn write_waiting(&mut self, sink: &mut dyn LineSink, each_took: Duration) -> usize {
         let mut written = 0;
-        while let Some(line) = self.waiting.pop_front() {
-            self.waiting_bytes -= line.len();
+        while let Some(queued) = self.waiting.pop_front() {
+            self.waiting_bytes -= queued.line.len();
             if each_took >= WRITE_DEADLINE {
                 self.fail(OutputFailure::WriteExpired);
                 return written;
             }
-            match sink.write_line(&line) {
+            match sink.write_line(&queued.line) {
                 Written::Complete => {
                     written += 1;
-                    self.acknowledged.push(line);
+                    self.acknowledged.push(queued.line);
+                    if let Some(identifier) = queued.acknowledged_request {
+                        self.acknowledged_requests.push(identifier);
+                    }
                 }
                 Written::Prefix(_) | Written::Refused => {
                     self.fail(OutputFailure::SinkFailed);
