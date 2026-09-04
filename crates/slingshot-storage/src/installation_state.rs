@@ -14,7 +14,7 @@
 //! decides whether a daemon may keep an identity that remote subscriptions
 //! depend on.
 
-use std::io::Write as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 
 use slingshot_domain::installation::{InstallationFailure, InstallationRecord};
@@ -27,6 +27,9 @@ pub const LOCK_FILE_NAME: &str = "installation-state.lock";
 
 /// Suffix a partly written record carries until it is published.
 const STAGING_SUFFIX: &str = ".staging";
+
+/// Largest canonical installation ledger record this build reads.
+const MAXIMUM_RECORD_BYTES: u64 = 65_536;
 
 /// Reason the record could not be read or replaced.
 #[derive(Debug, thiserror::Error)]
@@ -103,7 +106,7 @@ impl InstallationState {
     /// nothing further once anything is.
     pub fn read(&self) -> Result<InstallationRecord, InstallationStateFailure> {
         let path = self.record_path();
-        let file = match std::fs::File::open(&path) {
+        let file = match open_without_following(&path) {
             Ok(file) => file,
             Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => {
                 return Err(InstallationStateFailure::Absent);
@@ -119,8 +122,20 @@ impl InstallationState {
             return Err(InstallationStateFailure::NotAPlainFile);
         }
         require_current_user_only(&metadata)?;
-        let text = std::io::read_to_string(file)
+        if metadata.len() > MAXIMUM_RECORD_BYTES {
+            return Err(InstallationStateFailure::Unreadable(
+                "the record exceeds its byte limit".to_owned(),
+            ));
+        }
+        let mut text = String::new();
+        file.take(MAXIMUM_RECORD_BYTES.saturating_add(1))
+            .read_to_string(&mut text)
             .map_err(|failure| InstallationStateFailure::Unreadable(failure.to_string()))?;
+        if u64::try_from(text.len()).unwrap_or(u64::MAX) > MAXIMUM_RECORD_BYTES {
+            return Err(InstallationStateFailure::Unreadable(
+                "the record exceeds its byte limit".to_owned(),
+            ));
+        }
         let record: InstallationRecord = serde_json::from_str(&text)
             .map_err(|failure| InstallationStateFailure::Unreadable(failure.to_string()))?;
         record.require_supported().map_err(InstallationStateFailure::Unsupported)?;
@@ -143,7 +158,8 @@ impl InstallationState {
         };
         let written = serde_json::to_string(record)
             .map_err(|failure| InstallationStateFailure::Unreadable(failure.to_string()))?;
-        let staging = self.root.join(format!("{RECORD_FILE_NAME}{STAGING_SUFFIX}"));
+        let staging =
+            self.root.join(format!("{RECORD_FILE_NAME}.{}{STAGING_SUFFIX}", uuid::Uuid::new_v4()));
         let mut file = create_private(&staging)?;
         file.write_all(written.as_bytes()).map_err(refused)?;
         file.sync_all().map_err(refused)?;
@@ -192,8 +208,7 @@ fn create_private(path: &Path) -> Result<std::fs::File, InstallationStateFailure
 
     std::fs::OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .mode(OWNER_ONLY)
         .open(path)
         .map_err(|failure| InstallationStateFailure::FilesystemRefused(failure.to_string()))
@@ -202,8 +217,27 @@ fn create_private(path: &Path) -> Result<std::fs::File, InstallationStateFailure
 /// Creates one file reachable by its owner alone.
 #[cfg(not(unix))]
 fn create_private(path: &Path) -> Result<std::fs::File, InstallationStateFailure> {
-    std::fs::File::create(path)
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
         .map_err(|failure| InstallationStateFailure::FilesystemRefused(failure.to_string()))
+}
+
+/// Opens one record without following a symbolic link.
+#[cfg(unix)]
+fn open_without_following(path: &Path) -> Result<std::fs::File, std::io::Error> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    const LINUX_NOFOLLOW: i32 = 0o400_000;
+    const DARWIN_NOFOLLOW: i32 = 0x0010_0000;
+    let nofollow = if cfg!(target_os = "linux") { LINUX_NOFOLLOW } else { DARWIN_NOFOLLOW };
+    std::fs::OpenOptions::new().read(true).custom_flags(nofollow).open(path)
+}
+
+/// Opens one record on platforms without Unix link semantics.
+#[cfg(not(unix))]
+fn open_without_following(path: &Path) -> Result<std::fs::File, std::io::Error> {
+    std::fs::File::open(path)
 }
 
 /// Synchronizes one directory so a rename is durable.
