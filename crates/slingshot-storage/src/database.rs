@@ -300,6 +300,10 @@ impl OperationDatabase {
             .authorizer(Some(|context: AuthContext<'_>| match context.action {
                 AuthAction::Attach { .. }
                 | AuthAction::Detach { .. }
+                | AuthAction::CreateIndex { .. }
+                | AuthAction::CreateTable { .. }
+                | AuthAction::CreateTrigger { .. }
+                | AuthAction::CreateView { .. }
                 | AuthAction::CreateTempIndex { .. }
                 | AuthAction::CreateTempTable { .. }
                 | AuthAction::CreateTempTrigger { .. }
@@ -310,13 +314,18 @@ impl OperationDatabase {
                 | AuthAction::DropTempView { .. }
                 | AuthAction::CreateVtable { .. }
                 | AuthAction::DropVtable { .. }
+                | AuthAction::DropIndex { .. }
+                | AuthAction::DropTable { .. }
+                | AuthAction::DropTrigger { .. }
+                | AuthAction::DropView { .. }
+                | AuthAction::AlterTable { .. }
+                | AuthAction::Reindex { .. }
+                | AuthAction::Analyze { .. }
                 // Parameterized ATTACH has no filename while SQLite prepares
                 // it, which rusqlite represents as an unknown action. Unknown
                 // authorizer codes are never safe to accept by default.
                 | AuthAction::Unknown { .. } => Authorization::Deny,
-                AuthAction::Pragma { pragma_name: "temp_store_directory", .. } => {
-                    Authorization::Deny
-                }
+                AuthAction::Pragma { pragma_value: Some(_), .. } => Authorization::Deny,
                 AuthAction::Function { function_name: "load_extension" } => Authorization::Deny,
                 _ => Authorization::Allow,
             }))
