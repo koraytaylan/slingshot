@@ -54,7 +54,18 @@ privileged = false
 # toolchain file is read inside the container and its components are looked for
 # on a network that is deliberately absent, so the gates would refuse for the
 # isolation working rather than for anything about this revision.
-allowed = ["HOME", "PATH", "RUSTUP_TOOLCHAIN", "SLINGSHOT_ACCEPTANCE_OUTPUT", "TMPDIR"]
+# CARGO_HOME names the transferred cache, which is where every dependency this
+# revision resolves against already is; CARGO_TARGET_DIR names the temporary
+# filesystem, because the source is mounted read-only and a build writes.
+allowed = [
+    "CARGO_HOME",
+    "CARGO_TARGET_DIR",
+    "HOME",
+    "PATH",
+    "RUSTUP_TOOLCHAIN",
+    "SLINGSHOT_ACCEPTANCE_OUTPUT",
+    "TMPDIR",
+]
 
 [mounts]
 # Inputs are read-only and remounting is denied, so a descendant that tried to
