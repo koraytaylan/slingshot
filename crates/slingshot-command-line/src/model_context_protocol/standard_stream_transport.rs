@@ -424,6 +424,8 @@ pub enum Written {
     Prefix(usize),
     /// It accepted nothing.
     Refused,
+    /// The writer made no progress before its declared deadline.
+    Expired,
 }
 
 /// Whatever this server writes complete lines to.
@@ -596,6 +598,10 @@ impl OutputQueue {
                     if let Some(identifier) = queued.acknowledged_request {
                         self.acknowledged_requests.push(identifier);
                     }
+                }
+                Written::Expired => {
+                    self.fail(OutputFailure::WriteExpired);
+                    return written;
                 }
                 Written::Prefix(_) | Written::Refused => {
                     self.fail(OutputFailure::SinkFailed);
