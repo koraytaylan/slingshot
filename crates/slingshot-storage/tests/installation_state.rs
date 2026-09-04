@@ -245,7 +245,7 @@ fn a_lock_link_cannot_redirect_a_ledger_replacement() {
     let refused = state.replace(&InstallationRecord::new(identifier('f')));
     assert!(matches!(refused, Err(InstallationStateFailure::FilesystemRefused(_))));
     assert_eq!(std::fs::read(&protected).expect("the target reads"), b"protected lock target");
-    assert!(matches!(state.read(), Err(InstallationStateFailure::Absent)));
+    assert!(matches!(state.read(), Err(InstallationStateFailure::FilesystemRefused(_))));
 }
 
 #[test]
