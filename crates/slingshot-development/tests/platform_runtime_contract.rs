@@ -456,7 +456,17 @@ fn the_current_environment_proves_its_own_row_and_reports_it_as_untrusted() {
 /// runtime root that leaves no room for the namespace digest is a real defect
 /// rather than a test inconvenience.
 fn probe_root(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("sls-{}-{name}", std::process::id()));
+    // The endpoint address bound is an operating-system limit of about a
+    // hundred bytes, and a per-user temporary directory is long enough on some
+    // rows to spend most of it before the namespace is even named. The product
+    // never derives its runtime root from there - a caller supplies one - so a
+    // probe that did would be measuring the runner's temporary path rather than
+    // the bound it claims to prove.
+    #[cfg(unix)]
+    let base = PathBuf::from("/tmp");
+    #[cfg(not(unix))]
+    let base = std::env::temp_dir();
+    let root = base.join(format!("sls-{}-{name}", std::process::id()));
     std::fs::remove_dir_all(&root).ok();
     root
 }
