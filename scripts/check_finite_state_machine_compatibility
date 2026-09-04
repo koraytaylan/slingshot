@@ -15,6 +15,10 @@ set -eu
 
 MANIFEST=compatibility/finite-state-machine.toml
 INVENTORY=compatibility/finite-state-machine-test-targets.toml
+# The pinned project's command-line crate is fsm-cli and the executable it
+# builds is fsm. A crate name is not a binary name, and looking for the crate
+# name found nothing however well the build had gone.
+EXECUTABLE_NAME=fsm
 SOURCE=''
 SEED=''
 
@@ -84,7 +88,7 @@ else
     ( cd "$SOURCE" && cargo build --locked --target-dir "$FINITE_STATE_MACHINE_TARGET" ) \
         || report_refusal 'the pinned source did not build'
 fi
-EXECUTABLE="$FINITE_STATE_MACHINE_TARGET/debug/fsm-cli"
+EXECUTABLE="$FINITE_STATE_MACHINE_TARGET/debug/$EXECUTABLE_NAME"
 [ -x "$EXECUTABLE" ] || report_refusal 'the build produced no executable where one was expected'
 
 report_stage 'this product'
