@@ -132,8 +132,15 @@ impl OperationDatabase {
         path: &std::path::Path,
         settings: RequiredSettings,
     ) -> Result<Self, DatabaseFailure> {
-        inspect_existing_schema(path)?;
+        let inspected = inspect_existing_schema(path)?;
         let connection = Connection::open(path).map_err(refused)?;
+        if let Some(inspected) = inspected
+            && file_snapshot(path)? != inspected
+        {
+            return Err(DatabaseFailure::Refused(
+                "the database changed between inspection and reopen".to_owned(),
+            ));
+        }
         let database = Self { connection };
         database.require_compile_options()?;
         database.apply_and_verify(settings)?;
@@ -267,10 +274,13 @@ impl OperationDatabase {
 }
 
 /// Refuses a future schema through a read-only connection before any mutable open.
-fn inspect_existing_schema(path: &std::path::Path) -> Result<(), DatabaseFailure> {
+fn inspect_existing_schema(
+    path: &std::path::Path,
+) -> Result<Option<FileSnapshot>, DatabaseFailure> {
     if !path.exists() {
-        return Ok(());
+        return Ok(None);
     }
+    let snapshot = file_snapshot(path)?;
     let connection =
         Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(refused)?;
     let observed: i64 =
@@ -280,7 +290,34 @@ fn inspect_existing_schema(path: &std::path::Path) -> Result<(), DatabaseFailure
     if observed > supported {
         return Err(DatabaseFailure::SchemaTooNew { observed, supported });
     }
-    Ok(())
+    Ok(Some(snapshot))
+}
+
+/// The stable identity of one inspected database pathname.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileSnapshot(u64, u64);
+
+#[cfg(unix)]
+fn file_snapshot(path: &std::path::Path) -> Result<FileSnapshot, DatabaseFailure> {
+    use std::os::unix::fs::MetadataExt as _;
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?;
+    if !metadata.is_file() || metadata.nlink() != 1 {
+        return Err(DatabaseFailure::Refused(
+            "the database is not one private regular file".to_owned(),
+        ));
+    }
+    Ok(FileSnapshot(metadata.dev(), metadata.ino()))
+}
+
+#[cfg(not(unix))]
+fn file_snapshot(path: &std::path::Path) -> Result<FileSnapshot, DatabaseFailure> {
+    let metadata =
+        std::fs::metadata(path).map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?;
+    if !metadata.is_file() {
+        return Err(DatabaseFailure::Refused("the database is not one regular file".to_owned()));
+    }
+    Ok(FileSnapshot(metadata.len(), 0))
 }
 
 /// Returns whether `text` contains a construct this crate may never run.
