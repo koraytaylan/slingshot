@@ -534,10 +534,10 @@ impl ArtifactStore {
     /// at any point leaves either the complete verified artifact or a file
     /// wearing the staging suffix, which nothing addresses and nothing reads.
     ///
-    /// A staged file that never got published is left where it is rather than
-    /// removed. A process that died mid-write could not have removed it either,
-    /// so leaving it is the behaviour an operator can actually rely on: one
-    /// rule for every interruption, and something to find afterwards.
+    /// A stream failure removes only the UUID-named stage this invocation
+    /// created. A process crash is distinguishable from that controlled failure
+    /// and may leave a stage for startup reconciliation, but an ordinary
+    /// refusal never turns into unbounded retained partial state.
     ///
     /// Content already present is not written twice. The destination is the
     /// digest, so identical bytes are the same artifact however many operations
@@ -556,7 +556,13 @@ impl ArtifactStore {
     ) -> Result<ArtifactMetadata, ArtifactFailure> {
         request.require_bounded()?;
         let staging = self.content.join(format!("{}{STAGING_SUFFIX}", uuid::Uuid::new_v4()));
-        let (content_digest, byte_length) = self.stream_into(&staging, source)?;
+        let (content_digest, byte_length) = match self.stream_into(&staging, source) {
+            Ok(completed) => completed,
+            Err(failure) => {
+                std::fs::remove_file(&staging).ok();
+                return Err(failure);
+            }
+        };
         self.publish(&staging, &content_digest, byte_length)?;
         Ok(ArtifactMetadata {
             artifact_identifier: ArtifactIdentifier::derive(
