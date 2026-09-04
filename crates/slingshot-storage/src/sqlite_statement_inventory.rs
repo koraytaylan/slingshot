@@ -495,8 +495,9 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                SET canonical_digest = ?, cursor = ?, event_bytes = event_bytes + ?, \
                    event_rows = event_rows + 1 \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
+                 AND agent_event_store_generation = ? \
                  AND (cursor IS NULL OR cursor < ?)",
-        parameters: 6,
+        parameters: 7,
         maximum_rows: 0,
     },
     InventoriedStatement {
@@ -518,19 +519,31 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         text: "UPDATE subscription_ledger \
                SET agent_event_store_generation = ?, canonical_digest = ?, cursor = ?, \
                    high_water_cursor = ?, unresolved_incident = NULL, \
-                   unresolved_incident_count = 0 \
-               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ?",
-        parameters: 6,
+                   unresolved_incident_count = 0, event_bytes = 0, event_rows = 0, \
+                   compacted_below_cursor = NULL \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
+                 AND agent_event_store_generation = ? AND cursor IS ? \
+                 AND unresolved_incident IS ? AND ? > agent_event_store_generation",
+        parameters: 10,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "remove a subscription generation's retained events",
+        text: "DELETE FROM subscription_event \
+               WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
+                 AND agent_event_store_generation = ?",
+        parameters: 3,
         maximum_rows: 0,
     },
     InventoriedStatement {
         purpose: "record one subscription event",
         text: "INSERT INTO subscription_event \
-               (agent_operation_identifier, author_target_identity_digest, canonical_digest, \
+               (agent_event_store_generation, agent_operation_identifier, \
+                author_target_identity_digest, canonical_digest, \
                 cursor, daemon_subscription_identifier, disposition, event_bytes, job_sequence, \
                 recorded_at_unix_milliseconds) \
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        parameters: 9,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        parameters: 10,
         maximum_rows: 0,
     },
     InventoriedStatement {

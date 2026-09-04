@@ -9,7 +9,7 @@ touches:
   - crates/slingshot-storage/src/agent_subscription_ledger.rs
   - crates/slingshot-storage/migrations/**
   - crates/slingshot-storage/tests/agent_job_repository.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # Subscription Events Are Generation Fenced
