@@ -108,16 +108,11 @@ impl ServerApplication {
     /// sink in full. A failed writer leaves the same one failure transition for
     /// the caller to finish and never makes a queued answer look delivered.
     pub fn write_output(&mut self, sink: &mut dyn LineSink) -> bool {
-        let acknowledged = self.output.acknowledged().len();
+        let acknowledged = self.output.acknowledged_requests().len();
         self.output.write_waiting(sink, std::time::Duration::ZERO);
-        let delivered: Vec<String> = self.output.acknowledged()[acknowledged..].to_vec();
-        for line in delivered {
-            if let Some(identifier) = serde_json::from_str::<Value>(&line)
-                .ok()
-                .and_then(|value| value["id"].as_str().map(str::to_owned))
-            {
-                self.active.acknowledged(&identifier);
-            }
+        let delivered: Vec<String> = self.output.acknowledged_requests()[acknowledged..].to_vec();
+        for identifier in delivered {
+            self.active.acknowledged(&identifier);
         }
         self.output.accepts_more()
     }
@@ -190,13 +185,20 @@ impl ServerApplication {
                 rendered_error_value(identifier, rendered)
             }
         };
-        self.enqueue(&line);
+        self.enqueue_response(identifier, &line);
         line
     }
 
     /// Queues one answer or makes output's single terminal transition.
     fn enqueue(&mut self, line: &str) {
         if self.output.enqueue(line).is_err() {
+            self.output.fail(OutputFailure::PressureExpired);
+        }
+    }
+
+    /// Queues one response with the active request it settles on delivery.
+    fn enqueue_response(&mut self, identifier: &str, line: &str) {
+        if self.output.enqueue_response(identifier, line).is_err() {
             self.output.fail(OutputFailure::PressureExpired);
         }
     }
