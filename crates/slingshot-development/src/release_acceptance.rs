@@ -67,6 +67,13 @@ pub const REVIEW_RECORD_MOUNT: &str = "/review-record.json";
 /// What a run writes its decision as.
 pub const MANIFEST_FILE_NAME: &str = "acceptance.json";
 
+/// The command that runs the gates and writes down what they decided.
+///
+/// Declared here rather than beside the dispatcher because the script inside
+/// the container invokes it by name and nothing held the two together - which
+/// is how a release came to ask for a command no executable carried.
+pub const RUN_COMMAND: &str = "run-release-acceptance";
+
 /// What a run writes one gate's report as, after the gate's own name.
 pub const REPORT_FILE_SUFFIX: &str = ".report";
 
@@ -111,11 +118,8 @@ const FILE_READ_WINDOW_BYTES: usize = 65_536;
 
 /// What running one gate is.
 ///
-/// Three kinds, because a gate is one of three things and nothing else: a
-/// command this repository carries, one package's integration target, or a
-/// script this repository commits. Naming the kind rather than the whole
-/// invocation keeps the flags that make a gate offline in one place, where
-/// they cannot be forgotten from a row somebody adds later.
+/// Naming the kind rather than the whole invocation keeps the flags that make a
+/// gate offline in one place, where a row somebody adds later cannot omit them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GateSubject {
     /// A command this repository's own executable carries.
@@ -148,11 +152,10 @@ pub struct AcceptanceGate {
 impl AcceptanceGate {
     /// Returns the program that runs this gate.
     ///
-    /// Cargo exports its own path while it runs, and every gate is started by a
-    /// run of this executable that Cargo itself began, so a Cargo gate uses
-    /// that same Cargo rather than whichever one a search path finds first. A
-    /// script gate is a file of the source being decided, so it is resolved
-    /// against that source and against nothing else.
+    /// Cargo exports its own path while it runs, and this executable was
+    /// started by one, so a Cargo gate uses that Cargo rather than whichever a
+    /// search path finds first. A script gate is a file of the source being
+    /// decided, so it is resolved against that source and nothing else.
     #[must_use]
     pub fn program(&self, source_root: &Path) -> PathBuf {
         match self.subject {
@@ -165,8 +168,8 @@ impl AcceptanceGate {
 
     /// Returns the arguments this gate is run with.
     ///
-    /// Every Cargo gate is locked, frozen, and offline. The container has no
-    /// network, so a gate that tried to resolve anything would refuse for the
+    /// Every Cargo gate is locked, frozen, and offline: the container has no
+    /// network, and a gate that resolved anything would refuse for the
     /// isolation working rather than for anything about this revision.
     #[must_use]
     pub fn arguments(&self) -> Vec<String> {
@@ -191,6 +194,7 @@ impl AcceptanceGate {
                 LOCKED_FLAG,
                 FROZEN_FLAG,
                 OFFLINE_FLAG,
+                QUIET_FLAG,
                 PACKAGE_FLAG,
                 package,
                 TEST_TARGET_FLAG,
@@ -685,10 +689,8 @@ pub fn require_revision(
 
 /// What one run was told about itself.
 ///
-/// Three values, and none of them discoverable from inside. A container with no
-/// network, no history, and no provider is exactly a place where a revision
-/// cannot be worked out, which is the point: a run that could work out which
-/// revision it was could be persuaded it was a different one.
+/// None of it is discoverable from inside, which is the point: a run that could
+/// work out which revision it was could be persuaded it was a different one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunIdentity {
     /// The exact revision it is about.
@@ -701,9 +703,9 @@ pub struct RunIdentity {
 
 /// What one run binds its decision to.
 ///
-/// What the run was told, beside what it read for itself from the inputs the
-/// container mounted. The digests are the second kind: a decision that named an
-/// input without saying which bytes it read would bind nothing at all.
+/// What the run was told, beside what it read for itself from the inputs it was
+/// mounted: a decision that named an input without saying which bytes it read
+/// would bind nothing at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunBinding {
     /// Which row coordinated it.
@@ -731,9 +733,8 @@ pub struct GateRun {
 
 /// Returns the variables this run has.
 ///
-/// Read once, into a value a caller holds, so that what the decision was told
-/// is something that can be handed to it and inspected rather than something
-/// fetched again at each use from a place no assertion can reach.
+/// Read once, into a value a caller holds, so what the decision was told can be
+/// handed to it rather than fetched again where no assertion can reach.
 #[must_use]
 pub fn environment() -> BTreeMap<String, String> {
     std::env::vars().collect()
@@ -772,10 +773,10 @@ pub fn digest_of_bytes(bytes: &[u8]) -> String {
 
 /// Returns what every file under one directory digests to, together.
 ///
-/// Sorted by relative path, with each path fed in beside what its own bytes
-/// digest to, so that a file added, removed, renamed, or moved changes the
-/// answer. This is not the cache surveyor: that one leaves out the manifest it
-/// writes from what it measures, and evidence has nothing left out of it.
+/// Sorted by relative path, each path fed in beside what its own bytes digest
+/// to, so a file added, removed, renamed, or moved changes the answer. Not the
+/// cache surveyor: that one leaves out the manifest it writes, and evidence has
+/// nothing left out of it.
 ///
 /// # Errors
 ///
@@ -830,6 +831,15 @@ fn collect_files(
             collect_files(root, &path, collected)?;
             continue;
         }
+        // A link to a directory, which is neither walked nor digested. Walking
+        // it could walk a cycle, and reading it as a file fails with something
+        // that reads like a broken decision rather than like what it is.
+        if path.is_dir() {
+            return Err(AcceptanceRefusal::Unreadable(format!(
+                "{} points at a directory, and a digest would bind where it points",
+                path.display()
+            )));
+        }
         let relative = path.strip_prefix(root).unwrap_or(&path);
         let Some(named) = relative.to_str() else {
             return Err(AcceptanceRefusal::Unreadable(format!(
@@ -854,11 +864,10 @@ fn unreadable(path: &Path, failure: &std::io::Error) -> AcceptanceRefusal {
 
 /// Runs one gate and returns what it concluded.
 ///
-/// A gate that could not be started at all did not hold, and the report says
-/// why it could not. There is no third answer: a run that recorded "could not
-/// run" as anything but a refusal would let a missing tool, a target nobody
-/// spelled right, or an input the container was never given read as evidence
-/// about this revision.
+/// A gate that could not be started at all did not hold, and its report says
+/// why. There is no third answer: recording "could not run" as anything but a
+/// refusal would let a missing tool, a target nobody spelled right, or an input
+/// the container was never given read as evidence about this revision.
 #[must_use]
 pub fn run_gate(gate: &AcceptanceGate, source_root: &Path) -> GateRun {
     let program = gate.program(source_root);
@@ -879,10 +888,10 @@ pub fn run_gate(gate: &AcceptanceGate, source_root: &Path) -> GateRun {
 
 /// Returns what one run of the gates concluded.
 ///
-/// Every gate that ran is recorded, whichever way it went. A run that stopped
-/// at the first refusal would leave the gates after it absent, and a manifest
-/// with a gate absent is refused for the one that is missing rather than for
-/// the one that refused - which tells whoever reads it the wrong thing.
+/// Every gate that ran is recorded, whichever way it went. Stopping at the
+/// first refusal would leave the gates after it absent, and a manifest with a
+/// gate absent is refused for the one missing rather than the one that refused,
+/// which tells whoever reads it the wrong thing.
 #[must_use]
 pub fn conclude(binding: &RunBinding, runs: &[GateRun]) -> AcceptanceManifest {
     let gates: Vec<GateOutcome> = runs
@@ -938,9 +947,8 @@ pub fn bind(source_root: &Path) -> Result<RunBinding, AcceptanceRefusal> {
 
 /// Runs every gate, records what each concluded, and returns the decision.
 ///
-/// The reports are written beside the manifest as they are produced, because a
-/// manifest that digests a report nobody kept binds a document that cannot be
-/// read back.
+/// Each report is written beside the manifest as it is produced: a manifest
+/// that digests a report nobody kept binds a document nobody can read back.
 ///
 /// # Errors
 ///
