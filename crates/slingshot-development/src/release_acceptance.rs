@@ -106,6 +106,9 @@ const ARGUMENT_SEPARATOR: &str = "--";
 /// What separates a path from its content in a tree digest.
 const TREE_DIGEST_SEPARATOR: u8 = 0;
 
+/// How much of a file a digest reads at a time.
+const FILE_READ_WINDOW_BYTES: usize = 65_536;
+
 /// What running one gate is.
 ///
 /// Three kinds, because a gate is one of three things and nothing else: a
@@ -784,12 +787,31 @@ pub fn digest_of_tree(root: &Path) -> Result<String, AcceptanceRefusal> {
     relatives.sort();
     let mut digest = sha2::Sha256::new();
     for relative in &relatives {
-        let held = read_bytes(&root.join(relative))?;
         digest.update(relative.as_bytes());
         digest.update([TREE_DIGEST_SEPARATOR]);
-        digest.update(digest_of_bytes(&held).as_bytes());
+        digest.update(digest_of_file(&root.join(relative))?.as_bytes());
     }
     Ok(hex::encode(digest.finalize()))
+}
+
+/// Returns what one file's bytes digest to, without holding them all at once.
+///
+/// The evidence a run is given includes the image the gates are running in, and
+/// reading a file that size into memory to hash it would make the decision's own
+/// footprint depend on how large the things it reads are.
+fn digest_of_file(path: &Path) -> Result<String, AcceptanceRefusal> {
+    use std::io::Read as _;
+
+    let mut held = std::fs::File::open(path).map_err(|failure| unreadable(path, &failure))?;
+    let mut digest = sha2::Sha256::new();
+    let mut window = vec![0; FILE_READ_WINDOW_BYTES];
+    loop {
+        let read = held.read(&mut window).map_err(|failure| unreadable(path, &failure))?;
+        if read == 0 {
+            return Ok(hex::encode(digest.finalize()));
+        }
+        digest.update(&window[..read]);
+    }
 }
 
 /// Collects every file under `directory`, named relative to `root`.
@@ -871,7 +893,12 @@ pub fn conclude(binding: &RunBinding, runs: &[GateRun]) -> AcceptanceManifest {
             report_sha256: digest_of_bytes(&run.report),
         })
         .collect();
-    let unanimous = gates.iter().all(|recorded| recorded.outcome == HELD);
+    // Unanimous among all of them, not among however many happened to run. A
+    // run that recorded three gates and held all three has not agreed about
+    // anything, and an outcome that only counted what it was handed would say
+    // it had.
+    let unanimous = gates.len() == REQUIRED_GATES.len()
+        && gates.iter().all(|recorded| recorded.outcome == HELD);
     AcceptanceManifest {
         coordinator_row: binding.coordinator_row.clone(),
         format: MANIFEST_FORMAT.to_owned(),
