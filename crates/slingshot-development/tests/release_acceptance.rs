@@ -17,9 +17,11 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 use slingshot_development::github_automation_authority::{AUTHORITY_PATH, parse_authority};
 use slingshot_development::release_acceptance::{
-    AcceptanceManifest, AcceptanceRefusal, CONTAINER_PATH, HELD, MANIFEST_FORMAT, NETWORK_NONE,
-    RELEASABLE, REQUIRED_GATES, SCHEMA_PATH, parse_container, parse_manifest, require_complete,
-    require_revision,
+    AcceptanceGate, AcceptanceManifest, AcceptanceRefusal, CACHE_MOUNT, CONTAINER_PATH,
+    FINITE_STATE_MACHINE_MOUNT, GateRun, GateSubject, HELD, MANIFEST_FORMAT, NETWORK_NONE,
+    PLATFORM_EVIDENCE_MOUNT, REFUSED, RELEASABLE, REQUIRED_GATES, REVIEW_RECORD_MOUNT, RunBinding,
+    RunIdentity, SCHEMA_PATH, conclude, parse_container, parse_manifest, require_complete,
+    require_revision, run_gate,
 };
 
 /// Where the fixtures live.
@@ -33,6 +35,15 @@ const DIGEST_CHARACTERS: usize = 64;
 
 /// How many characters a commit is written in.
 const COMMIT_CHARACTERS: usize = 40;
+
+/// A gate whose program this repository does not have and never had.
+const ABSENT_PROGRAM: &str = "scripts/no_such_gate_lives_here";
+
+/// The provider run a fixture acceptance run was produced by.
+const PROVIDER_RUN: &str = ".github/workflows/release.yml@refs/heads/main";
+
+/// The row a fixture acceptance run was coordinated by.
+const COORDINATOR_ROW: &str = "x86_64-unknown-linux-gnu";
 
 /// Returns the workspace root.
 fn workspace_root() -> PathBuf {
@@ -58,39 +69,60 @@ fn fixture_rows(name: &str) -> Vec<Value> {
 }
 
 /// Returns which refusal one failure is.
-fn refusal_name(failure: &AcceptanceRefusal) -> &'static str {
-    match failure {
-        AcceptanceRefusal::Unreadable(_) => "Unreadable",
-        AcceptanceRefusal::ForeignFormat { .. } => "ForeignFormat",
-        AcceptanceRefusal::IsolationWeakened(_) => "IsolationWeakened",
-        AcceptanceRefusal::GateMissing(_) => "GateMissing",
-        AcceptanceRefusal::GateRepeated(_) => "GateRepeated",
-        AcceptanceRefusal::GateOutOfOrder { .. } => "GateOutOfOrder",
-        AcceptanceRefusal::GateRefused(_) => "GateRefused",
-        AcceptanceRefusal::GateUnknown(_) => "GateUnknown",
-        AcceptanceRefusal::RevisionDrift { .. } => "RevisionDrift",
-        AcceptanceRefusal::OutcomeUnsupported(_) => "OutcomeUnsupported",
+///
+/// Read off the refusal itself rather than matched name by name. A table of
+/// names beside the refusals needs a row adding whenever a refusal is, and the
+/// row nobody adds is the one a fixture then cannot tell from another.
+fn refusal_name(failure: &AcceptanceRefusal) -> String {
+    let rendered = format!("{failure:?}");
+    rendered
+        .split(|character: char| !character.is_alphanumeric())
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// Returns what a fixture acceptance run binds its decision to.
+fn binding() -> RunBinding {
+    let digest = "a".repeat(DIGEST_CHARACTERS);
+    RunBinding {
+        coordinator_row: COORDINATOR_ROW.to_owned(),
+        isolation_sha256: digest.clone(),
+        platform_evidence_sha256: digest.clone(),
+        rustsec_review_record_sha256: digest,
+        identity: RunIdentity {
+            source_commit: SOURCE_COMMIT.to_owned(),
+            source_tree: SOURCE_COMMIT.to_owned(),
+            provider_run: PROVIDER_RUN.to_owned(),
+        },
     }
 }
 
-/// Returns one complete acceptance manifest, as a run would write it.
+/// Returns one run of every gate in which exactly the named ones refused.
+fn runs_refusing(refused: &[&str]) -> Vec<GateRun> {
+    REQUIRED_GATES
+        .iter()
+        .map(|gate| GateRun {
+            name: gate.name.to_owned(),
+            held: !refused.contains(&gate.name),
+            report: format!("{} ran\n", gate.name).into_bytes(),
+        })
+        .collect()
+}
+
+/// Returns a gate that runs one command of this repository's own executable.
+fn probe_gate(passed: &'static [&'static str]) -> AcceptanceGate {
+    AcceptanceGate { name: REQUIRED_GATES[0].name, subject: GateSubject::RepositoryCommand(passed) }
+}
+
+/// Returns one complete acceptance manifest, as a run does write it.
+///
+/// Produced by the thing that produces one rather than written out beside it.
+/// A fixture manifest assembled by hand would be a second statement of the
+/// document's shape, and the two could disagree for as long as nobody looked.
 fn complete_manifest() -> Value {
-    let digest = "a".repeat(DIGEST_CHARACTERS);
-    json!({
-        "coordinator_row": "x86_64-unknown-linux-gnu",
-        "format": MANIFEST_FORMAT,
-        "gates": REQUIRED_GATES
-            .iter()
-            .map(|name| json!({ "name": name, "outcome": HELD, "report_sha256": digest }))
-            .collect::<Vec<Value>>(),
-        "isolation_sha256": digest,
-        "outcome": RELEASABLE,
-        "platform_evidence_sha256": digest,
-        "provider_run": ".github/workflows/release.yml@refs/heads/main",
-        "rustsec_review_record_sha256": digest,
-        "source_commit": SOURCE_COMMIT,
-        "source_tree": SOURCE_COMMIT,
-    })
+    serde_json::to_value(conclude(&binding(), &runs_refusing(&[])))
+        .expect("what a run writes is JSON")
 }
 
 /// Returns the manifest one value parses into.
@@ -183,7 +215,7 @@ fn gates_recorded_out_of_the_order_they_run_in_are_refused() {
     let failure = require_complete(&parsed(&manifest)).expect_err("they are out of order");
     assert_eq!(refusal_name(&failure), "GateOutOfOrder");
     assert!(
-        failure.to_string().contains(REQUIRED_GATES[0]),
+        failure.to_string().contains(REQUIRED_GATES[0].name),
         "and the refusal names what belongs there"
     );
 }
@@ -195,7 +227,7 @@ fn one_refused_gate_makes_the_revision_unreleasable() {
         manifest["gates"][position]["outcome"] = json!("refused");
         let failure = require_complete(&parsed(&manifest)).expect_err("a gate refused");
         assert_eq!(refusal_name(&failure), "GateRefused");
-        assert!(failure.to_string().contains(REQUIRED_GATES[position]), "and names which");
+        assert!(failure.to_string().contains(REQUIRED_GATES[position].name), "and names which");
     }
 }
 
@@ -241,11 +273,21 @@ fn the_schema_and_the_manifest_a_run_writes_agree() {
         assert!(properties.contains_key(named), "the schema describes no {named}");
     }
     assert_eq!(schema["properties"]["format"]["const"].as_str(), Some(MANIFEST_FORMAT));
+    let outcomes = schema["properties"]["outcome"]["enum"]
+        .as_array()
+        .expect("the schema names what a run may conclude");
+    let answers = [RELEASABLE, REFUSED];
     assert_eq!(
-        schema["properties"]["outcome"]["enum"].as_array().map(Vec::len),
-        Some(2),
+        outcomes.len(),
+        answers.len(),
         "a run is releasable or it is refused, and there is no third answer"
     );
+    for answer in answers {
+        assert!(
+            outcomes.iter().any(|held| held.as_str() == Some(answer)),
+            "a run writes {answer} and the schema admits no such answer"
+        );
+    }
 }
 
 #[test]
@@ -317,4 +359,107 @@ fn the_gates_run_inside_the_container_and_the_host_starts_nothing_after_it() {
         !runner.contains("scripts/quality"),
         "the host runs no gate of its own after the container exits"
     );
+}
+
+#[test]
+fn what_a_run_decides_is_what_the_verifier_reads_back_out_of_it() {
+    let declared = fixture_rows("decisions.jsonl");
+    assert!(!declared.is_empty());
+    for row in declared {
+        let name = row["name"].as_str().expect("a name");
+        let refused: Vec<&str> = row["refused"]
+            .as_array()
+            .expect("the gates that refused")
+            .iter()
+            .map(|held| held.as_str().expect("a gate name"))
+            .collect();
+        let manifest = conclude(&binding(), &runs_refusing(&refused));
+        assert_eq!(manifest.outcome, row["outcome"].as_str().expect("an outcome"), "{name}");
+        let written =
+            parse_manifest(&serde_json::to_string(&manifest).expect("what a run writes is JSON"))
+                .unwrap_or_else(|failure| panic!("{name}: a run wrote no manifest: {failure}"));
+        assert_eq!(written, manifest, "{name}: what was written is what is read back");
+        require_revision(&written, SOURCE_COMMIT)
+            .unwrap_or_else(|failure| panic!("{name}: {failure}"));
+        let Some(expected) = row["refusal"].as_str().filter(|held| !held.is_empty()) else {
+            require_complete(&written).unwrap_or_else(|failure| panic!("{name}: {failure}"));
+            continue;
+        };
+        let failure = require_complete(&written).expect_err(&format!("{name} was accepted"));
+        assert_eq!(refusal_name(&failure), expected, "{name}: {failure}");
+        assert!(
+            failure.to_string().contains(row["names"].as_str().expect("a gate")),
+            "{name}: the refusal does not name which gate stopped it: {failure}"
+        );
+    }
+}
+
+#[test]
+fn a_gate_that_could_not_run_at_all_is_not_a_gate_that_held() {
+    let gate = AcceptanceGate {
+        name: REQUIRED_GATES[0].name,
+        subject: GateSubject::Script { path: ABSENT_PROGRAM, arguments: &[] },
+    };
+    let run = run_gate(&gate, &workspace_root());
+    assert!(!run.held, "a gate that never started is not a gate that held");
+    let report = String::from_utf8_lossy(&run.report).into_owned();
+    assert!(report.contains(ABSENT_PROGRAM), "and its report names what could not start: {report}");
+    let manifest = conclude(&binding(), &[run]);
+    assert_eq!(manifest.gates[0].outcome, REFUSED);
+    assert_eq!(manifest.outcome, REFUSED, "and the revision it was about is not releasable");
+}
+
+#[test]
+fn a_gate_is_recorded_by_what_its_own_run_concluded() {
+    let root = workspace_root();
+    let held = run_gate(&probe_gate(&["workspace-metadata"]), &root);
+    let report = String::from_utf8_lossy(&held.report).into_owned();
+    assert!(held.held, "a gate whose run succeeded held: {report}");
+    assert!(!held.report.is_empty(), "and what it wrote is what its digest is over");
+    let refused = run_gate(&probe_gate(&["no-such-repository-command"]), &root);
+    assert!(!refused.held, "and a gate whose run failed refused");
+    assert_ne!(
+        conclude(&binding(), &[held]).gates[0].report_sha256,
+        conclude(&binding(), &[refused]).gates[0].report_sha256,
+        "two gates that wrote different things do not digest the same"
+    );
+}
+
+#[test]
+fn no_gate_reaches_for_anything_the_container_was_not_given() {
+    let runner = read_repository_file("scripts/release_acceptance");
+    let given =
+        [CACHE_MOUNT, FINITE_STATE_MACHINE_MOUNT, PLATFORM_EVIDENCE_MOUNT, REVIEW_RECORD_MOUNT];
+    for mount in given {
+        assert!(
+            runner.contains(&format!(":{mount}:ro")),
+            "the invocation mounts no {mount} for the decision to read"
+        );
+    }
+    for gate in REQUIRED_GATES {
+        let program = gate.program(&workspace_root());
+        if let GateSubject::Script { path, .. } = gate.subject {
+            assert!(program.is_file(), "{}: this repository commits no {path}", gate.name);
+        }
+        for argument in gate.arguments() {
+            if !argument.starts_with('/') {
+                continue;
+            }
+            assert!(
+                given.contains(&argument.as_str()),
+                "{}: {argument} is not something the container is given",
+                gate.name
+            );
+        }
+    }
+}
+
+#[test]
+fn every_gate_the_inventory_names_is_named_once_and_run_by_something() {
+    let mut seen = std::collections::BTreeSet::new();
+    for gate in REQUIRED_GATES {
+        assert!(seen.insert(gate.name), "{} is in the inventory twice", gate.name);
+        assert!(!gate.arguments().is_empty(), "{} is run by nothing", gate.name);
+    }
+    assert_eq!(seen.len(), REQUIRED_GATES.len());
 }

@@ -46,6 +46,12 @@ const CONTAINER_COMMAND: &str = "release-acceptance-container";
 /// Name of the command that verifies one acceptance manifest.
 const VERIFY_ACCEPTANCE_COMMAND: &str = "verify-release-acceptance";
 
+/// Name of the command that decides one revision inside the container.
+const RUN_ACCEPTANCE_COMMAND: &str = "run-release-acceptance";
+
+/// Option naming where the decision and its reports are written.
+const RUN_ACCEPTANCE_OPTION: &str = "--output-directory";
+
 /// Name of the command that builds one row's release archive.
 const PACKAGE_COMMAND: &str = "package-release-artifacts";
 
@@ -172,6 +178,7 @@ fn release_command(
         PACKAGE_COMMAND => package_release_artifacts(arguments, working_directory, output),
         VERIFY_ARTIFACTS_COMMAND => verify_release_artifacts(arguments, working_directory, output),
         VERIFY_ACCEPTANCE_COMMAND => verify_release_acceptance(arguments, output),
+        RUN_ACCEPTANCE_COMMAND => run_release_acceptance(arguments, working_directory, output),
         _ => Err(RepositoryCommandFailure::UnknownCommand(requested.to_owned())),
     }
 }
@@ -747,6 +754,32 @@ fn verify_release_acceptance(
     release_acceptance::require_complete(&manifest)
         .map_err(|failure| refuse(failure.to_string()))?;
     writeln!(output, "every one of the {} gates held", manifest.gates.len())
+        .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
+}
+
+/// Runs every acceptance gate and records what this revision was decided to be.
+///
+/// This runs inside the acceptance container and nowhere else. What it reads it
+/// reads from the source it is deciding and the inputs that source was mounted
+/// beside; what it cannot read there, it is told through the closed environment
+/// the isolation contract declares.
+fn run_release_acceptance(
+    arguments: &[String],
+    working_directory: &Path,
+    output: &mut dyn Write,
+) -> Result<(), RepositoryCommandFailure> {
+    let destination =
+        PathBuf::from(named_value(arguments, RUN_ACCEPTANCE_OPTION, RUN_ACCEPTANCE_COMMAND)?);
+    let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let refuse = |reason: String| RepositoryCommandFailure::ToolFailed {
+        program: RUN_ACCEPTANCE_COMMAND.to_owned(),
+        reason,
+    };
+    let manifest = release_acceptance::decide(&workspace_root, &destination)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    let written = release_acceptance::record(&manifest, &destination)
+        .map_err(|failure| refuse(failure.to_string()))?;
+    writeln!(output, "{} says this revision is {}", written.display(), manifest.outcome)
         .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
 }
 
