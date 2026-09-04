@@ -39,4 +39,8 @@ git -C "$DESTINATION" checkout --quiet "$COMMIT"
 
 OBSERVED=$(git -C "$DESTINATION" rev-parse HEAD)
 [ "$OBSERVED" = "$COMMIT" ] || report_refusal "the checkout is at $OBSERVED and the pin names $COMMIT"
-cargo run --locked --quiet -p slingshot-development -- rustsec-advisory-pin
+# The pin is read from the checkout this just made. Taking the directory from
+# the environment instead would make the verification depend on the caller
+# having named the same place twice, which no caller has ever had to do.
+SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY="$DESTINATION" \
+    cargo run --locked --quiet -p slingshot-development -- rustsec-advisory-pin
