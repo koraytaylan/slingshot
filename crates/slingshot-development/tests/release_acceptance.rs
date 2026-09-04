@@ -521,11 +521,37 @@ fn no_gate_reaches_for_anything_the_container_was_not_given() {
 }
 
 #[test]
-fn every_gate_the_inventory_names_is_named_once_and_run_by_something() {
+fn every_gate_the_inventory_names_is_named_once_and_run_by_something_that_exists() {
+    let dispatcher = read_repository_file("crates/slingshot-development/src/main.rs");
+    let root = workspace_root();
     let mut seen = std::collections::BTreeSet::new();
     for gate in REQUIRED_GATES {
         assert!(seen.insert(gate.name), "{} is in the inventory twice", gate.name);
         assert!(!gate.arguments().is_empty(), "{} is run by nothing", gate.name);
+        match gate.subject {
+            // A command nobody wrote is how this plan came to exist, so every
+            // row is held to something the repository actually carries.
+            GateSubject::RepositoryCommand(passed) => {
+                let named = passed.first().expect("a command is named");
+                assert!(
+                    dispatcher.contains(&format!("{named:?}")),
+                    "{}: this executable carries no {named}",
+                    gate.name
+                );
+            }
+            GateSubject::IntegrationTarget { package, target } => {
+                let source =
+                    root.join("crates").join(package).join("tests").join(format!("{target}.rs"));
+                assert!(source.is_file(), "{}: {package} carries no {target}", gate.name);
+            }
+            GateSubject::Script { path, .. } => {
+                assert!(
+                    root.join(path).is_file(),
+                    "{}: this repository commits no {path}",
+                    gate.name
+                );
+            }
+        }
     }
     assert_eq!(seen.len(), REQUIRED_GATES.len());
 }
