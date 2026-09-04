@@ -41,6 +41,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (5, include_str!("../migrations/0005-recovery-receipt-operation-key.sql")),
     (6, include_str!("../migrations/0006-successful-result-atomicity.sql")),
     (7, include_str!("../migrations/0007-subscription-event-generation.sql")),
+    (8, include_str!("../migrations/0008-maintenance-receipt-count.sql")),
 ];
 
 /// The one temporary-storage mode the reviewed SQLite build may report.

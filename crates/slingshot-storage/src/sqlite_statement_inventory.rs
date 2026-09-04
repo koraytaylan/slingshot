@@ -280,9 +280,9 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         purpose: "record one maintenance-application receipt",
         text: "INSERT INTO maintenance_application_receipt \
                (application_receipt_identifier, author_target_identity_digest, \
-                recorded_at_unix_milliseconds, reviewed_manifest_digest) \
-               VALUES (?, ?, ?, ?)",
-        parameters: 4,
+                recorded_at_unix_milliseconds, released_operation_rows, reviewed_manifest_digest) \
+               VALUES (?, ?, ?, ?, ?)",
+        parameters: 5,
         maximum_rows: 0,
     },
     InventoriedStatement {
@@ -307,8 +307,9 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         // through a list this statement has to keep in step with the schema.
         text: "DELETE FROM operation \
                WHERE author_target_identity_digest = ? AND operation_identifier = ? \
+                 AND operation_revision = ? AND settled_at_unix_milliseconds = ? \
                  AND lifecycle_state IN ('succeeded', 'failed')",
-        parameters: 2,
+        parameters: 4,
         maximum_rows: 0,
     },
     InventoriedStatement {
@@ -327,7 +328,8 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
     },
     InventoriedStatement {
         purpose: "read one target's maintenance-application receipt",
-        text: "SELECT recorded_at_unix_milliseconds, reviewed_manifest_digest \
+        text: "SELECT recorded_at_unix_milliseconds, released_operation_rows, \
+                      reviewed_manifest_digest \
                FROM maintenance_application_receipt \
                WHERE author_target_identity_digest = ? AND application_receipt_identifier = ?",
         parameters: 2,
@@ -598,8 +600,8 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         purpose: "remove one ended agent submission",
         text: "DELETE FROM agent_operation \
                WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
-                 AND terminal_disposition IS NOT NULL",
-        parameters: 2,
+                 AND submitted_command_digest = ? AND terminal_disposition = ?",
+        parameters: 4,
         maximum_rows: 0,
     },
     InventoriedStatement {

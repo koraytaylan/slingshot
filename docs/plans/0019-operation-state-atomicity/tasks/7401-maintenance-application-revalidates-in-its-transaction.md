@@ -9,7 +9,7 @@ touches:
   - crates/slingshot-storage/src/maintenance.rs
   - crates/slingshot-storage/migrations/**
   - crates/slingshot-daemon/tests/operation_maintenance.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # Maintenance Application Revalidates In Its Transaction
