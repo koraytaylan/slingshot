@@ -157,8 +157,44 @@ fn a_page_creation_carries_every_value_it_was_given() {
     assert_eq!(request.parent_path.as_text(), PARENT);
     assert_eq!(request.page_name.as_text(), PAGE_NAME);
     assert_eq!(request.template_path.as_text(), TEMPLATE);
-    assert_eq!(request.title, TITLE, "the title is carried exactly, not normalized");
+    assert_eq!(request.title.as_text(), TITLE, "the title is carried exactly, not normalized");
     assert_eq!(request.initial_properties, None, "and no document means no properties");
+}
+
+#[test]
+fn create_page_cli_refuses_a_title_past_the_shared_unicode_bound() {
+    let maximum = usize::try_from(CommandContract::embedded().limit("maximum_page_title_bytes"))
+        .expect("the title bound fits");
+    let exact = "é".repeat(maximum / 2);
+    let accepted = build(&invocation(&[
+        CREATE_PAGE,
+        "--operation-key",
+        KEY,
+        PATH_OPTION,
+        PARENT,
+        NAME_OPTION,
+        PAGE_NAME,
+        TEMPLATE_OPTION,
+        TEMPLATE,
+        TITLE_OPTION,
+        &exact,
+    ]));
+    assert!(accepted.is_ok(), "the exact byte bound is accepted");
+    let oversized = format!("{exact}é");
+    let refused = build(&invocation(&[
+        CREATE_PAGE,
+        "--operation-key",
+        KEY,
+        PATH_OPTION,
+        PARENT,
+        NAME_OPTION,
+        PAGE_NAME,
+        TEMPLATE_OPTION,
+        TEMPLATE,
+        TITLE_OPTION,
+        &oversized,
+    ]));
+    assert_eq!(refused, Err(RequestRefusal::ValueUnusable { named: TITLE_OPTION.to_owned() }));
 }
 
 #[test]
