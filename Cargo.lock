@@ -2246,6 +2246,7 @@ dependencies = [
  "hex",
  "proptest",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
