@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use sha2::{Digest, Sha256};
 use slingshot_development::supported_platform_matrix::{self, SupportedPlatformMatrix};
 
 /// The three root documents.
@@ -165,6 +166,33 @@ fn workspace_packages() -> BTreeSet<String> {
         .collect()
 }
 
+/// Returns the metadata every workspace package publishes through Cargo.
+fn workspace_package_metadata() -> BTreeSet<(String, Vec<String>, String, String)> {
+    let mut metadata = Vec::new();
+    slingshot_development::emit_workspace_metadata(&workspace_root(), &mut metadata)
+        .expect("cargo metadata describes the workspace");
+    let document: serde_json::Value =
+        serde_json::from_slice(&metadata).expect("cargo metadata is well-formed");
+    document["packages"]
+        .as_array()
+        .expect("cargo metadata lists packages")
+        .iter()
+        .map(|package| {
+            let name = package["name"].as_str().expect("a package has a name").to_owned();
+            let publish = package["publish"]
+                .as_array()
+                .expect("a package has a publish policy")
+                .iter()
+                .map(|value| value.as_str().expect("a publish registry is text").to_owned())
+                .collect();
+            let license = package["license"].as_str().expect("a package has a license").to_owned();
+            let repository =
+                package["repository"].as_str().expect("a package has a repository").to_owned();
+            (name, publish, license, repository)
+        })
+        .collect()
+}
+
 /// Runs the product executable inside a temporary runtime root.
 fn run_documented(root: &Path, action: &str) -> std::process::Output {
     Command::new(slingshot_development::cargo_executable())
@@ -263,9 +291,10 @@ fn the_documented_crate_map_is_the_workspace() {
 }
 
 #[test]
-fn every_documented_target_row_is_a_row_the_manifest_declares() {
+fn every_documented_target_row_is_exactly_the_manifest_set() {
     let readme = read_repository_file("README.md");
     let matrix = committed_matrix();
+    let declared: BTreeSet<String> = matrix.target.iter().map(|row| row.triple.clone()).collect();
     for row in &matrix.target {
         let executable = format!("{}{}", row.executable_stem, row.executable_suffix);
         let documented = format!(
@@ -274,10 +303,62 @@ fn every_documented_target_row_is_a_row_the_manifest_declares() {
         );
         assert!(readme.contains(&documented), "the target table omits {documented}");
     }
-    let rows = readme.matches("x86_64-unknown-linux-gnu").count();
-    assert!(rows > 0, "the target table names the rows it declares");
+    let documented: BTreeSet<String> = readme
+        .lines()
+        .skip_while(|line| *line != "## Supported targets")
+        .skip(1)
+        .take_while(|line| !line.starts_with("## "))
+        .filter_map(|line| line.strip_prefix("| `"))
+        .filter_map(|line| line.split("` | ").next())
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(documented, declared, "the README names an undeclared target row");
     assert!(readme.contains("untrusted_current_native_observation"));
     assert!(readme.contains("makes no aggregate claim across rows"));
+}
+
+#[test]
+fn package_metadata_is_current_for_every_workspace_package() {
+    let readme = read_repository_file("README.md");
+    for (name, publish, license, repository) in workspace_package_metadata() {
+        assert!(publish.is_empty(), "{name} is no longer unpublished");
+        assert_eq!(license, "MIT OR Apache-2.0", "{name} has different license metadata");
+        assert_eq!(
+            repository, "https://github.com/koraytaylan/slingshot",
+            "{name} has different repository metadata"
+        );
+    }
+    assert!(readme.contains("publication is\ndisabled, the license expression is `MIT OR Apache-2.0`, and the repository is\n`https://github.com/koraytaylan/slingshot`"));
+}
+
+#[test]
+fn profile_loading_and_release_interfaces_are_documented_from_their_authorities() {
+    let readme = read_repository_file("README.md");
+    let architecture = read_repository_file("ARCHITECTURE.md");
+    let command_line = read_repository_file("crates/slingshot-command-line/src/command_line.rs");
+    let release = read_repository_file(".github/workflows/release.yml");
+    let publisher = read_repository_file("scripts/publish_release");
+    assert!(command_line.contains("profile_loader::load_profiles"));
+    assert!(readme.contains("loads its profile\ndocuments"));
+    assert!(release.contains("release-acceptance:"));
+    assert!(publisher.contains("verify-release-acceptance"));
+    assert!(readme.contains("release workflow") && readme.contains("scripts/publish_release"));
+    assert!(architecture.contains(
+        "command-line profile loader plus the release workflow and publication preflight"
+    ));
+}
+
+#[test]
+fn the_documentation_review_is_bound_to_the_full_documents_it_reviewed() {
+    let review = read_repository_file("docs/DOCUMENTATION_REVIEW.md");
+    for document in every_product_document() {
+        let digest = hex::encode(Sha256::digest(read_repository_file(document).as_bytes()));
+        let entry = format!("| `{document}` | `{digest}` |");
+        assert!(
+            review.contains(&entry),
+            "the review does not bind {document} to its current content"
+        );
+    }
 }
 
 #[test]
@@ -289,7 +370,6 @@ fn no_document_claims_evidence_that_does_not_exist() {
         }
     }
     let readme = read_repository_file("README.md");
-    assert!(readme.contains("Every package is unpublished"));
     assert!(readme.contains("Experience Manager behavior exists here yet"));
     let architecture = read_repository_file("ARCHITECTURE.md");
     assert!(architecture.contains("## What is not here"));

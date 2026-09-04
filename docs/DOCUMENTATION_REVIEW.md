@@ -67,3 +67,20 @@ Everything else that names a command is generated from the registry and
 compared byte for byte, so no other document could have drifted without the
 gate saying so.
 
+## Reviewed document identities
+
+This review applies only to the complete product documents named below. Each
+identity is the SHA-256 digest of the document bytes reviewed; a changed byte
+cannot inherit this review without an explicit renewed record.
+
+| Document | SHA-256 |
+|---|---|
+| `README.md` | `b344337cf8e1049a3e3a484eadef69132c21a321045b6f42af519e4196ecf8e4` |
+| `CONTRIBUTING.md` | `97e3f1a0bd8723865cc4b858606e3a25dafe75d18039e99d49a2eafde2c7be0d` |
+| `ARCHITECTURE.md` | `acaa53946f9299d0f11f32a67969ef2c77e7bcbe93955c34d225cc3b63e4b7aa` |
+| `docs/AGENT_PROTOCOL.md` | `ece5eae8453303b299635ede39026267888f13749ca718f0a1a528f4ef738806` |
+| `docs/COMMANDS.md` | `dfe0c21d59a198443978220b88e17eb7658df943c649c90d265ab7c58e8b0f5e` |
+| `docs/CONFIGURATION.md` | `775ce5363790d1b44a91fdb7e7b2015d538cce224de5030f5e13edec87b089b3` |
+| `docs/DAEMON.md` | `4d1f7748636d8e0a44195755ab1d8492c561f6c3dedeb5c88e95ebd9ed7df6d6` |
+| `docs/MODEL_CONTEXT_PROTOCOL.md` | `0e7de936b9f044b95131aeccf576bd8724f806bf37b661581e5a5f1b9fcaeae9` |
+| `docs/WORKFLOWS.md` | `0bd107a373f258069f2e9472f5c17bea2ccb675aa070ccc581d49ce11c9f3f6e` |

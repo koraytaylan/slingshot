@@ -97,16 +97,16 @@ method is read.
 
 ## Platforms
 
-`support/platforms.toml` declares three abstract rows and the capabilities each
-must provide. A Unix row uses a Unix domain socket, advisory locks, an
+`support/platforms.toml` declares two abstract native rows and the capabilities
+each must provide. Both rows use a Unix domain socket, advisory locks, an
 owner-only runtime directory, atomic readiness, and session-independent
-detachment. The Windows row uses a named pipe created with remote clients
-rejected on every path, exclusive locks, the current user's access control, and
-detached creation.
+detachment; the macOS row additionally names the access-control-list behavior
+its filesystem evidence needs.
 
 Every row is evaluated through deterministic observations that decide ownership
-and readiness from observed facts alone, so all three are checked from one
-machine. Real behavior runs only for the row the machine matches, and its
+and readiness from observed facts alone. The native workflow maps each declared
+row to its exact runner and runs the complete repository gate there. Real
+behavior runs only for the row the machine matches, and its
 result is one report labelled `untrusted_current_native_observation`, shaped by
 `support/platform-runtime-evidence.schema.json`. Mapping every row to an
 owner-approved environment and attesting its evidence is release work that has
@@ -129,10 +129,12 @@ executable scripts into a shell syntax tree, migrations into statements, and
 workflows into their real structure. It reports a file, a line, a rule, and a
 symbol, ordered deterministically.
 
-The checker decides only what it can decide. Whether prose is accurate,
-complete, historically framed, or narrating adjacent code is recorded as a
-review checklist in `policy/documentation-rules.toml`, and an assertion proves
-the checker does not pretend otherwise.
+The checker decides only what it can decide. The product-documentation contract
+derives platform rows and package metadata from their manifests, and names the
+command-line profile loader plus the release workflow and publication preflight
+as the interfaces that make those claims current. Editorial judgement remains
+recorded in `policy/documentation-rules.toml` and in the content-bound review
+record.
 
 ## The daemon in detail
 
@@ -146,5 +148,5 @@ No Adobe Experience Manager behavior. Sixty-four commands are published as
 contracts - what each is called, what it accepts, what it answers, and what it
 may refuse with - and the agent that carries any of them out is built
 separately and is not in this repository. No aggregate proof across platform
-rows, and no release artifact: the packages are unpublished and carry no owner-
-supplied legal or repository metadata.
+rows, and no published release artifact: package metadata permits clear
+attribution while publication remains disabled.
