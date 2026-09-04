@@ -336,6 +336,12 @@ fn the_preparation_command_names_every_input_it_is_given() {
         "a review record is evidence only against the authority that says whose approval counts"
     );
     assert!(held.contains("[ ! -e \"$OUTPUT_DIRECTORY\" ]"), "it prepares only into a new place");
+    for bound in ["fuzz-Cargo.lock", "coverage-bundle"] {
+        assert!(
+            held.contains(bound),
+            "the declared {bound} input is not copied under the surveyed cache root"
+        );
+    }
 }
 
 #[test]

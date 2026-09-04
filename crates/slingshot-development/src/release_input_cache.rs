@@ -196,9 +196,21 @@ fn collect_entries(
         let path = entry.path();
         let kind =
             entry.file_type().map_err(|failure| CacheRefusal::Unreadable(failure.to_string()))?;
+        if kind.is_symlink() {
+            return Err(CacheRefusal::Changed(format!(
+                "{} is a link rather than a cache member",
+                path.display()
+            )));
+        }
         if kind.is_dir() {
             collect_entries(cache, &path, collected)?;
             continue;
+        }
+        if !kind.is_file() {
+            return Err(CacheRefusal::Changed(format!(
+                "{} is not a regular cache member",
+                path.display()
+            )));
         }
         let relative = path.strip_prefix(cache).unwrap_or(&path);
         let Some(named) = relative.to_str() else {

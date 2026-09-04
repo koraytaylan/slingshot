@@ -109,6 +109,14 @@ mkdir -p "$OUTPUT_DIRECTORY"
 CARGO_HOME="$OUTPUT_DIRECTORY" cargo fetch --locked \
     || report_refusal 'the declared inputs could not be fetched'
 
+# These are release inputs too, not merely arguments that happened to exist
+# while preparation ran.  Put their verified bytes under the cache root before
+# its manifest is surveyed, so every build and acceptance decision binds them
+# through the same cache digest as the registry closure.
+[ -f fuzz/Cargo.lock ] || report_refusal 'there is no committed fuzz lockfile to bind'
+cp fuzz/Cargo.lock "$OUTPUT_DIRECTORY/fuzz-Cargo.lock"
+cp -R "$COVERAGE_FUZZING_TOOL_BUNDLE" "$OUTPUT_DIRECTORY/coverage-bundle"
+
 # The acceptance runs its gates inside a container it may not fetch, so the
 # image travels with everything else it is given. Only the coordinating row
 # carries it, because only that row's cache reaches the acceptance, and only
