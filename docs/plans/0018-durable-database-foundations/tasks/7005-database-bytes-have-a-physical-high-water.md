@@ -12,7 +12,7 @@ touches:
   - crates/slingshot-storage/src/agent_job_repository.rs
   - crates/slingshot-storage/tests/persistent_capacity/**
   - crates/slingshot-storage/tests/migrations.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # Database Bytes Have A Physical High Water
