@@ -25,6 +25,7 @@ use std::fs::File;
 use std::sync::OnceLock;
 
 use rusqlite::{Connection, OpenFlags};
+use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
 
 use crate::sqlite_statement_inventory::FORBIDDEN_CONSTRUCTS;
 
@@ -229,6 +230,10 @@ impl OperationDatabase {
         for (name, expected) in RequiredSettings::fixed_pragmas() {
             self.set_pragma(name, expected)?;
         }
+        let frames = DaemonRuntimeContract::embedded()
+            .limit("maximum_sqlite_write_ahead_log_frames")
+            .to_string();
+        self.set_pragma("wal_autocheckpoint", &frames)?;
         Ok(())
     }
 
@@ -555,6 +560,7 @@ fn refused(failure: rusqlite::Error) -> DatabaseFailure {
 #[cfg(test)]
 mod tests {
     use super::{OperationDatabase, RequiredSettings};
+    use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
 
     fn settings() -> RequiredSettings {
         RequiredSettings {
@@ -633,6 +639,13 @@ mod tests {
         assert_eq!(read_integer("synchronous"), 2);
         assert_eq!(read_integer("foreign_keys"), 1);
         assert_eq!(read_integer("temp_store"), 2);
+        assert_eq!(
+            read_integer("wal_autocheckpoint"),
+            i64::try_from(
+                DaemonRuntimeContract::embedded().limit("maximum_sqlite_write_ahead_log_frames")
+            )
+            .expect("a frame limit")
+        );
         assert!(database.require_compile_options().is_ok());
     }
 }
