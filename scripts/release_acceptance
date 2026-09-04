@@ -134,6 +134,8 @@ PINNED_TOOLCHAIN=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml | he
     --tmpfs "$TOOLCHAIN_SCRATCH:size=$TEMPORARY_BYTES" \
     --env TMPDIR=/tmp \
     --env "RUSTUP_TOOLCHAIN=$PINNED_TOOLCHAIN" \
+    --env CARGO_HOME=/cache \
+    --env CARGO_TARGET_DIR=/tmp/target \
     --network none \
     --user "$IMAGE_USER" \
     --read-only \
