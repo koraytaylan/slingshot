@@ -80,4 +80,8 @@ read-only = [
     "platform-evidence",
 ]
 writable-output-root = "acceptance-output"
+# Where a build works. What it produces is not evidence and does not leave the
+# container, and it is far too large to hold in the temporary filesystem, which
+# is memory.
+writable-build-root = "acceptance-build"
 temporary-filesystem-bytes = 2147483648

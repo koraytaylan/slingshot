@@ -287,11 +287,18 @@ fn every_denial_the_contract_names_appears_in_the_invocation_that_makes_it() {
         container.mounts.read_only.len(),
         "every input the contract names read-only is mounted read-only"
     );
+    // The writable roots the contract declares: the one evidence leaves through
+    // and the one a build works in. A mount beyond those is a mount nothing
+    // named, which is the thing this whole document exists to prevent.
+    let writable = [&container.mounts.writable_output_root, &container.mounts.writable_build_root];
     assert_eq!(
         runner.matches("--volume").count(),
-        container.mounts.read_only.len() + 1,
-        "and exactly one more mount, which is the writable output root"
+        container.mounts.read_only.len() + writable.len(),
+        "and exactly the writable roots the contract declares, and no other mount"
     );
+    for root in writable {
+        assert!(runner.contains(root.as_str()), "the invocation does not mount {root}");
+    }
 }
 
 #[test]
