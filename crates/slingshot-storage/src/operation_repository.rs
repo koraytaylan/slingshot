@@ -27,7 +27,7 @@ use slingshot_domain::operation::{
 };
 pub use slingshot_domain::operation::{RecoveryResumeReceipt, ResultDisposition};
 
-use slingshot_domain::persistent_capacity::{CapacityRefusal, PersistentCapacityPolicy};
+use slingshot_domain::persistent_capacity::{CapacityFacts, PersistentCapacityPolicy};
 
 use crate::database::{DatabaseFailure, OperationDatabase};
 use crate::persistent_capacity::{AccountingFailure, PersistentCapacityAccount};
@@ -276,6 +276,35 @@ pub enum ResumeOutcome {
     Applied(Box<RecoveryResumeReceipt>),
     /// A receipt for that source was already committed, and this is it.
     Replayed(Box<RecoveryResumeReceipt>),
+    /// The operation no longer meets the request's eligibility preconditions.
+    Refused(ResumeEligibilityRefusal),
+}
+
+/// Why an operation changed before an atomic resume receipt could commit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResumeEligibilityRefusal {
+    /// The selected environment differs from the operation's durable one.
+    EnvironmentRevision,
+    /// A terminal operation cannot be resumed.
+    Terminal,
+    /// No recovery fact is outstanding.
+    NotWaiting,
+    /// A different recovery category is outstanding.
+    Category {
+        /// The category the durable recovery fact holds.
+        holding: RecoveryCategory,
+        /// The category the resume request named.
+        named: RecoveryCategory,
+    },
+    /// The outstanding recovery is not manually resumable.
+    NotManual,
+    /// The operation revision moved after the request was formed.
+    Revision {
+        /// The revision the resume request was formed against.
+        expected: u64,
+        /// The revision durably observed inside the receipt transaction.
+        observed: u64,
+    },
 }
 
 /// The operation ledger, reached only through its own vocabulary.
@@ -898,7 +927,11 @@ impl OperationRepository {
             transaction.commit()?;
             return Ok(ResumeOutcome::Replayed(Box::new(held)));
         }
-        self.require_receipt_capacity(author_target_identity_digest, operation_identifier)?;
+        self.require_receipt_capacity_within(
+            &transaction,
+            author_target_identity_digest,
+            operation_identifier,
+        )?;
         transaction.execute(
             statement("record one recovery-resume receipt"),
             rusqlite::params![
@@ -923,23 +956,114 @@ impl OperationRepository {
         Ok(ResumeOutcome::Applied(Box::new(written)))
     }
 
-    /// Refuses a fresh receipt once an operation holds all it may.
+    /// Rechecks resumability and records one receipt in the same immediate transaction.
     ///
-    /// The bound is the namespace's rather than this module's.
-    fn require_receipt_capacity(
+    /// Unlike [`Self::record_resume_receipt`], this is the product boundary: a
+    /// stale caller can never commit an `Applied` receipt for a terminal,
+    /// moved, or differently recovering operation.
+    pub fn record_eligible_resume_receipt(
         &self,
         author_target_identity_digest: &str,
         operation_identifier: &str,
-    ) -> Result<(), RepositoryFailure> {
-        match self
-            .account()
-            .require_room_for_resume_receipt(author_target_identity_digest, operation_identifier)
-        {
-            Ok(_) => Ok(()),
-            Err(AccountingFailure::Refused(CapacityRefusal::ResumeReceipts { facts })) => {
-                Err(RepositoryFailure::ReceiptsExhausted { allowed: facts.limit })
+        source_fingerprint: &str,
+        selected_environment_revision: &str,
+        expected_recovery_category: RecoveryCategory,
+        expected_operation_revision: u64,
+        now_unix_milliseconds: u64,
+    ) -> Result<ResumeOutcome, RepositoryFailure> {
+        let transaction = write_transaction(self.database.connection())?;
+        if let Some(held) = Self::receipt_within(
+            &transaction,
+            author_target_identity_digest,
+            operation_identifier,
+            source_fingerprint,
+        )? {
+            transaction.commit()?;
+            return Ok(ResumeOutcome::Replayed(Box::new(held)));
+        }
+        let current =
+            self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
+        let refusal = if current.selected_environment_revision != selected_environment_revision {
+            Some(ResumeEligibilityRefusal::EnvironmentRevision)
+        } else if current.record.lifecycle_state.is_terminal() {
+            Some(ResumeEligibilityRefusal::Terminal)
+        } else if let Some(recovery) = &current.record.outstanding_recovery {
+            if recovery.category != expected_recovery_category {
+                Some(ResumeEligibilityRefusal::Category {
+                    holding: recovery.category,
+                    named: expected_recovery_category,
+                })
+            } else if !recovery.manual_resume_eligible {
+                Some(ResumeEligibilityRefusal::NotManual)
+            } else if current.record.revision != expected_operation_revision {
+                Some(ResumeEligibilityRefusal::Revision {
+                    expected: expected_operation_revision,
+                    observed: current.record.revision,
+                })
+            } else {
+                None
             }
-            Err(other) => Err(other.into()),
+        } else {
+            Some(ResumeEligibilityRefusal::NotWaiting)
+        };
+        if let Some(refusal) = refusal {
+            transaction.commit()?;
+            return Ok(ResumeOutcome::Refused(refusal));
+        }
+        self.require_receipt_capacity_within(
+            &transaction,
+            author_target_identity_digest,
+            operation_identifier,
+        )?;
+        transaction.execute(
+            statement("record one recovery-resume receipt"),
+            rusqlite::params![
+                i64::try_from(expected_operation_revision).unwrap_or(i64::MAX),
+                author_target_identity_digest,
+                operation_identifier,
+                i64::try_from(now_unix_milliseconds).unwrap_or(i64::MAX),
+                selected_environment_revision,
+                source_fingerprint,
+            ],
+        )?;
+        let written = Self::receipt_within(
+            &transaction,
+            author_target_identity_digest,
+            operation_identifier,
+            source_fingerprint,
+        )?
+        .ok_or_else(|| RepositoryFailure::NoSuchOperation {
+            identifier: operation_identifier.to_owned(),
+        })?;
+        transaction.commit()?;
+        Ok(ResumeOutcome::Applied(Box::new(written)))
+    }
+
+    /// Refuses a fresh receipt once the transaction sees an operation at its bound.
+    fn require_receipt_capacity_within(
+        &self,
+        connection: &rusqlite::Connection,
+        author_target_identity_digest: &str,
+        operation_identifier: &str,
+    ) -> Result<(), RepositoryFailure> {
+        let counted: i64 = connection.query_row(
+            statement("count one operation's recovery-resume receipts"),
+            rusqlite::params![author_target_identity_digest, operation_identifier],
+            |row| row.get(0),
+        )?;
+        let held = u64::try_from(counted).map_err(|_| RepositoryFailure::NotDecodable {
+            column: "recovery-resume receipt count",
+            detail: format!("{counted} is not a non-negative count"),
+        })?;
+        let facts = CapacityFacts {
+            held,
+            limit: self.policy.recovery_resume_receipts_per_operation,
+            wanted: 1,
+        };
+        if facts.fits() {
+            Ok(())
+        } else {
+            Err(RepositoryFailure::ReceiptsExhausted { allowed: facts.limit })
         }
     }
 

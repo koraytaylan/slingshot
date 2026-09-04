@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/migrations/**
   - crates/slingshot-daemon/tests/operation_recovery.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # Recovery Receipts Belong To One Operation
