@@ -339,14 +339,14 @@ fn configure_sqlite() -> Result<(), DatabaseFailure> {
 
 /// A database pathname resolved through an open, verified state-root directory.
 ///
-/// Linux resolves `/proc/self/fd/<directory-fd>/name` through that descriptor,
-/// not by looking up the original directory pathname again.  Keeping the file
-/// alive in [`OperationDatabase`] therefore pins the main database and SQLite's
-/// `-wal` and `-shm` sidecars to the verified directory across a pathname swap.
-#[cfg(target_os = "linux")]
+/// Unix resolves the descriptor namespace through that descriptor, not by
+/// looking up the original directory pathname again. Keeping the file alive in
+/// [`OperationDatabase`] therefore pins the main database and SQLite's `-wal`
+/// and `-shm` sidecars to the verified directory across a pathname swap.
+#[cfg(unix)]
 struct PinnedDatabasePath;
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 impl PinnedDatabasePath {
     /// Opens the containing directory without following it and returns its pinned child path.
     fn open(path: &std::path::Path) -> Result<(File, std::path::PathBuf), DatabaseFailure> {
@@ -390,14 +390,22 @@ impl PinnedDatabasePath {
             ));
         }
         let descriptor = root.as_raw_fd();
-        Ok((root, std::path::PathBuf::from(format!("/proc/self/fd/{descriptor}/{name}"))))
+        Ok((root, std::path::PathBuf::from(format!("{DESCRIPTOR_DIRECTORY}/{descriptor}/{name}"))))
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+/// The operating system's stable directory-descriptor namespace.
+#[cfg(target_os = "linux")]
+const DESCRIPTOR_DIRECTORY: &str = "/proc/self/fd";
+
+/// The operating system's stable directory-descriptor namespace.
+#[cfg(target_os = "macos")]
+const DESCRIPTOR_DIRECTORY: &str = "/dev/fd";
+
+#[cfg(not(unix))]
 struct PinnedDatabasePath;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(unix))]
 impl PinnedDatabasePath {
     /// Refuses rather than silently falling back to an unpinned default path.
     fn open(_path: &std::path::Path) -> Result<(File, std::path::PathBuf), DatabaseFailure> {
