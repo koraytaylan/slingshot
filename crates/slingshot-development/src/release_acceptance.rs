@@ -669,6 +669,40 @@ pub fn require_complete(manifest: &AcceptanceManifest) -> Result<(), AcceptanceR
     Ok(())
 }
 
+/// Requires retained gate reports to have the names and bytes the manifest binds.
+///
+/// # Errors
+///
+/// Returns [`AcceptanceRefusal::Unreadable`] when a report is absent, linked,
+/// not a regular file, or has bytes different from its recorded digest.
+pub fn require_retained_reports(
+    manifest: &AcceptanceManifest,
+    directory: &Path,
+) -> Result<(), AcceptanceRefusal> {
+    for gate in &manifest.gates {
+        let path = directory.join(format!("{}{REPORT_FILE_SUFFIX}", gate.name));
+        let metadata = std::fs::symlink_metadata(&path).map_err(|failure| {
+            AcceptanceRefusal::Unreadable(format!("{}: {failure}", path.display()))
+        })?;
+        if !metadata.file_type().is_file() {
+            return Err(AcceptanceRefusal::Unreadable(format!(
+                "{} is not a regular retained report",
+                path.display()
+            )));
+        }
+        let held = std::fs::read(&path).map_err(|failure| {
+            AcceptanceRefusal::Unreadable(format!("{}: {failure}", path.display()))
+        })?;
+        if digest_of_bytes(&held) != gate.report_sha256 {
+            return Err(AcceptanceRefusal::Unreadable(format!(
+                "{} differs from the digest its gate records",
+                path.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Requires one manifest to be about the revision being accepted.
 ///
 /// # Errors
@@ -682,6 +716,24 @@ pub fn require_revision(
         return Err(AcceptanceRefusal::RevisionDrift {
             expected: source_commit.to_owned(),
             held: manifest.source_commit.clone(),
+        });
+    }
+    Ok(())
+}
+
+/// Requires one manifest to name the independently supplied source tree.
+///
+/// # Errors
+///
+/// Returns [`AcceptanceRefusal::RevisionDrift`] when the tree differs.
+pub fn require_source_tree(
+    manifest: &AcceptanceManifest,
+    source_tree: &str,
+) -> Result<(), AcceptanceRefusal> {
+    if manifest.source_tree != source_tree {
+        return Err(AcceptanceRefusal::RevisionDrift {
+            expected: source_tree.to_owned(),
+            held: manifest.source_tree.clone(),
         });
     }
     Ok(())

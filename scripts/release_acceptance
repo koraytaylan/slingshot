@@ -187,6 +187,8 @@ report_stage 'the acceptance manifest'
 cargo run --locked --quiet -p slingshot-development -- \
     verify-release-acceptance \
     --manifest "$OUTPUT_DIRECTORY/acceptance.json" \
-    --source-commit "$SOURCE_COMMIT"
+    --reports-directory "$OUTPUT_DIRECTORY" \
+    --source-commit "$SOURCE_COMMIT" \
+    --source-tree "$SOURCE_TREE"
 
 printf '\n== %s is releasable ==\n' "$SOURCE_TREE"
