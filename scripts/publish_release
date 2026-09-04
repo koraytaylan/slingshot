@@ -23,7 +23,6 @@ OPTION_AND_VALUE=2
 
 RELEASE_TAG=''
 EVIDENCE_DIRECTORY=''
-CACHE_DIGEST=''
 MANIFEST=Cargo.toml
 NOTES_PATH=release-notes/RELEASE_NOTES.md
 ARCHIVE_SUFFIX=.tar.gz
@@ -44,14 +43,12 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         --tag) RELEASE_TAG=$2; shift "$OPTION_AND_VALUE" ;;
         --evidence) EVIDENCE_DIRECTORY=$2; shift "$OPTION_AND_VALUE" ;;
-        --cache-sha256) CACHE_DIGEST=$2; shift "$OPTION_AND_VALUE" ;;
         *) report_refusal "$1 is not an option this publisher takes" ;;
     esac
 done
 
 [ -n "$RELEASE_TAG" ] || report_refusal 'name the tag to publish'
 [ -n "$EVIDENCE_DIRECTORY" ] || report_refusal 'name the directory the run was downloaded to'
-[ -n "$CACHE_DIGEST" ] || report_refusal 'name the cache digest every row built from'
 [ -d "$EVIDENCE_DIRECTORY" ] || report_refusal "$EVIDENCE_DIRECTORY is not a directory"
 [ -f "$MANIFEST" ] || report_refusal "$MANIFEST is not here"
 
@@ -69,19 +66,36 @@ scripts/verify_release_version
 
 SOURCE_COMMIT=$(git rev-parse "$RELEASE_TAG^{commit}")
 
+STAGING=$(mktemp -d)
+trap 'rm -rf "$STAGING"' EXIT
+
 report_stage 'every archive, against the reviewed root'
 set --
 for ROW in "$EVIDENCE_DIRECTORY"/*; do
     [ -d "$ROW" ] || continue
     ARCHIVE=$(find "$ROW" -maxdepth 1 -type f -name "*$ARCHIVE_SUFFIX" | head -n 1)
     [ -n "$ARCHIVE" ] || continue
+    # Each row prepares its own cache, so the digest belongs to the row rather
+    # than to the release, and only the run that built it knows what it was.
+    # Until an acceptance manifest states these independently, this reads each
+    # row's own record: what that verifies is the archive against the evidence
+    # beside it, and the attestation above both, which is the check that
+    # establishes where an archive came from.
+    ROW_CACHE=$(sed -n 's/^cache-sha256 = "\(.*\)"$/\1/p' "$ROW/$EVIDENCE_NAME" | head -n 1)
+    [ -n "$ROW_CACHE" ] || report_refusal "$ROW/$EVIDENCE_NAME records no cache digest"
     scripts/verify_release_artifacts \
         --archive "$ARCHIVE" \
         --attestation-bundle "$ROW/$BUNDLE_NAME" \
         --evidence "$ROW/$EVIDENCE_NAME" \
         --source-commit "$SOURCE_COMMIT" \
-        --cache-sha256 "$CACHE_DIGEST"
-    set -- "$@" "$ARCHIVE" "$ROW/$BUNDLE_NAME"
+        --cache-sha256 "$ROW_CACHE"
+    # Every row names its bundle the same thing, and a release is one flat set
+    # of files. Named after the archive it attests, each bundle is both nameable
+    # and obvious to whoever downloads the pair.
+    ARCHIVE_NAME=$(basename "$ARCHIVE")
+    ATTESTATION="$STAGING/${ARCHIVE_NAME%"$ARCHIVE_SUFFIX"}.attestation.jsonl"
+    cp "$ROW/$BUNDLE_NAME" "$ATTESTATION"
+    set -- "$@" "$ARCHIVE" "$ATTESTATION"
 done
 [ "$#" -gt 0 ] || report_refusal "no release archive is under $EVIDENCE_DIRECTORY"
 

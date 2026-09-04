@@ -412,7 +412,12 @@ fn the_verifier_authenticates_provenance_before_it_reads_a_manifest() {
     let attestation = verify.find("gh attestation verify").expect("it verifies provenance");
     let manifest = verify.find("verify-release-artifacts").expect("it reads the manifest");
     assert!(attestation < manifest, "a manifest checked first has already said what checks it");
-    assert!(verify.contains("--offline"), "and it never reaches the network");
+    // The pinned client has no offline switch, and one it does not have is one
+    // it cannot obey. Verification is offline because everything it reads comes
+    // from disk: the attestation beside the archive, and the trust root
+    // committed here. Verifying with every route to the network poisoned
+    // changes nothing about the outcome.
+    assert!(verify.contains("--bundle"), "it reads the attestation beside the archive");
     assert!(verify.contains("--custom-trusted-root"), "and never the verifier's own root");
     for reaching in ["curl", "git fetch", "gh api", "--update"] {
         assert!(!verify.contains(reaching), "a verifier that ran {reaching} would report on more");
