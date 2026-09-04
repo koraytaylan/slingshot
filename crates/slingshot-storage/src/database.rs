@@ -328,7 +328,7 @@ impl OperationDatabase {
         let physical_inventory = self.physical_inventory.clone();
         self.connection
             .authorizer(Some(move |context: AuthContext<'_>| match context.action {
-                AuthAction::Insert { .. } | AuthAction::Update { .. }
+                AuthAction::Insert { .. } | AuthAction::Update { .. } | AuthAction::Delete { .. }
                     if physical_inventory
                         .as_ref()
                         .is_some_and(|inventory| !inventory.has_write_headroom()) =>
