@@ -284,6 +284,38 @@ async fn an_established_idle_connection_has_no_incomplete_frame_deadline() {
     finish(daemon).await;
 }
 
+#[tokio::test(start_paused = true)]
+async fn post_response_idle_peers_release_general_capacity_at_the_declared_lease() {
+    let contract = FoundationContract::embedded();
+    let root = temporary_runtime_root("q");
+    let daemon = start_daemon(&root, ENVIRONMENT).await;
+    let mut idle = Vec::new();
+    for index in 0..contract.server.connection_capacity {
+        let mut stream = connect(&daemon.address).await;
+        stream
+            .write_all(&frame(
+                &contract,
+                &format!("idle-{index}"),
+                PING_METHOD,
+                serde_json::json!({}),
+            ))
+            .await
+            .expect("the ping is written");
+        local_server::read_frame(&mut stream, &contract, true)
+            .await
+            .expect("the response arrives")
+            .expect("the response is complete");
+        idle.push(stream);
+    }
+
+    tokio::time::advance(contract.server.quiescent_connection_lease()).await;
+    tokio::task::yield_now().await;
+    let recovered = ping(&daemon.address, "after-idle-lease").await;
+    assert_eq!(recovered.readiness_nonce, daemon.service.ownership().readiness_nonce());
+    drop(idle);
+    finish(daemon).await;
+}
+
 #[tokio::test]
 async fn concatenated_requests_have_one_ordered_response_each() {
     let contract = FoundationContract::embedded();

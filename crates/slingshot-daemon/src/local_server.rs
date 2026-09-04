@@ -438,14 +438,25 @@ where
 {
     let contract = service.contract();
     let mut first_frame = true;
+    let mut post_response = false;
     let mut reader = FrameReader::new();
     loop {
-        let Some(payload) = reader.read(stream, contract, first_frame).await? else {
+        let next = reader.read(stream, contract, first_frame);
+        let payload = if post_response {
+            let deadline = contract.server.quiescent_connection_lease();
+            tokio::time::timeout(deadline, next).await.map_err(|_| {
+                ConnectionFailure::DeadlineElapsed { stage: "quiescent connection lease", deadline }
+            })??
+        } else {
+            next.await?
+        };
+        let Some(payload) = payload else {
             return Ok(false);
         };
         first_frame = false;
         let outcome = service.answer(&payload);
         write_frame(stream, contract, outcome.frame()).await?;
+        post_response = true;
         if outcome.stops() {
             return Ok(true);
         }
