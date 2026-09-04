@@ -77,6 +77,8 @@ pub enum OperationResult {
     Succeeded {
         /// Where the result went.
         disposition: ResultDisposition,
+        /// Canonical bytes when the result is inline.
+        inline_result: Option<String>,
     },
 }
 
@@ -155,7 +157,10 @@ pub fn result(
     if summary.record.lifecycle_state == OperationLifecycleState::Succeeded {
         let disposition =
             summary.result_disposition.ok_or(QueryFailure::ResultDispositionMissing)?;
-        return Ok(OperationResult::Succeeded { disposition });
+        return Ok(OperationResult::Succeeded {
+            disposition,
+            inline_result: summary.result_inline_bytes,
+        });
     }
     match summary.record.outstanding_recovery {
         Some(recovery) => Ok(OperationResult::RecoveryRequired { recovery }),

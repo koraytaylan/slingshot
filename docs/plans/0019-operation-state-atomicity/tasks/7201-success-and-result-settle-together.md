@@ -13,7 +13,7 @@ touches:
   - crates/slingshot-storage/migrations/**
   - crates/slingshot-development/tests/operation_submission_process.rs
   - crates/slingshot-daemon/tests/operation_queries.rs
-status: planned
+status: completed
 merged_as: ""
 ---
 # Success And Result Settle Together

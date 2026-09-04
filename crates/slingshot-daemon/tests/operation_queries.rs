@@ -262,32 +262,30 @@ fn every_terminal_pairing_reports_the_one_disposition_its_kind_admits() {
 }
 
 #[test]
-fn a_success_says_where_its_result_is_and_a_row_that_does_not_is_refused() {
+fn a_complete_success_says_where_its_result_is() {
     let repository = repository();
     let digest = partition(FIRST_PRINCIPAL);
     let first = admitted(&repository, &digest, "operation-1");
-    let running =
-        advance(&repository, &digest, "operation-1", &first, OperationLifecycleState::Succeeded);
-
-    let refused = result(&repository, &digest, "operation-1");
-    assert!(
-        matches!(refused, Err(QueryFailure::ResultDispositionMissing)),
-        "a success whose row does not say where the result went is refused rather than \
-         answered with a guess: {refused:?}"
-    );
-
     repository
-        .record_result_disposition(
+        .settle_success(
             &digest,
             "operation-1",
-            running.record.revision,
-            ResultDisposition::Artifact,
+            &slingshot_domain::operation::SuccessfulSettlement {
+                artifacts: Vec::new(),
+                inline_result: Some("{}".to_owned()),
+                expected_lifecycle_state: OperationLifecycleState::Queued,
+                expected_revision: first.record.revision,
+                settled_at_unix_milliseconds: NOW,
+            },
         )
-        .expect("a disposition");
+        .expect("a complete success");
     assert_eq!(
         result(&repository, &digest, "operation-1").expect("a result"),
-        OperationResult::Succeeded { disposition: ResultDisposition::Artifact },
-        "and once it does, the answer says which it was"
+        OperationResult::Succeeded {
+            disposition: ResultDisposition::Inline,
+            inline_result: Some("{}".to_owned()),
+        },
+        "the result representation was committed with success"
     );
 }
 
