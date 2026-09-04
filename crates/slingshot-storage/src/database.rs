@@ -38,6 +38,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (2, include_str!("../migrations/0002-agent-jobs.sql")),
     (3, include_str!("../migrations/0003-execution-fence.sql")),
     (4, include_str!("../migrations/0004-artifact-reservations.sql")),
+    (5, include_str!("../migrations/0005-recovery-receipt-operation-key.sql")),
 ];
 
 /// The one temporary-storage mode the reviewed SQLite build may report.
@@ -214,6 +215,24 @@ impl OperationDatabase {
         self.connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .map(|version| u32::try_from(version).unwrap_or_default())
+            .map_err(refused)
+    }
+
+    /// Lists target partitions that still hold a nonterminal operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DatabaseFailure::Refused`] when the reviewed audit statement
+    /// cannot be prepared or read.
+    pub fn unfinished_partitions(&self) -> Result<Vec<(String, String)>, DatabaseFailure> {
+        let statement = crate::sqlite_statement_inventory::statement_text(
+            "list every partition holding work that has not ended",
+        );
+        let mut prepared = self.connection.prepare(statement).map_err(refused)?;
+        prepared
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(refused)?
+            .collect::<Result<Vec<(String, String)>, _>>()
             .map_err(refused)
     }
 
