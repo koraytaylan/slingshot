@@ -25,11 +25,14 @@ use slingshot_command_line::invocation::{
     COMPONENT_PARENT_OPTION, Invocation, NAME_OPTION, PATH_OPTION, PROPERTIES_OPTION,
     RESOURCE_TYPE_OPTION, Selection, TEMPLATE_OPTION, TITLE_OPTION, parse,
 };
-use slingshot_command_line::property_document::{PropertyDocumentRefusal, parse as read_document};
+use slingshot_command_line::property_document::{
+    PropertyDocumentRefusal, parse as read_document, read as read_document_file,
+};
 use slingshot_domain::command::add_component::{
     COMPONENT_RESOURCE_TYPE_PROPERTY, ContentRootMarker, PageContentParent,
 };
 use slingshot_domain::command::catalog::{AccessClassification, Command, CommandCatalog};
+use slingshot_domain::command::command_identity::CommandContract;
 use slingshot_domain::command::create_page::PAGE_TITLE_PROPERTY;
 
 /// Where a created page goes.
@@ -78,6 +81,24 @@ fn document(text: &str) -> tempfile::NamedTempFile {
     file.write_all(text.as_bytes()).expect("the document writes");
     file.flush().expect("the document lands");
     file
+}
+
+/// Returns the one canonical byte bound a property document may occupy.
+fn maximum_document_bytes() -> usize {
+    usize::try_from(CommandContract::embedded().limit("maximum_command_argument_bytes"))
+        .expect("the command argument bound fits")
+}
+
+#[test]
+fn property_document_file_reads_are_bounded_before_json_construction() {
+    let exact = document(&" ".repeat(maximum_document_bytes()));
+    assert_eq!(read_document_file(exact.path()), Err(PropertyDocumentRefusal::NotAnObject));
+
+    let oversized = document(&" ".repeat(maximum_document_bytes() + 1));
+    assert_eq!(
+        read_document_file(oversized.path()),
+        Err(PropertyDocumentRefusal::TooLarge { maximum: maximum_document_bytes() })
+    );
 }
 
 #[test]
