@@ -6,8 +6,7 @@
 //! twice, and what an operator finds after an interruption.
 
 use slingshot_storage::artifact_store::{
-    ArtifactFailure, CANONICAL_JSON_MEDIA_TYPE, ResultPlacement, STAGING_SUFFIX,
-    STRUCTURED_RESULT_SLOT,
+    ArtifactFailure, CANONICAL_JSON_MEDIA_TYPE, ResultPlacement, STRUCTURED_RESULT_SLOT,
 };
 
 use crate::fixtures::*;
@@ -117,7 +116,7 @@ fn concurrent_identical_installations_publish_one_verified_content_file() {
 }
 
 #[test]
-fn an_interrupted_installation_leaves_something_nothing_reads() {
+fn an_interrupted_installation_removes_its_own_unpublished_stage() {
     /// A reader that stops part way, the way an interrupted transfer does.
     struct Interrupted {
         /// Bytes still to hand out before failing.
@@ -148,18 +147,7 @@ fn an_interrupted_installation_leaves_something_nothing_reads() {
         .expect("the content directory reads")
         .map(|entry| entry.expect("an entry").file_name().to_string_lossy().into_owned())
         .collect();
-    assert_eq!(left.len(), 1, "the partial write is still there to be found: {left:?}");
-    assert!(
-        left[0].ends_with(STAGING_SUFFIX),
-        "wearing the staging suffix, so nothing addresses it as content: {left:?}"
-    );
-    assert_eq!(
-        std::fs::metadata(directory.path().join("content").join(&left[0]))
-            .expect("the staged file reads")
-            .len(),
-        u64::try_from(TRANSFER_BYTES + 1).expect("a countable length"),
-        "holding exactly what arrived before the transfer stopped"
-    );
+    assert!(left.is_empty(), "a refused stream leaves no accumulating partial: {left:?}");
 }
 
 #[test]
