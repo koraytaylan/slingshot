@@ -18,13 +18,13 @@
 //! other, not each against itself, so a family added to one and not the other
 //! is a finding.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::Path;
 
 use slingshot_command_line::application::{
-    Answer, ClockBoundary, CommandLineApplication, Completion, ConfigurationBoundary,
-    DaemonBoundary, DispatchRefusal, FilesystemBoundary, MAINTENANCE_LEAVES, NetworkBoundary,
-    OBSERVATION_LEAVES, ProcessBoundary, Provenance, Service, SignalBoundary,
+    Answer, CommandLineApplication, Completion, ConfigurationBoundary, DaemonBoundary,
+    DispatchRefusal, FilesystemBoundary, MAINTENANCE_LEAVES, NetworkBoundary, OBSERVATION_LEAVES,
+    ProcessBoundary, Provenance, RequestIdentityBoundary, Service, SignalBoundary,
     needs_complete_target, require_dispatchable, service_for,
 };
 use slingshot_command_line::command_line;
@@ -82,9 +82,6 @@ const SPOKEN_VERSION: u32 = 1;
 
 /// The operation a scenario daemon admits.
 const OPERATION_IDENTIFIER: &str = "scenario-operation";
-
-/// The instant every scenario clock reports.
-const FIXED_MILLISECONDS: u64 = 1_700_000_000_000;
 
 /// The exit an unavailable daemon produces.
 const UNAVAILABLE_EXIT: i32 = UNAVAILABLE;
@@ -335,6 +332,10 @@ struct Fakes {
     interrupted: bool,
     /// What was reached.
     reached: Reached,
+    /// Invocation identities the operation boundary received.
+    operation_request_identifiers: RefCell<Vec<String>>,
+    /// How many identities the fixture invented.
+    invented_identifiers: Cell<u32>,
 }
 
 impl Default for Fakes {
@@ -354,6 +355,8 @@ impl Default for Fakes {
             owner: Some(NONCE.to_owned()),
             interrupted: false,
             reached: Reached::default(),
+            operation_request_identifiers: RefCell::new(Vec::new()),
+            invented_identifiers: Cell::new(0),
         }
     }
 }
@@ -386,9 +389,11 @@ impl ProcessBoundary for Fakes {
     }
 }
 
-impl ClockBoundary for Fakes {
-    fn milliseconds_since_epoch(&self) -> u64 {
-        FIXED_MILLISECONDS
+impl RequestIdentityBoundary for Fakes {
+    fn invent_request_identifier(&self) -> String {
+        let sequence = self.invented_identifiers.get() + 1;
+        self.invented_identifiers.set(sequence);
+        format!("command-line-fixture-{sequence}")
     }
 }
 
@@ -421,10 +426,11 @@ impl DaemonBoundary for Fakes {
     fn operate(
         &self,
         _namespace: &NamespacePair,
-        _envelope: &OperationEnvelope,
+        envelope: &OperationEnvelope,
     ) -> Result<OperationResponse, ExchangeFailure> {
         Reached::counted(&self.reached.daemon);
         Reached::counted(&self.reached.operations);
+        self.operation_request_identifiers.borrow_mut().push(envelope.request_identifier.clone());
         Ok(self.answer.clone())
     }
 }
@@ -463,7 +469,7 @@ fn invoking(leaf: &str, arguments: &[(&str, &str)]) -> Invocation {
 /// Runs one invocation against fakes and returns what it produced.
 fn against(fakes: &Fakes, provenance: Provenance, invocation: &Invocation) -> Completion {
     let application = CommandLineApplication {
-        clock: fakes,
+        request_identity: fakes,
         configuration: fakes,
         daemon: fakes,
         filesystem: fakes,
@@ -535,6 +541,18 @@ fn a_daemon_backed_leaf_cannot_bypass_target_or_revision_validation() {
         assert_eq!(completion.exit, UNAVAILABLE_EXIT, "{option}");
         assert_eq!(fakes.reached.operations.get(), 0, "{option} still sent an operation");
     }
+}
+
+#[test]
+fn one_invocation_keeps_its_generated_identity_for_the_operation_exchange() {
+    let fakes = Fakes::default();
+    let _completion = against(&fakes, Provenance::embedded(), &invoking("operation-list", &[]));
+    assert_eq!(fakes.invented_identifiers.get(), 1, "the invocation generates one identity");
+    assert_eq!(
+        fakes.operation_request_identifiers.borrow().as_slice(),
+        ["command-line-fixture-1"],
+        "the exchange carries that invocation identity rather than another generated value"
+    );
 }
 
 #[test]
