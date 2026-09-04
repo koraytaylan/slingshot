@@ -113,7 +113,10 @@ LOADED=$("$RUNTIME" load --input "$LOCKED_SOURCE_CACHE/$IMAGE_MEMBER" \
     | sed -n 's/^Loaded image: //p' | head -n 1)
 [ -n "$LOADED" ] || report_refusal 'the transferred image could not be loaded'
 
-mkdir -p "$OUTPUT_DIRECTORY"
+BUILD_ROOT="$OUTPUT_DIRECTORY.build"
+[ ! -e "$BUILD_ROOT" ] || report_refusal "$BUILD_ROOT already exists"
+mkdir -p "$OUTPUT_DIRECTORY" "$BUILD_ROOT"
+
 report_stage 'every gate, inside the container'
 # Read-only inputs, no network, no capabilities, and one writable root. Every
 # denial named in the contract appears here, because a contract nobody applied
@@ -135,7 +138,7 @@ PINNED_TOOLCHAIN=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml | he
     --env TMPDIR=/tmp \
     --env "RUSTUP_TOOLCHAIN=$PINNED_TOOLCHAIN" \
     --env CARGO_HOME=/cache \
-    --env CARGO_TARGET_DIR=/tmp/target \
+    --env CARGO_TARGET_DIR=/acceptance-build \
     --network none \
     --user "$IMAGE_USER" \
     --read-only \
@@ -148,6 +151,7 @@ PINNED_TOOLCHAIN=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml | he
     --volume "$LOCKED_SOURCE_CACHE:/cache:ro" \
     --volume "$PLATFORM_EVIDENCE:/platform-evidence:ro" \
     --volume "$OUTPUT_DIRECTORY:/acceptance-output" \
+    --volume "$BUILD_ROOT:/acceptance-build" \
     --workdir /slingshot \
     --env SLINGSHOT_ACCEPTANCE_OUTPUT=/acceptance-output \
     "$LOADED" \

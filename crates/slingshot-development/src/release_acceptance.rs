@@ -156,6 +156,13 @@ pub struct MountPolicy {
     pub temporary_filesystem_bytes: u64,
     /// The one writable root that leaves the container.
     pub writable_output_root: String,
+    /// The writable root a build works in, which does not leave the container.
+    ///
+    /// Separate from the output root because what a build produces is not
+    /// evidence, and separate from the temporary filesystem because that one is
+    /// held in memory and a build of this workspace is far larger than a
+    /// machine should be asked to hold.
+    pub writable_build_root: String,
 }
 
 /// The runtime that enforces the isolation.
@@ -345,6 +352,9 @@ fn require_image_and_runtime(held: &AcceptanceContainer) -> Result<(), Acceptanc
     }
     if held.mounts.writable_output_root.trim().is_empty() {
         return Err(weakened("nothing is writable, so a run could produce no evidence"));
+    }
+    if held.mounts.writable_build_root.trim().is_empty() {
+        return Err(weakened("a build has nowhere to work, so no gate could run"));
     }
     Ok(())
 }
