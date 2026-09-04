@@ -60,6 +60,8 @@ pub struct SubscriptionLedgerRow {
 /// What folding one event into the ledger did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LedgerOutcome {
+    /// The fact belongs to another event-store generation and changed nothing.
+    GenerationMismatch,
     /// The ledger now sits at a later position.
     Advanced,
     /// The same position with the same contents, so nothing moved.
@@ -73,6 +75,8 @@ pub enum LedgerOutcome {
 /// One position in one stream, with whatever it turned out to be about.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventFact {
+    /// The event-store incarnation that produced this cursor.
+    pub agent_event_store_generation: u64,
     /// Which submission it is about, when it is about one this daemon holds.
     pub agent_operation_identifier: Option<String>,
     /// What was at this position, canonically.
@@ -203,6 +207,10 @@ impl AgentSubscriptionLedger {
         .ok_or_else(|| AgentRepositoryFailure::NoSuchSubscription {
             identifier: daemon_subscription_identifier.to_owned(),
         })?;
+        if held.agent_event_store_generation != fact.agent_event_store_generation {
+            transaction.commit()?;
+            return Ok(LedgerOutcome::GenerationMismatch);
+        }
         let outcome = classify(&held, fact);
         if matches!(outcome, LedgerOutcome::Advanced) {
             self.require_event_room(&held)?;
@@ -214,12 +222,14 @@ impl AgentSubscriptionLedger {
                     stored(fact.event_bytes),
                     author_target_identity_digest,
                     daemon_subscription_identifier,
+                    stored(fact.agent_event_store_generation),
                     &fact.cursor,
                 ),
             )?;
             transaction.execute(
                 statement("record one subscription event"),
                 (
+                    stored(fact.agent_event_store_generation),
                     &fact.agent_operation_identifier,
                     author_target_identity_digest,
                     &fact.canonical_digest,
@@ -275,26 +285,54 @@ impl AgentSubscriptionLedger {
         &self,
         author_target_identity_digest: &str,
         daemon_subscription_identifier: &str,
-        agent_event_store_generation: u64,
+        expected_generation: u64,
+        expected_incident: Option<&str>,
+        expected_cursor: Option<&str>,
+        new_generation: u64,
         captured_cursor: &str,
         canonical_digest: &str,
     ) -> Result<(), AgentRepositoryFailure> {
-        let changed = self.database.connection().execute(
+        let connection = self.database.connection();
+        let transaction = write_transaction(connection)?;
+        let changed = transaction.execute(
             statement("install a captured high-water position on a subscription"),
             (
-                stored(agent_event_store_generation),
+                stored(new_generation),
                 canonical_digest,
                 captured_cursor,
                 captured_cursor,
                 author_target_identity_digest,
                 daemon_subscription_identifier,
+                stored(expected_generation),
+                expected_cursor,
+                expected_incident,
+                stored(new_generation),
             ),
         )?;
         if changed != ONE_ROW {
-            return Err(AgentRepositoryFailure::NoSuchSubscription {
-                identifier: daemon_subscription_identifier.to_owned(),
+            let exists = read_subscription(
+                &transaction,
+                author_target_identity_digest,
+                daemon_subscription_identifier,
+            )?
+            .is_some();
+            return Err(if exists {
+                AgentRepositoryFailure::SubscriptionMoved
+            } else {
+                AgentRepositoryFailure::NoSuchSubscription {
+                    identifier: daemon_subscription_identifier.to_owned(),
+                }
             });
         }
+        transaction.execute(
+            statement("remove a subscription generation's retained events"),
+            (
+                author_target_identity_digest,
+                daemon_subscription_identifier,
+                stored(expected_generation),
+            ),
+        )?;
+        transaction.commit()?;
         Ok(())
     }
 
