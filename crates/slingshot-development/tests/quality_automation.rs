@@ -35,7 +35,8 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "dependency-direction",
     "source-policy",
     "rustsec-advisory-pin",
-    "cargo deny --offline --all-features check --disable-fetch",
+    "cargo deny --locked --offline --all-features check --disable-fetch",
+    "cargo +\"$fuzz_toolchain\" deny --manifest-path fuzz/Cargo.toml --locked --offline --all-features check --disable-fetch",
 ];
 
 /// Ways the gate must refuse to fetch or discover anything.
