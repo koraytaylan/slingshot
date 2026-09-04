@@ -216,7 +216,11 @@ jobs:
         env:
           SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
         run: scripts/release_acceptance --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine" --rustsec-advisory-database "$RUNNER_TEMP/advisory-db" --rustsec-owner-review-record "$RUNNER_TEMP/evidence/rustsec-owner-review-record/review-record.json" --locked-source-cache "$RUNNER_TEMP/evidence/locked-source-cache" --platform-evidence-directory "$RUNNER_TEMP/evidence" --output-directory "$RUNNER_TEMP/acceptance"
+      # Kept whatever was decided. A refused revision is the one occasion the
+      # manifest and the gate reports beside it are worth reading, and a step
+      # that ran only when everything held would throw them away exactly then.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
         with:
           name: release-acceptance
           path: ${{ runner.temp }}/acceptance
