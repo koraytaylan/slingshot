@@ -118,9 +118,14 @@ BUILD_ROOT="$OUTPUT_DIRECTORY.build"
 mkdir -p "$OUTPUT_DIRECTORY" "$BUILD_ROOT"
 
 report_stage 'every gate, inside the container'
-# Read-only inputs, no network, no capabilities, and one writable root. Every
-# denial named in the contract appears here, because a contract nobody applied
-# is a description rather than a boundary.
+# Read-only inputs, no network, no capabilities, and the writable roots the
+# contract declares. Every denial named in the contract appears here, because a
+# contract nobody applied is a description rather than a boundary.
+#
+# The writable roots are given to the user the contract says the gates run as.
+# The container runs unprivileged and as nobody in particular, so a directory
+# the host made is a directory that user cannot write into, and the isolation
+# would look like a broken build.
 # The contract declares a temporary filesystem and admits TMPDIR, because a
 # root that cannot be written to is not a root that nothing needs to write near:
 # the pinned toolchain writes while it confirms itself, and the gates write what
@@ -150,8 +155,8 @@ PINNED_TOOLCHAIN=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml | he
     --volume "$REVIEW_RECORD:/review-record.json:ro" \
     --volume "$LOCKED_SOURCE_CACHE:/cache:ro" \
     --volume "$PLATFORM_EVIDENCE:/platform-evidence:ro" \
-    --volume "$OUTPUT_DIRECTORY:/acceptance-output" \
-    --volume "$BUILD_ROOT:/acceptance-build" \
+    --volume "$OUTPUT_DIRECTORY:/acceptance-output:U" \
+    --volume "$BUILD_ROOT:/acceptance-build:U" \
     --workdir /slingshot \
     --env SLINGSHOT_ACCEPTANCE_OUTPUT=/acceptance-output \
     "$LOADED" \
