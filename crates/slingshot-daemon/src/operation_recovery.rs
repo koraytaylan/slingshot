@@ -23,7 +23,7 @@
 
 use slingshot_domain::operation::{RecoveryCategory, RecoveryResumeReceipt};
 use slingshot_storage::operation_repository::{
-    OperationRepository, RepositoryFailure, ResumeOutcome,
+    OperationRepository, RepositoryFailure, ResumeEligibilityRefusal, ResumeOutcome,
 };
 
 /// What a person asked to be resumed.
@@ -162,18 +162,36 @@ pub fn resume(
         return Ok(ResumeResponse::Refused(refusal));
     }
 
-    let outcome = repository.record_resume_receipt(
+    let outcome = repository.record_eligible_resume_receipt(
         &request.author_target_identity_digest,
         &request.operation_identifier,
         &source,
         &request.selected_environment_revision,
+        request.expected_recovery_category,
         summary.record.revision,
         now_unix_milliseconds,
     )?;
     Ok(match outcome {
         ResumeOutcome::Applied(receipt) => ResumeResponse::Applied(receipt),
         ResumeOutcome::Replayed(receipt) => ResumeResponse::Replayed(receipt),
+        ResumeOutcome::Refused(refusal) => ResumeResponse::Refused(map_receipt_refusal(refusal)),
     })
+}
+
+/// Maps the transaction-time eligibility observation to the public refusal.
+fn map_receipt_refusal(refusal: ResumeEligibilityRefusal) -> ResumeRefusal {
+    match refusal {
+        ResumeEligibilityRefusal::EnvironmentRevision => ResumeRefusal::RevisionMismatch,
+        ResumeEligibilityRefusal::Terminal => ResumeRefusal::AlreadyTerminal,
+        ResumeEligibilityRefusal::NotWaiting => ResumeRefusal::NotWaiting,
+        ResumeEligibilityRefusal::Category { holding, named } => {
+            ResumeRefusal::CategoryMismatch { holding, named }
+        }
+        ResumeEligibilityRefusal::NotManual => ResumeRefusal::NotManuallyResumable,
+        ResumeEligibilityRefusal::Revision { expected, observed } => {
+            ResumeRefusal::RevisionMoved { expected, stored: observed }
+        }
+    }
 }
 
 /// Requires the operation to be the one the caller looked at.

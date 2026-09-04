@@ -13,7 +13,7 @@ use slingshot_domain::operation::{
 };
 use slingshot_storage::database::OperationDatabase;
 use slingshot_storage::operation_repository::{
-    OperationRepository, RepositoryFailure, ResumeOutcome,
+    OperationRepository, RepositoryFailure, ResumeEligibilityRefusal, ResumeOutcome,
 };
 
 use crate::fixtures::*;
@@ -289,6 +289,43 @@ fn one_resume_source_commits_one_receipt_and_replays_it_afterwards() {
         store.read_resume_receipt(&digest, OPERATION, &source(1)).expect("a read").as_ref(),
         Some(&applied),
         "and the receipt reads back the same either way"
+    );
+}
+
+#[test]
+fn an_atomic_resume_refuses_a_revision_that_moved_before_its_receipt() {
+    let store = in_memory();
+    let digest = partition(FIRST_PRINCIPAL);
+    let admitted_revision = admitted(&store, &digest);
+    let recovery = recovering(RecoveryCategory::AmbiguousSubmission, SUBMISSION_UNKNOWN, 1);
+    let waiting = applied(&store, &digest, admitted_revision, &recovery, NOW);
+    let outcome = store
+        .record_eligible_resume_receipt(
+            &digest,
+            OPERATION,
+            "atomic-stale-source",
+            "revision-1",
+            RecoveryCategory::AmbiguousSubmission,
+            admitted_revision,
+            SECOND_INSTANT,
+        )
+        .expect("a transactional classification");
+    assert!(
+        matches!(
+            outcome,
+            ResumeOutcome::Refused(ResumeEligibilityRefusal::Revision {
+                expected,
+                observed
+            }) if expected == admitted_revision && observed == waiting.record.revision
+        ),
+        "the changed operation cannot receive an applied receipt: {outcome:?}"
+    );
+    assert!(
+        store
+            .read_resume_receipt(&digest, OPERATION, "atomic-stale-source")
+            .expect("a receipt lookup")
+            .is_none(),
+        "the stale atomic resume commits no receipt"
     );
 }
 
