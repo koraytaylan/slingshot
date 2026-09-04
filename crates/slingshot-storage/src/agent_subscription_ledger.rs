@@ -172,11 +172,22 @@ impl AgentSubscriptionLedger {
         author_target_identity_digest: &str,
         daemon_subscription_identifier: &str,
     ) -> Result<Option<SubscriptionLedgerRow>, AgentRepositoryFailure> {
-        read_subscription(
-            self.database.connection(),
+        let transaction = self.database.connection().unchecked_transaction()?;
+        let found = read_subscription(
+            &transaction,
             author_target_identity_digest,
             daemon_subscription_identifier,
-        )
+        )?;
+        if let Some(held) = &found {
+            Self::require_reconciled(
+                &transaction,
+                author_target_identity_digest,
+                daemon_subscription_identifier,
+                held,
+            )?;
+        }
+        transaction.commit()?;
+        Ok(found)
     }
 
     /// Folds one event into one subscription, and says what that did.
@@ -211,9 +222,15 @@ impl AgentSubscriptionLedger {
             transaction.commit()?;
             return Ok(LedgerOutcome::GenerationMismatch);
         }
+        Self::require_reconciled(
+            &transaction,
+            author_target_identity_digest,
+            daemon_subscription_identifier,
+            &held,
+        )?;
         let outcome = classify(&held, fact);
         if matches!(outcome, LedgerOutcome::Advanced) {
-            self.require_event_room(&held)?;
+            self.require_event_room(&held, fact.event_bytes)?;
             transaction.execute(
                 statement("advance one subscription ledger to a later position"),
                 (
@@ -256,14 +273,25 @@ impl AgentSubscriptionLedger {
     fn require_event_room(
         &self,
         held: &SubscriptionLedgerRow,
+        incoming_bytes: u64,
     ) -> Result<(), AgentRepositoryFailure> {
-        if held.event_rows >= self.bounds.event_rows {
+        if incoming_bytes > crate::agent_job_repository::BYTES_PER_EVENT {
+            return Err(AgentRepositoryFailure::EventTooLarge {
+                provided: incoming_bytes,
+                allowed: crate::agent_job_repository::BYTES_PER_EVENT,
+            });
+        }
+        if held.event_rows.checked_add(1).is_none_or(|rows| rows > self.bounds.event_rows) {
             return Err(AgentRepositoryFailure::Exhausted {
                 allowed: self.bounds.event_rows,
                 subject: "retained events",
             });
         }
-        if held.event_bytes >= self.bounds.event_bytes {
+        if held
+            .event_bytes
+            .checked_add(incoming_bytes)
+            .is_none_or(|bytes| bytes > self.bounds.event_bytes)
+        {
             return Err(AgentRepositoryFailure::Exhausted {
                 allowed: self.bounds.event_bytes,
                 subject: "retained event bytes",
@@ -352,13 +380,36 @@ impl AgentSubscriptionLedger {
     ) -> Result<u64, AgentRepositoryFailure> {
         let connection = self.database.connection();
         let transaction = write_transaction(connection)?;
+        let held = read_subscription(
+            &transaction,
+            author_target_identity_digest,
+            daemon_subscription_identifier,
+        )?
+        .ok_or_else(|| AgentRepositoryFailure::NoSuchSubscription {
+            identifier: daemon_subscription_identifier.to_owned(),
+        })?;
+        Self::require_reconciled(
+            &transaction,
+            author_target_identity_digest,
+            daemon_subscription_identifier,
+            &held,
+        )?;
         let removed = transaction.execute(
             statement("compact one subscription's events below a position"),
-            (author_target_identity_digest, daemon_subscription_identifier, floor_cursor),
+            (
+                author_target_identity_digest,
+                daemon_subscription_identifier,
+                stored(held.agent_event_store_generation),
+                floor_cursor,
+            ),
         )?;
         let (rows, bytes) = transaction.query_row(
             statement("measure one subscription's retained events"),
-            (author_target_identity_digest, daemon_subscription_identifier),
+            (
+                author_target_identity_digest,
+                daemon_subscription_identifier,
+                stored(held.agent_event_store_generation),
+            ),
             |row| Ok((counted(row.get::<_, i64>(0)?), counted(row.get::<_, i64>(1)?))),
         )?;
         let changed = transaction.execute(
@@ -369,6 +420,7 @@ impl AgentSubscriptionLedger {
                 stored(rows),
                 author_target_identity_digest,
                 daemon_subscription_identifier,
+                stored(held.agent_event_store_generation),
             ),
         )?;
         if changed != ONE_ROW {
@@ -378,6 +430,29 @@ impl AgentSubscriptionLedger {
         }
         transaction.commit()?;
         Ok(u64::try_from(removed).unwrap_or(0))
+    }
+
+    /// Refuses counters that do not equal the current generation's event rows.
+    fn require_reconciled(
+        transaction: &rusqlite::Transaction<'_>,
+        author_target_identity_digest: &str,
+        daemon_subscription_identifier: &str,
+        held: &SubscriptionLedgerRow,
+    ) -> Result<(), AgentRepositoryFailure> {
+        let (rows, bytes) = transaction.query_row(
+            statement("measure one subscription's retained events"),
+            (
+                author_target_identity_digest,
+                daemon_subscription_identifier,
+                stored(held.agent_event_store_generation),
+            ),
+            |row| Ok((counted(row.get::<_, i64>(0)?), counted(row.get::<_, i64>(1)?))),
+        )?;
+        if rows == held.event_rows && bytes == held.event_bytes {
+            Ok(())
+        } else {
+            Err(AgentRepositoryFailure::EventCounterDrift)
+        }
     }
 
     /// Returns the subscriptions no retained submission still needs.

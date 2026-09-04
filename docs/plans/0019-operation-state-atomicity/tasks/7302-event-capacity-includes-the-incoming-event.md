@@ -10,7 +10,7 @@ touches:
   - crates/slingshot-storage/tests/agent_job_repository.rs
   - policy/daemon-runtime-contract-1.json
   - policy/daemon-runtime-contract-1.sha256
-status: planned
+status: completed
 merged_as: ""
 ---
 # Event Capacity Includes The Incoming Event

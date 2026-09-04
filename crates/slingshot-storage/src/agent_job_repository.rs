@@ -166,6 +166,17 @@ pub enum AgentRepositoryFailure {
         /// What was being counted.
         subject: &'static str,
     },
+    /// One event exceeds the independent per-event byte bound.
+    #[error("one event holds {provided} bytes, beyond the {allowed} byte event limit")]
+    EventTooLarge {
+        /// The event's claimed byte length.
+        provided: u64,
+        /// The independent per-event limit.
+        allowed: u64,
+    },
+    /// Ledger counters differ from their generation's authoritative event rows.
+    #[error("subscription event counters do not match their retained rows")]
+    EventCounterDrift,
 }
 
 /// Which contracts one submission was made under.
