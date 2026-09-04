@@ -117,6 +117,27 @@ fn property_document_duplicates_are_refused_before_a_value_is_selected() {
 }
 
 #[test]
+fn property_document_structure_is_bounded_before_values_are_built() {
+    let maximum =
+        usize::try_from(slingshot_domain::command::create_page::maximum_mutation_properties())
+            .expect("the property count fits");
+    let entry = |index| format!(r#""property-{index}":{{"type":"string","value":"held"}}"#);
+    let exact = format!("{{{}}}", (0..maximum).map(entry).collect::<Vec<_>>().join(","));
+    assert_eq!(read_document(&exact).expect("the exact count is valid").len(), maximum);
+    let plus_one = format!("{{{}}}", (0..=maximum).map(entry).collect::<Vec<_>>().join(","));
+    assert!(matches!(
+        read_document(&plus_one),
+        Err(PropertyDocumentRefusal::TooManyProperties { .. })
+    ));
+
+    let deeply_nested = format!(
+        r#"{{"property":{{"type":"string","value":{}}}}}"#,
+        "[".repeat(5) + "\"held\"" + &"]".repeat(5)
+    );
+    assert_eq!(read_document(&deeply_nested), Err(PropertyDocumentRefusal::TooDeep));
+}
+
+#[test]
 fn a_page_creation_carries_every_value_it_was_given() {
     let built = build(&invocation(&[
         CREATE_PAGE,

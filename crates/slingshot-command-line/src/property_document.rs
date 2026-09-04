@@ -16,6 +16,7 @@ use std::io::Read;
 
 use serde_json::Value;
 use slingshot_domain::command::command_identity::CommandContract;
+use slingshot_domain::command::create_page::maximum_mutation_properties;
 use slingshot_domain::command::property_value::{
     BOOLEAN_TYPE, DATE_TIME_TYPE, DECIMAL_TYPE, DateTimeString, DecimalString, INTEGER_TYPE,
     PropertyScalarValue, PropertyValue, REPOSITORY_PATH_TYPE, STRING_TYPE,
@@ -65,6 +66,12 @@ pub enum PropertyDocumentRefusal {
         /// The decoded member name that has no unambiguous value.
         named: String,
     },
+    /// The document names more properties than one mutation admits.
+    #[error("a mutation carries at most {maximum} properties")]
+    TooManyProperties {
+        /// The canonical maximum property count.
+        maximum: u64,
+    },
     /// It carries a member this build does not know.
     #[error("{named} is not a member a property entry carries")]
     SurplusMember {
@@ -111,6 +118,8 @@ pub fn parse(text: &str) -> Result<BTreeMap<String, PropertyValue>, PropertyDocu
 /// Rejects duplicate decoded member names before a map can choose a winner.
 fn require_unique_members(text: &str) -> Result<(), PropertyDocumentRefusal> {
     let mut objects: Vec<BTreeMap<String, ()>> = Vec::new();
+    let mut depth = 0_usize;
+    let mut outer_properties = 0_u64;
     let mut raw = None::<String>;
     let mut escaped = false;
     let mut held = None::<String>;
@@ -133,11 +142,25 @@ fn require_unique_members(text: &str) -> Result<(), PropertyDocumentRefusal> {
         }
         match character {
             '"' => raw = Some(String::new()),
-            '{' => objects.push(BTreeMap::new()),
+            '{' => {
+                depth = depth.saturating_add(1);
+                if depth > MAXIMUM_DEPTH {
+                    return Err(PropertyDocumentRefusal::TooDeep);
+                }
+                objects.push(BTreeMap::new());
+            }
+            '[' => {
+                depth = depth.saturating_add(1);
+                if depth > MAXIMUM_DEPTH {
+                    return Err(PropertyDocumentRefusal::TooDeep);
+                }
+            }
             '}' => {
                 objects.pop();
+                depth = depth.saturating_sub(1);
                 held = None;
             }
+            ']' => depth = depth.saturating_sub(1),
             ':' => {
                 let Some(raw_name) = held.take() else { continue };
                 let name = serde_json::from_str::<String>(&format!("\"{raw_name}\""))
@@ -145,6 +168,13 @@ fn require_unique_members(text: &str) -> Result<(), PropertyDocumentRefusal> {
                 let Some(members) = objects.last_mut() else { continue };
                 if members.insert(name.clone(), ()).is_some() {
                     return Err(PropertyDocumentRefusal::DuplicateMember { named: name });
+                }
+                if objects.len() == 1 {
+                    outer_properties = outer_properties.saturating_add(1);
+                    let maximum = maximum_mutation_properties();
+                    if outer_properties > maximum {
+                        return Err(PropertyDocumentRefusal::TooManyProperties { maximum });
+                    }
                 }
             }
             ',' => held = None,
