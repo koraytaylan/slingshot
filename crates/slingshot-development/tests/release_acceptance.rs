@@ -1,12 +1,19 @@
 //! Whether one source revision is releasable, and what makes that answerable.
 //!
-//! Two properties carry this suite. The isolation has to actually deny what it
+//! Four properties carry this suite. The isolation has to actually deny what it
 //! says it denies - so every flag that makes a denial real is weakened one at a
 //! time and each weakening is refused by name, because a contract that admitted
-//! one of them would be a description rather than a boundary. And the gate
+//! one of them would be a description rather than a boundary. The gate
 //! inventory has to be complete, ordered, and unanimous: a gate that did not
 //! run is not a gate that passed, and the five ways a record can be wrong are
 //! five different defects with one consequence.
+//!
+//! What a run decides has to be what the verifier reads back out of it, so the
+//! fixture runs are produced by the thing that produces one and then put
+//! through the verifier that was written before it. And what the run is told
+//! about itself has to arrive named, through the environment the contract
+//! declares, because a container that could work out which run it was could be
+//! persuaded it was a run it is not.
 //!
 //! The runner is held to preparing nothing. Acceptance that fetched a missing
 //! input, installed a missing tool, or repaired a dirty tree would be accepting
