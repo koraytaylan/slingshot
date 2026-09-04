@@ -9,7 +9,7 @@ touches:
   - crates/slingshot-storage/src/database.rs
   - crates/slingshot-storage/tests/migrations.rs
   - crates/slingshot-storage/tests/fixtures/migrations/tables.jsonl
-status: planned
+status: completed
 merged_as: ""
 ---
 # Database Compatibility Precedes Mutation

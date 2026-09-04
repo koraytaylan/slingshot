@@ -20,7 +20,7 @@
 //! about those rows this one does not, and migrating them backwards would be
 //! guessing.
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 use crate::sqlite_statement_inventory::FORBIDDEN_CONSTRUCTS;
 
@@ -132,6 +132,7 @@ impl OperationDatabase {
         path: &std::path::Path,
         settings: RequiredSettings,
     ) -> Result<Self, DatabaseFailure> {
+        inspect_existing_schema(path)?;
         let connection = Connection::open(path).map_err(refused)?;
         let database = Self { connection };
         database.require_compile_options()?;
@@ -263,6 +264,23 @@ impl OperationDatabase {
         self.connection.execute(statement, []).map_err(refused)?;
         Ok(())
     }
+}
+
+/// Refuses a future schema through a read-only connection before any mutable open.
+fn inspect_existing_schema(path: &std::path::Path) -> Result<(), DatabaseFailure> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let connection =
+        Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(refused)?;
+    let observed: i64 =
+        connection.query_row("PRAGMA user_version", [], |row| row.get(0)).map_err(refused)?;
+    let observed = u32::try_from(observed).unwrap_or_default();
+    let supported = MIGRATIONS.iter().map(|(version, _)| *version).max().unwrap_or_default();
+    if observed > supported {
+        return Err(DatabaseFailure::SchemaTooNew { observed, supported });
+    }
+    Ok(())
 }
 
 /// Returns whether `text` contains a construct this crate may never run.
