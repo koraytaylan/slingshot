@@ -128,6 +128,18 @@ jobs:
           SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
           SLINGSHOT_REPORTED_RUNNER: ${{ matrix.runner }}
         run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
+      # The cache is built from three verified inputs, and this row starts with
+      # none of them: the machine is new, and nothing but the review record
+      # arrives as an artifact. Each is checked out or built here, against the
+      # pin that names it, before anything is packed into a cache.
+      - name: check out the pinned external source
+        run: scripts/checkout_pinned_finite_state_machine "$RUNNER_TEMP/finite-state-machine"
+      - name: check out the exact pinned advisory snapshot
+        run: scripts/checkout_pinned_advisory_database "$RUNNER_TEMP/advisory-db"
+      - name: build the pinned coverage-fuzzing tool for this row
+        env:
+          SLINGSHOT_ROW: ${{ matrix.triple }}
+        run: scripts/prepare_coverage_fuzzing_tool --output "$RUNNER_TEMP/coverage-bundle" --host "$SLINGSHOT_ROW"
       - name: prepare the cache this row builds from
         run: scripts/prepare_locked_source_cache --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine" --rustsec-advisory-database "$RUNNER_TEMP/advisory-db" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --coverage-fuzzing-tool-bundle "$RUNNER_TEMP/coverage-bundle" --output-directory "$RUNNER_TEMP/cache"
       - name: build this row twice and compare the bytes
