@@ -1,0 +1,29 @@
+#!/bin/sh
+# The native, repository-local pull-request gate.
+#
+# This is deliberately separate from `scripts/quality`: it has no acquired
+# tools or advisory checkout, and consequently every supported native runner
+# can execute exactly the same compilation and OS-sensitive test inventory.
+# It accepts no caller-selected scope, performs no network access, and does
+# not modify repository sources.
+
+set -eu
+
+refuse() {
+    printf 'platform quality: %s\n' "$1" >&2
+    exit 1
+}
+
+if [ "$#" -ne 0 ]; then
+    refuse 'this gate takes no arguments'
+fi
+
+if [ -z "${SLINGSHOT_AUTOMATION_ROW:-}" ]; then
+    refuse 'SLINGSHOT_AUTOMATION_ROW names the authenticated native row'
+fi
+
+# Compile all targets and features before testing them.  The integration test
+# below contains the macOS-only sentinel; `--all-targets` therefore prevents a
+# native PR row from silently proving only platform_runtime_contract.
+cargo check --locked --offline --workspace --all-targets --all-features
+cargo test --locked --offline --workspace --all-targets --all-features

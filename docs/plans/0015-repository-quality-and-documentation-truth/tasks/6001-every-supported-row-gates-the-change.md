@@ -10,8 +10,8 @@ touches:
   - scripts/platform_quality
   - crates/slingshot-development/tests/github_workflow_contract.rs
   - crates/slingshot-development/tests/fixtures/github-workflow-contract/workflows.jsonl
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # Every Supported Row Gates The Change
 
