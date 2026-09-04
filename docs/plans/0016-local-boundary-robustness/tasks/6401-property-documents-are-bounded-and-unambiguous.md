@@ -8,8 +8,8 @@ gated: false
 touches:
   - crates/slingshot-command-line/src/property_document.rs
   - crates/slingshot-command-line/tests/page_mutation_commands.rs
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # Property Documents Are Bounded And Unambiguous
 
