@@ -12,8 +12,10 @@
 //! than resolved - two values under one name have no correct winner.
 
 use std::collections::BTreeMap;
+use std::io::Read;
 
 use serde_json::Value;
+use slingshot_domain::command::command_identity::CommandContract;
 use slingshot_domain::command::property_value::{
     BOOLEAN_TYPE, DATE_TIME_TYPE, DECIMAL_TYPE, DateTimeString, DecimalString, INTEGER_TYPE,
     PropertyScalarValue, PropertyValue, REPOSITORY_PATH_TYPE, STRING_TYPE,
@@ -45,6 +47,12 @@ pub enum PropertyDocumentRefusal {
     /// The file could not be read.
     #[error("the property document could not be read")]
     Unreadable,
+    /// The document exceeds the command argument byte bound.
+    #[error("a property document is at most {maximum} bytes")]
+    TooLarge {
+        /// The canonical command-argument byte bound.
+        maximum: usize,
+    },
     /// It is not one JSON object.
     #[error("a property document is one canonical JSON object, and this is not")]
     NotAnObject,
@@ -102,8 +110,28 @@ pub fn parse(text: &str) -> Result<BTreeMap<String, PropertyValue>, PropertyDocu
 pub fn read(
     path: &std::path::Path,
 ) -> Result<BTreeMap<String, PropertyValue>, PropertyDocumentRefusal> {
-    let text = std::fs::read_to_string(path).map_err(|_| PropertyDocumentRefusal::Unreadable)?;
-    parse(&text)
+    let maximum = maximum_document_bytes();
+    let metadata = std::fs::metadata(path).map_err(|_| PropertyDocumentRefusal::Unreadable)?;
+    if metadata.len() > u64::try_from(maximum).unwrap_or(u64::MAX) {
+        return Err(PropertyDocumentRefusal::TooLarge { maximum });
+    }
+    let mut file = std::fs::File::open(path).map_err(|_| PropertyDocumentRefusal::Unreadable)?;
+    let mut bytes = Vec::with_capacity(maximum.saturating_add(1));
+    file.by_ref()
+        .take(u64::try_from(maximum.saturating_add(1)).unwrap_or(u64::MAX))
+        .read_to_end(&mut bytes)
+        .map_err(|_| PropertyDocumentRefusal::Unreadable)?;
+    if bytes.len() > maximum {
+        return Err(PropertyDocumentRefusal::TooLarge { maximum });
+    }
+    let text = core::str::from_utf8(&bytes).map_err(|_| PropertyDocumentRefusal::NotAnObject)?;
+    parse(text)
+}
+
+/// Returns the canonical maximum size of one command argument document.
+fn maximum_document_bytes() -> usize {
+    usize::try_from(CommandContract::embedded().limit("maximum_command_argument_bytes"))
+        .unwrap_or(usize::MAX)
 }
 
 /// Requires one document to nest no deeper than the vocabulary reaches.
