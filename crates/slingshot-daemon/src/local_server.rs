@@ -371,7 +371,9 @@ impl FrameReader {
                 let end = start + declared;
                 let payload = self.buffer[start..end].to_vec();
                 self.buffer.drain(..end);
-                self.frame_started = (!self.buffer.is_empty()).then(Instant::now);
+                if self.buffer.is_empty() {
+                    self.frame_started = None;
+                }
                 return Ok(Some(payload));
             }
             let deadline = read_deadline(contract, progress, first_frame, self.frame_started);
