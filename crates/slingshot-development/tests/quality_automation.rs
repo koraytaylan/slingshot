@@ -68,6 +68,18 @@ struct PinnedTool {
     install: String,
     /// Command that reports a version, and the exact text it must contain.
     version_check: String,
+    /// Linux archive identity when the tool is acquired as a release asset.
+    linux_archive: Option<String>,
+    /// Digest of that archive before extraction.
+    linux_sha256: Option<String>,
+    /// Whether the ordinary quality gate needs the executable.
+    #[serde(default = "quality_gate_default")]
+    quality_gate: bool,
+}
+
+/// Most repository tools are quality-gate inputs unless explicitly release-only.
+const fn quality_gate_default() -> bool {
+    true
 }
 
 /// Where the pinned dependency-policy tool looks for the advisory database.
@@ -174,6 +186,17 @@ fn every_external_executable_is_pinned_to_an_exact_version_and_source() {
             "{} does not check its pinned version",
             tool.name
         );
+        match (&tool.linux_archive, &tool.linux_sha256) {
+            (Some(archive), Some(digest)) => {
+                assert!(!archive.is_empty(), "{} names an empty archive", tool.name);
+                assert_eq!(digest.len(), 64, "{} names a non-SHA-256 archive identity", tool.name);
+                assert!(digest.chars().all(|held| held.is_ascii_hexdigit()));
+            }
+            (None, None) => {
+                assert!(tool.quality_gate, "a release-only tool has no archive identity")
+            }
+            _ => panic!("{} names only part of an archive identity", tool.name),
+        }
     }
     assert!(!tools.advisory_database.directory_name.is_empty());
     assert!(!tools.advisory_database.lock_file_name.is_empty());

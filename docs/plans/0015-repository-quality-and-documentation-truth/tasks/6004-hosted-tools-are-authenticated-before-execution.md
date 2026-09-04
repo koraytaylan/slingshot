@@ -11,8 +11,8 @@ touches:
   - scripts/install_pinned_repository_tools
   - scripts/build_release_notes
   - support/repository-tools.toml
-status: planned
-merged_as: ""
+status: complete
+merged_as: "pending"
 ---
 # Hosted Tools Are Authenticated Before Execution
 
