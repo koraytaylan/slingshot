@@ -47,7 +47,16 @@ refuse_arguments() {
 verify_repository_tools() {
     report_stage 'repository tools'
     checks="$SCRATCH/tool-checks"
-    sed -n 's/^version-check = "\(.*\)"$/\1/p' "$TOOL_MANIFEST" > "$checks"
+    awk '
+        $0 == "[[tool]]" {
+            if (version != "" && quality) print version
+            version = ""; quality = 1; next
+        }
+        /^version-check = / { version = $0 }
+        /^quality-gate = false$/ { quality = 0 }
+        /^\[advisory-database\]$/ { if (version != "" && quality) print version; exit }
+        END { if (version != "" && quality) print version }
+    ' "$TOOL_MANIFEST" | sed -n 's/^version-check = "\(.*\)"$/\1/p' > "$checks"
     if [ ! -s "$checks" ]; then
         report_refusal "$TOOL_MANIFEST names no tool to verify"
     fi

@@ -41,6 +41,24 @@ pinned_version() {
     ' "$MANIFEST"
 }
 
+pinned_field() {
+    awk -v name="$1" -v field="$2" '
+        $0 == "[[tool]]" { found = 0 }
+        $0 == "name = \"" name "\"" { found = 1; next }
+        found && $0 ~ "^" field " = " {
+            sub("^[^=]*= \"", ""); sub("\"$", ""); print; exit
+        }
+    ' "$MANIFEST"
+}
+
+verify_archive() {
+    archive=$1
+    expected=$2
+    [ -n "$expected" ] || report_refusal "the manifest names no digest for $archive"
+    printf '%s  %s\n' "$expected" "$archive" | sha256sum --check --status \
+        || report_refusal "$archive does not match its manifest digest"
+}
+
 # Refuses unless the named tool answers with the version the manifest pins.
 require_reported_version() {
     "$1" --version 2>/dev/null | grep -qF "$2" \
@@ -60,15 +78,26 @@ trap 'rm -rf "$WORKING"' EXIT
 report_stage 'the pinned dependency-policy tool'
 DENY_VERSION=$(pinned_version "$CARGO_DENY")
 [ -n "$DENY_VERSION" ] || report_refusal "$MANIFEST pins no $CARGO_DENY version"
-cargo install --locked "$CARGO_DENY" --version "$DENY_VERSION"
+DENY_ARCHIVE=$(pinned_field "$CARGO_DENY" linux-archive)
+DENY_DIGEST=$(pinned_field "$CARGO_DENY" linux-sha256)
+[ -n "$DENY_ARCHIVE" ] || report_refusal "$MANIFEST names no Linux archive for $CARGO_DENY"
+curl --silent --show-error --fail --location --output "$WORKING/$DENY_ARCHIVE" \
+    "https://static.crates.io/crates/$CARGO_DENY/$DENY_ARCHIVE"
+verify_archive "$WORKING/$DENY_ARCHIVE" "$DENY_DIGEST"
+mkdir "$WORKING/$CARGO_DENY-$DENY_VERSION"
+tar -xzf "$WORKING/$DENY_ARCHIVE" -C "$WORKING/$CARGO_DENY-$DENY_VERSION"
+cargo install --locked --path "$WORKING/$CARGO_DENY-$DENY_VERSION"
 require_reported_version "cargo-deny" "$CARGO_DENY $DENY_VERSION"
 
 report_stage 'the pinned script linter'
 SHELLCHECK_VERSION=$(pinned_version "$SHELLCHECK")
 [ -n "$SHELLCHECK_VERSION" ] || report_refusal "$MANIFEST pins no $SHELLCHECK version"
-SHELLCHECK_ARCHIVE="shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"
+SHELLCHECK_ARCHIVE=$(pinned_field "$SHELLCHECK" linux-archive)
+SHELLCHECK_DIGEST=$(pinned_field "$SHELLCHECK" linux-sha256)
+[ -n "$SHELLCHECK_ARCHIVE" ] || report_refusal "$MANIFEST names no Linux archive for $SHELLCHECK"
 curl --silent --show-error --fail --location --output "$WORKING/$SHELLCHECK_ARCHIVE" \
     "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/$SHELLCHECK_ARCHIVE"
+verify_archive "$WORKING/$SHELLCHECK_ARCHIVE" "$SHELLCHECK_DIGEST"
 tar -xJf "$WORKING/$SHELLCHECK_ARCHIVE" -C "$WORKING"
 install "$WORKING/shellcheck-v$SHELLCHECK_VERSION/shellcheck" "$DESTINATION/shellcheck"
 require_reported_version "shellcheck" "version: $SHELLCHECK_VERSION"
@@ -76,9 +105,12 @@ require_reported_version "shellcheck" "version: $SHELLCHECK_VERSION"
 report_stage 'the pinned provider client'
 GITHUB_CLI_VERSION=$(pinned_version "$GITHUB_CLI")
 [ -n "$GITHUB_CLI_VERSION" ] || report_refusal "$MANIFEST pins no $GITHUB_CLI version"
-GITHUB_CLI_ARCHIVE="gh_${GITHUB_CLI_VERSION}_linux_amd64.tar.gz"
+GITHUB_CLI_ARCHIVE=$(pinned_field "$GITHUB_CLI" linux-archive)
+GITHUB_CLI_DIGEST=$(pinned_field "$GITHUB_CLI" linux-sha256)
+[ -n "$GITHUB_CLI_ARCHIVE" ] || report_refusal "$MANIFEST names no Linux archive for $GITHUB_CLI"
 curl --silent --show-error --fail --location --output "$WORKING/$GITHUB_CLI_ARCHIVE" \
     "https://github.com/cli/cli/releases/download/v$GITHUB_CLI_VERSION/$GITHUB_CLI_ARCHIVE"
+verify_archive "$WORKING/$GITHUB_CLI_ARCHIVE" "$GITHUB_CLI_DIGEST"
 tar -xzf "$WORKING/$GITHUB_CLI_ARCHIVE" -C "$WORKING"
 install "$WORKING/gh_${GITHUB_CLI_VERSION}_linux_amd64/bin/gh" "$DESTINATION/gh"
 require_reported_version "gh" "gh version $GITHUB_CLI_VERSION"
