@@ -97,7 +97,28 @@ struct StandardOutputSink<'writer> {
 
 impl LineSink for StandardOutputSink<'_> {
     fn write_line(&mut self, line: &str) -> Written {
-        if writeln!(self.output, "{line}").is_ok() { Written::Complete } else { Written::Refused }
+        let mut rendered = String::with_capacity(line.len().saturating_add(1));
+        rendered.push_str(line);
+        rendered.push('\n');
+        let mut remaining = rendered.as_bytes();
+        let started = std::time::Instant::now();
+        while !remaining.is_empty() {
+            match self.output.write(remaining) {
+                Ok(0) => return Written::Refused,
+                Ok(written) => remaining = &remaining[written..],
+                Err(failure) if failure.kind() == std::io::ErrorKind::WouldBlock => {
+                    if started.elapsed()
+                        >= crate::model_context_protocol::standard_stream_transport::write_deadline(
+                        )
+                    {
+                        return Written::Expired;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                Err(_) => return Written::Refused,
+            }
+        }
+        Written::Complete
     }
 }
 
@@ -203,6 +224,16 @@ pub fn run(
     }
     let completion = complete(&invocation, executable);
     write_completion(&completion, invocation.output, output, diagnostics)
+}
+
+/// Returns whether an invocation hands standard output to the protocol server.
+///
+/// The process entry uses this before it locks standard output: only this leaf
+/// needs nonblocking output, because it owns a deadline-aware writer.
+#[must_use]
+pub fn serves_protocol(arguments: &[String]) -> bool {
+    let named = normalized(arguments);
+    invocation::parse(&named).is_ok_and(|invocation| invocation.verb == SERVE_LEAF)
 }
 
 /// Returns what one parsed invocation produced against the real boundaries.

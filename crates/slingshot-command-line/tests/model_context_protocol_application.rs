@@ -9,6 +9,7 @@
 use serde_json::Value;
 
 use slingshot_command_line::application::{Service, service_for};
+use slingshot_command_line::command_line::serves_protocol;
 use slingshot_command_line::invocation::{Invocation, SERVE_LEAF, Selection, parse};
 use slingshot_command_line::model_context_protocol::application::{
     RESOURCE_EXHAUSTED_ERROR, Served, ServerApplication,
@@ -168,6 +169,15 @@ fn the_serve_leaf_takes_a_target_and_nothing_a_caller_writes_a_command_with() {
     ])
     .expect("the serve leaf takes its target");
     assert_eq!(service_for(&invocation), Ok(Service::ModelContextProtocolServer));
+    assert!(serves_protocol(&[
+        "--profile".to_owned(),
+        "local".to_owned(),
+        "--environment".to_owned(),
+        "author".to_owned(),
+        "protocol".to_owned(),
+        "serve".to_owned(),
+    ]));
+    assert!(!serves_protocol(&["daemon".to_owned(), "ping".to_owned()]));
     for refused in ["--machine", "--detach", "--operation-key", "--author-target-digest", "--path"]
     {
         let attempted = parse(&[SERVE_LEAF.to_owned(), refused.to_owned(), "value".to_owned()]);
