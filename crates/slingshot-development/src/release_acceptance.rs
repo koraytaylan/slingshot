@@ -831,12 +831,12 @@ fn collect_files(
             collect_files(root, &path, collected)?;
             continue;
         }
-        // A link to a directory, which is neither walked nor digested. Walking
-        // it could walk a cycle, and reading it as a file fails with something
-        // that reads like a broken decision rather than like what it is.
-        if path.is_dir() {
+        // A link, whichever kind. Digesting one binds what it points at rather
+        // than what is here, so two trees that differ in where a member came
+        // from would digest the same; walking one could walk a cycle.
+        if kind.is_symlink() {
             return Err(AcceptanceRefusal::Unreadable(format!(
-                "{} points at a directory, and a digest would bind where it points",
+                "{} points somewhere else, and a digest would bind where it points",
                 path.display()
             )));
         }
@@ -940,7 +940,7 @@ pub fn bind(source_root: &Path) -> Result<RunBinding, AcceptanceRefusal> {
         coordinator_row: held.coordinator.triple,
         isolation_sha256: digest_of_bytes(&isolation),
         platform_evidence_sha256: digest_of_tree(Path::new(PLATFORM_EVIDENCE_MOUNT))?,
-        rustsec_review_record_sha256: digest_of_bytes(&read_bytes(Path::new(REVIEW_RECORD_MOUNT))?),
+        rustsec_review_record_sha256: digest_of_file(Path::new(REVIEW_RECORD_MOUNT))?,
         identity,
     })
 }
