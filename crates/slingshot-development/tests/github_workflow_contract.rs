@@ -285,6 +285,9 @@ fn the_native_matrix_is_exactly_the_rows_the_authority_maps() {
     );
 }
 
+/// The action that attests, which composes the provenance itself.
+const ATTESTING_ACTION: &str = "actions/attest-build-provenance@";
+
 #[test]
 fn exactly_one_job_attests_and_it_does_so_over_named_files() {
     let document = workflow(".github/workflows/release.yml");
@@ -292,7 +295,7 @@ fn exactly_one_job_attests_and_it_does_so_over_named_files() {
         .into_iter()
         .filter(|(_, job)| {
             steps(job).iter().any(|step| {
-                step["uses"].as_str().is_some_and(|uses| uses.starts_with("actions/attest@"))
+                step["uses"].as_str().is_some_and(|uses| uses.starts_with(ATTESTING_ACTION))
             })
         })
         .map(|(name, _)| name)
@@ -302,13 +305,21 @@ fn exactly_one_job_attests_and_it_does_so_over_named_files() {
     let (_, job) = named.iter().find(|(name, _)| name == ATTESTATION_JOB).expect("it is there");
     let attest = steps(job)
         .into_iter()
-        .find(|step| step["uses"].as_str().is_some_and(|uses| uses.starts_with("actions/attest@")))
+        .find(|step| step["uses"].as_str().is_some_and(|uses| uses.starts_with(ATTESTING_ACTION)))
         .expect("the step is there");
     assert!(attest["with"]["subject-path"].as_str().is_some(), "it names the files it attests");
-    assert_eq!(
-        attest["with"]["predicate-type"].as_str(),
-        Some("https://slsa.dev/provenance/v1"),
-        "and the provenance version the policy names"
+    // The provider composes the provenance, because the policy reads the builder
+    // and the workflow out of it and only the provider can state those. So the
+    // workflow composes no predicate, and the type this repository verifies is
+    // pinned where the verification happens.
+    assert!(
+        attest["with"]["predicate-type"].is_null() && attest["with"]["predicate-path"].is_null(),
+        "a workflow that composed the predicate would be attesting its own account of itself"
+    );
+    let policy = read_repository_file("support/release-attestation-policy.toml");
+    assert!(
+        policy.contains("predicate-type = \"https://slsa.dev/provenance/v1\""),
+        "and the policy pins the provenance version the attesting action produces"
     );
     for discovery in ["subject-digest", "subject-checksums", "push-to-registry"] {
         assert!(
