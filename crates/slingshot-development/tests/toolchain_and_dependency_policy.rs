@@ -75,17 +75,30 @@ fn the_script_that_proves_the_minimum_builds_the_whole_workspace_locked() {
 
 #[test]
 fn every_dependency_is_resolved_from_the_lockfile_and_from_no_replacement() {
-    let manifest = read_repository_file("Cargo.toml");
-    assert!(!manifest.contains("[source."), "a replaced source is a dependency nobody pinned");
-    assert!(!manifest.contains("[patch."), "and a patched one is a dependency nobody reviewed");
-    let lock = read_repository_file("Cargo.lock");
-    assert!(lock.contains("[[package]]"), "the lockfile is committed");
-    let unchecked = lock
-        .split("[[package]]")
-        .filter(|held| held.contains("source = \"registry+"))
-        .filter(|held| !held.contains("checksum = "))
-        .count();
-    assert_eq!(unchecked, 0, "a registry package without a checksum is bytes nobody authenticated");
+    for (graph, manifest_path, lock_path) in
+        [("product", "Cargo.toml", "Cargo.lock"), ("fuzz", "fuzz/Cargo.toml", "fuzz/Cargo.lock")]
+    {
+        let manifest = read_repository_file(manifest_path);
+        assert!(
+            !manifest.contains("[source."),
+            "{graph}: a replaced source is a dependency nobody pinned"
+        );
+        assert!(
+            !manifest.contains("[patch."),
+            "{graph}: a patched one is a dependency nobody reviewed"
+        );
+        let lock = read_repository_file(lock_path);
+        assert!(lock.contains("[[package]]"), "{graph}: the lockfile is committed");
+        let unchecked = lock
+            .split("[[package]]")
+            .filter(|held| held.contains("source = \"registry+"))
+            .filter(|held| !held.contains("checksum = "))
+            .count();
+        assert_eq!(
+            unchecked, 0,
+            "{graph}: a registry package without a checksum is bytes nobody authenticated"
+        );
+    }
 }
 
 #[test]
@@ -126,5 +139,28 @@ fn the_quality_gate_runs_the_minimum_version_check() {
     assert!(
         gate.contains("check_minimum_supported_rust_version"),
         "a check nothing runs is a check nobody makes"
+    );
+}
+
+#[test]
+fn the_fuzz_graph_has_one_dated_toolchain_and_the_same_offline_policy() {
+    let toolchain = read_repository_file("fuzz/rust-toolchain.toml");
+    assert!(toolchain.contains("channel = \"nightly-"), "the fuzz toolchain must not float");
+    assert!(toolchain.contains("rust-src"), "the fuzz toolchain records its required input");
+    let gate = read_repository_file("scripts/quality");
+    assert!(gate.contains("--manifest-path fuzz/Cargo.toml"), "the fuzz graph bypasses cargo-deny");
+    assert!(
+        gate.contains("cargo +\"$fuzz_toolchain\" deny"),
+        "the fuzz graph bypasses its pinned toolchain"
+    );
+    assert!(gate.contains("--offline"), "dependency policy may not fetch either graph");
+    assert!(gate.contains("--disable-fetch"), "dependency policy may not discover either graph");
+    assert!(
+        gate.contains("locked-graphs.before"),
+        "the gate does not retain the pre-policy graph identity"
+    );
+    assert!(
+        gate.contains("locked-graphs.after"),
+        "the gate does not compare the post-policy graph identity"
     );
 }
