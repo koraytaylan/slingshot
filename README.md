@@ -11,8 +11,9 @@ Version 0.1.0.
 
 One daemon owns one `(profile, environment)` target. Several clients that
 address the same target converge on that one daemon; different targets have
-independent daemons, endpoints, locks, and state. A target name is a bounded
-opaque value here, and nothing reads a profile document yet.
+independent daemons, endpoints, locks, and state. The command-line boundary
+resolves the current account's configuration root and loads its profile
+documents before a selected target can reach product work.
 
 ```sh
 # Reach the daemon that owns a target, creating it if nobody has.
@@ -56,27 +57,26 @@ The first eight form the product graph. The last two exist for tests and
 repository policy, and no product crate reaches either through a library or
 build dependency.
 
-Every package is unpublished. No package declares a license, a license file, or
-a repository, because no owner has supplied those values, and none is inferred
-from anywhere else. A release artifact stays refused until they are supplied.
+Every workspace package inherits the workspace metadata: publication is
+disabled, the license expression is `MIT OR Apache-2.0`, and the repository is
+`https://github.com/koraytaylan/slingshot`. These values are package metadata,
+not a claim that a release has happened.
 
 ## Supported targets
 
 `support/platforms.toml` is the only abstract supported-target authority. It
-declares three rows and their release artifact layout:
+declares two rows and their release artifact layout:
 
 | Target | Executable | Archive | Native smoke |
 |---|---|---|---|
 | `x86_64-unknown-linux-gnu` | `slingshot` | `tar.gz` | `direct` |
 | `aarch64-apple-darwin` | `slingshot` | `tar.gz` | `direct` |
-| `x86_64-pc-windows-msvc` | `slingshot.exe` | `zip` | `direct` |
 
 Each row also names the capabilities the target must provide: the
 provider-record trust decisions a store must not flatten, the endpoint, the two
 separate locks, the current-user protection, atomic readiness, detachment,
 stable supervised cleanup, the filesystem evidence a credential check reads,
-and the deterministic build-policy requirements. The Windows row requires every
-named-pipe server creation to reject remote clients.
+and the deterministic build-policy requirements.
 
 A row is a declaration, not evidence. Every row is evaluated here through
 deterministic observations, and real behavior runs only for the single row that
@@ -143,6 +143,11 @@ narrowly as it is true: the cache is the one prepared for this lockfile,
 unchanged, and inside what a Cargo home may be. Whether its bytes were
 trustworthy when they were fetched is a different question that nothing here
 answers.
+
+The pinned [release workflow](.github/workflows/release.yml) collects one
+acceptance record and one verified archive for each declared row. It stops at
+evidence; an operator runs `scripts/publish_release` only after its closed
+tag-and-evidence preflight succeeds.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together,
 [CONTRIBUTING.md](CONTRIBUTING.md) for the rules a change is held to, and
