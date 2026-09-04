@@ -218,6 +218,22 @@ fn a_corrupt_record_is_refused_rather_than_replaced() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_record_link_or_an_oversized_record_is_refused_before_parsing() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let state = InstallationState::at(root.path());
+    let protected = root.path().join("protected-record");
+    write_private(&protected, b"{ not this ledger }");
+    std::os::unix::fs::symlink(&protected, state.record_path()).expect("the record link exists");
+    assert!(matches!(state.read(), Err(InstallationStateFailure::FilesystemRefused(_))));
+    assert_eq!(std::fs::read(&protected).expect("the target reads"), b"{ not this ledger }");
+    std::fs::remove_file(state.record_path()).expect("the link is removed");
+
+    write_private(&state.record_path(), &vec![b'x'; 65_537]);
+    assert!(matches!(state.read(), Err(InstallationStateFailure::Unreadable(_))));
+}
+
 #[test]
 fn a_record_from_another_format_is_refused() {
     let root = tempfile::tempdir().expect("a temporary directory");
