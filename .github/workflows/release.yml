@@ -16,6 +16,13 @@ on:
       - v[0-9]*
 permissions:
   contents: read
+# The Windows row builds a dependency whose assembly is normally produced by
+# NASM, which no runner image is required to carry. The crate ships the same
+# assembly prebuilt, so the build uses those objects: they come from the locked
+# graph rather than from whatever the image happened to install, which is the
+# only form of this that a release could reproduce offline.
+env:
+  AWS_LC_SYS_PREBUILT_NASM: "1"
 jobs:
   release-version:
     name: the version this run publishes
