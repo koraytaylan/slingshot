@@ -754,8 +754,15 @@ fn verify_release_acceptance(
         release_acceptance::parse_manifest(&text).map_err(|failure| refuse(failure.to_string()))?;
     release_acceptance::require_revision(&manifest, &named("--source-commit")?)
         .map_err(|failure| refuse(failure.to_string()))?;
+    release_acceptance::require_source_tree(&manifest, &named("--source-tree")?)
+        .map_err(|failure| refuse(failure.to_string()))?;
     release_acceptance::require_complete(&manifest)
         .map_err(|failure| refuse(failure.to_string()))?;
+    release_acceptance::require_retained_reports(
+        &manifest,
+        &PathBuf::from(named("--reports-directory")?),
+    )
+    .map_err(|failure| refuse(failure.to_string()))?;
     writeln!(output, "every one of the {} gates held", manifest.gates.len())
         .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))
 }
