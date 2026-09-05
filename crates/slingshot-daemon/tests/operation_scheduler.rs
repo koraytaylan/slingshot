@@ -107,6 +107,51 @@ fn scheduler() -> OperationScheduler {
 }
 
 #[test]
+fn paused_recovery_does_not_consume_a_slot_when_its_delay_expires() {
+    let paused = ScheduledOperation {
+        author_target_identity_digest: "a".repeat(64),
+        caller_identity: Some("caller".to_owned()),
+        enqueue_sequence: 1,
+        operation_identifier: "paused".to_owned(),
+        resume_committed: false,
+        outstanding_recovery: Some(RecoveryFact {
+            attempt_count: 0,
+            category: RecoveryCategory::PersistentCapacityUnavailable,
+            detail: "capacity".to_owned(),
+            evidence: RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
+            manual_resume_eligible: true,
+            retry_delay_milliseconds: 0,
+            retry_observed_at_unix_milliseconds: 1,
+        }),
+    };
+    assert!(!paused.is_eligible(u64::MAX));
+    let mut resumed = paused.clone();
+    resumed.resume_committed = true;
+    assert!(resumed.is_eligible(2), "an admitted resume may select work for guarded activation");
+    let mut activated = paused.clone();
+    activated.outstanding_recovery.as_mut().unwrap().manual_resume_eligible = false;
+    assert!(activated.is_eligible(2));
+    let mut exhausted = paused.clone();
+    let recovery = exhausted.outstanding_recovery.as_mut().unwrap();
+    recovery.category = RecoveryCategory::ResultAcquisition;
+    recovery.attempt_count = u32::MAX;
+    assert!(!exhausted.is_eligible(u64::MAX));
+    let ready = ScheduledOperation {
+        operation_identifier: "ready".to_owned(),
+        enqueue_sequence: 2,
+        outstanding_recovery: None,
+        ..paused.clone()
+    };
+    let observation = SchedulerObservation {
+        in_flight: GLOBAL_IN_FLIGHT - 1,
+        waiting: vec![paused, exhausted, ready],
+    };
+    let selected = scheduler().select(&observation, u64::MAX);
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].operation_identifier, "ready");
+}
+
+#[test]
 fn the_bounds_are_the_manifest_s_and_this_module_declares_none() {
     let bounds = SchedulerBounds::embedded();
     assert_eq!(bounds.global_in_flight, GLOBAL_IN_FLIGHT);

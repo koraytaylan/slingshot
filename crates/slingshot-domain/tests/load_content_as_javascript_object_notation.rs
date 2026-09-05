@@ -13,6 +13,39 @@
 
 use std::collections::BTreeMap;
 
+#[test]
+fn load_failure_paths_stay_within_the_requested_subtree_and_depth() {
+    let command: LoadContentAsJavaScriptObjectNotationCommand =
+        serde_json::from_value(serde_json::json!({
+            "path":"/content/example", "depth":1
+        }))
+        .unwrap();
+    for failure in ["not_found", "access_denied", "unsupported_repository_value"] {
+        for (path, accepted) in [
+            ("/content/example", true),
+            ("/content/example/child", true),
+            ("/content/example/child/grandchild", false),
+            ("/content/example-other", false),
+            ("/content", false),
+            ("/content/other", false),
+        ] {
+            let mut value = serde_json::json!({"failure":failure,"path":path});
+            if failure == "unsupported_repository_value" {
+                value["value_role"] = "property_value".into();
+            }
+            let refusal: LoadRefusal = serde_json::from_value(value).unwrap();
+            assert_eq!(refusal.require_answers(&command).is_ok(), accepted, "{failure}: {path}");
+        }
+    }
+    let root: LoadContentAsJavaScriptObjectNotationCommand =
+        serde_json::from_value(serde_json::json!({"path":"/","depth":0})).unwrap();
+    for (path, accepted) in [("/", true), ("/content", false)] {
+        let refusal: LoadRefusal =
+            serde_json::from_value(serde_json::json!({"failure":"not_found","path":path})).unwrap();
+        assert_eq!(refusal.require_answers(&root).is_ok(), accepted);
+    }
+}
+
 use serde_json::Value;
 use slingshot_domain::command::artifact::{
     ArtifactDescriptor, ArtifactDigest, ArtifactIdentifier, ArtifactMediaType, ArtifactSlot,
@@ -450,6 +483,105 @@ fn a_result_from_another_request_is_refused_before_it_can_be_kept() {
         Err(LoadFailure::NotThisRequest),
         "an artifact from another request is refused before it is accepted"
     );
+}
+
+#[test]
+fn an_echoed_path_cannot_hide_an_unrelated_or_overdepth_document() {
+    let asked = LoadContentAsJavaScriptObjectNotationCommand {
+        depth: Some(LoadDepth::new(1).unwrap()),
+        path: RepositoryPath::parse("/content/example").unwrap(),
+    };
+    let leaf = resource("/content/example/child", vec![], Vec::new(), true);
+    let valid = resource("/content/example", vec![], vec![leaf.clone()], false);
+    assert_eq!(valid.require_answers(&asked), Ok(()));
+    let bytes = valid.canonical_bytes().unwrap();
+    assert_eq!(
+        RepositoryJavaScriptObjectNotationResource::decode_for_request(bytes.as_bytes(), &asked),
+        Ok(valid.clone())
+    );
+    for invalid in [
+        format!(" {bytes}"),
+        bytes.replacen("\"children\":", "\"unknown\":false,\"children\":", 1),
+        bytes.replacen(
+            "\"children_truncated\":false",
+            "\"children_truncated\":false,\"children_truncated\":false",
+            1,
+        ),
+        bytes.replace("/content/example", "/content/other"),
+    ] {
+        assert!(
+            RepositoryJavaScriptObjectNotationResource::decode_for_request(
+                invalid.as_bytes(),
+                &asked
+            )
+            .is_err()
+        );
+    }
+    for document in [
+        resource("/content/other", vec![], Vec::new(), false),
+        resource(
+            "/content/example",
+            vec![],
+            vec![resource("/content/unrelated", vec![], Vec::new(), false)],
+            false,
+        ),
+        resource("/content/example", vec![], vec![leaf.clone(), leaf], false),
+        resource("/content/example", vec![], Vec::new(), true),
+        resource(
+            "/content/example",
+            vec![],
+            vec![resource(
+                "/content/example/child",
+                vec![],
+                vec![resource("/content/example/child/grandchild", vec![], Vec::new(), false)],
+                false,
+            )],
+            false,
+        ),
+    ] {
+        let result = LoadContentAsJavaScriptObjectNotationResult::Inline {
+            path: asked.path.clone(),
+            document,
+        };
+        assert_eq!(result.require_answers(&asked), Err(LoadFailure::NotThisRequest));
+    }
+    let zero = LoadContentAsJavaScriptObjectNotationCommand {
+        depth: Some(LoadDepth::new(0).unwrap()),
+        ..asked
+    };
+    assert_eq!(valid.require_answers(&zero), Err(LoadFailure::NotThisRequest));
+    assert_eq!(
+        resource("/content/example", vec![], Vec::new(), true).require_answers(&zero),
+        Ok(())
+    );
+}
+
+#[test]
+fn loaded_children_sort_by_name_then_numeric_sibling_index() {
+    let command = LoadContentAsJavaScriptObjectNotationCommand {
+        depth: Some(LoadDepth::new(1).unwrap()),
+        path: RepositoryPath::parse("/content/example").unwrap(),
+    };
+    for (names, accepted) in [
+        (vec!["a", "a[2]", "a[10]", "b"], true),
+        (vec!["a[10]", "a[2]"], false),
+        (vec!["b", "a"], false),
+        (vec!["a", "a"], false),
+    ] {
+        let children = names
+            .into_iter()
+            .map(|name| resource(&format!("/content/example/{name}"), vec![], Vec::new(), false))
+            .collect();
+        let document = resource("/content/example", vec![], children, false);
+        assert_eq!(document.require_answers(&command).is_ok(), accepted);
+    }
+    let mut document = resource("/content/example", vec![], Vec::new(), false);
+    let property = serde_json::from_value(
+        serde_json::json!({"property_type":"string","cardinality":"single","value":"safe"}),
+    )
+    .unwrap();
+    document.properties.insert("invalid/name".to_owned(), property);
+    assert_eq!(document.require_answers(&command), Err(LoadFailure::NotThisRequest));
 }
 
 #[test]

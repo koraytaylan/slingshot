@@ -32,7 +32,7 @@
 //! because a partial page that looked resumable would silently lose whatever
 //! the budget cut off.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::command::result_window::{ResultLimit, ResultOffset};
 
@@ -53,7 +53,7 @@ pub const BOOLEAN_PROPERTY_BYTES: u64 = 1;
 ///
 /// These five literals are the whole inventory. Result bytes are absent on
 /// purpose: reaching them completes a page rather than failing a job.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiscoveryBudget {
     /// Candidate nodes inspected.

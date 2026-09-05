@@ -17,6 +17,32 @@
 //! asks for `active` twice, or asks in an order the wire would rewrite, is
 //! sending a document whose bytes nobody can reproduce.
 
+/// Closed content-free inventory failures. A selected command admits only its
+/// own registry categories from this shared vocabulary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "failure", rename_all = "snake_case", deny_unknown_fields)]
+pub enum InventoryRefusal {
+    /// The job inventory could not be read.
+    JobInventoryFailed,
+    /// The workflow inventory could not be read.
+    WorkflowInventoryFailed,
+    /// The bundle inventory could not be read.
+    BundleInventoryFailed,
+    /// The component inventory could not be read.
+    ComponentInventoryFailed,
+    /// The replication-agent inventory could not be read.
+    AgentInventoryFailed,
+    /// The resource-mapping inventory could not be read.
+    MappingInventoryFailed,
+    /// Configuration lookup failed without a partial inventory.
+    ConfigurationLookupFailed,
+    /// Configuration lookup exhausted its declared lookup budget.
+    ConfigurationLookupBudgetExceeded {
+        /// The same bounded lookup vocabulary as configuration inspection.
+        budget: crate::command::inspect_open_service_gateway_initiative_configuration::LookupBudget,
+    },
+}
+
 /// Why a listing result is not one this contract can carry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ListingResultFailure {

@@ -43,7 +43,7 @@ use crate::author_hypertext_transfer_protocol_policy::{
 use crate::server_sent_event_decoder::EventStreamCursor;
 
 /// The one route a filtered event stream is asked for on.
-pub const EVENT_ROUTE: &str = "/libs/slingshot/agent/events";
+pub const EVENT_ROUTE: &str = "/bin/slingshot-agent/events";
 
 /// The query member naming which subscription is wanted.
 pub const SUBSCRIPTION_QUERY_MEMBER: &str = "daemon_subscription_identifier";
@@ -211,6 +211,10 @@ pub enum ReconnectionRefusal {
     /// The subscription is degraded and nothing resumes until it is reset.
     #[error("this subscription is degraded, and streaming resumes after a high-water reset")]
     ResetRequired,
+    /// A reset response no longer matches the committed request context, or
+    /// recovery is already outstanding. No cursor or generation is changed.
+    #[error("the event reset request context is no longer current")]
+    ResetContextMoved,
 }
 
 /// What one subscription has durably applied, and what it was.
@@ -431,6 +435,23 @@ impl EventStreamReconnection {
         self.health = StreamHealth::Degraded;
         self.outstanding_reset = Some(reason);
         reset_route(reason)
+    }
+
+    /// Enters recovery only for validated evidence matching this subscription's
+    /// still-current committed cursor and generation. The captured new cursor
+    /// is deliberately not installed; snapshot/high-water recovery must finish.
+    pub fn require_validated_reset(
+        &mut self,
+        reset: &crate::event_stream_reset::ValidatedEventReset,
+    ) -> Result<RecoveryRoute, ReconnectionRefusal> {
+        if self.subscription != reset.subscription()
+            || self.ledger.generation() != reset.requested_generation()
+            || self.ledger.last_event_identifier() != reset.requested_cursor()
+            || self.outstanding_reset.is_some()
+        {
+            return Err(ReconnectionRefusal::ResetContextMoved);
+        }
+        Ok(self.require_reset(reset.reason()))
     }
 
     /// Records that a high-water reset has rebuilt this subscription.

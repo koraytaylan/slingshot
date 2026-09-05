@@ -23,6 +23,11 @@
 pub use crate::operation::ProducedArtifact;
 use crate::operation::{RecoveryFact, TerminalFailure};
 
+/// An execution phase driven by its owning runtime. Dropping the future stops
+/// local polling; it never asserts that a remote command did not execute.
+pub type ExecutionFuture<'phase, Output> =
+    core::pin::Pin<Box<dyn core::future::Future<Output = Output> + 'phase>>;
+
 /// Which operation is being run, and on whose behalf.
 ///
 /// The target digest is here rather than the identity it digests, so an
@@ -34,6 +39,12 @@ pub struct ExecutionIdentity {
     pub attempt: u32,
     /// The partition this operation belongs to.
     pub author_target_identity_digest: String,
+    /// The immutable environment selection this operation was admitted under.
+    ///
+    /// An author exchange binds this alongside its target. Target equality
+    /// alone is insufficient after a profile, trust-policy, or endpoint
+    /// revision changes.
+    pub selected_environment_revision: String,
     /// The identifier its caller chose.
     pub operation_identifier: String,
 }
@@ -99,10 +110,10 @@ pub trait OperationExecutor {
     /// because "the remote refused" and "the daemon could not reach it" are
     /// facts about the operation that have to be recorded, not exceptions that
     /// may be logged and dropped.
-    fn execute(
-        &self,
-        identity: &ExecutionIdentity,
-        command: &crate::command::catalog::Command,
-        progress: &dyn ProgressPort,
-    ) -> OperationExecutorOutcome;
+    fn execute<'phase>(
+        &'phase self,
+        identity: &'phase ExecutionIdentity,
+        command: &'phase crate::command::catalog::Command,
+        progress: &'phase dyn ProgressPort,
+    ) -> ExecutionFuture<'phase, OperationExecutorOutcome>;
 }

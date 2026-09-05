@@ -7,6 +7,8 @@
 //! them. And one logical command has one effect however many physical records
 //! Sling makes of it.
 
+use std::sync::Arc;
+
 use slingshot_test_support::fake_author::authority::{
     AuthorityRefusal, ContinuationKeyAuthority, DeploymentProfile, EVERY_PROFILE,
     MAXIMUM_KEY_BYTES, MAXIMUM_KEY_RING_BYTES,
@@ -23,7 +25,7 @@ use slingshot_test_support::fake_author::server::{
 };
 
 /// The route these fixtures submit to.
-const SUBMIT: &str = "/bin/slingshot/agent/submit";
+const SUBMIT: &str = "/bin/slingshot-agent/jobs";
 
 /// A route a publisher would serve and this author never does.
 const PUBLISHER: &str = "/content/dam/something";
@@ -164,6 +166,68 @@ fn an_exhausted_script_says_so_rather_than_inventing_an_answer() {
         Answer::ScriptExhausted,
         "a simulator that improvised would let a test pass for a reason nobody wrote down"
     );
+}
+
+/// The network wrapper reaches the same script and the same redacted
+/// recording as the in-process fake, while binding only an ephemeral loopback
+/// listener.
+#[tokio::test]
+async fn the_loopback_server_speaks_the_script_without_recording_credentials() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let author = Arc::new(FakeAuthor::following(
+        script(SUBMIT, ScriptedResponse::Respond { body: b"{}".to_vec(), status: OK_STATUS }),
+        CredentialPolicy::Bearer,
+    ));
+    let recording = author.recording();
+    let server = Arc::clone(&author).serve_loopback().await.expect("the loopback listener binds");
+    let address =
+        server.endpoint().strip_prefix("http://").expect("the test server has an HTTP origin");
+    let mut client = tokio::net::TcpStream::connect(address).await.expect("the listener accepts");
+    client
+        .write_all(
+            b"POST /bin/slingshot-agent/jobs HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer a-test-secret\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+        )
+        .await
+        .expect("the request writes");
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).await.expect("the response reads");
+    assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200"));
+    assert_eq!(recording.requests().len(), 1);
+    assert!(recording.holds_no_credential_values());
+    server.stop().await;
+}
+
+/// A stopped author cannot continue answering over a previously accepted
+/// socket. An authenticated response proves acceptance before shutdown.
+#[tokio::test]
+async fn stopping_the_loopback_author_closes_accepted_connections() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::time::{Duration, timeout};
+
+    let author = Arc::new(FakeAuthor::following(
+        script(SUBMIT, ScriptedResponse::Respond { body: b"{}".to_vec(), status: OK_STATUS }),
+        CredentialPolicy::Basic,
+    ));
+    let server = author.serve_loopback().await.expect("bind loopback");
+    let address = server.endpoint().strip_prefix("http://").expect("HTTP endpoint");
+    let mut socket = tokio::net::TcpStream::connect(address).await.expect("connect");
+    socket.write_all(b"GET /bin/slingshot-agent/jobs HTTP/1.1\r\nHost: localhost\r\nAuthorization: Basic dGVzdA==\r\n\r\n")
+        .await.expect("send request");
+    timeout(Duration::from_secs(5), async {
+        let mut received = Vec::new();
+        while !received.ends_with(b"\r\n\r\n{}") {
+            received.push(socket.read_u8().await.expect("read response"));
+        }
+    })
+    .await
+    .expect("response completes");
+    server.stop().await;
+    let mut byte = [0];
+    let read = timeout(Duration::from_secs(5), socket.read(&mut byte))
+        .await
+        .expect("stopping cannot leave the connection alive");
+    assert!(matches!(read, Ok(0)) || read.is_err());
 }
 
 #[test]

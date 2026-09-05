@@ -43,6 +43,8 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (7, include_str!("../migrations/0007-subscription-event-generation.sql")),
     (8, include_str!("../migrations/0008-maintenance-receipt-count.sql")),
     (9, include_str!("../migrations/0009-maintenance-cleanup-work.sql")),
+    (10, include_str!("../migrations/0010-artifact-publication.sql")),
+    (11, include_str!("../migrations/0011-artifact-acquisition-anchor.sql")),
 ];
 
 /// The one temporary-storage mode the reviewed SQLite build may report.
@@ -143,6 +145,8 @@ pub struct OperationDatabase {
     _state_root: Option<File>,
     /// The named SQLite objects and physical byte limit for this file-backed database.
     physical_inventory: Option<PhysicalInventory>,
+    /// The main-file identity captured when this connection was opened.
+    opened_file: Option<FileSnapshot>,
 }
 
 impl OperationDatabase {
@@ -156,11 +160,40 @@ impl OperationDatabase {
         path: &std::path::Path,
         settings: RequiredSettings,
     ) -> Result<Self, DatabaseFailure> {
+        Self::open_with_startup_recovery(path, settings, true)
+    }
+
+    /// Opens another connection for an already-started, exclusively owned
+    /// daemon. Preserves live artifact reservations and refuses missing or
+    /// outdated schemas rather than running startup recovery or migrations.
+    /// The caller must retain the daemon's ownership lock for the namespace.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DatabaseFailure`] for an uninitialized database or any of the
+    /// same path, physical-budget, settings and authorizer failures as `open`.
+    pub fn open_live(
+        path: &std::path::Path,
+        settings: RequiredSettings,
+    ) -> Result<Self, DatabaseFailure> {
+        Self::open_with_startup_recovery(path, settings, false)
+    }
+
+    fn open_with_startup_recovery(
+        path: &std::path::Path,
+        settings: RequiredSettings,
+        startup: bool,
+    ) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let (state_root, pinned_path) = PinnedDatabasePath::open(path)?;
         let physical_inventory = PhysicalInventory::new(pinned_path.clone())?;
         physical_inventory.require_within_budget()?;
-        let inspected = inspect_existing_schema(&pinned_path)?;
+        let inspected = inspect_existing_schema(&pinned_path, !startup)?;
+        if !startup && inspected.is_none() {
+            return Err(DatabaseFailure::Refused(
+                "a live connection requires an initialized database".to_owned(),
+            ));
+        }
         let connection = Connection::open(&pinned_path).map_err(refused)?;
         if let Some(inspected) = inspected
             && file_snapshot(&pinned_path)? != inspected
@@ -173,11 +206,20 @@ impl OperationDatabase {
             connection,
             _state_root: Some(state_root),
             physical_inventory: Some(physical_inventory),
+            opened_file: Some(file_snapshot(&pinned_path)?),
         };
         database.require_compile_options()?;
         database.apply_and_verify(settings)?;
-        database.migrate()?;
-        database.reconcile_abandoned_artifact_reservations()?;
+        if startup {
+            database.migrate()?;
+            database.reconcile_abandoned_artifact_reservations()?;
+        } else if database.schema_version()?
+            != MIGRATIONS.iter().map(|(version, _)| *version).max().unwrap_or_default()
+        {
+            return Err(DatabaseFailure::Refused(
+                "a live connection requires the current database schema".to_owned(),
+            ));
+        }
         database.reconcile_physical_inventory()?;
         database.install_authorizer()?;
         Ok(database)
@@ -192,13 +234,38 @@ impl OperationDatabase {
     pub fn open_in_memory(settings: RequiredSettings) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let connection = Connection::open_in_memory().map_err(refused)?;
-        let database = Self { connection, _state_root: None, physical_inventory: None };
+        let database =
+            Self { connection, _state_root: None, physical_inventory: None, opened_file: None };
         database.require_compile_options()?;
         database.apply_valued(settings)?;
         database.set_pragma("foreign_keys", "1")?;
         database.migrate()?;
         database.install_authorizer()?;
         Ok(database)
+    }
+
+    /// Whether both connections still name the same opened database object.
+    /// No path or filesystem identity is exposed to callers. Distinct in-memory
+    /// databases and platforms without stable file identity fail closed.
+    #[must_use]
+    pub fn shares_database_with(&self, other: &Self) -> bool {
+        match (&self.physical_inventory, &other.physical_inventory) {
+            (None, None) => core::ptr::eq(self, other),
+            (Some(left), Some(right)) => {
+                #[cfg(unix)]
+                {
+                    self.opened_file == other.opened_file
+                        && file_snapshot(&left.main).ok() == self.opened_file
+                        && file_snapshot(&right.main).ok() == other.opened_file
+                }
+                #[cfg(not(unix))]
+                {
+                    let _ = (left, right);
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     /// Returns the connection this daemon owns.
@@ -646,9 +713,11 @@ fn reports_only_required_temp_store_ffi() -> bool {
     })
 }
 
-/// Refuses a future schema through a read-only connection before any mutable open.
+/// Refuses incompatible schemas through a read-only connection before any
+/// mutable open. Live connections require exact currency; startup may migrate.
 fn inspect_existing_schema(
     path: &std::path::Path,
+    require_current: bool,
 ) -> Result<Option<FileSnapshot>, DatabaseFailure> {
     if !path.exists() {
         return Ok(None);
@@ -662,6 +731,11 @@ fn inspect_existing_schema(
     let supported = MIGRATIONS.iter().map(|(version, _)| *version).max().unwrap_or_default();
     if observed > supported {
         return Err(DatabaseFailure::SchemaTooNew { observed, supported });
+    }
+    if require_current && observed != supported {
+        return Err(DatabaseFailure::Refused(
+            "a live connection requires the current database schema".to_owned(),
+        ));
     }
     Ok(Some(snapshot))
 }

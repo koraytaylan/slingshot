@@ -48,8 +48,439 @@ const SUBMITTED_DIGEST: &str = "111111111111111111111111111111111111111111111111
 /// A digest substituted where a real one belongs.
 const SUBSTITUTED_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
+#[test]
+fn decoded_events_preserve_missing_counters_without_accepting_explicit_regression() {
+    use slingshot_agent_connection::job_event_reducer::{
+        AssociationBinding, JobDisposition, ReducerRefusal, RetainedJob, reduce_decoded,
+    };
+    use slingshot_domain::remote_job::{AgentJobState, JobEventSequence, RemoteJobObservation};
+    let held = RetainedJob {
+        observation: RemoteJobObservation {
+            applied_sequence: JobEventSequence::of(3), attempt: 2, progress: 40,
+            state: AgentJobState::Running,
+        },
+        snapshot_watermark: JobEventSequence::of(1),
+    };
+    let binding = AssociationBinding {
+        expected_provenance: installed_provenance(),
+        selected_environment_revision: "retained-revision".into(),
+        submitted_command_digest: SUBMITTED_DIGEST.into(),
+    };
+    for (attempt, progress) in [(None, None), (Some(3), None), (None, Some(41)), (Some(0), None), (None, Some(0))] {
+        for sequence in [2, 3, 4, 5] {
+            let mut document = serde_json::json!({
+                "agent_event_store_generation": GENERATION,
+                "agent_operation_identifier": TERMINAL_OPERATION,
+                "daemon_subscription_identifier": SUBSCRIPTION,
+                "sling_job_identifier": "job-fixture", "kind": "progress",
+                "state": "running", "sequence": sequence
+            });
+            if let Some(attempt) = attempt { document["attempt"] = attempt.into(); }
+            if let Some(progress) = progress { document["progress"] = progress.into(); }
+            let bytes = format!("id:cursor\ndata:{document}\n\n");
+            let items = decode_in_chunks(bytes.as_bytes(), 1).unwrap();
+            let StreamItem::Event(event) = &items[0] else { panic!("event missing") };
+            for (generation, operation) in [(GENERATION + 1, TERMINAL_OPERATION), (GENERATION, "wrong-operation")] {
+                assert_eq!(reduce_decoded(&held, &binding, generation, operation, event), Err(ReducerRefusal::AnotherJob));
+            }
+            let result = reduce_decoded(&held, &binding, GENERATION, TERMINAL_OPERATION, event);
+            match sequence {
+                2 => assert_eq!(result.unwrap(), (JobDisposition::StaleCursorOnly, None)),
+                3 => assert_eq!(result.unwrap(), (if attempt.is_none() && progress.is_none() {
+                    JobDisposition::ExactReplay
+                } else { JobDisposition::IntegrityConflictNeedsReconciliation }, None)),
+                4 if attempt == Some(0) || progress == Some(0) => assert!(matches!(result, Err(ReducerRefusal::Job(_)))),
+                4 => {
+                    let (disposition, observation) = result.unwrap();
+                    assert_eq!(disposition, JobDisposition::Applied);
+                    let observation = observation.unwrap();
+                    assert_eq!(observation.attempt, attempt.unwrap_or(2));
+                    assert_eq!(observation.progress, progress.unwrap_or(40));
+                    assert_eq!(observation.applied_sequence, JobEventSequence::of(4));
+                }
+                5 => assert_eq!(result.unwrap(), (JobDisposition::NeedsSnapshot, None)),
+                _ => unreachable!(),
+            }
+        }
+    }
+}
+
+#[test]
+fn canonical_event_identity_covers_the_envelope_and_preserves_omission() {
+    use slingshot_domain::command::canonical_json::{canonical_digest, write_canonical};
+    let base = serde_json::json!({
+        "agent_event_store_generation": GENERATION,
+        "agent_operation_identifier": TERMINAL_OPERATION,
+        "daemon_subscription_identifier": SUBSCRIPTION,
+        "sling_job_identifier": "job-é", "kind": "progress",
+        "state": "running", "sequence": 3
+    });
+    let decode = |payload: &str, framing: &str| {
+        let bytes = format!("{framing}data:{payload}\n\n");
+        let mut items = decode_in_chunks(bytes.as_bytes(), 1).unwrap();
+        let StreamItem::Event(event) = items.remove(0) else { panic!("event missing") };
+        event
+    };
+    let first = decode(&base.to_string(), "id:first\nevent:job-event\n");
+    let canonical = write_canonical(&base).unwrap();
+    assert_eq!(first.canonical_digest, canonical_digest(&canonical));
+    assert_eq!(first.canonical_bytes, canonical.len() as u64);
+    // Reverse member order and add insignificant JSON whitespace. SSE cursor
+    // and event-name framing are not part of the event document's identity.
+    let reversed = base.as_object().unwrap().iter().rev()
+        .map(|(key, value)| format!("{} : {value}", serde_json::to_string(key).unwrap()))
+        .collect::<Vec<_>>().join(", ");
+    let equivalent = decode(&format!("{{ {reversed} }}"), "id:second\nevent:other-name\n");
+    assert_eq!(first.canonical_digest, equivalent.canonical_digest);
+    assert_eq!(first.canonical_bytes, equivalent.canonical_bytes);
+    for (field, value) in [
+        ("attempt", serde_json::json!(0)),
+        ("progress", serde_json::json!(0)),
+        ("sling_job_identifier", serde_json::json!("other-job")),
+        ("sequence", serde_json::json!(4)),
+        ("agent_operation_identifier", serde_json::json!("b".repeat(64))),
+    ] {
+        let mut changed = base.clone();
+        changed[field] = value;
+        let event = decode(&changed.to_string(), "id:first\n");
+        assert_ne!(first.canonical_digest, event.canonical_digest, "{field}");
+        assert_eq!(event.canonical_bytes, write_canonical(&changed).unwrap().len() as u64);
+    }
+}
+
+#[test]
+fn incremental_delivery_preserves_valid_items_before_a_later_failure_at_every_split() {
+    let bytes = b": valid heartbeat\n\ndata: not-json\n\n";
+    for split in 0..=bytes.len() {
+        let mut decoder = attached();
+        let mut delivered = Vec::new();
+        let mut consume = |item| {
+            delivered.push(item);
+            Ok(())
+        };
+        let first = decoder.push_each(&bytes[..split], &mut consume);
+        let result =
+            if first.is_ok() { decoder.push_each(&bytes[split..], &mut consume) } else { first };
+        assert!(result.is_err());
+        assert_eq!(delivered, [StreamItem::Heartbeat]);
+        assert!(!decoder.has_partial_event());
+        assert_eq!(
+            decoder.push_each(b": later\n", |_| panic!("closed decoder delivered")),
+            Err(StreamRefusal::Closed)
+        );
+    }
+}
+
+#[test]
+fn physical_event_state_and_optional_counters_are_validated_and_preserved() {
+    let base = serde_json::json!({"agent_event_store_generation":GENERATION,
+        "agent_operation_identifier":TERMINAL_OPERATION, "daemon_subscription_identifier":SUBSCRIPTION,
+        "sling_job_identifier":"job-fixture", "state":"running", "kind":"progress", "sequence":1});
+    let decode = |document: &serde_json::Value| attached().push(format!("data:{document}\n\n").as_bytes());
+    for (kind, expected) in [("accepted", "queued"), ("started", "running"), ("progress", "running"), ("succeeded", "succeeded"), ("failed", "failed")] {
+        for state in ["queued", "running", "succeeded", "failed"] {
+            let mut document = base.clone(); document["kind"] = kind.into(); document["state"] = state.into();
+            if ["succeeded", "failed"].contains(&kind) {
+                document["terminal"] = serde_json::json!({"provenance":installed_provenance().provenance(), "submitted_command_digest":SUBMITTED_DIGEST});
+            }
+            assert_eq!(decode(&document).is_ok(), state == expected, "{kind}/{state}");
+        }
+    }
+    for (physical, valid) in [("job /?é".into(), true), (String::new(), false), ("a".repeat(1024), true), ("a".repeat(1025), false), ("é".repeat(512), true), ("é".repeat(513), false)] {
+        let mut document = base.clone(); document["sling_job_identifier"] = physical.clone().into();
+        let result = decode(&document);
+        assert_eq!(result.is_ok(), valid);
+        if valid { let StreamItem::Event(event) = &result.unwrap()[0] else {panic!("event missing");}; assert_eq!(event.sling_job_identifier, physical); }
+    }
+    for field in ["sling_job_identifier", "state"] {
+        let mut document = base.clone(); document.as_object_mut().unwrap().remove(field);
+        assert!(decode(&document).is_err());
+    }
+    for counter in [None, Some(0), Some(17), Some(u64::MAX)] {
+        let mut document = base.clone();
+        if let Some(counter) = counter { document["attempt"] = counter.into(); document["progress"] = counter.into(); }
+        let items = decode(&document).unwrap(); let StreamItem::Event(event) = &items[0] else {panic!("event missing");};
+        assert_eq!(event.attempt, counter); assert_eq!(event.progress, counter);
+    }
+    for field in ["attempt", "progress"] {
+        for value in [serde_json::Value::Null, serde_json::json!(-1), serde_json::json!(1.5), serde_json::json!("1"), serde_json::json!(true)] {
+            let mut document = base.clone(); document[field] = value; assert!(decode(&document).is_err());
+        }
+    }
+}
+
+#[test]
+fn event_operation_identifiers_obey_the_closed_wire_grammar() {
+    let valid = "a".repeat(64);
+    for identifier in [String::new(), "operation-placeholder".into(), "a".repeat(63), "a".repeat(65),
+        "A".repeat(64), "g".repeat(64), format!(" {}", "a".repeat(63)), "é".repeat(32),
+        valid.clone(), "0".repeat(64), "f".repeat(64)] {
+        let mut decoder = attached();
+        let document = serde_json::json!({"agent_event_store_generation":GENERATION,
+            "agent_operation_identifier":identifier, "daemon_subscription_identifier":SUBSCRIPTION,
+            "kind":"progress", "sequence":1, "sling_job_identifier":"job-fixture", "state":"running"});
+        let mut delivered = Vec::new();
+        let result = decoder.push_each(format!(": prefix\ndata:{document}\n\n").as_bytes(), |item| {delivered.push(item); Ok(())});
+        let acceptable = identifier.len() == 64 && identifier.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+        if acceptable {
+            assert!(result.is_ok()); assert_eq!(delivered.len(), 2);
+        } else {
+            assert_eq!(result, Err(StreamRefusal::Malformed {field:"agent_operation_identifier"}));
+            assert_eq!(delivered.len(), 1, "only the prior heartbeat may escape");
+            assert_eq!(decoder.push(b": later\n"), Err(StreamRefusal::Closed));
+        }
+    }
+}
+
+#[test]
+fn event_and_terminal_debug_views_do_not_expose_wire_identity() {
+    let items = attached().push(&terminal_stream(&installed_provenance().provenance(), SUBMITTED_DIGEST)).unwrap();
+    let StreamItem::Event(event) = &items[0] else { panic!("expected terminal event"); };
+    assert_eq!(format!("{event:?}"), "DecodedEvent([redacted])");
+    assert_eq!(format!("{:?}", event.terminal.as_ref().unwrap()), "TerminalCorrelation([redacted])");
+}
+
+#[test]
+fn explicitly_null_terminal_data_is_not_an_absent_member() {
+    for kind in ["progress", "succeeded"] {
+        let document = serde_json::json!({"agent_event_store_generation":GENERATION,
+            "agent_operation_identifier":TERMINAL_OPERATION, "daemon_subscription_identifier":SUBSCRIPTION,
+            "kind":kind, "sequence":1, "terminal":null, "sling_job_identifier":"job-fixture", "state":if kind == "progress" {"running"} else {"succeeded"}});
+        assert_eq!(attached().push(format!("data:{document}\n\n").as_bytes()), Err(StreamRefusal::Malformed {field:"payload"}));
+    }
+}
+
+#[test]
+fn incremental_consumer_refusal_never_delivers_later_items_or_reopens() {
+    let mut decoder = attached();
+    let mut delivered = 0;
+    assert_eq!(
+        decoder.push_each(b": first\n: refused\n: never\n", |_| {
+            delivered += 1;
+            if delivered == 2 { Err(StreamRefusal::Consumer) } else { Ok(()) }
+        }),
+        Err(StreamRefusal::Consumer)
+    );
+    assert_eq!(delivered, 2);
+    assert_eq!(decoder.push(b": never\n"), Err(StreamRefusal::Closed));
+}
+
+#[test]
+fn incremental_delivery_does_not_collect_a_chunk_sized_batch() {
+    let mut decoder = attached();
+    let chunk = b": heartbeat\n".repeat(100_000);
+    let mut delivered = 0;
+    decoder
+        .push_each(&chunk, |item| {
+            assert_eq!(item, StreamItem::Heartbeat);
+            delivered += 1;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(delivered, 100_000);
+    assert!(!decoder.has_partial_event());
+}
+
+#[test]
+fn a_caught_consumer_panic_cannot_reopen_the_decoder_or_expose_its_buffers() {
+    let mut decoder = attached();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = decoder.push_each(b": heartbeat\n", |_| panic!("consumer stopped"));
+    }));
+    assert!(result.is_err());
+    assert_eq!(decoder.push(b": later\n"), Err(StreamRefusal::Closed));
+    assert_eq!(format!("{decoder:?}"), "ServerSentEventDecoder([redacted])");
+}
+
+#[test]
+fn subscription_terminals_resolve_each_operations_own_contract_and_digest() {
+    use slingshot_agent_connection::server_sent_event_decoder::OperationStreamExpectation;
+    let first = installed_provenance();
+    let second = ExpectedProvenance {
+        command_contract: SelectedCommandContractIdentity::installed("create_asset").unwrap(),
+        ..installed_provenance()
+    };
+    let first_bytes = terminal_stream(&first.provenance(), SUBMITTED_DIGEST);
+    let second_bytes = String::from_utf8(terminal_stream(&second.provenance(), SUBSTITUTED_DIGEST))
+        .unwrap()
+        .replace(TERMINAL_OPERATION, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        .replace("cursor-terminal", "cursor-second")
+        .into_bytes();
+    let bytes = [first_bytes, second_bytes].concat();
+    for chunk in CHUNK_SIZES {
+        let mut resolved = Vec::new();
+        let resolver = |operation: &str| {
+            resolved.push(operation.to_owned());
+            let (provenance, digest) = match operation {
+                TERMINAL_OPERATION => (first.clone(), SUBMITTED_DIGEST),
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" => (second.clone(), SUBSTITUTED_DIGEST),
+                _ => return Err(StreamRefusal::AnotherSubmission),
+            };
+            Ok(OperationStreamExpectation {
+                agent_operation_identifier: operation.to_owned(),
+                daemon_subscription_identifier: SUBSCRIPTION.to_owned(),
+                agent_event_store_generation: GENERATION,
+                expected_provenance: provenance,
+                submitted_command_digest: digest.to_owned(),
+            })
+        };
+        let mut decoder = ServerSentEventDecoder::attached_subscription(
+            &clean_head(),
+            EVENT_STREAM_MEDIA_TYPE,
+            DecoderBounds::embedded(),
+            SUBSCRIPTION.to_owned(),
+            GENERATION,
+            resolver,
+        )
+        .unwrap();
+        let mut delivered = Vec::new();
+        for part in bytes.chunks(*chunk) {
+            decoder
+                .push_each(part, |item| {
+                    delivered.push(item);
+                    Ok(())
+                })
+                .unwrap();
+        }
+        assert_eq!(delivered.len(), 2);
+        drop(decoder);
+        assert_eq!(resolved, [TERMINAL_OPERATION, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]);
+    }
+}
+
+#[test]
+fn wrong_retained_key_digest_contract_or_resolution_failure_prevents_delivery() {
+    use slingshot_agent_connection::server_sent_event_decoder::OperationStreamExpectation;
+    for defect in
+        ["key", "digest", "contract", "missing", "generation", "subscription", "malformed_digest"]
+    {
+        let resolver = |operation: &str| {
+            if defect == "missing" {
+                return Err(StreamRefusal::AnotherSubmission);
+            }
+            let mut provenance = installed_provenance();
+            if defect == "contract" {
+                provenance.transport_contract_digest = SUBSTITUTED_DIGEST.to_owned();
+            }
+            Ok(OperationStreamExpectation {
+                daemon_subscription_identifier: if defect == "subscription" {
+                    "other"
+                } else {
+                    SUBSCRIPTION
+                }
+                .to_owned(),
+                agent_event_store_generation: if defect == "generation" {
+                    GENERATION + 1
+                } else {
+                    GENERATION
+                },
+                agent_operation_identifier: if defect == "key" {
+                    "another".to_owned()
+                } else {
+                    operation.to_owned()
+                },
+                expected_provenance: provenance,
+                submitted_command_digest: if defect == "digest" {
+                    SUBSTITUTED_DIGEST
+                } else if defect == "malformed_digest" {
+                    "not a digest"
+                } else {
+                    SUBMITTED_DIGEST
+                }
+                .to_owned(),
+            })
+        };
+        let mut decoder = ServerSentEventDecoder::attached_subscription(
+            &clean_head(),
+            EVENT_STREAM_MEDIA_TYPE,
+            DecoderBounds::embedded(),
+            SUBSCRIPTION.to_owned(),
+            GENERATION,
+            resolver,
+        )
+        .unwrap();
+        assert!(
+            decoder
+                .push_each(
+                    &terminal_stream(&installed_provenance().provenance(), SUBMITTED_DIGEST),
+                    |_| panic!("uncorrelated terminal was delivered")
+                )
+                .is_err()
+        );
+        assert_eq!(decoder.push(b": later\n"), Err(StreamRefusal::Closed));
+    }
+}
+
+#[test]
+fn subscription_and_generation_are_checked_before_retained_operation_resolution() {
+    use slingshot_agent_connection::server_sent_event_decoder::OperationStreamExpectation;
+    for bytes in [
+        String::from_utf8(terminal_stream(&installed_provenance().provenance(), SUBMITTED_DIGEST))
+            .unwrap()
+            .replace(SUBSCRIPTION, "other"),
+        String::from_utf8(terminal_stream(&installed_provenance().provenance(), SUBMITTED_DIGEST))
+            .unwrap()
+            .replace("\"agent_event_store_generation\":7", "\"agent_event_store_generation\":8"),
+    ] {
+        let resolver = |_: &str| -> Result<OperationStreamExpectation, StreamRefusal> {
+            panic!("wrong stream caused a storage lookup");
+        };
+        let mut decoder = ServerSentEventDecoder::attached_subscription(
+            &clean_head(),
+            EVENT_STREAM_MEDIA_TYPE,
+            DecoderBounds::embedded(),
+            SUBSCRIPTION.to_owned(),
+            GENERATION,
+            resolver,
+        )
+        .unwrap();
+        assert!(
+            decoder.push_each(bytes.as_bytes(), |_| panic!("wrong stream was delivered")).is_err()
+        );
+    }
+}
+
+#[test]
+fn matching_remote_and_retained_drift_is_not_installed_contract_evidence() {
+    use slingshot_agent_connection::server_sent_event_decoder::OperationStreamExpectation;
+    for defect in ["transport", "canonical", "digest"] {
+        let mut retained = installed_provenance();
+        if defect == "transport" {
+            retained.transport_contract_digest = SUBSTITUTED_DIGEST.to_owned();
+        }
+        if defect == "canonical" {
+            retained.canonical_json_contract_digest = SUBSTITUTED_DIGEST.to_owned();
+        }
+        let digest = if defect == "digest" { "invalid" } else { SUBMITTED_DIGEST };
+        let bytes = terminal_stream(&retained.provenance(), digest);
+        let resolver = |operation: &str| {
+            Ok(OperationStreamExpectation {
+                daemon_subscription_identifier: SUBSCRIPTION.to_owned(),
+                agent_event_store_generation: GENERATION,
+                agent_operation_identifier: operation.to_owned(),
+                expected_provenance: retained.clone(),
+                submitted_command_digest: digest.to_owned(),
+            })
+        };
+        let mut decoder = ServerSentEventDecoder::attached_subscription(
+            &clean_head(),
+            EVENT_STREAM_MEDIA_TYPE,
+            DecoderBounds::embedded(),
+            SUBSCRIPTION.to_owned(),
+            GENERATION,
+            resolver,
+        )
+        .unwrap();
+        assert!(
+            decoder
+                .push_each(&bytes, |_| panic!("matching invalid records were delivered"))
+                .is_err()
+        );
+    }
+}
+
 /// The operation a terminal event ends.
-const TERMINAL_OPERATION: &str = "operation-alpha";
+const TERMINAL_OPERATION: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 /// Where a terminal event sits in that operation's own sequence.
 const TERMINAL_SEQUENCE: u64 = 9;
@@ -182,6 +613,7 @@ fn terminal_stream(provenance: &DocumentProvenance, digest: &str) -> Vec<u8> {
         "agent_operation_identifier": TERMINAL_OPERATION,
         "daemon_subscription_identifier": SUBSCRIPTION,
         "kind": "succeeded",
+        "sling_job_identifier": "job-fixture", "state": "succeeded",
         "sequence": TERMINAL_SEQUENCE,
         "terminal": { "provenance": provenance, "submitted_command_digest": digest },
     });
@@ -336,9 +768,9 @@ fn data_fields_join_with_a_newline_and_the_fields_this_build_ignores_are_ignored
             format!(
                 "{RETRY_FIELD}:5000\nunheard-of:something\n{IDENTIFIER_FIELD}:cursor-joined\n\
                  {DATA_FIELD}:{{\"agent_event_store_generation\":{GENERATION},\n\
-                 {DATA_FIELD}: \"agent_operation_identifier\":\"operation-joined\",\n\
+                 {DATA_FIELD}: \"agent_operation_identifier\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\n\
                  {DATA_FIELD}:\"daemon_subscription_identifier\":\"{SUBSCRIPTION}\",\n\
-                 {DATA_FIELD}:\"kind\":\"progress\",\"sequence\":1}}\n\n"
+                 {DATA_FIELD}:\"kind\":\"progress\",\"sequence\":1,\"sling_job_identifier\":\"job-fixture\",\"state\":\"running\"}}\n\n"
             )
             .as_bytes(),
         )
@@ -347,7 +779,7 @@ fn data_fields_join_with_a_newline_and_the_fields_this_build_ignores_are_ignored
         panic!("a data field joined across lines is still one event")
     };
     let (cursor, event) = (&decoded.cursor, &decoded.event);
-    assert_eq!(event.agent_operation_identifier, "operation-joined");
+    assert_eq!(event.agent_operation_identifier, "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd");
     assert_eq!(
         cursor.as_ref().map(EventStreamCursor::as_text),
         Some("cursor-joined"),
@@ -367,7 +799,7 @@ fn interleaved_jobs_keep_independent_sequences_and_distinct_cursors() {
         let StreamItem::Event(decoded) = item else { panic!("no comments here") };
         let (cursor, event) = (&decoded.cursor, &decoded.event);
         cursors.push(cursor.as_ref().expect("each carries one").as_text().to_owned());
-        if event.agent_operation_identifier == "operation-alpha" {
+        if event.agent_operation_identifier == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
             alpha.push(event.sequence);
         } else {
             beta.push(event.sequence);
@@ -410,9 +842,10 @@ fn each_named_bound_admits_its_exact_value_and_refuses_one_byte_past_it() {
 fn padded_event(bounds: DecoderBounds, surplus: usize) -> String {
     let document = serde_json::json!({
         "agent_event_store_generation": GENERATION,
-        "agent_operation_identifier": "operation-padded",
+        "agent_operation_identifier": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "daemon_subscription_identifier": SUBSCRIPTION,
         "kind": "progress",
+        "sling_job_identifier": "job-fixture", "state": "running",
         "sequence": 1,
     })
     .to_string();
@@ -535,6 +968,7 @@ fn a_correlation_on_an_event_that_ends_nothing_correlates_nothing() {
         "agent_operation_identifier": TERMINAL_OPERATION,
         "daemon_subscription_identifier": SUBSCRIPTION,
         "kind": "progress",
+        "sling_job_identifier": "job-fixture", "state": "running",
         "sequence": 1,
         "terminal": {
             "provenance": installed_provenance().provenance(),

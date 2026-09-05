@@ -6,18 +6,18 @@
 //! nothing to reconstruct, because there was never a second copy of the truth.
 //!
 //! Reservations are the exception, and deliberately so. An artifact being
-//! installed has no row yet, so its bytes are held in memory against the same
-//! bound until the association commits. That is the right lifetime: a
+//! installed has no blob row yet, so its bytes are held in a reservation row
+//! against the same bound until the association commits. That is the right lifetime: a
 //! reservation belongs to an installation in progress, and an installation
 //! interrupted by a restart is not in progress any more. What it leaves behind
 //! is the staged file the artifact store deliberately does not delete, which
 //! nothing addresses and which no count includes.
 //!
-//! One account belongs to one open database, and a database belongs to one
-//! daemon process, so the reservations are process-local by construction. The
-//! check and the take are still one critical section rather than two, because
-//! an invariant that holds only because of what a type happens not to implement
-//! is an invariant nobody wrote down.
+//! Accounts on already-open connections share the reservation rows. An
+//! immediate transaction holds the capacity check and insert together, so two
+//! connections cannot each consume the same remaining capacity. Startup still
+//! owns abandonment reconciliation; opening a new startup database while live
+//! reservations exist must not be confused with acquiring another account.
 //!
 //! Refusal always happens before mutation. Nothing here deletes a terminal row,
 //! a receipt, or committed content to make room: reaching a bound is a fact to
@@ -42,6 +42,9 @@ fn statement(purpose: &str) -> &'static str {
 /// Reason a capacity question could not be answered or acted on.
 #[derive(Debug, thiserror::Error)]
 pub enum AccountingFailure {
+    /// A purported duplicate disagrees with the already committed content.
+    #[error("the artifact length differs from the committed content")]
+    ContentLengthConflict,
     /// The namespace is at or past a bound.
     #[error(transparent)]
     Refused(#[from] CapacityRefusal),
@@ -59,12 +62,69 @@ fn refused(failure: rusqlite::Error) -> AccountingFailure {
 }
 
 /// One artifact's bytes, held against the bound until its association commits.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ArtifactReservation {
+/// Dropping the guard releases only this reservation on its owning connection.
+///
+/// A consumed reservation cannot release a reused ticket a second time:
+/// ```compile_fail
+/// use slingshot_storage::persistent_capacity::ArtifactReservation;
+/// fn release_twice(reservation: ArtifactReservation<'_>) {
+///     drop(reservation);
+///     drop(reservation);
+/// }
+/// ```
+#[must_use = "keep the reservation alive until publication commits or the transfer is abandoned"]
+pub struct ArtifactReservation<'database> {
     /// How many bytes are held.
     pub byte_length: u64,
     /// Which reservation this is.
-    pub ticket: u64,
+    ticket: Option<u64>,
+    /// The connection owning this reservation; never a caller-selected account.
+    database: &'database OperationDatabase,
+}
+
+impl core::fmt::Debug for ArtifactReservation<'_> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("ArtifactReservation([redacted])")
+    }
+}
+
+impl Drop for ArtifactReservation<'_> {
+    fn drop(&mut self) {
+        let Some(ticket) = self.ticket.and_then(|ticket| i64::try_from(ticket).ok()) else {
+            return;
+        };
+        // A failed release conservatively retains capacity until startup
+        // reconciliation; it never releases another connection's ticket.
+        self.database
+            .connection()
+            .execute(
+                statement("release one durable artifact reservation"),
+                rusqlite::params![ticket],
+            )
+            .ok();
+    }
+}
+
+/// A durable, producer-specific hold protecting content during publication.
+/// Dropping this value deliberately does not release the persisted hold.
+/// Completion/reconciliation must consume the exact record, never all records
+/// sharing its digest. It is not proof of a published file or local success.
+#[derive(Clone)]
+pub struct ArtifactPublication {
+    identifier: String,
+}
+
+impl ArtifactPublication {
+    /// Opaque identifier for the exact persisted publication attempt.
+    pub fn identifier(&self) -> &str {
+        &self.identifier
+    }
+}
+
+impl core::fmt::Debug for ArtifactPublication {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("ArtifactPublication([redacted])")
+    }
 }
 
 /// What one namespace is currently holding.
@@ -98,6 +158,12 @@ impl<'database> PersistentCapacityAccount<'database> {
     #[must_use]
     pub fn policy(&self) -> PersistentCapacityPolicy {
         self.policy
+    }
+
+    /// Requires accounting and operation state to share the same live database.
+    #[must_use]
+    pub fn belongs_to(&self, database: &OperationDatabase) -> bool {
+        self.database.shares_database_with(database)
     }
 
     /// Returns one count from the rows that are authoritative for it.
@@ -134,7 +200,7 @@ impl<'database> PersistentCapacityAccount<'database> {
     }
 }
 
-impl PersistentCapacityAccount<'_> {
+impl<'database> PersistentCapacityAccount<'database> {
     /// Requires room for one more operation row.
     ///
     /// Asked before admission writes anything, so a namespace at its bound
@@ -241,11 +307,19 @@ impl PersistentCapacityAccount<'_> {
         &self,
         content_digest: Option<&str>,
         byte_length: u64,
-    ) -> Result<Option<ArtifactReservation>, AccountingFailure> {
+    ) -> Result<Option<ArtifactReservation<'database>>, AccountingFailure> {
         self.policy.require_artifact_representable(byte_length)?;
+        let transaction = rusqlite::Transaction::new_unchecked(
+            self.database.connection(),
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .map_err(refused)?;
         if let Some(digest) = content_digest
-            && self.committed_length(digest)?.is_some()
+            && let Some(committed_length) = self.committed_length(digest)?
         {
+            if committed_length != byte_length {
+                return Err(AccountingFailure::ContentLengthConflict);
+            }
             return Ok(None);
         }
         let committed =
@@ -275,25 +349,145 @@ impl PersistentCapacityAccount<'_> {
             u64::try_from(self.database.connection().last_insert_rowid()).map_err(|_| {
                 AccountingFailure::DatabaseRefused("the reservation ticket is negative".to_owned())
             })?;
-        let reservation = ArtifactReservation { byte_length, ticket };
-        Ok(Some(reservation))
+        transaction.commit().map_err(refused)?;
+        Ok(Some(ArtifactReservation { byte_length, ticket: Some(ticket), database: self.database }))
+    }
+
+    /// Converts reserved bytes into a durable publication hold before a verified
+    /// private stage is published. Blob accounting and reservation release are
+    /// atomic; startup cleanup cannot release these bytes. Existing content
+    /// still receives a separate producer hold without a second byte charge.
+    pub fn retain_staged_publication(
+        &self,
+        stage: &crate::artifact_store::StagedArtifact<'_>,
+        mut reservation: Option<ArtifactReservation<'_>>,
+        now_unix_milliseconds: u64,
+    ) -> Result<ArtifactPublication, AccountingFailure> {
+        use rusqlite::OptionalExtension as _;
+        let metadata = stage.metadata();
+        let invalid =
+            || AccountingFailure::DatabaseRefused("the publication hold is not valid".to_owned());
+        let length = i64::try_from(metadata.byte_length).map_err(|_| invalid())?;
+        let now = i64::try_from(now_unix_milliseconds).map_err(|_| invalid())?;
+        let transaction = rusqlite::Transaction::new_unchecked(
+            self.database.connection(),
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .map_err(refused)?;
+        let existing = self.committed_length(&metadata.content_digest)?;
+        // Each retained command can produce one remote artifact and one local
+        // structured-result artifact. Pending producers consume bounded rows
+        // even when their shared content consumes no additional byte charge.
+        let maximum_publications =
+            self.policy.retained_operation_rows.checked_mul(2).ok_or_else(invalid)?;
+        if self.count("count this namespace's pending artifact publications", &[])?
+            >= maximum_publications
+        {
+            return Err(invalid());
+        }
+        if existing.is_some_and(|held| held != metadata.byte_length) {
+            return Err(AccountingFailure::ContentLengthConflict);
+        }
+        if let Some(hold) = &reservation {
+            if !core::ptr::eq(hold.database, self.database) {
+                return Err(invalid());
+            }
+            let ticket =
+                hold.ticket.and_then(|value| i64::try_from(value).ok()).ok_or_else(invalid)?;
+            let held: Option<i64> = transaction
+                .query_row(statement("read one durable artifact reservation"), [ticket], |row| {
+                    row.get(0)
+                })
+                .optional()
+                .map_err(refused)?;
+            if held != Some(length) {
+                return Err(invalid());
+            }
+        } else if existing.is_none() {
+            return Err(invalid());
+        }
+        transaction
+            .execute(
+                statement("record one artifact's content, once per digest"),
+                rusqlite::params![length, metadata.content_digest, now],
+            )
+            .map_err(refused)?;
+        let identifier = uuid::Uuid::new_v4().to_string();
+        transaction
+            .execute(
+                statement("retain one artifact publication across restart"),
+                rusqlite::params![
+                    identifier,
+                    metadata.artifact_identifier.as_text(),
+                    metadata.content_digest,
+                    now
+                ],
+            )
+            .map_err(refused)?;
+        if let Some(hold) = &reservation {
+            let ticket =
+                hold.ticket.and_then(|value| i64::try_from(value).ok()).ok_or_else(invalid)?;
+            if transaction
+                .execute(statement("release one durable artifact reservation"), [ticket])
+                .map_err(refused)?
+                != 1
+            {
+                return Err(invalid());
+            }
+        }
+        transaction.commit().map_err(refused)?;
+        if let Some(hold) = &mut reservation {
+            hold.ticket = None;
+        }
+        Ok(ArtifactPublication { identifier })
+    }
+
+    /// Number of durable publication holds awaiting completion or reconciliation.
+    pub fn pending_publications(&self) -> Result<u64, AccountingFailure> {
+        self.count("count this namespace's pending artifact publications", &[])
+    }
+
+    /// Recovers a sole pending producer for exactly the expected artifact and
+    /// verified content. Multiple producers or changed content refuse without
+    /// choosing or deleting a hold. This does not prove file presence or grant
+    /// execution authority; the caller still validates the result and its owner.
+    pub fn recover_publication(
+        &self,
+        metadata: &crate::artifact_store::ArtifactMetadata,
+    ) -> Result<Option<ArtifactPublication>, AccountingFailure> {
+        let invalid = || {
+            AccountingFailure::DatabaseRefused(
+                "the pending publication is ambiguous or changed".to_owned(),
+            )
+        };
+        let mut statement = self
+            .database
+            .connection()
+            .prepare(statement("find an artifact's pending publication without hiding ambiguity"))
+            .map_err(refused)?;
+        let mut rows =
+            statement.query([metadata.artifact_identifier.as_text()]).map_err(refused)?;
+        let Some(row) = rows.next().map_err(refused)? else {
+            return Ok(None);
+        };
+        let identifier: String = row.get(0).map_err(refused)?;
+        let digest: String = row.get(1).map_err(refused)?;
+        let length: i64 = row.get(2).map_err(refused)?;
+        if digest != metadata.content_digest
+            || u64::try_from(length).ok() != Some(metadata.byte_length)
+            || rows.next().map_err(refused)?.is_some()
+        {
+            return Err(invalid());
+        }
+        Ok(Some(ArtifactPublication { identifier }))
     }
 
     /// Releases one reservation without committing it.
     ///
     /// An installation that was abandoned held bytes it never used, and holding
     /// them afterwards would refuse work for space nothing occupies.
-    pub fn release(&self, reservation: ArtifactReservation) {
-        let Ok(ticket) = i64::try_from(reservation.ticket) else {
-            return;
-        };
-        self.database
-            .connection()
-            .execute(
-                statement("release one durable artifact reservation"),
-                rusqlite::params![ticket],
-            )
-            .ok();
+    pub fn release(&self, reservation: ArtifactReservation<'_>) {
+        drop(reservation);
     }
 
     /// Converts one reservation into committed usage.
@@ -301,7 +495,7 @@ impl PersistentCapacityAccount<'_> {
     /// The caller has already committed the blob row, so the bytes are now
     /// counted by the authoritative table. Dropping the reservation at the same
     /// moment is what makes the total neither double-count them nor lose them.
-    pub fn commit(&self, reservation: ArtifactReservation) {
+    pub fn commit(&self, reservation: ArtifactReservation<'_>) {
         self.release(reservation);
     }
 

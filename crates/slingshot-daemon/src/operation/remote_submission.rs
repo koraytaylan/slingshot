@@ -175,13 +175,17 @@ pub enum HandoffDisposition {
     Accepted,
     /// The agent had it already, which is the same thing.
     Duplicate,
+    /// A durable child already exists. Enter same-identity lookup without
+    /// claiming acceptance and without granting another submission permit.
+    ReconcileRetained,
     /// Provably nothing was recorded, and provably nothing ran.
     NotExecuted,
     /// The window in which the agent would have answered has closed.
     RecoveryWindowExpired,
     /// This identifier already means something else at the agent.
     Conflict,
-    /// Nothing is settled and the identical submission may go again.
+    /// Nothing is settled. Wait this long before lookup-first reconciliation;
+    /// a retryable status does not prove the POST had no effect.
     RetryAfter {
         /// How long to wait.
         milliseconds: u64,
@@ -192,9 +196,9 @@ pub enum HandoffDisposition {
 
 /// Returns what one submission outcome means durably.
 ///
-/// The mapping is deliberately narrow. Everything that is not a proof lands in
-/// [`HandoffDisposition::Unknown`], whose only resolution is asking the agent
-/// by the names already derived.
+/// A retained-child instruction enters lookup directly without claiming
+/// acceptance. Other unproved responses remain unknown or retain their retry
+/// delay; none grants another send.
 #[must_use]
 pub fn disposition_of(outcome: &SubmissionOutcome) -> HandoffDisposition {
     match outcome {
@@ -207,6 +211,9 @@ pub fn disposition_of(outcome: &SubmissionOutcome) -> HandoffDisposition {
         SubmissionOutcome::RetryAfter { milliseconds } => {
             HandoffDisposition::RetryAfter { milliseconds: *milliseconds }
         }
+        SubmissionOutcome::SubmissionUnknown {
+            cause: slingshot_agent_connection::command_submission::UnknownCause::LookupRequired,
+        } => HandoffDisposition::ReconcileRetained,
         SubmissionOutcome::SubmissionUnknown { .. } => HandoffDisposition::Unknown,
     }
 }
@@ -214,17 +221,16 @@ pub fn disposition_of(outcome: &SubmissionOutcome) -> HandoffDisposition {
 impl HandoffDisposition {
     /// Returns whether this disposition permits sending the same request again.
     ///
-    /// Only a bounded wait after a status that settled nothing, and a proof
-    /// that nothing was recorded. An unknown outcome does not: its resolution
-    /// is a lookup, and resending it is how one command becomes two.
+    /// Only proof that nothing was recorded qualifies. A retryable status
+    /// preserves submission uncertainty and must be reconciled by lookup.
     #[must_use]
     pub fn permits_another_send(&self) -> bool {
-        matches!(self, Self::RetryAfter { .. } | Self::NotExecuted)
+        matches!(self, Self::NotExecuted)
     }
 
     /// Returns whether this disposition must be settled by asking the agent.
     #[must_use]
     pub fn requires_lookup(&self) -> bool {
-        matches!(self, Self::Unknown)
+        matches!(self, Self::ReconcileRetained | Self::Unknown | Self::RetryAfter { .. })
     }
 }

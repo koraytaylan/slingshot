@@ -37,6 +37,12 @@ tracing.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
+url.workspace = true
+slingshot-agent-connection = { workspace = true, features = ["test-support"] }
+rustls.workspace = true
+rustls-pki-types.workspace = true
+tokio-rustls.workspace = true
+tokio.workspace = true
 proptest.workspace = true
 assert_cmd.workspace = true
 predicates.workspace = true

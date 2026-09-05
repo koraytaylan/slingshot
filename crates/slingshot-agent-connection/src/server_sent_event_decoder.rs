@@ -21,8 +21,6 @@
 //! another subscription, another generation, or another submission is not this
 //! daemon's event, whatever else is right about it.
 
-use serde::Deserialize;
-use slingshot_agent_protocol::identity::DocumentProvenance;
 use slingshot_agent_protocol::job_contract::JobEvent;
 use slingshot_agent_protocol::job_contract::JobEventKind;
 use slingshot_agent_protocol::wire_contract::{ExpectedProvenance, WireRefusal};
@@ -94,6 +92,12 @@ impl DecoderBounds {
 /// Why a stream cannot be attached to, or cannot be read any further.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum StreamRefusal {
+    /// This connection's decoder previously failed and must not be resumed.
+    #[error("the event stream decoder is closed after a refusal")]
+    Closed,
+    /// The consumer could not accept one independently validated stream item.
+    #[error("the event stream consumer refused an item")]
+    Consumer,
     /// The response head is one the shared policy refuses.
     #[error(transparent)]
     Head(#[from] ResponseRefusal),
@@ -204,15 +208,8 @@ impl EventStreamCursor {
     }
 }
 
-/// What a terminal event says about which submission it ends.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct TerminalCorrelation {
-    /// Which contracts the ending was produced under.
-    pub provenance: DocumentProvenance,
-    /// Which submission it ends.
-    pub submitted_command_digest: String,
-}
+pub use slingshot_agent_protocol::job_event_document::TerminalCorrelation;
+use slingshot_agent_protocol::job_event_document::{JobEventDocument, JobEventState};
 
 /// What the request this stream answers asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,28 +224,80 @@ pub struct StreamExpectation {
     pub submitted_command_digest: String,
 }
 
-/// One event document, exactly as the agent writes it.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct JobEventDocument {
-    /// Which incarnation of the store it came from.
-    agent_event_store_generation: u64,
-    /// Which operation it is about.
-    agent_operation_identifier: String,
-    /// Which subscription delivered it.
-    daemon_subscription_identifier: String,
-    /// What happened.
-    kind: JobEventKind,
-    /// Where it sits in that operation's own sequence.
-    sequence: u64,
-    /// What it says about the submission it ends, when it ends one.
-    #[serde(default)]
-    terminal: Option<TerminalCorrelation>,
+/// Independently retained correlation for one operation, resolved by its key.
+/// The decoder checks the returned key as well as every provenance/digest field.
+pub struct OperationStreamExpectation {
+    /// The retained subscription, checked independently of the operation key.
+    pub daemon_subscription_identifier: String,
+    /// The retained generation, never inferred from another identity.
+    pub agent_event_store_generation: u64,
+    /// The operation actually read from retained storage.
+    pub agent_operation_identifier: String,
+    /// Its independently retained/installed command provenance.
+    pub expected_provenance: ExpectedProvenance,
+    /// Its unchanged submitted-command digest.
+    pub submitted_command_digest: String,
+}
+
+impl core::fmt::Debug for OperationStreamExpectation {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("OperationStreamExpectation([redacted])")
+    }
+}
+
+/// Resolves terminal correlation from retained state, not from the event's
+/// claimed contract or digest. Failure stops delivery and cursor advancement.
+pub trait TerminalExpectationResolver {
+    /// Read the named operation's immutable correlation, or refuse resolution.
+    fn resolve(&mut self, operation: &str) -> Result<OperationStreamExpectation, StreamRefusal>;
+}
+
+impl<F: FnMut(&str) -> Result<OperationStreamExpectation, StreamRefusal>>
+    TerminalExpectationResolver for F
+{
+    fn resolve(&mut self, operation: &str) -> Result<OperationStreamExpectation, StreamRefusal> {
+        self(operation)
+    }
+}
+
+/// Fixed correlation retained for the legacy single-command decoder constructor.
+/// Product subscription streams must use per-operation resolution instead.
+pub struct FixedTerminalExpectation {
+    subscription: String,
+    generation: u64,
+    provenance: ExpectedProvenance,
+    digest: String,
+}
+
+impl TerminalExpectationResolver for FixedTerminalExpectation {
+    fn resolve(&mut self, operation: &str) -> Result<OperationStreamExpectation, StreamRefusal> {
+        Ok(OperationStreamExpectation {
+            daemon_subscription_identifier: self.subscription.clone(),
+            agent_event_store_generation: self.generation,
+            agent_operation_identifier: operation.to_owned(),
+            expected_provenance: self.provenance.clone(),
+            submitted_command_digest: self.digest.clone(),
+        })
+    }
 }
 
 /// One authenticated event, with everything the stream said around it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct DecodedEvent {
+    /// Subscription authenticated by the decoder, retained for durable binding.
+    pub daemon_subscription_identifier: String,
+    /// Digest of the complete canonical event document, excluding SSE framing.
+    pub canonical_digest: String,
+    /// UTF-8 byte count of that complete canonical document for ledger accounting.
+    pub canonical_bytes: u64,
+    /// Bounded physical Sling job reporting this event.
+    pub sling_job_identifier: String,
+    /// Explicit, kind-consistent logical state.
+    pub state: JobEventState,
+    /// Optional monotonic remote attempt; absence is not zero.
+    pub attempt: Option<u64>,
+    /// Optional monotonic logical progress; absence is not zero.
+    pub progress: Option<u64>,
     /// Where this event sits in the stream, when the agent said.
     pub cursor: Option<EventStreamCursor>,
     /// What happened to which operation, in that operation's own order.
@@ -257,6 +306,12 @@ pub struct DecodedEvent {
     pub name: String,
     /// What it says about the submission it ends, when it ends one.
     pub terminal: Option<TerminalCorrelation>,
+}
+
+impl core::fmt::Debug for DecodedEvent {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("DecodedEvent([redacted])")
+    }
 }
 
 /// What one complete unit of the stream turned out to be.
@@ -273,8 +328,9 @@ pub enum StreamItem {
 }
 
 /// One event stream being read, a byte at a time.
-#[derive(Debug)]
-pub struct ServerSentEventDecoder {
+pub struct ServerSentEventDecoder<R = FixedTerminalExpectation> {
+    /// Failed decoding or delivery closes this connection permanently.
+    poisoned: bool,
     /// Whether the previous byte was a carriage return.
     after_carriage_return: bool,
     /// The bounds this stream is held to.
@@ -286,7 +342,9 @@ pub struct ServerSentEventDecoder {
     /// How many bytes the current event's field lines come to.
     event_bytes: usize,
     /// What the request asked for.
-    expectation: StreamExpectation,
+    subscription: String,
+    generation: u64,
+    resolver: R,
     /// The cursor the current event carries.
     identifier: Option<String>,
     /// Bytes of the line being read.
@@ -295,7 +353,18 @@ pub struct ServerSentEventDecoder {
     saw_field: bool,
 }
 
+impl<R> core::fmt::Debug for ServerSentEventDecoder<R> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("ServerSentEventDecoder([redacted])")
+    }
+}
+
 impl ServerSentEventDecoder {
+    /// An actual undeclared trailer is a transport failure, never an event or
+    /// cursor fact. Previously committed valid events are not retracted.
+    pub fn undeclared_trailer() -> StreamRefusal {
+        StreamRefusal::UndeclaredTrailer
+    }
     /// Returns a decoder attached to a response this policy accepts.
     ///
     /// The head is settled before a byte of body is read. A stream this daemon
@@ -312,15 +381,47 @@ impl ServerSentEventDecoder {
         bounds: DecoderBounds,
         expectation: StreamExpectation,
     ) -> Result<Self, StreamRefusal> {
+        let resolver = FixedTerminalExpectation {
+            subscription: expectation.daemon_subscription_identifier.clone(),
+            generation: expectation.agent_event_store_generation,
+            provenance: expectation.expected_provenance,
+            digest: expectation.submitted_command_digest,
+        };
+        Self::attached_subscription(
+            head,
+            media_type,
+            bounds,
+            expectation.daemon_subscription_identifier,
+            expectation.agent_event_store_generation,
+            resolver,
+        )
+    }
+}
+
+impl<R: TerminalExpectationResolver> ServerSentEventDecoder<R> {
+    /// Attaches one filtered subscription with independently resolved terminal
+    /// expectations for every operation. Resolution happens only after closed
+    /// event decoding and subscription/generation checks, and before delivery.
+    pub fn attached_subscription(
+        head: &ResponseHead,
+        media_type: &str,
+        bounds: DecoderBounds,
+        subscription: String,
+        generation: u64,
+        resolver: R,
+    ) -> Result<Self, StreamRefusal> {
         head.require_acceptable()?;
         require_event_stream(media_type)?;
         Ok(Self {
+            poisoned: false,
             after_carriage_return: false,
             bounds,
             data: String::new(),
             event_name: String::new(),
             event_bytes: 0,
-            expectation,
+            subscription,
+            generation,
+            resolver,
             identifier: None,
             pending: Vec::new(),
             saw_field: false,
@@ -339,17 +440,49 @@ impl ServerSentEventDecoder {
     /// Returns the first [`StreamRefusal`] the bytes produce.
     pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<StreamItem>, StreamRefusal> {
         let mut items = Vec::new();
+        self.push_each(chunk, |item| {
+            items.push(item);
+            Ok(())
+        })?;
+        Ok(items)
+    }
+
+    /// Delivers each complete validated item immediately, without accumulating
+    /// a batch. Live transports use this boundary so a later malformed item
+    /// cannot discard independently committed earlier items in the same chunk.
+    /// A failed callback stops before any later byte is consumed. The decoder
+    /// is permanently closed on either decoding or consumer refusal; reopening
+    /// requires a new connection and the caller's last durably committed cursor.
+    pub fn push_each(
+        &mut self,
+        chunk: &[u8],
+        mut consume: impl FnMut(StreamItem) -> Result<(), StreamRefusal>,
+    ) -> Result<(), StreamRefusal> {
+        if self.poisoned {
+            return Err(StreamRefusal::Closed);
+        }
+        // Keep a decoder closed even if a consumer unwinds and its caller
+        // catches the panic. Only a completely successful push reopens it.
+        self.poisoned = true;
         for byte in chunk {
             match self.absorb(*byte) {
-                Ok(Some(item)) => items.push(item),
+                Ok(Some(item)) => {
+                    if let Err(refusal) = consume(item) {
+                        self.discard();
+                        self.poisoned = true;
+                        return Err(refusal);
+                    }
+                }
                 Ok(None) => {}
                 Err(refusal) => {
                     self.discard();
+                    self.poisoned = true;
                     return Err(refusal);
                 }
             }
         }
-        Ok(items)
+        self.poisoned = false;
+        Ok(())
     }
 
     /// Returns whether bytes remain that never completed an event.
@@ -360,16 +493,6 @@ impl ServerSentEventDecoder {
     #[must_use]
     pub fn has_partial_event(&self) -> bool {
         !self.pending.is_empty() || self.saw_field
-    }
-
-    /// Returns what a trailer section nobody declared means for this stream.
-    ///
-    /// A transport failure, handled by reconnecting. It is not a field, and it
-    /// carries no cursor: treating it as either would let the framing layer
-    /// write into the stream's own record of where it has got to.
-    #[must_use]
-    pub fn undeclared_trailer() -> StreamRefusal {
-        StreamRefusal::UndeclaredTrailer
     }
 
     /// Returns what one more byte completes.
@@ -385,14 +508,14 @@ impl ServerSentEventDecoder {
             return self.complete_line();
         }
         self.after_carriage_return = false;
-        self.pending.push(byte);
-        let reached = self.pending.len();
+        let reached = self.pending.len().saturating_add(1);
         if u64::try_from(reached).unwrap_or(u64::MAX) > self.bounds.line_bytes {
             return Err(StreamRefusal::LineTooLong {
                 allowed: self.bounds.line_bytes,
                 actual: reached,
             });
         }
+        self.pending.push(byte);
         Ok(None)
     }
 
@@ -458,6 +581,17 @@ impl ServerSentEventDecoder {
             .map_err(|_| StreamRefusal::Malformed { field: "payload" })?;
         self.require_requested(&document)?;
         self.require_correlated(&document)?;
+        // Hash the full envelope before projecting it into job-specific fields.
+        // Optional counters stay omitted: absence and explicit zero are distinct
+        // accounts of an event even when they yield the same job observation.
+        let value = serde_json::to_value(&document)
+            .map_err(|_| StreamRefusal::Malformed { field: "payload" })?;
+        let canonical = slingshot_domain::command::canonical_json::write_canonical(&value)
+            .map_err(|_| StreamRefusal::Malformed { field: "payload" })?;
+        let canonical_digest =
+            slingshot_domain::command::canonical_json::canonical_digest(&canonical);
+        let canonical_bytes = u64::try_from(canonical.len())
+            .map_err(|_| StreamRefusal::Malformed { field: "payload" })?;
         let cursor = match identifier {
             Some(spelling) => {
                 Some(EventStreamCursor::new(&spelling, self.bounds.identifier_bytes)?)
@@ -465,6 +599,13 @@ impl ServerSentEventDecoder {
             None => None,
         };
         Ok(Some(StreamItem::Event(Box::new(DecodedEvent {
+            daemon_subscription_identifier: document.daemon_subscription_identifier,
+            canonical_digest,
+            canonical_bytes,
+            sling_job_identifier: document.sling_job_identifier,
+            state: document.state,
+            attempt: document.attempt,
+            progress: document.progress,
             cursor,
             event: JobEvent {
                 agent_event_store_generation: document.agent_event_store_generation,
@@ -479,26 +620,69 @@ impl ServerSentEventDecoder {
 
     /// Requires one document to belong to the stream that was asked for.
     fn require_requested(&self, document: &JobEventDocument) -> Result<(), StreamRefusal> {
-        if document.daemon_subscription_identifier
-            != self.expectation.daemon_subscription_identifier
-        {
+        slingshot_domain::remote_job::AgentJobIdentifier::new(&document.sling_job_identifier)
+            .map_err(|_| StreamRefusal::Malformed {field: "sling_job_identifier"})?;
+        let state = match document.kind {
+            JobEventKind::Accepted => JobEventState::Queued,
+            JobEventKind::Started | JobEventKind::Progress => JobEventState::Running,
+            JobEventKind::Succeeded => JobEventState::Succeeded,
+            JobEventKind::Failed => JobEventState::Failed,
+        };
+        if document.state != state { return Err(StreamRefusal::Malformed {field: "state"}); }
+        if document.daemon_subscription_identifier != self.subscription {
             return Err(StreamRefusal::AnotherSubscription);
         }
-        if document.agent_event_store_generation != self.expectation.agent_event_store_generation {
+        if document.agent_event_store_generation != self.generation {
             return Err(StreamRefusal::AnotherGeneration {
-                expected: self.expectation.agent_event_store_generation,
+                expected: self.generation,
                 named: document.agent_event_store_generation,
             });
+        }
+        if document.agent_operation_identifier.len() != 64
+            || !document.agent_operation_identifier.bytes().all(|byte| {
+                byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)
+            })
+        {
+            return Err(StreamRefusal::Malformed { field: "agent_operation_identifier" });
         }
         Ok(())
     }
 
     /// Requires an ending to authenticate itself, and nothing else to try.
-    fn require_correlated(&self, document: &JobEventDocument) -> Result<(), StreamRefusal> {
+    fn require_correlated(&mut self, document: &JobEventDocument) -> Result<(), StreamRefusal> {
         match (&document.terminal, document.kind.is_terminal()) {
             (Some(terminal), true) => {
-                self.expectation.expected_provenance.require_matching(&terminal.provenance)?;
-                if terminal.submitted_command_digest != self.expectation.submitted_command_digest {
+                let expected = self.resolver.resolve(&document.agent_operation_identifier)?;
+                if expected.daemon_subscription_identifier != self.subscription {
+                    return Err(StreamRefusal::AnotherSubscription);
+                }
+                if expected.agent_event_store_generation != self.generation {
+                    return Err(StreamRefusal::AnotherGeneration {
+                        expected: self.generation,
+                        named: expected.agent_event_store_generation,
+                    });
+                }
+                if expected.agent_operation_identifier != document.agent_operation_identifier {
+                    return Err(StreamRefusal::AnotherSubmission);
+                }
+                let installed = ExpectedProvenance {
+                    command_contract: slingshot_domain::selected_command_contract_identity::SelectedCommandContractIdentity::installed(
+                        &expected.expected_provenance.command_contract.command_wire_name
+                    ).map_err(|_| StreamRefusal::AnotherSubmission)?,
+                    canonical_json_contract_digest: slingshot_domain::command::schema::canonical_contract_digest(),
+                    transport_contract_digest: AuthorAgentTransportContract::embedded_digest(),
+                };
+                installed.require_matching(&expected.expected_provenance.provenance())?;
+                if expected.submitted_command_digest.len() != 64
+                    || !expected
+                        .submitted_command_digest
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                {
+                    return Err(StreamRefusal::AnotherSubmission);
+                }
+                expected.expected_provenance.require_matching(&terminal.provenance)?;
+                if terminal.submitted_command_digest != expected.submitted_command_digest {
                     return Err(StreamRefusal::AnotherSubmission);
                 }
                 Ok(())

@@ -12,6 +12,9 @@
 
 use std::cell::Cell;
 
+#[path = "access_token_cache/async_cases.rs"]
+mod async_cases;
+
 use slingshot_agent_connection::authentication::access_token_cache::{
     AccessTokenSource, CloudAccessTokenCache,
 };
@@ -251,7 +254,27 @@ fn a_failed_exchange_installs_nothing_and_is_delivered_to_the_caller() {
 fn a_cache_identity_has_no_rendering_that_could_be_correlated() {
     let cache = CloudAccessTokenCache::with_identity(CACHE_IDENTITY);
     let rendered = format!("{:?}", cache.identity());
-    assert!(!rendered.contains("not-a-real-access-token"), "{rendered}");
+    assert_eq!(rendered,"AccessTokenCacheIdentity([redacted])");
     let other = CloudAccessTokenCache::with_identity(CACHE_IDENTITY + 1);
     assert_ne!(cache.identity(), other.identity(), "two caches share one identity");
+}
+
+#[test]
+fn a_foreign_lease_cannot_read_invalidate_or_refresh_another_cache() {
+    let source=CountingSource::new();
+    let first=CloudAccessTokenCache::with_identity(CACHE_IDENTITY);
+    let (_,foreign)=first.token(ANCHOR_READING,&source,leased).unwrap();
+    assert_eq!(format!("{foreign:?}"),"AccessTokenLease([redacted])");
+    assert_eq!(format!("{first:?}"),"CloudAccessTokenCache([redacted])");
+    for populated in [false,true] {
+        let second=CloudAccessTokenCache::with_identity(CACHE_IDENTITY+1);
+        let held=if populated {Some(second.token(ANCHOR_READING,&source,leased).unwrap())} else {None};
+        let exchanges=source.exchanges.get();
+        let refused=second.refresh_after_unauthorized(foreign,&source,|_| panic!("foreign lease exposed token"));
+        assert_eq!(refused.unwrap_err().code,ConfigurationFailureCode::AuthenticationTargetMismatch);
+        assert_eq!(source.exchanges.get(),exchanges,"foreign lease started an exchange");
+        let current=second.token(ANCHOR_READING,&source,leased).unwrap();
+        if let Some(held)=held {assert_eq!(current,held); assert_eq!(source.exchanges.get(),exchanges);}
+        else {assert_eq!(source.exchanges.get(),exchanges+1); assert_eq!(current.1.generation(),1);}
+    }
 }

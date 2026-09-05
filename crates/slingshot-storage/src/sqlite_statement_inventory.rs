@@ -48,6 +48,43 @@ const PHYSICAL_JOB_ROWS: u64 = 32;
 /// Every statement, in the order a reader would want to read them.
 pub const STATEMENTS: &[InventoriedStatement] = &[
     InventoriedStatement {
+        purpose: "install a reconciled subscription boundary without inventing an event digest",
+        text: "UPDATE subscription_ledger SET agent_event_store_generation = ?, canonical_digest = NULL, cursor = NULL, high_water_cursor = ?, compacted_below_cursor = ?, unresolved_incident = NULL, unresolved_incident_count = 0, event_bytes = 0, event_rows = 0 WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? AND agent_event_store_generation = ? AND COALESCE(cursor, high_water_cursor) IS ? AND unresolved_incident IS ?",
+        parameters: 8,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "page unsettled subscription members across retained generations",
+        text: "SELECT agent_operation_identifier FROM agent_operation AS a WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? AND (terminal_disposition IS NULL OR EXISTS(SELECT 1 FROM operation AS o WHERE o.author_target_identity_digest = a.author_target_identity_digest AND o.operation_identifier = a.operation_identifier AND o.lifecycle_state NOT IN ('succeeded', 'failed'))) AND NOT EXISTS(SELECT 1 FROM operation AS o WHERE o.author_target_identity_digest = a.author_target_identity_digest AND o.operation_identifier = a.operation_identifier AND o.lifecycle_state IN ('succeeded', 'failed')) AND (? IS NULL OR agent_operation_identifier > ?) ORDER BY agent_operation_identifier LIMIT 256",
+        parameters: 4,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
+        purpose: "detect unsettled members before a ledger-only reset",
+        text: "SELECT EXISTS(SELECT 1 FROM agent_operation AS a WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? AND (terminal_disposition IS NULL OR EXISTS(SELECT 1 FROM operation AS o WHERE o.author_target_identity_digest = a.author_target_identity_digest AND o.operation_identifier = a.operation_identifier AND o.lifecycle_state NOT IN ('succeeded', 'failed'))) AND NOT EXISTS(SELECT 1 FROM operation AS o WHERE o.author_target_identity_digest = a.author_target_identity_digest AND o.operation_identifier = a.operation_identifier AND o.lifecycle_state IN ('succeeded', 'failed')))",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "record the first artifact acquisition for one retained child",
+        text: "UPDATE agent_operation SET acquisition_artifact_identifier = ?, acquisition_artifact_slot = ?, acquisition_content_digest = ?, acquisition_started_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? AND acquisition_started_at_unix_milliseconds IS NULL",
+        parameters: 6,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read one retained artifact acquisition anchor",
+        text: "SELECT acquisition_artifact_identifier, acquisition_artifact_slot, acquisition_content_digest, acquisition_started_at_unix_milliseconds FROM agent_operation WHERE author_target_identity_digest = ? AND agent_operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "read retained execution input inside its target partition",
+        text: "SELECT canonical_command, daemon_runtime_contract_digest FROM operation \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
         purpose: "record this installation's identifier once",
         text: "INSERT INTO installation \
                (singleton, installation_identifier, recorded_at_unix_milliseconds) \
@@ -259,6 +296,36 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: 0,
     },
     InventoriedStatement {
+        purpose: "read one durable artifact reservation",
+        text: "SELECT byte_length FROM artifact_reservation WHERE ticket = ?",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "count this namespace's pending artifact publications",
+        text: "SELECT COUNT(*) FROM artifact_publication",
+        parameters: 0,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "retain one artifact publication across restart",
+        text: "INSERT INTO artifact_publication (publication_identifier, artifact_identifier, content_digest, recorded_at_unix_milliseconds) VALUES (?, ?, ?, ?)",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "consume one completed artifact publication",
+        text: "DELETE FROM artifact_publication WHERE publication_identifier = ? AND artifact_identifier = ? AND content_digest = ?",
+        parameters: 3,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "find an artifact's pending publication without hiding ambiguity",
+        text: "SELECT p.publication_identifier, p.content_digest, b.byte_length FROM artifact_publication p JOIN artifact_blob b ON b.content_digest = p.content_digest WHERE p.artifact_identifier = ? ORDER BY p.publication_identifier LIMIT 2",
+        parameters: 1,
+        maximum_rows: 2,
+    },
+    InventoriedStatement {
         purpose: "associate one artifact with the operation slot it fills",
         text: "INSERT INTO artifact_association \
                (artifact_identifier, artifact_slot, author_target_identity_digest, \
@@ -362,8 +429,9 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         purpose: "count what still references one artifact's content",
         text: "SELECT (SELECT COUNT(*) FROM artifact_association WHERE content_digest = ?) \
                       + (SELECT COUNT(*) FROM maintenance_result_association \
-                         WHERE content_digest = ?)",
-        parameters: 2,
+                         WHERE content_digest = ?) \
+                      + (SELECT COUNT(*) FROM artifact_publication WHERE content_digest = ?)",
+        parameters: 3,
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
@@ -465,6 +533,14 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: PHYSICAL_JOB_ROWS,
     },
     InventoriedStatement {
+        purpose: "retain one acknowledged submission lifetime",
+        text: "UPDATE agent_operation SET remaining_retention_milliseconds = ? \
+               WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
+                 AND submitted_command_digest = ? AND terminal_disposition IS NULL",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
         purpose: "fold one believed event into one agent submission",
         // The applied sequence is in the predicate as well as the assignment,
         // so two folds racing on one row cannot both succeed and neither can
@@ -519,7 +595,7 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
     InventoriedStatement {
         purpose: "read one subscription ledger",
         text: "SELECT agent_event_store_generation, canonical_digest, compacted_below_cursor, \
-                      cursor, event_bytes, event_rows, high_water_cursor, \
+                      COALESCE(cursor, high_water_cursor) AS cursor, event_bytes, event_rows, high_water_cursor, \
                       recorded_at_unix_milliseconds, unresolved_incident, \
                       unresolved_incident_count \
                FROM subscription_ledger \
@@ -544,7 +620,7 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                    event_rows = event_rows + 1 \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
                  AND agent_event_store_generation = ? \
-                 AND (cursor IS NULL OR cursor < ?)",
+                 AND (COALESCE(cursor, high_water_cursor) IS NULL OR COALESCE(cursor, high_water_cursor) < ?)",
         parameters: 7,
         maximum_rows: 0,
     },
@@ -570,7 +646,7 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                    unresolved_incident_count = 0, event_bytes = 0, event_rows = 0, \
                    compacted_below_cursor = NULL \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
-                 AND agent_event_store_generation = ? AND cursor IS ? \
+                 AND agent_event_store_generation = ? AND COALESCE(cursor, high_water_cursor) IS ? \
                  AND unresolved_incident IS ? AND ? > agent_event_store_generation",
         parameters: 10,
         maximum_rows: 0,
@@ -634,19 +710,32 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         // Ended work only, and named in one fixed order so two previews of the
         // same target under the same window digest alike.
         text: "SELECT agent_operation_identifier, submitted_command_digest, \
-                      terminal_disposition \
+                      COALESCE(terminal_disposition, (SELECT operation.terminal_failure_kind FROM operation \
+                        WHERE operation.author_target_identity_digest = agent_operation.author_target_identity_digest \
+                          AND operation.operation_identifier = agent_operation.operation_identifier)) AS terminal_disposition \
                FROM agent_operation \
-               WHERE author_target_identity_digest = ? AND terminal_disposition IS NOT NULL \
+               WHERE author_target_identity_digest = ? AND (terminal_disposition IS NOT NULL \
+                 OR EXISTS (SELECT 1 FROM operation WHERE operation.author_target_identity_digest = agent_operation.author_target_identity_digest \
+                   AND operation.operation_identifier = agent_operation.operation_identifier \
+                   AND operation.selected_environment_revision = agent_operation.selected_environment_revision \
+                   AND operation.settled_at_unix_milliseconds < ? \
+                   AND operation.terminal_failure_kind IN ('recovery_window_expired', 'result_unavailable', 'remote_state_lost'))) \
                  AND recorded_at_unix_milliseconds < ? \
                ORDER BY agent_operation_identifier LIMIT ?",
-        parameters: 3,
+        parameters: 4,
         maximum_rows: LISTING_ROWS,
     },
     InventoriedStatement {
         purpose: "remove one ended agent submission",
         text: "DELETE FROM agent_operation \
                WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
-                 AND submitted_command_digest = ? AND terminal_disposition = ?",
+                 AND submitted_command_digest = ? AND (terminal_disposition = ? \
+                   OR (terminal_disposition IS NULL AND EXISTS (SELECT 1 FROM operation \
+                     WHERE operation.author_target_identity_digest = agent_operation.author_target_identity_digest \
+                       AND operation.operation_identifier = agent_operation.operation_identifier \
+                       AND operation.selected_environment_revision = agent_operation.selected_environment_revision \
+                       AND operation.settled_at_unix_milliseconds IS NOT NULL \
+                       AND operation.terminal_failure_kind IN ('recovery_window_expired', 'result_unavailable', 'remote_state_lost'))))",
         parameters: 4,
         maximum_rows: 0,
     },

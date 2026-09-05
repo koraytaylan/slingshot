@@ -377,9 +377,20 @@ impl RecoveryAndEventSupervisor {
         &self.work
     }
 
-    /// Takes one more piece of work.
+    /// Holds one pending operation/category pair. Refreshing its durable schedule
+    /// replaces the existing entry rather than creating duplicate dispatches.
+    /// After detachment, late completions cannot reopen this scheduling queue;
+    /// their durable recovery facts remain available to the next runtime.
     pub fn hold(&mut self, work: DueWork) {
-        self.work.push(work);
+        if self.shutting_down { return; }
+        if let Some(held) = self.work.iter_mut().find(|held| {
+            held.agent_operation_identifier == work.agent_operation_identifier
+                && held.category == work.category
+        }) {
+            *held = work;
+        } else {
+            self.work.push(work);
+        }
     }
 
     /// Pauses one piece of work, as an exhausted automatic policy does.
@@ -396,33 +407,46 @@ impl RecoveryAndEventSupervisor {
         paused
     }
 
-    /// Returns what to attempt next, and records that the category was served.
+    /// Removes what to attempt next, and records that the category was served.
     ///
     /// Due work comes before new admission, and the least-served category comes
     /// before the earliest deadline. A stream that drops constantly would
     /// otherwise starve an ambiguous submission that has been waiting all day,
-    /// which is exactly the operation somebody is watching.
+    /// which is exactly the operation somebody is watching. Equal deadlines use
+    /// queue order: a zero-delay retry requeued after dispatch cannot repeatedly
+    /// jump ahead of another operation in its category. Another attempt must be
+    /// explicitly held again after its durable outcome has been recorded.
     pub fn next_due(&mut self, now_unix_milliseconds: u64) -> Option<DueWork> {
-        let served = self.served.clone();
-        let chosen = self
+        if self.shutting_down { return None; }
+        let index = self
             .work
             .iter()
-            .filter(|held| {
+            .enumerate()
+            .filter(|(_, held)| {
                 !held.paused && held.eligible_at_unix_milliseconds <= now_unix_milliseconds
             })
-            .min_by_key(|held| {
+            .min_by_key(|(index, held)| {
                 (
-                    served.get(&held.category).copied().unwrap_or_default(),
+                    self.served.get(&held.category).copied().unwrap_or_default(),
                     held.eligible_at_unix_milliseconds,
-                    held.agent_operation_identifier.clone(),
+                    *index,
                 )
             })
-            .cloned()?;
-        *self.served.entry(chosen.category).or_default() += 1;
+            .map(|(index, _)| index)?;
+        let chosen = self.work.remove(index);
+        // The least-served due category reached the ceiling, so every due
+        // category is tied there. Rebase before incrementing instead of letting
+        // saturated counts permanently reduce fairness to deadline ordering.
+        if self.served.get(&chosen.category) == Some(&u64::MAX) {
+            for count in self.served.values_mut() { *count = 0; }
+        }
+        let served = self.served.entry(chosen.category).or_default();
+        *served += 1;
         Some(chosen)
     }
 
-    /// Returns how many times each category has been served.
+    /// Returns relative service counts used for fairness. Counts rebase together
+    /// at their numeric ceiling; they are not lifetime telemetry counters.
     #[must_use]
     pub fn served(&self) -> &BTreeMap<RetryCategory, u64> {
         &self.served
@@ -488,5 +512,26 @@ impl RecoveryAndEventSupervisor {
     #[must_use]
     pub fn accepts_new_work(&self) -> bool {
         !self.shutting_down
+    }
+}
+
+#[cfg(test)]
+mod queue_tests {
+    use super::*;
+
+    #[test]
+    fn saturated_fairness_counts_rebase_before_dispatch() {
+        let mut supervisor = RecoveryAndEventSupervisor::over("target");
+        for category in [RetryCategory::EventReconnect, RetryCategory::SnapshotPoll] {
+            supervisor.served.insert(category, u64::MAX);
+            supervisor.hold(DueWork { agent_operation_identifier: format!("{category:?}"),
+                category, eligible_at_unix_milliseconds: 0, paused: false });
+        }
+        let first = supervisor.next_due(0).unwrap();
+        assert_eq!(supervisor.served()[&first.category], 1);
+        supervisor.hold(first.clone());
+        let second = supervisor.next_due(0).unwrap();
+        assert_ne!(first.category, second.category);
+        assert_eq!(supervisor.served()[&second.category], 1);
     }
 }

@@ -127,6 +127,249 @@ fn expectation() -> SnapshotExpectation {
     }
 }
 
+#[test]
+fn absence_requires_a_complete_same_partition_document_not_a_status_alone() {
+    use slingshot_agent_connection::selected_author_lookup::decode_lookup_absence;
+    let expected = expectation();
+    let missing = serde_json::json!({
+        "kind": "missing", "format": "slingshot.agent/1",
+        "transport_contract_digest": expected.expected_provenance.transport_contract_digest,
+        "agent_event_store_generation": expected.agent_event_store_generation,
+        "agent_operation_identifier": expected.agent_operation_identifier,
+        "author_target_identity_digest": expected.author_target_identity_digest,
+    });
+    let retired = serde_json::json!({
+        "kind": "retired", "provenance": expected.expected_provenance.provenance(),
+        "agent_event_store_generation": expected.agent_event_store_generation,
+        "agent_operation_identifier": expected.agent_operation_identifier,
+        "author_target_identity_digest": expected.author_target_identity_digest,
+        "daemon_subscription_identifier": expected.daemon_subscription_identifier,
+        "selected_environment_revision": expected.selected_environment_revision,
+        "submitted_command_digest": expected.submitted_command_digest,
+    });
+    for (status, document) in [(404, missing), (410, retired)] {
+        let bytes = serde_json::to_vec(&document).unwrap();
+        let accepted = decode_lookup_absence(status, &bytes, &expected).unwrap();
+        assert!(matches!(
+            (status, accepted),
+            (404, LookupAnswer::Missing) | (410, LookupAnswer::Retired(_))
+        ));
+        for wrong_status in [200, 401, 403, 500, if status == 404 { 410 } else { 404 }] {
+            assert!(decode_lookup_absence(wrong_status, &bytes, &expected).is_err());
+        }
+        for member in document.as_object().unwrap().keys() {
+            let mut changed = document.clone();
+            changed.as_object_mut().unwrap().remove(member);
+            assert!(
+                decode_lookup_absence(status, &serde_json::to_vec(&changed).unwrap(), &expected)
+                    .is_err()
+            );
+            let mut changed = document.clone();
+            changed[member] = serde_json::json!("another");
+            assert!(
+                decode_lookup_absence(status, &serde_json::to_vec(&changed).unwrap(), &expected)
+                    .is_err()
+            );
+        }
+        let mut extra = document.clone();
+        extra["unknown"] = serde_json::json!(true);
+        assert!(
+            decode_lookup_absence(status, &serde_json::to_vec(&extra).unwrap(), &expected).is_err()
+        );
+        assert!(decode_lookup_absence(status, b"{}", &expected).is_err());
+        assert!(decode_lookup_absence(status, b"", &expected).is_err());
+    }
+}
+
+#[test]
+fn network_snapshot_decoder_requires_all_echoes_and_a_bounded_ordered_job_set() {
+    use slingshot_agent_connection::job_snapshot_reconciliation::decode_snapshot;
+    let mut expected = expectation();
+    expected.agent_operation_identifier = "a".repeat(64);
+    expected.author_target_identity_digest = "b".repeat(64);
+    expected.selected_environment_revision = "c".repeat(64);
+    expected.submitted_command_digest = "d".repeat(64);
+    let document = serde_json::json!({
+        "provenance": expected.expected_provenance.provenance(),
+        "agent_event_store_generation": expected.agent_event_store_generation,
+        "agent_operation_identifier": expected.agent_operation_identifier,
+        "author_target_identity_digest": expected.author_target_identity_digest,
+        "selected_environment_revision": expected.selected_environment_revision,
+        "daemon_subscription_identifier": expected.daemon_subscription_identifier,
+        "submitted_command_digest": expected.submitted_command_digest,
+        "kind": "progress", "sequence": 2, "attempt": 1, "progress": 10,
+        "subscription_watermark":"cursor-010", "physical_sling_job_identifiers": ["job-a", "job-b"],
+        "granted_retention_milliseconds": 120000
+    });
+    let decode =
+        |value: &serde_json::Value| decode_snapshot(&serde_json::to_vec(value).unwrap(), &expected);
+    assert_eq!(decode(&document).unwrap().progress, 10);
+    assert_eq!(decode(&document).unwrap().subscription_watermark.as_text(), "cursor-010");
+    assert_eq!(format!("{:?}", decode(&document).unwrap()), "JobSnapshot([redacted])");
+    let mut missing_watermark = document.clone();
+    missing_watermark.as_object_mut().unwrap().remove("subscription_watermark");
+    assert!(decode(&missing_watermark).is_err());
+    for invalid in [serde_json::Value::Null, serde_json::json!(10), serde_json::json!(""),
+        serde_json::json!("x".repeat(97)), serde_json::json!("é".repeat(49)),
+        serde_json::json!("bad\r\ncursor"), serde_json::json!(" leading"), serde_json::json!("trailing ")] {
+        let mut changed = document.clone(); changed["subscription_watermark"] = invalid;
+        assert!(decode(&changed).is_err());
+    }
+    let duplicated = serde_json::to_string(&document).unwrap().replacen('{', "{\"subscription_watermark\":\"cursor-010\",", 1);
+    assert!(decode_snapshot(duplicated.as_bytes(), &expected).is_err());
+    let mut successful = document.clone();
+    let mut failed = document.clone();
+    failed["kind"] = "failed".into();
+    failed["terminal_failure"] = serde_json::json!({
+        "operation": {
+            "agent_event_store_generation": expected.agent_event_store_generation,
+            "agent_operation_identifier": expected.agent_operation_identifier,
+            "author_target_identity_digest": expected.author_target_identity_digest,
+            "selected_environment_revision": expected.selected_environment_revision
+        },
+        "daemon_subscription_identifier": expected.daemon_subscription_identifier,
+        "provenance": expected.expected_provenance.provenance(),
+        "submitted_command_digest": expected.submitted_command_digest,
+        "canonical_failure": "{\"failure\":\"not_found\"}"
+    });
+    assert!(decode(&failed).unwrap().terminal_failure.is_some());
+    let mut changed = failed.clone();
+    changed["terminal_failure"]["operation"]["agent_event_store_generation"] = 999.into();
+    assert!(decode(&changed).is_err());
+    let mut changed = failed.clone();
+    changed["terminal_failure"]["provenance"]["transport_contract_digest"] = "e".repeat(64).into();
+    assert!(decode(&changed).is_err());
+    for kind in ["accepted", "started", "progress", "succeeded"] {
+        let mut changed = failed.clone();
+        changed["kind"] = kind.into();
+        assert!(decode(&changed).is_err());
+    }
+    for member in [
+        "agent_operation_identifier",
+        "author_target_identity_digest",
+        "selected_environment_revision",
+    ] {
+        let mut changed = failed.clone();
+        changed["terminal_failure"]["operation"][member] = "e".repeat(64).into();
+        assert!(decode(&changed).is_err());
+    }
+    for member in ["daemon_subscription_identifier", "submitted_command_digest"] {
+        let mut changed = failed.clone();
+        changed["terminal_failure"][member] = "e".repeat(64).into();
+        assert!(decode(&changed).is_err());
+    }
+    let mut changed = failed.clone();
+    changed["terminal_failure"] = serde_json::Value::Null;
+    assert!(decode(&changed).is_err());
+    successful["kind"] = serde_json::json!("succeeded");
+    successful["terminal_result"] = serde_json::json!({
+        "operation": {
+            "agent_event_store_generation": expected.agent_event_store_generation,
+            "agent_operation_identifier": expected.agent_operation_identifier,
+            "author_target_identity_digest": expected.author_target_identity_digest,
+            "selected_environment_revision": expected.selected_environment_revision
+        },
+        "daemon_subscription_identifier": expected.daemon_subscription_identifier,
+        "provenance": expected.expected_provenance.provenance(),
+        "submitted_command_digest": expected.submitted_command_digest,
+        "canonical_result": "{\"matches\":[]}", "declared_artifacts": []
+    });
+    assert_eq!(
+        decode(&successful).unwrap().terminal_result.unwrap().canonical_result,
+        "{\"matches\":[]}"
+    );
+    for kind in ["succeeded", "failed"] {
+        let mut mixed = successful.clone();
+        mixed["kind"] = kind.into();
+        mixed["terminal_failure"] = failed["terminal_failure"].clone();
+        assert!(decode(&mixed).is_err(), "a snapshot cannot carry success and failure together");
+    }
+    for kind in ["accepted", "started", "progress", "failed"] {
+        let mut changed = successful.clone();
+        changed["kind"] = serde_json::json!(kind);
+        assert!(decode(&changed).is_err());
+    }
+    for member in [
+        "agent_operation_identifier",
+        "author_target_identity_digest",
+        "selected_environment_revision",
+    ] {
+        let mut changed = successful.clone();
+        changed["terminal_result"]["operation"][member] = serde_json::json!("e".repeat(64));
+        assert!(decode(&changed).is_err());
+    }
+    let mut null = successful.clone();
+    null["terminal_result"] = serde_json::Value::Null;
+    assert!(decode(&null).is_err());
+    for member in document.as_object().unwrap().keys() {
+        let mut missing = document.clone();
+        missing.as_object_mut().unwrap().remove(member);
+        assert!(decode(&missing).is_err(), "missing {member}");
+    }
+    for member in [
+        "agent_operation_identifier",
+        "author_target_identity_digest",
+        "selected_environment_revision",
+        "submitted_command_digest",
+    ] {
+        let mut changed = document.clone();
+        changed[member] = serde_json::json!("e".repeat(64));
+        assert!(decode(&changed).is_err(), "changed {member}");
+    }
+    for invalid in [
+        serde_json::json!([]),
+        serde_json::json!(["job-b", "job-a"]),
+        serde_json::json!(["job-a", "job-a"]),
+        serde_json::json!([""]),
+        serde_json::json!(["x".repeat(1025)]),
+    ] {
+        let mut changed = document.clone();
+        changed["physical_sling_job_identifiers"] = invalid;
+        assert!(decode(&changed).is_err());
+    }
+    let mut extra = document.clone();
+    extra["unrecognized"] = serde_json::json!(true);
+    assert!(decode(&extra).is_err());
+    let mut drift = document;
+    drift["provenance"]["transport_contract_digest"] = serde_json::json!("f".repeat(64));
+    assert!(decode(&drift).is_err());
+}
+
+/// Per-job sequence and subscription cursor are distinct ordering domains.
+#[test]
+fn reset_coverage_uses_subscription_watermark_not_job_sequence() {
+    use slingshot_agent_connection::selected_author_exchange::{CollectedFiniteResponse, validate_collected_finite_response};
+    use slingshot_agent_connection::subscription_high_water::decode_high_water;
+    use slingshot_agent_connection::server_sent_event_decoder::EventStreamCursor;
+    let response = validate_collected_finite_response(CollectedFiniteResponse {
+        response: http::Response::builder().status(200).version(http::Version::HTTP_2)
+            .header("content-type", "application/json")
+            .body(serde_json::to_vec(&serde_json::json!({
+                "format":"slingshot.agent/1", "transport_contract_digest":AuthorAgentTransportContract::embedded_digest(),
+                "daemon_subscription_identifier":SUBSCRIPTION, "agent_event_store_generation":GENERATION,
+                "high_water_cursor":"cursor-010"
+            })).unwrap()).unwrap(),
+        framing_ambiguous: false, trailer_section_present: false, trailing_bytes: false,
+    }).unwrap();
+    let capture = decode_high_water(&response, SUBSCRIPTION, GENERATION).unwrap();
+    for (watermark, covered) in [("cursor-009", false), ("cursor-010", true), ("cursor-011", true)] {
+        for sequence in [0, 1, u64::MAX] {
+            let mut value = snapshot(JobEventKind::Progress, sequence, 1, 10);
+            value.subscription_watermark = EventStreamCursor::new(watermark, 96).unwrap();
+            assert_eq!(capture.require_snapshot_coverage(&value).is_ok(), covered);
+        }
+    }
+    let mut value = snapshot(JobEventKind::Progress, 100, 1, 10);
+    value.subscription_watermark = EventStreamCursor::new("z\r\nunsafe", 96).unwrap();
+    assert!(capture.require_snapshot_coverage(&value).is_err());
+    value.subscription_watermark = EventStreamCursor::new("cursor-010", 96).unwrap();
+    value.echo.agent_event_store_generation += 1;
+    assert!(capture.require_snapshot_coverage(&value).is_err());
+    value.echo.agent_event_store_generation = GENERATION;
+    value.echo.daemon_subscription_identifier = "other".into();
+    assert!(capture.require_snapshot_coverage(&value).is_err());
+}
+
 /// Returns the echo a truthful answer carries.
 fn echo() -> SnapshotEcho {
     SnapshotEcho {
@@ -143,6 +386,9 @@ fn echo() -> SnapshotEcho {
 /// Returns one snapshot of `kind` at `sequence`.
 fn snapshot(kind: JobEventKind, sequence: u64, attempt: u64, progress: u64) -> JobSnapshot {
     JobSnapshot {
+        subscription_watermark: slingshot_agent_connection::server_sent_event_decoder::EventStreamCursor::new("cursor-010", 96).unwrap(),
+        terminal_result: None,
+        terminal_failure: None,
         attempt,
         echo: echo(),
         granted_retention_milliseconds: GRANTED_RETENTION,

@@ -322,3 +322,32 @@ fn the_lifecycle_holds_nothing_about_a_process_or_a_connection() {
         assert!(!code.contains(absent), "an operation's state does not change when {absent} does");
     }
 }
+#[test]
+fn command_artifacts_do_not_replace_the_inline_logical_result() {
+    use slingshot_domain::operation::{
+        OperationLifecycleState, ProducedArtifact, ResultDisposition, SettlementFailure,
+        SuccessfulSettlement,
+    };
+    let mut settlement = SuccessfulSettlement {
+        artifacts: vec![ProducedArtifact {
+            artifact_identifier: "artifact".to_owned(),
+            artifact_slot: "content_package".to_owned(),
+            byte_length: 3,
+            content_digest: "a".repeat(64),
+            media_type: "application/zip".to_owned(),
+        }],
+        inline_result: Some("{}".to_owned()),
+        expected_lifecycle_state: OperationLifecycleState::Queued,
+        expected_revision: 1,
+        settled_at_unix_milliseconds: 0,
+    };
+    assert_eq!(settlement.disposition(), Ok(ResultDisposition::Inline));
+    settlement.artifacts[0].artifact_slot = "structured_result".to_owned();
+    assert_eq!(settlement.disposition(), Err(SettlementFailure::MixedResults));
+    settlement.inline_result = None;
+    assert_eq!(settlement.disposition(), Ok(ResultDisposition::Artifact));
+    settlement.artifacts.clear();
+    assert_eq!(settlement.disposition(), Err(SettlementFailure::MissingResult));
+    settlement.inline_result = Some("{}".to_owned());
+    assert_eq!(settlement.disposition(), Ok(ResultDisposition::Inline));
+}

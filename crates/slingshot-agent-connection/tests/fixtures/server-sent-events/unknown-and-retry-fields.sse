@@ -2,5 +2,5 @@ event:job-event
 id:cursor-0004
 retry:5000
 unheard-of-field:something
-data:{"agent_event_store_generation":7,"agent_operation_identifier":"operation-alpha","daemon_subscription_identifier":"daemon-subscription-one","kind":"progress","sequence":4}
+data:{"agent_event_store_generation":7,"agent_operation_identifier":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","daemon_subscription_identifier":"daemon-subscription-one","sling_job_identifier":"job-fixture","state":"running","kind":"progress","sequence":4}
 

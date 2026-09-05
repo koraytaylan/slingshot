@@ -617,7 +617,10 @@ impl TryFrom<PropertyDocument> for RepositoryJavaScriptObjectNotationPropertyVal
 }
 
 /// Reads one value of the declared type, without inferring the type from it.
-fn read_scalar(property_type: &str, value: serde_json::Value) -> Result<LoadedScalar, LoadFailure> {
+pub(super) fn read_scalar(
+    property_type: &str,
+    value: serde_json::Value,
+) -> Result<LoadedScalar, LoadFailure> {
     let mismatch = || LoadFailure::TypeMismatch;
     match property_type {
         "binary" => read_binary(&value),
@@ -737,6 +740,70 @@ pub struct RepositoryJavaScriptObjectNotationResource {
 }
 
 impl RepositoryJavaScriptObjectNotationResource {
+    /// Decodes a bounded canonical document and checks its request-relative
+    /// structure. Artifact framing, digest and disposition are separate gates.
+    pub fn decode_for_request(
+        bytes: &[u8],
+        command: &LoadContentAsJavaScriptObjectNotationCommand,
+    ) -> Result<Self, LoadFailure> {
+        if bytes.len() as u64 > maximum_load_document_bytes() {
+            return Err(LoadFailure::DocumentTooLong);
+        }
+        let value = super::canonical_json::require_canonical_bytes(bytes)
+            .map_err(|_| LoadFailure::NotThisRequest)?;
+        let document: Self =
+            serde_json::from_value(value).map_err(|_| LoadFailure::NotThisRequest)?;
+        document.require_answers(command)?;
+        Ok(document)
+    }
+
+    /// Requires the represented tree to belong to this request and stay within
+    /// its depth, with canonical child ordering and representable property names.
+    /// This checks observable structure, not repository completeness.
+    pub fn require_answers(
+        &self,
+        command: &LoadContentAsJavaScriptObjectNotationCommand,
+    ) -> Result<(), LoadFailure> {
+        if self.path != command.path {
+            return Err(LoadFailure::NotThisRequest);
+        }
+        let mut pending = vec![(self, 0_u64)];
+        let maximum = command.resolved_depth().edges();
+        while let Some((resource, depth)) = pending.pop() {
+            if (depth == maximum && !resource.children.is_empty())
+                || (depth < maximum && resource.children_truncated)
+            {
+                return Err(LoadFailure::NotThisRequest);
+            }
+            for name in resource.properties.keys() {
+                super::repository_path::RepositoryName::parse(name)
+                    .map_err(|_| LoadFailure::NotThisRequest)?;
+            }
+            let mut previous = None;
+            for child in &resource.children {
+                if child.path.parent().as_ref() != Some(&resource.path) {
+                    return Err(LoadFailure::NotThisRequest);
+                }
+                let segments = child.path.segments();
+                let segment = segments.last().ok_or(LoadFailure::NotThisRequest)?;
+                let index = match segment.as_text().rsplit_once('[') {
+                    Some((_, suffix)) => suffix
+                        .strip_suffix(']')
+                        .and_then(|digits| digits.parse::<u64>().ok())
+                        .ok_or(LoadFailure::NotThisRequest)?,
+                    None => 1,
+                };
+                let key = (segment.name().as_text().to_owned(), index);
+                if previous.as_ref().is_some_and(|earlier| earlier >= &key) {
+                    return Err(LoadFailure::NotThisRequest);
+                }
+                previous = Some(key);
+                pending.push((child, depth + 1));
+            }
+        }
+        Ok(())
+    }
+
     /// Returns the canonical bytes this document is charged as.
     ///
     /// Only the document itself is charged. The result discriminator, the
@@ -840,6 +907,9 @@ impl LoadContentAsJavaScriptObjectNotationResult {
     ) -> Result<(), LoadFailure> {
         if *self.path() != command.path {
             return Err(LoadFailure::NotThisRequest);
+        }
+        if let Self::Inline { document, .. } = self {
+            document.require_answers(command)?;
         }
         self.require_consistent()
     }
@@ -997,4 +1067,36 @@ pub enum LoadRefusal {
         /// Budget that ran out.
         budget: LoadBudget,
     },
+}
+
+impl LoadRefusal {
+    /// Requires a failure location to lie within the requested traversal.
+    /// Budget failures carry no location and are already closed by their type.
+    ///
+    /// # Errors
+    /// Returns [`LoadFailure::NotThisRequest`] for another subtree or a path
+    /// below the maximum depth this request could have visited.
+    pub fn require_answers(
+        &self,
+        command: &LoadContentAsJavaScriptObjectNotationCommand,
+    ) -> Result<(), LoadFailure> {
+        let path = match self {
+            Self::NotFound { path }
+            | Self::AccessDenied { path }
+            | Self::UnsupportedRepositoryValue { path, .. } => path,
+            Self::LoadBudgetExceeded { .. } => return Ok(()),
+        };
+        if !crate::command::query_paths::anchor_contains(&command.path, path) {
+            return Err(LoadFailure::NotThisRequest);
+        }
+        let depth = |path: &RepositoryPath| {
+            path.as_text().split('/').filter(|part| !part.is_empty()).count()
+        };
+        if depth(path).saturating_sub(depth(&command.path)) as u64
+            > command.resolved_depth().edges()
+        {
+            return Err(LoadFailure::NotThisRequest);
+        }
+        Ok(())
+    }
 }

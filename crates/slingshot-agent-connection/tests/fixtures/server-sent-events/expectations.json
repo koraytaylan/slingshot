@@ -9,7 +9,7 @@
       "heartbeats": 0,
       "events": [
         {
-          "operation": "operation-alpha",
+          "operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "sequence": 1,
           "kind": "accepted",
           "cursor": "cursor-0001",
@@ -24,7 +24,7 @@
       "heartbeats": 0,
       "events": [
         {
-          "operation": "operation-alpha",
+          "operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "sequence": 2,
           "kind": "started",
           "cursor": "cursor-0002",
@@ -39,7 +39,7 @@
       "heartbeats": 2,
       "events": [
         {
-          "operation": "operation-alpha",
+          "operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "sequence": 3,
           "kind": "progress",
           "cursor": "cursor-0003",
@@ -54,7 +54,7 @@
       "heartbeats": 0,
       "events": [
         {
-          "operation": "operation-alpha",
+          "operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "sequence": 4,
           "kind": "progress",
           "cursor": "cursor-0004",
@@ -69,7 +69,7 @@
       "heartbeats": 0,
       "events": [
         {
-          "operation": "operation-alpha",
+          "operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "sequence": 5,
           "kind": "progress",
           "cursor": "cursor-0005",
@@ -84,28 +84,28 @@
       "heartbeats": 0,
       "events": [
         {
-          "operation": "operation-alpha",
+          "operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "sequence": 6,
           "kind": "progress",
           "cursor": "cursor-0006",
           "name": "job-event"
         },
         {
-          "operation": "operation-beta",
+          "operation": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "sequence": 1,
           "kind": "accepted",
           "cursor": "cursor-0007",
           "name": "job-event"
         },
         {
-          "operation": "operation-alpha",
+          "operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "sequence": 7,
           "kind": "progress",
           "cursor": "cursor-0008",
           "name": "job-event"
         },
         {
-          "operation": "operation-beta",
+          "operation": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "sequence": 2,
           "kind": "started",
           "cursor": "cursor-0009",
@@ -120,7 +120,7 @@
       "heartbeats": 0,
       "events": [
         {
-          "operation": "operation-nobody-holds",
+          "operation": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "sequence": 1,
           "kind": "accepted",
           "cursor": null,

@@ -34,7 +34,7 @@
 {"kind": "reset", "name": "cursor-expired", "reason": "cursor-expired", "route": "high-water-snapshot-reset"}
 {"kind": "reset", "name": "generation-changed", "reason": "generation-changed", "route": "high-water-snapshot-reset"}
 {"kind": "reset", "name": "equal-cursor-digest-conflict", "reason": "equal-cursor-digest-conflict", "route": "high-water-snapshot-reset"}
-{"generation": 7, "kind": "route", "name": "canonical-pair", "route": "/libs/slingshot/agent/events?agent_event_store_generation=7&daemon_subscription_identifier=daemon-subscription-one", "subscription": "daemon-subscription-one"}
+{"generation": 7, "kind": "route", "name": "canonical-pair", "route": "/bin/slingshot-agent/events?agent_event_store_generation=7&daemon_subscription_identifier=daemon-subscription-one", "subscription": "daemon-subscription-one"}
 {"defect": "informational-head", "kind": "head", "name": "informational-head", "refusal": "head"}
 {"defect": "declared-trailer", "kind": "head", "name": "declared-trailer", "refusal": "head"}
 {"defect": "unsupported-protocol-version", "kind": "head", "name": "unsupported-protocol-version", "refusal": "head"}

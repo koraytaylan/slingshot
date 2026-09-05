@@ -348,12 +348,13 @@ pub struct ProducedArtifact {
 
 /// The complete immutable value committed when an operation succeeds.
 ///
-/// A success has exactly one representation: canonical inline bytes, or one
-/// or more verified artifacts. The expected lifecycle and revision make a
+/// A logical result has one representation: canonical inline bytes or an
+/// artifact fallback. Command artifacts may accompany an inline descriptor.
+/// The expected lifecycle and revision make a
 /// stale executor lose before it can publish any part of that result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuccessfulSettlement {
-    /// Verified artifact descriptions, when the result is artifact-backed.
+    /// Verified command artifacts and any local structured-result fallback.
     pub artifacts: Vec<ProducedArtifact>,
     /// Canonical inline result bytes, when the result is inline.
     pub inline_result: Option<String>,
@@ -370,13 +371,22 @@ impl SuccessfulSettlement {
     ///
     /// # Errors
     ///
-    /// Returns [`SettlementFailure::MixedResults`] when both representations
+    /// Returns [`SettlementFailure::MixedResults`] when inline bytes and the
+    /// structured-result fallback are both
     /// are supplied, or [`SettlementFailure::MissingResult`] when neither is.
     pub fn disposition(&self) -> Result<ResultDisposition, SettlementFailure> {
         match (self.inline_result.is_some(), self.artifacts.is_empty()) {
             (true, true) => Ok(ResultDisposition::Inline),
             (false, false) => Ok(ResultDisposition::Artifact),
-            (true, false) => Err(SettlementFailure::MixedResults),
+            (true, false)
+                if self
+                    .artifacts
+                    .iter()
+                    .any(|artifact| artifact.artifact_slot == "structured_result") =>
+            {
+                Err(SettlementFailure::MixedResults)
+            }
+            (true, false) => Ok(ResultDisposition::Inline),
             (false, true) => Err(SettlementFailure::MissingResult),
         }
     }
@@ -385,8 +395,8 @@ impl SuccessfulSettlement {
 /// Why a purported successful settlement cannot be one immutable result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum SettlementFailure {
-    /// Inline bytes and artifacts are two representations, not two parts.
-    #[error("a successful result is inline bytes or artifacts, never both")]
+    /// Inline bytes and the local structured-result fallback conflict.
+    #[error("a logical result cannot be both inline and a structured-result artifact")]
     MixedResults,
     /// A success must leave a readable immutable result.
     #[error("a successful result needs inline bytes or at least one artifact")]

@@ -19,6 +19,7 @@
 //! that can.
 
 use slingshot_configuration::profile_selection::ProfileSelection;
+use slingshot_domain::operation_executor::ExecutionIdentity;
 use slingshot_domain::profile::{
     AdobeExperienceManagerDeployment, BasicUserName, InsecureAuthorTransportWarning,
     TierBaseAddress,
@@ -35,6 +36,9 @@ use crate::authentication::access_token_cache::{
 use crate::authentication::cloud_service_credentials::CloudServiceCredentials;
 use crate::authentication::identity_management_exchange::ExchangeFailure;
 use crate::transport_policy::{AuthorTrustInput, IdentityManagementTrustInput};
+
+mod async_provider;
+pub use async_provider::{AsyncEnvironmentAuthenticationProvider, AsyncProviderState};
 
 /// Scheme every authorization value this provider builds opens with.
 const BASIC_SCHEME: &str = "Basic ";
@@ -107,6 +111,112 @@ pub struct SelectedEnvironmentSnapshot {
     identity_management_trust: IdentityManagementTrustInput,
     /// Roots the author route may use.
     author_trust: AuthorTrustInput,
+}
+
+/// The complete, immutable boundary a product author client is allowed to use.
+///
+/// This deliberately contains no publisher address, profile document, or
+/// reload handle.  A runtime constructs it once from the selected snapshot and
+/// gives it to its author client; every request that client makes must derive
+/// its URL and partition binding from this value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectedAuthorConnection {
+    /// The sole origin and context path an author client may address.
+    author: TierBaseAddress,
+    /// The target partition every request and response must name.
+    target: AuthorTargetIdentityDigest,
+    /// The selected configuration generation every request must name.
+    revision: SelectedEnvironmentRevision,
+    /// The roots only this author route may trust.
+    trust: AuthorTrustInput,
+    /// Whether startup accepted this exact author as an explicitly warned
+    /// cleartext connection.
+    ///
+    /// A later transport receives this frozen decision rather than consulting
+    /// profile files, environment variables, or an ambient TLS policy.
+    cleartext_permitted: bool,
+}
+
+impl SelectedAuthorConnection {
+    /// Returns the exact endpoint below the selected author address.
+    #[must_use]
+    pub fn endpoint(&self, segments: &[&str]) -> String {
+        self.author.endpoint(segments)
+    }
+
+    /// Returns the selected author address.
+    #[must_use]
+    pub fn author(&self) -> &TierBaseAddress {
+        &self.author
+    }
+
+    /// Returns the target partition every exchange must echo.
+    #[must_use]
+    pub fn target(&self) -> AuthorTargetIdentityDigest {
+        self.target
+    }
+
+    /// Returns the selected environment revision every exchange must echo.
+    #[must_use]
+    pub fn revision(&self) -> SelectedEnvironmentRevision {
+        self.revision
+    }
+
+    /// Returns the frozen author-only trust input.
+    #[must_use]
+    pub fn trust(&self) -> &AuthorTrustInput {
+        &self.trust
+    }
+
+    /// Reports whether this selected author requires an authenticated TLS
+    /// transport.
+    ///
+    /// Cleartext is permitted for loopback or when startup produced its typed
+    /// warning. A protected address always requires TLS.
+    #[must_use]
+    pub fn requires_transport_layer_security(&self) -> bool {
+        !self.cleartext_permitted
+    }
+
+    /// Requires a durable operation to belong to this connection's target.
+    ///
+    /// A caller cannot redirect an operation by supplying another target
+    /// string: that mismatch is refused before it can form a request.
+    pub fn require_target(&self, target: &str) -> Result<(), SelectedAuthorConnectionRefusal> {
+        if target == self.target.to_string() {
+            Ok(())
+        } else {
+            Err(SelectedAuthorConnectionRefusal::AnotherTarget)
+        }
+    }
+
+    /// Requires an execution to belong to this exact selected connection.
+    ///
+    /// Both values are required.  Sending target-compatible work admitted
+    /// under an older revision would otherwise silently use a different
+    /// endpoint or trust policy than the one that admitted it.
+    pub fn require_execution(
+        &self,
+        identity: &ExecutionIdentity,
+    ) -> Result<(), SelectedAuthorConnectionRefusal> {
+        self.require_target(&identity.author_target_identity_digest)?;
+        if identity.selected_environment_revision == self.revision.to_string() {
+            Ok(())
+        } else {
+            Err(SelectedAuthorConnectionRefusal::AnotherRevision)
+        }
+    }
+}
+
+/// Why work cannot be sent through the selected author connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SelectedAuthorConnectionRefusal {
+    /// The work belongs to a different selected author target.
+    #[error("the operation belongs to another author target")]
+    AnotherTarget,
+    /// The work was admitted under another selected environment revision.
+    #[error("the operation belongs to another selected environment revision")]
+    AnotherRevision,
 }
 
 /// Everything one snapshot is assembled from.
@@ -202,6 +312,24 @@ impl SelectedEnvironmentSnapshot {
         &self.author_trust
     }
 
+    /// Freezes the author-only connection boundary for one product client.
+    ///
+    /// The returned value is independent of this snapshot's publisher and
+    /// authentication material.  In particular, it has no configuration
+    /// reader, so profile or trust changes take effect only through a new
+    /// startup snapshot.
+    #[must_use]
+    pub fn author_connection(&self) -> SelectedAuthorConnection {
+        SelectedAuthorConnection {
+            author: self.author.clone(),
+            target: self.target,
+            revision: self.revision,
+            trust: self.author_trust.clone(),
+            cleartext_permitted: !self.author.is_protected()
+                && (self.author.is_loopback() || self.warning.is_some()),
+        }
+    }
+
     /// Returns the warning a cleartext author address carries.
     #[must_use]
     pub fn insecure_author_transport_warning(&self) -> Option<InsecureAuthorTransportWarning> {
@@ -216,9 +344,39 @@ impl SelectedEnvironmentSnapshot {
 pub struct RequestAuthentication {
     /// The complete authorization value.
     value: SecretValue,
+    /// Immutable provider selection that authorized these bytes.
+    target: AuthorTargetIdentityDigest,
+    revision: SelectedEnvironmentRevision,
 }
 
 impl RequestAuthentication {
+    /// Validates the immutable invocation binding without exposing credentials
+    /// or opening a connection. Durable runtime construction uses this before
+    /// retaining a fixed authentication policy.
+    pub fn require_execution(
+        &self,
+        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
+    ) -> Result<(), SelectedAuthorConnectionRefusal> {
+        if self.target.to_string() != identity.author_target_identity_digest {
+            return Err(SelectedAuthorConnectionRefusal::AnotherTarget);
+        }
+        if self.revision.to_string() != identity.selected_environment_revision {
+            return Err(SelectedAuthorConnectionRefusal::AnotherRevision);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn require_connection(&self, connection: &SelectedAuthorConnection)
+        -> Result<(), SelectedAuthorConnectionRefusal>
+    {
+        if self.target != connection.target() {
+            return Err(SelectedAuthorConnectionRefusal::AnotherTarget);
+        }
+        if self.revision != connection.revision() {
+            return Err(SelectedAuthorConnectionRefusal::AnotherRevision);
+        }
+        Ok(())
+    }
     /// Lends the complete authorization value to `use_bytes`.
     pub fn lend_value_bytes<Outcome>(&self, use_bytes: impl FnOnce(&[u8]) -> Outcome) -> Outcome {
         use_bytes(self.value.expose_secret_bytes())
@@ -233,11 +391,11 @@ impl ::core::fmt::Debug for RequestAuthentication {
 
 /// Authenticates requests to one author, and to nothing else.
 #[derive(Debug)]
-pub struct EnvironmentAuthenticationProvider {
+pub struct EnvironmentAuthenticationProvider<Cache = CloudAccessTokenCache> {
     /// Material this provider was built from, which it never reloads.
     snapshot: SelectedEnvironmentSnapshot,
     /// Cache the cloud variant leases its token from.
-    cache: CloudAccessTokenCache,
+    cache: Cache,
 }
 
 impl EnvironmentAuthenticationProvider {
@@ -246,18 +404,6 @@ impl EnvironmentAuthenticationProvider {
     #[must_use]
     pub fn new(snapshot: SelectedEnvironmentSnapshot, cache_identity: u64) -> Self {
         Self { snapshot, cache: CloudAccessTokenCache::with_identity(cache_identity) }
-    }
-
-    /// Returns the snapshot this provider was built from.
-    #[must_use]
-    pub fn snapshot(&self) -> &SelectedEnvironmentSnapshot {
-        &self.snapshot
-    }
-
-    /// Returns the endpoint `segments` names below the author address.
-    #[must_use]
-    pub fn author_endpoint(&self, segments: &[&str]) -> String {
-        self.snapshot.author.endpoint(segments)
     }
 
     /// Returns the material a request to `endpoint` carries.
@@ -279,11 +425,11 @@ impl EnvironmentAuthenticationProvider {
         self.require_permitted_transport()?;
         match &self.snapshot.authentication {
             SnapshotAuthentication::BasicCredentials { user_name, password } => {
-                Ok((basic_authentication(user_name, password), None))
+                Ok((self.bind_authentication(basic_authentication(user_name, password)), None))
             }
             SnapshotAuthentication::ServiceCredentials { .. } => {
                 let (value, lease) = self.cache.token(reading, source, bearer_authentication)?;
-                Ok((value, Some(lease)))
+                Ok((self.bind_authentication(value), Some(lease)))
             }
         }
     }
@@ -306,7 +452,23 @@ impl EnvironmentAuthenticationProvider {
                 ConfigurationFailureCode::AuthenticationTargetMismatch,
             ));
         };
-        Ok(self.cache.refresh_after_unauthorized(lease, source, bearer_authentication)?)
+        let (value, lease) = self.cache.refresh_after_unauthorized(lease, source, bearer_authentication)?;
+        Ok((self.bind_authentication(value), lease))
+    }
+
+}
+
+impl<Cache> EnvironmentAuthenticationProvider<Cache> {
+    /// Returns the immutable startup snapshot, independent of cache strategy.
+    #[must_use]
+    pub fn snapshot(&self) -> &SelectedEnvironmentSnapshot { &self.snapshot }
+
+    /// Returns an endpoint below this provider's only author address.
+    #[must_use]
+    pub fn author_endpoint(&self, segments: &[&str]) -> String { self.snapshot.author.endpoint(segments) }
+
+    fn bind_authentication(&self, value: SecretValue) -> RequestAuthentication {
+        RequestAuthentication { value, target: self.snapshot.target(), revision: self.snapshot.revision() }
     }
 
     /// Requires `endpoint` to be the author address or an endpoint below it.
@@ -342,7 +504,7 @@ impl EnvironmentAuthenticationProvider {
 fn basic_authentication(
     user_name: &BasicUserName,
     password: &SecretValue,
-) -> RequestAuthentication {
+) -> SecretValue {
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
 
@@ -352,18 +514,20 @@ fn basic_authentication(
     canonical.push(b':');
     canonical.extend_from_slice(password.expose_secret_bytes());
     let canonical = SecretValue::from_bytes(canonical);
-    let encoded = STANDARD.encode(canonical.expose_secret_bytes());
-    RequestAuthentication { value: SecretValue::from_text(format!("{BASIC_SCHEME}{encoded}")) }
+    let encoded = SecretValue::from_text(STANDARD.encode(canonical.expose_secret_bytes()));
+    let mut value = BASIC_SCHEME.as_bytes().to_vec();
+    value.extend_from_slice(encoded.expose_secret_bytes());
+    SecretValue::from_bytes(value)
 }
 
 /// Builds the exact bearer authorization value.
 fn bearer_authentication(
     token: &crate::authentication::identity_management_exchange::AccessToken,
-) -> RequestAuthentication {
+) -> SecretValue {
     let value = token.lend_token_bytes(|bytes| {
         let mut value = BEARER_SCHEME.as_bytes().to_vec();
         value.extend_from_slice(bytes);
         value
     });
-    RequestAuthentication { value: SecretValue::from_bytes(value) }
+    SecretValue::from_bytes(value)
 }

@@ -9,6 +9,75 @@
 use slingshot_agent_connection::capability_discovery::{
     AdvertisedCapabilities, DiscoveryRefusal, RequiredCapabilities,
 };
+
+#[test]
+fn closed_capability_document_refuses_ambiguous_or_incomplete_wire_evidence() {
+    use slingshot_agent_connection::capability_discovery::decode_capabilities;
+    let held = matching();
+    let document = serde_json::json!({
+        "format": "slingshot.agent/1",
+        "agent_event_store_generation": held.agent_event_store_generation,
+        "canonical_json_contract_digest": held.canonical_json_contract_digest,
+        "command_contracts": held.command_contracts,
+        "continuation_authority_ready": true,
+        "transport_contract_digest": held.transport_contract_digest,
+    });
+    let requirement = required(Some(GENERATION));
+    assert_eq!(
+        decode_capabilities(&serde_json::to_vec(&document).unwrap(), &requirement).unwrap(),
+        held
+    );
+    for key in document.as_object().unwrap().keys() {
+        let mut changed = document.clone();
+        changed.as_object_mut().unwrap().remove(key);
+        assert!(
+            decode_capabilities(&serde_json::to_vec(&changed).unwrap(), &requirement).is_err(),
+            "missing {key}"
+        );
+    }
+    for (key, value) in [
+        ("format", serde_json::json!("slingshot.agent/2")),
+        ("agent_event_store_generation", serde_json::json!(0)),
+        ("agent_event_store_generation", serde_json::json!(GENERATION + 1)),
+        ("continuation_authority_ready", serde_json::json!(false)),
+        ("extra", serde_json::json!(true)),
+        (
+            "command_contracts",
+            serde_json::json!([held.command_contracts[0], held.command_contracts[0]]),
+        ),
+    ] {
+        let mut changed = document.clone();
+        changed[key] = value;
+        assert!(decode_capabilities(&serde_json::to_vec(&changed).unwrap(), &requirement).is_err());
+    }
+    let duplicate = document.to_string().replacen('{', "{\"format\":\"slingshot.agent/1\",", 1);
+    assert!(decode_capabilities(duplicate.as_bytes(), &requirement).is_err());
+    for (key, value) in [
+        ("argument_schema_digest", "bad".to_owned()),
+        ("result_schema_digest", "A".repeat(64)),
+        ("command_contract_limits_digest", "".to_owned()),
+        ("command_semantic_contract_version", "v".repeat(65)),
+        ("command_wire_name", "x".repeat(97)),
+    ] {
+        let mut changed = document.clone();
+        let mut other = changed["command_contracts"][0].clone();
+        other["command_wire_name"] = serde_json::json!("another_command");
+        other[key] = serde_json::json!(value);
+        changed["command_contracts"].as_array_mut().unwrap().push(other);
+        assert!(
+            decode_capabilities(&serde_json::to_vec(&changed).unwrap(), &requirement).is_err(),
+            "malformed unselected {key}"
+        );
+    }
+    let mut oversized = serde_json::to_vec(&document).unwrap();
+    oversized.resize(
+        AuthorAgentTransportContract::embedded().limit("maximum_agent_protocol_document_bytes")
+            as usize
+            + 1,
+        b' ',
+    );
+    assert!(decode_capabilities(&oversized, &requirement).is_err());
+}
 use slingshot_agent_protocol::identity::WireContractIdentity;
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
 use slingshot_domain::command::schema::canonical_contract_digest;

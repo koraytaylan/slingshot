@@ -44,6 +44,192 @@ use crate::sqlite_statement_inventory::statement_text;
 /// Physical Sling jobs one logical submission may be carried by.
 pub const PHYSICAL_JOBS_PER_SUBMISSION: u64 = 32;
 
+/// Validated successful snapshot facts to publish with the local result.
+/// This persistence input does not itself prove wire authenticity.
+#[derive(Debug, Clone)]
+pub struct SuccessfulAgentSnapshot {
+    /// Monotonic successful remote observation.
+    pub observation: RemoteJobObservation,
+    /// Complete bounded physical-job set in ascending order.
+    pub physical_sling_job_identifiers: Vec<String>,
+    /// Conservative remaining lifetime at publication. Zero is valid once a
+    /// complete local result can settle independently of remote retention.
+    pub remaining_retention_milliseconds: u64,
+}
+
+/// Validated failed snapshot facts. This input does not prove wire authenticity
+/// or establish whether a command's effects are known.
+#[derive(Debug, Clone)]
+pub struct FailedAgentSnapshot {
+    /// Monotonic failed remote observation.
+    pub observation: RemoteJobObservation,
+    /// Complete bounded physical-job set in ascending order.
+    pub physical_sling_job_identifiers: Vec<String>,
+    /// Conservative remaining retention at settlement.
+    pub remaining_retention_milliseconds: u64,
+}
+
+/// Content-free diagnosis derived locally from a validated command refusal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RejectedAgentDiagnosis {
+    /// Unpublished package staging could not be removed. Agent maintenance is
+    /// required; rebuilding the package is not a recovery action.
+    PackageStagingCleanupRequired,
+}
+
+impl RejectedAgentDiagnosis {
+    /// Fixed bounded diagnosis; contains no agent-supplied paths or details.
+    #[must_use]
+    pub fn as_text(self) -> &'static str {
+        match self {
+            Self::PackageStagingCleanupRequired => {
+                "package staging cleanup failed; agent maintenance required; package rebuild forbidden"
+            }
+        }
+    }
+}
+
+pub(crate) fn write_failed_snapshot(
+    transaction: &rusqlite::Transaction<'_>,
+    expected: &AgentSubmission,
+    snapshot: &FailedAgentSnapshot,
+    partial_admission: bool,
+    now: u64,
+) -> Result<(), AgentRepositoryFailure> {
+    write_terminal_snapshot(
+        transaction,
+        expected,
+        &SuccessfulAgentSnapshot {
+            observation: snapshot.observation,
+            physical_sling_job_identifiers: snapshot.physical_sling_job_identifiers.clone(),
+            remaining_retention_milliseconds: snapshot.remaining_retention_milliseconds,
+        },
+        now,
+        AgentJobState::Failed,
+        if partial_admission {
+            "authoritative-remote-failure"
+        } else {
+            "authoritative-nonexecution"
+        },
+    )
+}
+
+/// Writes snapshot facts inside the caller's guarded success transaction.
+pub(crate) fn write_successful_snapshot(
+    transaction: &rusqlite::Transaction<'_>,
+    expected: &AgentSubmission,
+    snapshot: &SuccessfulAgentSnapshot,
+    now: u64,
+) -> Result<(), AgentRepositoryFailure> {
+    write_terminal_snapshot(
+        transaction,
+        expected,
+        snapshot,
+        now,
+        AgentJobState::Succeeded,
+        "authoritative-remote-success",
+    )
+}
+
+fn write_terminal_snapshot(
+    transaction: &rusqlite::Transaction<'_>,
+    expected: &AgentSubmission,
+    snapshot: &SuccessfulAgentSnapshot,
+    now: u64,
+    state: AgentJobState,
+    disposition: &str,
+) -> Result<(), AgentRepositoryFailure> {
+    use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
+    use slingshot_domain::remote_job::AgentJobIdentifier;
+    let observation = snapshot.observation;
+    let names = &snapshot.physical_sling_job_identifiers;
+    let identity = &expected.identity;
+    if observation.state != state
+        || observation.applied_sequence < expected.snapshot_watermark
+        || observation.applied_sequence < expected.observation.applied_sequence
+        || [observation.applied_sequence.value(), observation.attempt, observation.progress, now]
+            .into_iter()
+            .any(|value| i64::try_from(value).is_err())
+        || (observation.applied_sequence == expected.observation.applied_sequence
+            && observation != expected.observation)
+        || expected
+            .observation
+            .advanced(
+                observation.state,
+                observation.applied_sequence,
+                observation.attempt,
+                observation.progress,
+            )
+            .is_err()
+        || names.is_empty()
+        || names.len() as u64 > PHYSICAL_JOBS_PER_SUBMISSION
+        || names.windows(2).any(|pair| pair[0] >= pair[1])
+        || names.iter().any(|name| AgentJobIdentifier::new(name).is_err())
+        || snapshot.remaining_retention_milliseconds
+            > AuthorAgentTransportContract::embedded()
+                .limit("maximum_persisted_remaining_retention_milliseconds")
+    {
+        return Err(AgentRepositoryFailure::Conflicted);
+    }
+    let held = physical_jobs(
+        transaction,
+        &identity.author_target_identity_digest,
+        &identity.agent_operation_identifier,
+    )?;
+    // A complete snapshot cannot forget an already retained physical attempt.
+    if held.iter().any(|name| names.binary_search(name).is_err()) {
+        return Err(AgentRepositoryFailure::Conflicted);
+    }
+    let remaining = if held.is_empty() && expected.remaining_retention_milliseconds == 0 {
+        snapshot.remaining_retention_milliseconds
+    } else {
+        snapshot.remaining_retention_milliseconds.min(expected.remaining_retention_milliseconds)
+    };
+    for name in names.iter().filter(|name| !held.contains(name)) {
+        let changed = transaction.execute(
+            statement("record one physical Sling job for one agent submission"),
+            (
+                &identity.agent_operation_identifier,
+                &identity.author_target_identity_digest,
+                stored(now),
+                name,
+            ),
+        )?;
+        if changed != ONE_ROW {
+            return Err(AgentRepositoryFailure::Conflicted);
+        }
+    }
+    let changed = transaction.execute(
+        statement("record one snapshot watermark on one agent submission"),
+        (
+            stored(observation.applied_sequence.value()),
+            &identity.author_target_identity_digest,
+            &identity.agent_operation_identifier,
+            stored(observation.applied_sequence.value()),
+        ),
+    )?;
+    if changed != ONE_ROW {
+        return Err(AgentRepositoryFailure::Conflicted);
+    }
+    let changed = transaction.execute(
+        statement("settle one agent submission"),
+        (
+            stored(observation.applied_sequence.value()),
+            stored(observation.attempt),
+            observation.state.to_string(),
+            stored(observation.progress),
+            stored(remaining),
+            disposition,
+            &identity.author_target_identity_digest,
+            &identity.agent_operation_identifier,
+        ),
+    )?;
+    if changed != ONE_ROW {
+        return Err(AgentRepositoryFailure::Conflicted);
+    }
+    Ok(())
+}
+
 /// Events one subscription may retain per submission it could be carrying.
 pub const EVENTS_PER_SUBMISSION: u64 = 256;
 
@@ -218,7 +404,7 @@ pub struct SubmissionIdentity {
 }
 
 /// One remote submission, as it is stored.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AgentSubmission {
     /// The exact bytes that were sent.
     pub canonical_submission: String,
@@ -238,6 +424,12 @@ pub struct AgentSubmission {
     pub snapshot_watermark: JobEventSequence,
     /// How it ended, when it has.
     pub terminal_disposition: Option<String>,
+}
+
+impl core::fmt::Debug for AgentSubmission {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("AgentSubmission([redacted])")
+    }
 }
 
 /// What admitting one submission did.
@@ -426,6 +618,92 @@ impl AgentJobRepository {
         )
     }
 
+    /// Atomically associates a validated acknowledgement with the exact
+    /// retained request. No partial physical set or renewed retention can be
+    /// observed if a statement fails. Replays never extend the held lifetime.
+    pub fn acknowledge(
+        &self,
+        expected: &AgentSubmission,
+        identifiers: &[String],
+        remaining_retention_milliseconds: u64,
+        recorded_at_unix_milliseconds: u64,
+    ) -> Result<u64, AgentRepositoryFailure> {
+        self.associate_snapshot(
+            expected,
+            identifiers,
+            remaining_retention_milliseconds,
+            recorded_at_unix_milliseconds,
+            None,
+            None,
+        )
+    }
+
+    /// Atomically applies a nonterminal snapshot, its physical set, watermark,
+    /// and lifetime. Terminal snapshots require result settlement, not this API.
+    pub fn reconcile_active_snapshot(
+        &self,
+        expected: &AgentSubmission,
+        identifiers: &[String],
+        observation: RemoteJobObservation,
+        remaining_retention_milliseconds: u64,
+        recorded_at_unix_milliseconds: u64,
+    ) -> Result<u64, AgentRepositoryFailure> {
+        self.associate_snapshot(
+            expected,
+            identifiers,
+            remaining_retention_milliseconds,
+            recorded_at_unix_milliseconds,
+            Some(observation),
+            None,
+        )
+    }
+
+    /// Applies active recovery only while the owning local operation still has
+    /// the expected revision. Both records must be in this database; the guard
+    /// and every remote-child write share one immediate transaction.
+    pub fn reconcile_active_snapshot_for_operation(
+        &self,
+        expected: &AgentSubmission,
+        expected_operation_revision: u64,
+        identifiers: &[String],
+        observation: RemoteJobObservation,
+        remaining_retention_milliseconds: u64,
+        recorded_at_unix_milliseconds: u64,
+    ) -> Result<u64, AgentRepositoryFailure> {
+        self.associate_snapshot(
+            expected,
+            identifiers,
+            remaining_retention_milliseconds,
+            recorded_at_unix_milliseconds,
+            Some(observation),
+            Some(expected_operation_revision),
+        )
+    }
+
+    fn associate_snapshot(
+        &self,
+        expected: &AgentSubmission,
+        identifiers: &[String],
+        remaining_retention_milliseconds: u64,
+        recorded_at_unix_milliseconds: u64,
+        observation: Option<RemoteJobObservation>,
+        expected_operation_revision: Option<u64>,
+    ) -> Result<u64, AgentRepositoryFailure> {
+        let transaction = write_transaction(self.database.connection())?;
+        let remaining = associate_snapshot_within(
+            &transaction,
+            self.bounds,
+            expected,
+            identifiers,
+            remaining_retention_milliseconds,
+            recorded_at_unix_milliseconds,
+            observation,
+            expected_operation_revision,
+        )?;
+        transaction.commit()?;
+        Ok(remaining)
+    }
+
     /// Applies one believed event to one submission's durable state.
     ///
     /// Conditional on the sequence the caller expected to find, so two folds
@@ -513,7 +791,8 @@ impl AgentJobRepository {
         require_one_row(changed, &identity.agent_operation_identifier)
     }
 
-    /// Returns the ended submissions one maintenance run would remove.
+    /// Returns remote-ended submissions or children of locally settled
+    /// expired-window/result-unavailable operations older than the cutoff.
     ///
     /// # Errors
     ///
@@ -528,7 +807,12 @@ impl AgentJobRepository {
         let mut prepared = connection
             .prepare(statement("select the agent submissions one maintenance run would remove"))?;
         let rows = prepared.query_map(
-            (author_target_identity_digest, stored(before_unix_milliseconds), stored(limit)),
+            (
+                author_target_identity_digest,
+                stored(before_unix_milliseconds),
+                stored(before_unix_milliseconds),
+                stored(limit),
+            ),
             |row| {
                 Ok((row.get("agent_operation_identifier")?, row.get("submitted_command_digest")?))
             },
@@ -548,11 +832,55 @@ impl AgentJobRepository {
         author_target_identity_digest: &str,
         agent_operation_identifier: &str,
     ) -> Result<(), AgentRepositoryFailure> {
-        let changed = self.database.connection().execute(
+        let transaction = write_transaction(self.database.connection())?;
+        let retained = read_submission(
+            &transaction,
+            author_target_identity_digest,
+            agent_operation_identifier,
+        )?
+        .ok_or_else(|| AgentRepositoryFailure::NoSuchSubmission {
+            identifier: agent_operation_identifier.to_owned(),
+        })?;
+        let disposition = retained.terminal_disposition.as_deref();
+        if disposition.is_none() {
+            use slingshot_domain::operation::TerminalFailureKind;
+            let local = crate::operation_repository::OperationRepository::read_within(
+                &transaction,
+                author_target_identity_digest,
+                &retained.identity.operation_identifier,
+            )
+            .map_err(|_| AgentRepositoryFailure::Conflicted)?
+            .ok_or_else(|| AgentRepositoryFailure::NoSuchSubmission {
+                identifier: agent_operation_identifier.to_owned(),
+            })?;
+            if !local.record.lifecycle_state.is_terminal()
+                || local.selected_environment_revision
+                    != retained.identity.selected_environment_revision
+                || !local.record.terminal_failure.as_ref().is_some_and(|failure| {
+                    matches!(
+                        failure.kind,
+                        TerminalFailureKind::RecoveryWindowExpired
+                            | TerminalFailureKind::ResultUnavailable
+                    )
+                })
+            {
+                return Err(AgentRepositoryFailure::NoSuchSubmission {
+                    identifier: agent_operation_identifier.to_owned(),
+                });
+            }
+        }
+        let changed = transaction.execute(
             statement("remove one ended agent submission"),
-            (author_target_identity_digest, agent_operation_identifier),
+            (
+                author_target_identity_digest,
+                agent_operation_identifier,
+                &retained.contracts.submitted_command_digest,
+                disposition,
+            ),
         )?;
-        require_one_row(changed, agent_operation_identifier)
+        require_one_row(changed, agent_operation_identifier)?;
+        transaction.commit()?;
+        Ok(())
     }
 }
 
@@ -615,8 +943,165 @@ fn insert_submission(
     Ok(())
 }
 
+/// Applies the same guarded snapshot writes inside a caller-owned transaction.
+pub(crate) fn associate_snapshot_within(
+    transaction: &rusqlite::Transaction<'_>,
+    bounds: AgentCapacityBounds,
+    expected: &AgentSubmission,
+    identifiers: &[String],
+    remaining_retention_milliseconds: u64,
+    recorded_at_unix_milliseconds: u64,
+    observation: Option<RemoteJobObservation>,
+    expected_operation_revision: Option<u64>,
+) -> Result<u64, AgentRepositoryFailure> {
+    use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
+    use slingshot_domain::remote_job::AgentJobIdentifier;
+    let maximum_retention = AuthorAgentTransportContract::embedded()
+        .limit("maximum_persisted_remaining_retention_milliseconds");
+    if identifiers.is_empty()
+        || identifiers.len() as u64 > bounds.physical_job_rows
+        || identifiers.windows(2).any(|pair| pair[0] >= pair[1])
+        || identifiers.iter().any(|name| AgentJobIdentifier::new(name).is_err())
+        || remaining_retention_milliseconds == 0
+        || remaining_retention_milliseconds > maximum_retention
+    {
+        return Err(AgentRepositoryFailure::Conflicted);
+    }
+    let identity = &expected.identity;
+    if let Some(revision) = expected_operation_revision {
+        let local = crate::operation_repository::OperationRepository::read_within(
+            transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )
+        .map_err(|_| AgentRepositoryFailure::Conflicted)?
+        .ok_or(AgentRepositoryFailure::Conflicted)?;
+        if local.record.revision != revision
+            || local.selected_environment_revision != identity.selected_environment_revision
+            || local.record.lifecycle_state.is_terminal()
+        {
+            return Err(AgentRepositoryFailure::Conflicted);
+        }
+    }
+    let retained = read_submission(
+        transaction,
+        &identity.author_target_identity_digest,
+        &identity.agent_operation_identifier,
+    )?
+    .ok_or(AgentRepositoryFailure::Conflicted)?;
+    if retained.identity != expected.identity
+        || retained.contracts != expected.contracts
+        || retained.canonical_submission != expected.canonical_submission
+        || retained.terminal_disposition.is_some()
+    {
+        return Err(AgentRepositoryFailure::Conflicted);
+    }
+    if let Some(observation) = observation {
+        if retained.observation != expected.observation
+            || retained.snapshot_watermark != expected.snapshot_watermark
+            || observation.state.is_terminal()
+            || observation.applied_sequence < retained.observation.applied_sequence
+            || observation.applied_sequence < retained.snapshot_watermark
+            || (observation.applied_sequence == retained.observation.applied_sequence
+                && observation != retained.observation)
+            || retained
+                .observation
+                .advanced(
+                    observation.state,
+                    observation.applied_sequence,
+                    observation.attempt,
+                    observation.progress,
+                )
+                .is_err()
+        {
+            return Err(AgentRepositoryFailure::Conflicted);
+        }
+    }
+    let held = physical_jobs(
+        transaction,
+        &identity.author_target_identity_digest,
+        &identity.agent_operation_identifier,
+    )?;
+    let additional = identifiers.iter().filter(|name| !held.contains(name)).count();
+    if held.len().saturating_add(additional) as u64 > bounds.physical_job_rows {
+        return Err(AgentRepositoryFailure::Exhausted {
+            allowed: bounds.physical_job_rows,
+            subject: "physical Sling jobs",
+        });
+    }
+    // The first association establishes a lifetime. Later acknowledgements
+    // cannot refresh it; the original request-start anchor is unchanged.
+    let remaining = if held.is_empty() && retained.remaining_retention_milliseconds == 0 {
+        remaining_retention_milliseconds
+    } else {
+        remaining_retention_milliseconds.min(retained.remaining_retention_milliseconds)
+    };
+    for name in identifiers {
+        if held.contains(name) {
+            continue;
+        }
+        let changed = transaction.execute(
+            statement("record one physical Sling job for one agent submission"),
+            (
+                &identity.agent_operation_identifier,
+                &identity.author_target_identity_digest,
+                stored(recorded_at_unix_milliseconds),
+                name,
+            ),
+        )?;
+        if changed != ONE_ROW {
+            return Err(AgentRepositoryFailure::Conflicted);
+        }
+    }
+    let changed = transaction.execute(
+        statement("retain one acknowledged submission lifetime"),
+        (
+            stored(remaining),
+            &identity.author_target_identity_digest,
+            &identity.agent_operation_identifier,
+            &expected.contracts.submitted_command_digest,
+        ),
+    )?;
+    if changed != ONE_ROW {
+        return Err(AgentRepositoryFailure::Conflicted);
+    }
+    if let Some(observation) = observation {
+        let changed = transaction.execute(
+            statement("fold one believed event into one agent submission"),
+            (
+                stored(observation.applied_sequence.value()),
+                stored(observation.attempt),
+                observation.state.to_string(),
+                stored(observation.progress),
+                &identity.author_target_identity_digest,
+                &identity.agent_operation_identifier,
+                stored(expected.observation.applied_sequence.value()),
+                observation.state.to_string(),
+                stored(observation.attempt),
+                stored(observation.progress),
+            ),
+        )?;
+        if changed != ONE_ROW {
+            return Err(AgentRepositoryFailure::Conflicted);
+        }
+        let changed = transaction.execute(
+            statement("record one snapshot watermark on one agent submission"),
+            (
+                stored(observation.applied_sequence.value()),
+                &identity.author_target_identity_digest,
+                &identity.agent_operation_identifier,
+                stored(observation.applied_sequence.value()),
+            ),
+        )?;
+        if changed != ONE_ROW {
+            return Err(AgentRepositoryFailure::Conflicted);
+        }
+    }
+    Ok(remaining)
+}
+
 /// Returns the submission one partition holds under that name.
-fn read_submission(
+pub(crate) fn read_submission(
     connection: &rusqlite::Connection,
     author_target_identity_digest: &str,
     agent_operation_identifier: &str,
@@ -687,7 +1172,7 @@ fn read_submission(
 }
 
 /// Returns the physical Sling jobs one submission is carried by.
-fn physical_jobs(
+pub(crate) fn physical_jobs(
     connection: &rusqlite::Connection,
     author_target_identity_digest: &str,
     agent_operation_identifier: &str,

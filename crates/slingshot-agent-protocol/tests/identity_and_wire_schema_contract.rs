@@ -29,7 +29,44 @@ const DIGEST_PAIRS: usize = 32;
 const WORKSPACE_ROOT_ANCESTORS: usize = 2;
 
 /// Documents the generated agent-schema families hold together.
-const GENERATED_SCHEMAS: usize = 5;
+const GENERATED_SCHEMAS: usize = 6;
+
+#[test]
+fn capability_wire_members_match_the_closed_schema() {
+    use slingshot_agent_protocol::capabilities::Capabilities;
+    let document = Capabilities {
+        format: AGENT_FORMAT.to_owned(),
+        agent_event_store_generation: 1,
+        canonical_json_contract_digest: canonical_contract_digest(),
+        command_contracts: vec![WireContractIdentity::from(&expected().command_contract)],
+        continuation_authority_ready: true,
+        transport_contract_digest: expected().transport_contract_digest,
+    };
+    let value = serde_json::to_value(&document).unwrap();
+    let schema: Value =
+        serde_json::from_str(include_str!("../../../schemas/agent-protocol/capabilities.json"))
+            .unwrap();
+    let names: std::collections::BTreeSet<_> =
+        value.as_object().unwrap().keys().map(String::as_str).collect();
+    let required: std::collections::BTreeSet<_> = schema["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect();
+    assert_eq!(names, required);
+    assert_eq!(schema["additionalProperties"], false);
+    assert_eq!(serde_json::from_value::<Capabilities>(value.clone()).unwrap(), document);
+    for name in names {
+        let mut missing = value.clone();
+        missing.as_object_mut().unwrap().remove(name);
+        assert!(serde_json::from_value::<Capabilities>(missing).is_err());
+    }
+    let mut surplus = value;
+    surplus["private-sentinel"] = serde_json::json!(true);
+    assert!(serde_json::from_value::<Capabilities>(surplus).is_err());
+    assert_eq!(format!("{document:?}"), "Capabilities([redacted])");
+}
 
 /// The generation an agent event store reaches once it has been rebuilt.
 const REBUILT_GENERATION: u64 = 2;

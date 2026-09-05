@@ -42,7 +42,8 @@ impl JobEventKind {
     }
 }
 
-/// One thing the agent says happened to one job.
+/// Identity/sequence projection used for ordering. The complete wire envelope is
+/// [`crate::job_event_document::JobEventDocument`], not this projection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct JobEvent {
@@ -113,9 +114,40 @@ impl ObservedJob {
 }
 
 /// What the agent's snapshot says, which is the record rather than the news.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct JobSnapshot {
+    /// Subscription cursor through which this snapshot includes the job's effects.
+    /// This is independent of the per-job event sequence.
+    pub subscription_watermark: String,
+    /// Optional retained failure; command/effect validation is still required.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_failure"
+    )]
+    pub terminal_failure: Option<crate::terminal_failure::TerminalFailureDocument>,
+    /// Optional retained successful result; absence leaves acquisition pending.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "present_result")]
+    pub terminal_result: Option<crate::terminal_result::TerminalResultDocument>,
+    /// Versioned transport, canonical-byte, and selected command contracts.
+    pub provenance: crate::identity::DocumentProvenance,
+    /// The selected author partition.
+    pub author_target_identity_digest: String,
+    /// The immutable selected environment revision.
+    pub selected_environment_revision: String,
+    /// The subscription whose snapshot this is.
+    pub daemon_subscription_identifier: String,
+    /// Digest of the retained canonical command and manifest.
+    pub submitted_command_digest: String,
+    /// Physical records carrying this logical operation, sorted and distinct.
+    pub physical_sling_job_identifiers: Vec<String>,
+    /// The bounded lifetime granted at request start.
+    pub granted_retention_milliseconds: u64,
+    /// Monotonic physical attempt count.
+    pub attempt: u64,
+    /// Monotonic progress value.
+    pub progress: u64,
     /// Which incarnation of the store it came from.
     pub agent_event_store_generation: u64,
     /// Which operation it is about.
@@ -124,6 +156,26 @@ pub struct JobSnapshot {
     pub kind: JobEventKind,
     /// The highest sequence the store holds.
     pub sequence: u64,
+}
+
+impl core::fmt::Debug for JobSnapshot {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("JobSnapshot([redacted])")
+    }
+}
+
+/// A present failure must be an object, never a null spelling of absence.
+fn present_failure<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<crate::terminal_failure::TerminalFailureDocument>, D::Error> {
+    crate::terminal_failure::TerminalFailureDocument::deserialize(deserializer).map(Some)
+}
+
+/// A present result must be an object, never a null spelling of absence.
+fn present_result<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<crate::terminal_result::TerminalResultDocument>, D::Error> {
+    crate::terminal_result::TerminalResultDocument::deserialize(deserializer).map(Some)
 }
 
 impl JobSnapshot {
