@@ -103,8 +103,8 @@ impl ScheduledOperation {
     /// Returns whether this operation may be selected at `now`.
     ///
     /// An operation waiting on nothing is eligible. One waiting on a recovery
-    /// is eligible when a person has explicitly resumed it, or when its
-    /// remaining delay has elapsed. The explicit resume wins over the clock,
+    /// is eligible when a person has explicitly resumed it, or when it is not
+    /// paused and its remaining delay has elapsed. The explicit resume wins over the clock,
     /// because a person who asked for a retry has said something the clock
     /// cannot say.
     #[must_use]
@@ -112,7 +112,9 @@ impl ScheduledOperation {
         let Some(recovery) = &self.outstanding_recovery else {
             return true;
         };
-        self.resume_committed || remaining_delay_milliseconds(recovery, now_unix_milliseconds) == 0
+        self.resume_committed
+            || (!crate::operation::durable_author_lookup::automatic_recovery_paused(recovery)
+                && remaining_delay_milliseconds(recovery, now_unix_milliseconds) == 0)
     }
 }
 

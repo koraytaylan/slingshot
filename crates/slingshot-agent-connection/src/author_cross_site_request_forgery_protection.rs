@@ -17,7 +17,7 @@
 //! of what is configured rather than something to discover by trying.
 
 /// The route a token is fetched from, after any context prefix.
-pub const TOKEN_ROUTE: &str = "/libs/granite/csrf/token";
+pub const TOKEN_ROUTE: &str = "/libs/granite/csrf/token.json";
 
 /// The header a token is presented in.
 pub const TOKEN_HEADER: &str = "CSRF-Token";
@@ -73,7 +73,7 @@ pub enum TokenFailure {
 }
 
 /// One token, and how long it lasts.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct CrossSiteRequestForgeryToken {
     /// When it stops being presented.
     pub expires_at_unix_milliseconds: u64,
@@ -81,6 +81,12 @@ pub struct CrossSiteRequestForgeryToken {
     pub origin: String,
     /// The value, which is presented and never logged.
     pub value: String,
+}
+
+impl core::fmt::Debug for CrossSiteRequestForgeryToken {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("CrossSiteRequestForgeryToken([redacted])")
+    }
 }
 
 impl CrossSiteRequestForgeryToken {

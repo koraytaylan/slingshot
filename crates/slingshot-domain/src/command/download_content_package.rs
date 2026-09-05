@@ -531,6 +531,32 @@ pub enum DownloadContentPackageRefusal {
 }
 
 impl DownloadContentPackageRefusal {
+    /// Requires any root or expression reference to belong to this request.
+    ///
+    /// # Errors
+    /// Returns [`PackageFailure::NotThisRequest`] for another root, an absent
+    /// filter collection, or an expression index outside that collection.
+    pub fn require_answers(
+        &self,
+        command: &DownloadContentPackageCommand,
+    ) -> Result<(), PackageFailure> {
+        let matches = match self {
+            Self::RootNotFound { root_path } | Self::RootAccessDenied { root_path } => {
+                command.roots.paths().contains(root_path)
+            }
+            Self::PatternRejected { collection, expression_index } => {
+                let filters = match collection {
+                    FilterCollection::Inclusion => command.inclusion_filters.as_ref(),
+                    FilterCollection::Exclusion => command.exclusion_filters.as_ref(),
+                };
+                filters
+                    .is_some_and(|filters| *expression_index < filters.expressions().len() as u64)
+            }
+            _ => true,
+        };
+        if matches { Ok(()) } else { Err(PackageFailure::NotThisRequest) }
+    }
+
     /// Returns whether this refusal proves no artifact was published.
     #[must_use]
     pub fn proves_no_publication(&self) -> bool {

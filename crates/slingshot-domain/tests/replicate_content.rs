@@ -16,6 +16,34 @@ use slingshot_domain::command::replicate_content::{
 };
 use slingshot_domain::command::repository_path::RepositoryPath;
 
+#[test]
+fn admission_failure_counts_and_stopping_path_must_be_possible_for_the_request() {
+    for recursive in [false, true] {
+        let command: ReplicateContentCommand = serde_json::from_value(serde_json::json!({"path":"/content/example","recursive":recursive})).unwrap();
+        for (accepted, remaining, path, valid) in [
+            (0, 1, "/content/example", true),
+            (0, 2, "/content/example", recursive),
+            (0, maximum_replication_candidate_paths(), "/content/example", recursive),
+            (maximum_replication_candidate_paths() - 1, 1, "/content/example/child", recursive),
+            (1, 1, "/content/example/child", recursive),
+            (0, 0, "/content/example", false),
+            (1, 0, "/content/example/child", false),
+            (1, 1, "/content/example", false),
+            (0, 1, "/content/example/child", false),
+            (1, 1, "/content/example-other", false),
+            (1, 1, "/other", false),
+            (u64::MAX, 1, "/content/example/child", false),
+            (0, maximum_replication_candidate_paths() + 1, "/content/example", false),
+        ] {
+            for failure in [AdmissionOutcome::AdmissionRejected, AdmissionOutcome::AdmissionBudgetExceeded, AdmissionOutcome::AdmissionOutcomeUnknown] {
+                let refusal = AdmissionRefusal { accepted_item_count: accepted, remaining_item_count: remaining,
+                    current_path: serde_json::from_value(serde_json::json!(path)).unwrap(), failure };
+                assert_eq!(refusal.require_answers(&command).is_ok(), valid, "{recursive}: {refusal:?}");
+            }
+        }
+    }
+}
+
 /// Commands this test reads.
 const COMMANDS: &str = include_str!("fixtures/commands/replicate_content/commands.jsonl");
 

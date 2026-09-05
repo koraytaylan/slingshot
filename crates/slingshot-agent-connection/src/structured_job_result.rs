@@ -23,7 +23,7 @@
 //! travel, not a licence for a load result to travel inline past the size its
 //! own contract allows.
 
-use slingshot_agent_protocol::identity::DocumentProvenance;
+pub use slingshot_agent_protocol::terminal_result::{ArtifactEcho, TerminalResultDocument};
 use slingshot_agent_protocol::wire_contract::{ExpectedProvenance, WireRefusal};
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
 use slingshot_domain::command::artifact::{
@@ -40,12 +40,10 @@ pub const STRUCTURED_RESULT_SLOT: &str = "structured_result";
 /// The media type a locally externalized result is stored as.
 pub const STRUCTURED_RESULT_MEDIA_TYPE: &str = "application/json";
 
-/// Every stage a terminal result passes, in the order it passes them.
+/// The required stages of complete terminal-result validation.
 ///
-/// Written down as data so the order a reader sees is the order the code runs.
-/// A refusal names the stage it stopped at, which is how a caller learns
-/// whether the document was unreadable, unauthenticated, or simply about
-/// something else.
+/// This inventory is not proof that a helper performs every stage. The wire
+/// decoder and metadata checker below each document their narrower guarantees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidationStage {
     /// The document is no larger than a document may be.
@@ -81,35 +79,184 @@ pub const STAGE_ORDER: &[ValidationStage] = &[
     ValidationStage::RequestCorrelation,
 ];
 
-/// What one artifact echo says about itself.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ArtifactEcho {
-    /// How many bytes it holds.
-    pub byte_length: u64,
-    /// What it is.
-    pub media_type: String,
-    /// Which declared slot it fills.
-    pub slot: String,
-    /// What it suggests being called.
-    pub suggested_name: String,
+/// A wire document could not pass bounded decoding and canonical-byte checks.
+/// No remote payload or parser detail escapes through this diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("the terminal result document is not acceptable")]
+pub struct TerminalResultDecodeRefusal;
+
+/// Decodes the closed result envelope, checks exact expected provenance and
+/// submitted digest, then verifies raw canonical result bytes. This returns a
+/// document, not a validated command result: schema, ordered-array, typed
+/// request correlation and artifact-identity checks remain the caller's gates.
+pub fn decode_terminal_result(
+    body: &[u8],
+    expectation: &ResultExpectation,
+) -> Result<TerminalResultDocument, TerminalResultDecodeRefusal> {
+    if body.len() as u64 > maximum_document_bytes() {
+        return Err(TerminalResultDecodeRefusal);
+    }
+    let document: TerminalResultDocument =
+        serde_json::from_slice(body).map_err(|_| TerminalResultDecodeRefusal)?;
+    expectation
+        .expected_provenance
+        .require_matching(&document.provenance)
+        .map_err(|_| TerminalResultDecodeRefusal)?;
+    if document.operation != expectation.operation
+        || document.daemon_subscription_identifier != expectation.daemon_subscription_identifier
+        || document.submitted_command_digest != expectation.submitted_command_digest
+        || expectation.wire_name != document.provenance.command_contract.command_wire_name
+        || document.canonical_result.len() as u64 > maximum_agent_inline_result_bytes()
+    {
+        return Err(TerminalResultDecodeRefusal);
+    }
+    slingshot_domain::command::canonical_json::require_canonical_bytes(
+        document.canonical_result.as_bytes(),
+    )
+    .map_err(|_| TerminalResultDecodeRefusal)?;
+    require_envelope_schema(&document)?;
+    Ok(document)
 }
 
-/// One terminal result document, as the agent sent it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TerminalResultDocument {
-    /// The canonical result bytes, exactly as they were validated.
-    pub canonical_result: String,
-    /// The remote artifacts it says it produced.
-    pub declared_artifacts: Vec<ArtifactEcho>,
-    /// Which contracts it was produced under.
-    pub provenance: DocumentProvenance,
-    /// Which submission it ends.
-    pub submitted_command_digest: String,
+/// Checks the published envelope with only embedded reference resources.
+/// Serde runs first to reject duplicate keys; the outer byte bound precedes both.
+fn require_envelope_schema(
+    document: &TerminalResultDocument,
+) -> Result<(), TerminalResultDecodeRefusal> {
+    static VALIDATOR: std::sync::OnceLock<Result<jsonschema::Validator, ()>> =
+        std::sync::OnceLock::new();
+    let validator = VALIDATOR.get_or_init(|| {
+        let mut options = jsonschema::options().with_draft(jsonschema::Draft::Draft202012);
+        for source in [
+            include_str!("../../../schemas/agent-protocol/identity/operation.json"),
+            include_str!("../../../schemas/agent-protocol/identity/command-contract.json"),
+            include_str!("../../../schemas/agent-protocol/common/provenance.json"),
+        ] {
+            let schema: serde_json::Value = serde_json::from_str(source).map_err(|_| ())?;
+            let uri = schema["$id"].as_str().ok_or(())?.to_owned();
+            options = options
+                .with_resource(uri, jsonschema::Resource::from_contents(schema).map_err(|_| ())?);
+        }
+        let schema = serde_json::from_str(slingshot_agent_protocol::terminal_result::SCHEMA)
+            .map_err(|_| ())?;
+        options.build(&schema).map_err(|_| ())
+    });
+    let validator = validator.as_ref().map_err(|_| TerminalResultDecodeRefusal)?;
+    let value = serde_json::to_value(document).map_err(|_| TerminalResultDecodeRefusal)?;
+    if !validator.is_valid(&value) {
+        return Err(TerminalResultDecodeRefusal);
+    }
+    Ok(())
+}
+
+/// Decodes a result and checks the installed schema, canonical array ordering,
+/// typed conversion and correlation with the retained command. The caller must
+/// supply the recomputed retained submission digest in `expectation`.
+///
+/// Artifact identifiers/content digests and durable operation/revision guards
+/// remain separate prerequisites before local settlement.
+///
+/// # Errors
+///
+/// Returns an opaque refusal at the first failed gate, without payload details.
+pub fn decode_result_for_command(
+    body: &[u8],
+    expectation: &ResultExpectation,
+    command: &slingshot_domain::command::catalog::Command,
+) -> Result<ValidatedResult, TerminalResultDecodeRefusal> {
+    use slingshot_domain::command::canonical_json::{ArrayOrderInventory, require_array_order};
+    use slingshot_domain::command::catalog::{CommandResult, validate_result_for_command};
+    use slingshot_domain::command::schema::{
+        SchemaRole, canonical_contract_digest, command_schema,
+    };
+    use slingshot_domain::selected_command_contract_identity::SelectedCommandContractIdentity;
+
+    if body.len() as u64 > maximum_document_bytes() {
+        return Err(TerminalResultDecodeRefusal);
+    }
+    let installed = SelectedCommandContractIdentity::installed(command.wire_name())
+        .map_err(|_| TerminalResultDecodeRefusal)?;
+    if expectation.wire_name != command.wire_name()
+        || expectation.expected_provenance.command_contract != installed
+        || expectation.expected_provenance.canonical_json_contract_digest
+            != canonical_contract_digest()
+        || expectation.expected_provenance.transport_contract_digest
+            != AuthorAgentTransportContract::embedded_digest()
+    {
+        return Err(TerminalResultDecodeRefusal);
+    }
+    let document = decode_terminal_result(body, expectation)?;
+    let catalog = CommandCatalog::published();
+    let descriptor = catalog.find(command.wire_name()).ok_or(TerminalResultDecodeRefusal)?;
+    if document.canonical_result.len() as u64 > descriptor.maximum_result_bytes {
+        return Err(TerminalResultDecodeRefusal);
+    }
+    let mut value: serde_json::Value = serde_json::from_str(&document.canonical_result)
+        .map_err(|_| TerminalResultDecodeRefusal)?;
+    // The inventory is the same embedded artifact authenticated by the installed
+    // canonical contract digest; callers cannot substitute a permissive inventory.
+    let contract: serde_json::Value =
+        serde_json::from_str(include_str!("../../../schemas/command-canonical-json-1.json"))
+            .map_err(|_| TerminalResultDecodeRefusal)?;
+    let pointers =
+        serde_json::from_value(contract["arrays"][command.wire_name()]["result"].clone())
+            .map_err(|_| TerminalResultDecodeRefusal)?;
+    let inventory = ArrayOrderInventory::new(pointers).map_err(|_| TerminalResultDecodeRefusal)?;
+    require_array_order(&value, &inventory).map_err(|_| TerminalResultDecodeRefusal)?;
+    let schema = command_schema(command.wire_name(), SchemaRole::Result);
+    let validator =
+        jsonschema::draft202012::new(&schema).map_err(|_| TerminalResultDecodeRefusal)?;
+    if !validator.is_valid(&value) {
+        return Err(TerminalResultDecodeRefusal);
+    }
+    // Role schemas carry no catalog discriminator. Add it only after validating
+    // the closed remote shape, so an attacker-supplied tag cannot be overwritten.
+    value
+        .as_object_mut()
+        .ok_or(TerminalResultDecodeRefusal)?
+        .insert("command".to_owned(), command.wire_name().into());
+    let result: CommandResult =
+        serde_json::from_value(value).map_err(|_| TerminalResultDecodeRefusal)?;
+    validate_result_for_command(command, &result).map_err(|_| TerminalResultDecodeRefusal)?;
+    use slingshot_domain::command::load_content_as_javascript_object_notation::LoadContentAsJavaScriptObjectNotationResult;
+    let artifact = match &result {
+        CommandResult::DownloadContentPackage(result) => Some(&result.artifact),
+        CommandResult::LoadContentAsJson(
+            LoadContentAsJavaScriptObjectNotationResult::Artifact { artifact, .. },
+        ) => Some(artifact),
+        _ => None,
+    };
+    // The typed result owns the inline/artifact alternative and its logical
+    // content bound. The descriptor envelope's size is not the loaded content's
+    // size, and cannot decide that alternative.
+    let expected_echoes: Vec<ArtifactEcho> = artifact
+        .into_iter()
+        .map(|artifact| ArtifactEcho {
+            byte_length: artifact.byte_length,
+            media_type: artifact.media_type.as_text().to_owned(),
+            slot: artifact.slot.as_text().to_owned(),
+            suggested_name: artifact.suggested_file_name.as_text().to_owned(),
+        })
+        .collect();
+    if document.declared_artifacts != expected_echoes {
+        return Err(TerminalResultDecodeRefusal);
+    }
+    Ok(ValidatedResult {
+        remote_artifact: artifact.cloned(),
+        disposition: local_disposition(document.canonical_result.len() as u64)
+            .map_err(|_| TerminalResultDecodeRefusal)?,
+        canonical_result: document.canonical_result,
+        declared_artifacts: document.declared_artifacts,
+    })
 }
 
 /// What this daemon knows about the submission it is expecting a result for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResultExpectation {
+    /// Independently retained operation identity, not supplied by the response.
+    pub operation: slingshot_agent_protocol::identity::WireOperationIdentity,
+    /// Independently retained subscription.
+    pub daemon_subscription_identifier: String,
     /// Which contracts this build has.
     pub expected_provenance: ExpectedProvenance,
     /// Which submission the result must end.
@@ -234,9 +381,14 @@ pub fn local_disposition(canonical_bytes: u64) -> Result<LocalDisposition, Resul
     })
 }
 
-/// What believing one result produced.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Result metadata checked by [`require_valid`], not proof of schema or request
+/// correlation validation.
+#[derive(Clone, PartialEq, Eq)]
 pub struct ValidatedResult {
+    /// Typed descriptor retained by the command-bound decoder for subsequent
+    /// deterministic identity and transfer checks. The legacy metadata-only
+    /// checker does not produce this evidence.
+    pub remote_artifact: Option<slingshot_domain::command::artifact::ArtifactDescriptor>,
     /// The canonical bytes, unchanged by having been validated.
     pub canonical_result: String,
     /// The remote artifacts the command declared and the result echoed.
@@ -245,10 +397,17 @@ pub struct ValidatedResult {
     pub disposition: LocalDisposition,
 }
 
-/// Requires one result to be one this daemon may act on.
+impl core::fmt::Debug for ValidatedResult {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("ValidatedResult([redacted])")
+    }
+}
+
+/// Checks provenance, submission digest, artifact metadata and storage size.
 ///
-/// Ordered, and the order is the point: the bound before the parse, the
-/// contracts before the schemas, the digest before anything is written down.
+/// This legacy helper does not parse the canonical result or check its schema,
+/// ordered arrays, typed result or request correlation. Its return value alone
+/// must not authorize successful local settlement.
 ///
 /// # Errors
 ///
@@ -264,12 +423,16 @@ pub fn require_valid(
         return Err(ResultRefusal::TooLarge { allowed, actual: document_bytes });
     }
     expectation.expected_provenance.require_matching(&document.provenance)?;
-    if document.submitted_command_digest != expectation.submitted_command_digest {
+    if document.operation != expectation.operation
+        || document.daemon_subscription_identifier != expectation.daemon_subscription_identifier
+        || document.submitted_command_digest != expectation.submitted_command_digest
+    {
         return Err(ResultRefusal::AnotherSubmission);
     }
     require_declared_artifacts(&expectation.wire_name, &document.declared_artifacts)?;
     require_one_form(&expectation.wire_name, document)?;
     Ok(ValidatedResult {
+        remote_artifact: None,
         canonical_result: document.canonical_result.clone(),
         declared_artifacts: document.declared_artifacts.clone(),
         disposition: local_disposition(document_bytes)?,

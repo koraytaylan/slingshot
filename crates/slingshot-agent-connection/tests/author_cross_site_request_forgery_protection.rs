@@ -109,6 +109,8 @@ fn a_token_fetched_from_one_author_is_never_presented_to_another() {
 #[test]
 fn no_failure_this_module_produces_carries_the_token_value() {
     let held = token();
+    assert!(!format!("{held:?}").contains(&held.value));
+    assert!(!format!("{held:?}").contains(&held.origin));
     for failure in [
         TokenFailure::Absent,
         TokenFailure::Expired { expired_at: NOW },
@@ -117,4 +119,9 @@ fn no_failure_this_module_produces_carries_the_token_value() {
         let rendered = format!("{failure}{failure:?}");
         assert!(!rendered.contains(&held.value), "a token is presented and not logged: {rendered}");
     }
+}
+
+#[test]
+fn the_token_route_uses_the_pinned_json_endpoint() {
+    assert_eq!(DeploymentEra::Cloud.token_route(), "/libs/granite/csrf/token.json");
 }

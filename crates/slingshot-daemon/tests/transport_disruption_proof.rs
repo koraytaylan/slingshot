@@ -88,7 +88,7 @@ const ARGUMENTS: &str = "{\"path\":\"/content/one\"}";
 const CREDENTIAL: &str = "Basic dGhlLXNlY3JldC12YWx1ZQ==";
 
 /// The submission route the author serves.
-const SUBMIT_ROUTE: &str = "/bin/slingshot/agent/submit";
+const SUBMIT_ROUTE: &str = "/bin/slingshot-agent/jobs";
 
 /// A status this build never validated.
 const UNVALIDATED_STATUS: u16 = 418;
@@ -169,6 +169,11 @@ fn clean_head() -> ResponseHead {
 fn exchange_of(cut: &str, submission: &Submission) -> Exchange {
     let mut exchange = Exchange {
         acknowledgement: Some(SubmissionAcknowledgement {
+            provenance: submission.provenance.clone(),
+            selected_environment_revision: submission
+                .operation
+                .selected_environment_revision
+                .clone(),
             agent_event_store_generation: GENERATION,
             agent_operation_identifier: submission.operation.agent_operation_identifier.clone(),
             author_target_identity_digest: TARGET.to_owned(),
@@ -225,6 +230,7 @@ fn disposition_spelling(disposition: &HandoffDisposition) -> &'static str {
         HandoffDisposition::Conflict => "conflict",
         HandoffDisposition::RetryAfter { .. } => "retry-after",
         HandoffDisposition::Unknown => "unknown",
+        HandoffDisposition::ReconcileRetained => "reconcile-retained",
     }
 }
 
@@ -345,7 +351,7 @@ fn every_row_reaches_the_conclusion_it_states() {
                 "may-send {}",
                 row["may_send_again"].as_bool().expect("an expectation")
             )),
-            "{name}: only a bounded wait and a proof of nonexecution permit another send"
+            "{name}: only proof of nonexecution permits another send"
         );
     }
 }

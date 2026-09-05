@@ -160,3 +160,223 @@ impl RequiredCapabilities {
         }
     }
 }
+
+/// A malformed or incompatible network capability response. Remote text is not
+/// retained in the error because it is not safe diagnostic material.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("the selected author did not provide compatible capabilities")]
+pub struct CapabilityExchangeRefusal;
+
+/// Decodes the closed, bounded capability document before any generation is
+/// used to derive work. Duplicate command names cannot hide conflicting entries.
+pub fn decode_capabilities(
+    body: &[u8],
+    required: &RequiredCapabilities,
+) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
+    use slingshot_agent_protocol::capabilities::Capabilities;
+    if body.len() as u64
+        > AuthorAgentTransportContract::embedded().limit("maximum_agent_protocol_document_bytes")
+    {
+        return Err(CapabilityExchangeRefusal);
+    }
+    let document: Capabilities =
+        serde_json::from_slice(body).map_err(|_| CapabilityExchangeRefusal)?;
+    if document.format != slingshot_agent_protocol::identity::AGENT_FORMAT
+        || document.agent_event_store_generation == 0
+    {
+        return Err(CapabilityExchangeRefusal);
+    }
+    let mut names = std::collections::BTreeSet::new();
+    for command in &document.command_contracts {
+        let digest = |value: &str| {
+            value.len() == 64
+                && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        };
+        if !names.insert(&command.command_wire_name)
+            || !(1..=96).contains(&command.command_wire_name.chars().count())
+            || !(1..=64).contains(&command.command_semantic_contract_version.chars().count())
+            || !digest(&command.argument_schema_digest)
+            || !digest(&command.result_schema_digest)
+            || !digest(&command.command_contract_limits_digest)
+        {
+            return Err(CapabilityExchangeRefusal);
+        }
+    }
+    let advertised = AdvertisedCapabilities {
+        agent_event_store_generation: document.agent_event_store_generation,
+        canonical_json_contract_digest: document.canonical_json_contract_digest,
+        command_contracts: document.command_contracts,
+        continuation_authority_ready: document.continuation_authority_ready,
+        transport_contract_digest: document.transport_contract_digest,
+    };
+    required.require_compatible(&advertised).map_err(|_| CapabilityExchangeRefusal)?;
+    Ok(advertised)
+}
+
+impl crate::selected_author_transport::SelectedAuthorTransport {
+    /// Authenticated discovery over the frozen selected transport. The required
+    /// contracts come from this build, not from caller-supplied digest strings.
+    pub async fn discover_capabilities(
+        &self,
+        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
+        command_wire_name: &str,
+        expected_generation: Option<u64>,
+        authentication: &crate::authentication::environment_provider::RequestAuthentication,
+    ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
+        self.discover_capabilities_over(
+            identity,
+            command_wire_name,
+            expected_generation,
+            authentication,
+            Some(false),
+        )
+        .await
+    }
+
+    /// Authenticated HTTP/2 discovery with the same installed-contract gates.
+    /// Failure never retries over HTTP/1.1 or follows a location header.
+    pub async fn discover_capabilities_http2(
+        &self,
+        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
+        command_wire_name: &str,
+        expected_generation: Option<u64>,
+        authentication: &crate::authentication::environment_provider::RequestAuthentication,
+    ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
+        self.discover_capabilities_over(
+            identity,
+            command_wire_name,
+            expected_generation,
+            authentication,
+            Some(true),
+        )
+        .await
+    }
+
+    /// Discovers installed-contract compatibility on the original negotiated
+    /// connection, without protocol retry or an alternate selected origin.
+    pub async fn discover_capabilities_negotiated(
+        &self,
+        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
+        command_wire_name: &str,
+        expected_generation: Option<u64>,
+        authentication: &crate::authentication::environment_provider::RequestAuthentication,
+    ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
+        self.discover_capabilities_over(
+            identity, command_wire_name, expected_generation, authentication, None,
+        ).await
+    }
+
+    /// Discovers compatibility with request-scoped provider authentication.
+    /// Only a validated Cloud 401 allows one refreshed GET; compatibility,
+    /// generation and readiness checks remain identical to explicit transports.
+    pub async fn discover_capabilities_authenticated(
+        &self,
+        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
+        command_wire_name: &str,
+        expected_generation: Option<u64>,
+        provider: &crate::authentication::environment_provider::EnvironmentAuthenticationProvider,
+        source: &dyn crate::authentication::access_token_cache::AccessTokenSource,
+        reading: u64,
+    ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
+        self.require_execution(identity).map_err(|_| CapabilityExchangeRefusal)?;
+        let command = SelectedCommandContractIdentity::installed(command_wire_name)
+            .map_err(|_| CapabilityExchangeRefusal)?;
+        let required = RequiredCapabilities::of(
+            command, &slingshot_domain::command::schema::canonical_contract_digest(),
+            expected_generation,
+        );
+        let receipt = self.authenticated_finite_get(
+            provider, source, reading, &["bin", "slingshot-agent", "capabilities"],
+            &[], &http::HeaderMap::new(),
+        ).await.map_err(|_| CapabilityExchangeRefusal)?;
+        Self::decode_capability_receipt(receipt, &required)
+    }
+
+    /// Discovers compatibility using the selected asynchronous credential provider.
+    pub async fn discover_capabilities_authenticated_async<Clock, Utc>(
+        &self,
+        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
+        command_wire_name: &str,
+        expected_generation: Option<u64>,
+        provider: &crate::authentication::environment_provider::AsyncEnvironmentAuthenticationProvider,
+        clock: &Clock,
+        utc: &Utc,
+    ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal>
+    where
+        Clock: crate::authentication::identity_management_exchange::MonotonicClock + Sync,
+        Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
+    {
+        self.require_execution(identity).map_err(|_| CapabilityExchangeRefusal)?;
+        let command = SelectedCommandContractIdentity::installed(command_wire_name)
+            .map_err(|_| CapabilityExchangeRefusal)?;
+        let required = RequiredCapabilities::of(
+            command, &slingshot_domain::command::schema::canonical_contract_digest(),
+            expected_generation,
+        );
+        let receipt = self.authenticated_finite_get_async(
+            provider, clock, utc, &["bin", "slingshot-agent", "capabilities"],
+            &[], &http::HeaderMap::new(),
+        ).await.map_err(|_| CapabilityExchangeRefusal)?;
+        Self::decode_capability_receipt(receipt, &required)
+    }
+
+    async fn discover_capabilities_over(
+        &self,
+        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
+        command_wire_name: &str,
+        expected_generation: Option<u64>,
+        authentication: &crate::authentication::environment_provider::RequestAuthentication,
+        http2: Option<bool>,
+    ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
+        self.require_execution(identity).map_err(|_| CapabilityExchangeRefusal)?;
+        let command = SelectedCommandContractIdentity::installed(command_wire_name)
+            .map_err(|_| CapabilityExchangeRefusal)?;
+        let required = RequiredCapabilities::of(
+            command,
+            &slingshot_domain::command::schema::canonical_contract_digest(),
+            expected_generation,
+        );
+        let receipt = if http2.is_none() {
+            self.finite_negotiated_query(
+                http::Method::GET, &["bin", "slingshot-agent", "capabilities"],
+                &[], authentication, &http::HeaderMap::new(), b"",
+            ).await
+        } else if http2 == Some(true) {
+            self.finite_http2_query(
+                http::Method::GET,
+                &["bin", "slingshot-agent", "capabilities"],
+                &[],
+                authentication,
+                &http::HeaderMap::new(),
+                b"",
+            )
+            .await
+        } else {
+            self.finite_http1(
+                http::Method::GET,
+                &["bin", "slingshot-agent", "capabilities"],
+                authentication,
+                &http::HeaderMap::new(),
+                b"",
+            )
+            .await
+        }
+        .map_err(|_| CapabilityExchangeRefusal)?;
+        Self::decode_capability_receipt(receipt, &required)
+    }
+
+    fn decode_capability_receipt(
+        receipt: crate::selected_author_http::FiniteHttpReceipt,
+        required: &RequiredCapabilities,
+    ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
+        if receipt.response.status != 200
+            || receipt.response.head.location.is_some()
+            || !crate::selected_author_submission::json_media_type(
+                receipt.response.content_type.as_deref().unwrap_or(""),
+            )
+        {
+            return Err(CapabilityExchangeRefusal);
+        }
+        decode_capabilities(&receipt.response.body, required)
+    }
+}

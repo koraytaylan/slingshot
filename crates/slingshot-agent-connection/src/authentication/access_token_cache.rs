@@ -41,19 +41,47 @@ pub trait AccessTokenSource {
 /// share a cell and nothing about a token can be inferred from it. It has no
 /// rendering and no serialization on purpose: an identity that could be written
 /// down would end up somewhere it could be correlated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct AccessTokenCacheIdentity {
-    /// A value that is unique within this process.
-    value: u64,
+    /// Process-local random bytes, unrelated to credentials and never exposed.
+    value: [u8; 32],
+}
+
+impl AccessTokenCacheIdentity {
+    pub(crate) fn from_factory(
+        factory: impl FnOnce() -> Result<[u8; 32], ExchangeFailure>,
+    ) -> Result<Self, ExchangeFailure> {
+        Ok(Self { value: factory()? })
+    }
+
+    pub(crate) fn random_bytes() -> Result<[u8; 32], ExchangeFailure> {
+        let mut bytes = [0; 32];
+        rustls::crypto::ring::default_provider().secure_random.fill(&mut bytes).map_err(|_| {
+            ExchangeFailure::new(ConfigurationFailureCode::IdentityManagementTransportFailed)
+        })?;
+        Ok(bytes)
+    }
 }
 
 /// A caller's claim on one installed generation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct AccessTokenLease {
     /// Cache the lease was taken from.
     identity: AccessTokenCacheIdentity,
     /// Generation the lease names.
     generation: u64,
+}
+
+impl core::fmt::Debug for AccessTokenCacheIdentity {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("AccessTokenCacheIdentity([redacted])")
+    }
+}
+
+impl core::fmt::Debug for AccessTokenLease {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("AccessTokenLease([redacted])")
+    }
 }
 
 impl AccessTokenLease {
@@ -76,12 +104,17 @@ struct CacheState {
 }
 
 /// One process-memory cache of cloud access tokens.
-#[derive(Debug)]
 pub struct CloudAccessTokenCache {
     /// Identity of this cache.
     identity: AccessTokenCacheIdentity,
     /// The cell every caller synchronizes through.
     state: Mutex<CacheState>,
+}
+
+impl core::fmt::Debug for CloudAccessTokenCache {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("CloudAccessTokenCache([redacted])")
+    }
 }
 
 impl CloudAccessTokenCache {
@@ -92,8 +125,10 @@ impl CloudAccessTokenCache {
     /// their contents.
     #[must_use]
     pub fn with_identity(identity: u64) -> Self {
+        let mut value = [0; 32];
+        value[..8].copy_from_slice(&identity.to_be_bytes());
         Self {
-            identity: AccessTokenCacheIdentity { value: identity },
+            identity: AccessTokenCacheIdentity { value },
             state: Mutex::new(CacheState::default()),
         }
     }
@@ -141,12 +176,20 @@ impl CloudAccessTokenCache {
     /// Returns whatever the exchange refused with, and
     /// [`ConfigurationFailureCode::AccessTokenInstallationGenerationExhausted`]
     /// when the generation counter has no room left.
+    /// A lease from another cache returns
+    /// [`ConfigurationFailureCode::AuthenticationTargetMismatch`] without
+    /// reading or changing this cache's token or invoking the source.
     pub fn refresh_after_unauthorized<Outcome>(
         &self,
         lease: AccessTokenLease,
         source: &dyn AccessTokenSource,
         use_token: impl FnOnce(&AccessToken) -> Outcome,
     ) -> Result<(Outcome, AccessTokenLease), ExchangeFailure> {
+        if lease.identity != self.identity {
+            return Err(ExchangeFailure::new(
+                ConfigurationFailureCode::AuthenticationTargetMismatch,
+            ));
+        }
         let mut state = self.locked();
         let current = lease.identity == self.identity && lease.generation == state.generation;
         if current && state.usable {

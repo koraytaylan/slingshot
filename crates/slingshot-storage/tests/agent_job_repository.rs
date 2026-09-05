@@ -160,6 +160,578 @@ fn submission(named: &str) -> AgentSubmission {
     submission_in(TARGET, named)
 }
 
+#[test]
+fn retained_submission_debug_does_not_disclose_the_stored_request() {
+    let repository = repository();
+    let mut expected = submission("private-operation-sentinel");
+    expected.canonical_submission = r#"{"password":"private-command-sentinel"}"#.to_owned();
+    repository.submit(&expected).unwrap();
+    let retained =
+        repository.read(TARGET, &expected.identity.agent_operation_identifier).unwrap().unwrap();
+    assert_eq!(format!("{retained:?}"), "AgentSubmission([redacted])");
+    assert_eq!(format!("{retained:#?}"), "AgentSubmission([redacted])");
+    assert_eq!(retained, expected);
+    assert_eq!(retained.clone().canonical_submission, expected.canonical_submission);
+}
+
+#[test]
+fn active_snapshot_is_atomic_and_a_stale_read_cannot_advance_it() {
+    let repository = repository();
+    let expected = submission("snapshot");
+    repository.submit(&expected).unwrap();
+    let jobs = vec!["job-a".to_owned()];
+    let observation = running(2, 1, 10);
+    repository
+        .reconcile_active_snapshot(&expected, &jobs, observation, RETENTION, NOW + 1)
+        .unwrap();
+    let identifier = &expected.identity.agent_operation_identifier;
+    let retained = repository.read(TARGET, identifier).unwrap().unwrap();
+    assert_eq!(retained.observation, observation);
+    assert_eq!(retained.snapshot_watermark, JobEventSequence::of(2));
+    assert_eq!(repository.physical_jobs(TARGET, identifier).unwrap(), jobs);
+    assert!(
+        repository
+            .reconcile_active_snapshot(
+                &expected,
+                &["job-b".to_owned()],
+                running(3, 2, 20),
+                RETENTION,
+                NOW + 2
+            )
+            .is_err()
+    );
+    assert_eq!(repository.read(TARGET, identifier).unwrap().unwrap(), retained);
+    assert_eq!(repository.physical_jobs(TARGET, identifier).unwrap(), jobs);
+    let mut terminal = running(3, 2, 20);
+    terminal.state = AgentJobState::Succeeded;
+    assert!(
+        repository
+            .reconcile_active_snapshot(&retained, &jobs, terminal, RETENTION, NOW + 2)
+            .is_err()
+    );
+    assert!(
+        repository
+            .reconcile_active_snapshot(&retained, &jobs, running(2, 1, 11), RETENTION, NOW + 2)
+            .is_err()
+    );
+    assert_eq!(repository.read(TARGET, identifier).unwrap().unwrap(), retained);
+}
+
+#[test]
+fn rejected_snapshot_is_atomic_guarded_and_cannot_retract_success() {
+    use slingshot_domain::{command_fingerprint::{CommandFingerprint, FingerprintInput}, installation::InstallationIdentifier, operation::*};
+    use slingshot_storage::{operation_repository::{AdmissionRequest, OperationRepository}, agent_job_repository::FailedAgentSnapshot};
+    for (known_success, partial) in [(false, false), (true, false), (false, true), (true, true)] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("rejection.sqlite3");
+        let remote = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        let local = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        let expected = submission_in(&"1d".repeat(32), "rejected");
+        let identity = &expected.identity;
+        remote.submit(&expected).unwrap();
+        local.admit(&AdmissionRequest {
+            author_target_identity: "opaque-target".to_owned(),
+            author_target_identity_digest: identity.author_target_identity_digest.clone(),
+            caller_identity: None,
+            canonical_command: "{}".to_owned(),
+            command_fingerprint: CommandFingerprint::derive(&FingerprintInput {
+                author_target_identity_digest: identity.author_target_identity_digest.clone(),
+                canonical_command: "{}".to_owned(), command_wire_name: "query_paths".to_owned(),
+                command_semantic_contract_version: "1".to_owned(),
+                selected_environment_revision: identity.selected_environment_revision.clone(),
+            }).unwrap(),
+            command_wire_name: "query_paths".to_owned(),
+            daemon_runtime_contract_digest: "c".repeat(64),
+            installation_identifier: InstallationIdentifier::parse(&"a1".repeat(32)).unwrap(),
+            operation_identifier: identity.operation_identifier.clone(),
+            selected_environment_revision: identity.selected_environment_revision.clone(),
+            workflow_correlation_identifier: None,
+        }, NOW).unwrap();
+        let owner = local.apply(&identity.author_target_identity_digest, &identity.operation_identifier, 1,
+            &OperationFact::Recovery { recovery: RecoveryFact {
+                attempt_count: 0, category: if known_success { RecoveryCategory::ResultAcquisition } else { RecoveryCategory::OperationLookup }, detail: "pending".to_owned(),
+                evidence: if known_success { RecoveryExecutionEvidence::AuthoritativeRemoteSuccess }
+                else { RecoveryExecutionEvidence::ExecutionCertainty { certainty: OperationExecutionCertainty::RemoteOutcomeUnknown } },
+                manual_resume_eligible: false, retry_delay_milliseconds: 0, retry_observed_at_unix_milliseconds: NOW,
+            } }, NOW).unwrap();
+        let snapshot = FailedAgentSnapshot {
+            observation: RemoteJobObservation { state: AgentJobState::Failed, applied_sequence: JobEventSequence::of(3), attempt: 1, progress: 10 },
+            physical_sling_job_identifiers: vec!["job-a".to_owned()], remaining_retention_milliseconds: RETENTION,
+        };
+        let settle = |child: &AgentSubmission, rev, snapshot: &FailedAgentSnapshot| if partial {
+            local.settle_partial_admission_snapshot(child, rev, snapshot, NOW + 1)
+        } else { local.settle_rejected_agent_snapshot(child, rev, snapshot, None, NOW + 1) };
+        assert!(settle(&expected, 1, &snapshot).is_err());
+        let mut wrong = expected.clone();
+        wrong.contracts.submitted_command_digest = "wrong".to_owned();
+        assert!(settle(&wrong, 2, &snapshot).is_err());
+        let mut invalid = snapshot.clone();
+        invalid.observation.state = AgentJobState::Succeeded;
+        assert!(settle(&expected, 2, &invalid).is_err());
+        invalid = snapshot.clone();
+        invalid.physical_sling_job_identifiers.clear();
+        assert!(settle(&expected, 2, &invalid).is_err());
+        let external = rusqlite::Connection::open(&path).unwrap();
+        external.execute_batch("CREATE TRIGGER refuse_remote_rejection BEFORE UPDATE ON agent_operation BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+        assert!(settle(&expected, 2, &snapshot).is_err());
+        assert_eq!(local.read(&identity.author_target_identity_digest, &identity.operation_identifier).unwrap(), Some(owner.clone()));
+        assert_eq!(remote.read(&identity.author_target_identity_digest, &identity.agent_operation_identifier).unwrap(), Some(expected.clone()));
+        assert!(remote.physical_jobs(&identity.author_target_identity_digest, &identity.agent_operation_identifier).unwrap().is_empty());
+        external.execute_batch("DROP TRIGGER refuse_remote_rejection;").unwrap();
+        if known_success {
+            assert!(settle(&expected, 2, &snapshot).is_err());
+            assert_eq!(local.read(&identity.author_target_identity_digest, &identity.operation_identifier).unwrap(), Some(owner));
+        } else {
+            let settled = settle(&expected, 2, &snapshot).unwrap();
+            assert_eq!(settled.record.terminal_failure.unwrap(), TerminalFailure {
+                kind: if partial { TerminalFailureKind::RemoteFailed } else { TerminalFailureKind::Rejected },
+                disposition: if partial { TerminalFailureDisposition::AuthoritativeRemoteFailure } else { TerminalFailureDisposition::AuthoritativeNonExecution { certainty: OperationExecutionCertainty::ConfirmedNotExecuted } }, metadata: None,
+            });
+            let reopened = AgentJobRepository::new(OperationDatabase::open_live(&path, settings()).unwrap());
+            let child = reopened.read(&identity.author_target_identity_digest, &identity.agent_operation_identifier).unwrap().unwrap();
+            assert_eq!(child.observation, snapshot.observation);
+            assert_eq!(child.snapshot_watermark, snapshot.observation.applied_sequence);
+            assert_eq!(child.terminal_disposition.as_deref(), Some(if partial { "authoritative-remote-failure" } else { "authoritative-nonexecution" }));
+            assert_eq!(reopened.physical_jobs(&identity.author_target_identity_digest, &identity.agent_operation_identifier).unwrap(), snapshot.physical_sling_job_identifiers);
+            assert!(settle(&expected, 2, &snapshot).is_err());
+        }
+    }
+}
+
+#[test]
+fn snapshot_and_success_transactions_guard_the_owner_and_roll_back_failed_publication() {
+    use slingshot_domain::command_fingerprint::{CommandFingerprint, FingerprintInput};
+    use slingshot_domain::installation::InstallationIdentifier;
+    use slingshot_domain::operation::{
+        OperationExecutionCertainty, OperationFact, RecoveryCategory, RecoveryExecutionEvidence,
+        RecoveryFact,
+    };
+    use slingshot_storage::operation_repository::{AdmissionRequest, OperationRepository};
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("guarded.sqlite3");
+    let remote = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    let local = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    let expected = submission_in(&"1d".repeat(32), "guarded");
+    let identity = &expected.identity;
+    remote.submit(&expected).unwrap();
+    let reconcile = |revision| {
+        remote.reconcile_active_snapshot_for_operation(
+            &expected,
+            revision,
+            &["job-a".to_owned()],
+            running(2, 1, 10),
+            RETENTION,
+            NOW + 1,
+        )
+    };
+    assert!(reconcile(1).is_err(), "missing local operation must refuse");
+    let admission = AdmissionRequest {
+        author_target_identity: "opaque-target".to_owned(),
+        author_target_identity_digest: identity.author_target_identity_digest.clone(),
+        caller_identity: None,
+        canonical_command: "{}".to_owned(),
+        command_fingerprint: CommandFingerprint::derive(&FingerprintInput {
+            author_target_identity_digest: identity.author_target_identity_digest.clone(),
+            canonical_command: "{}".to_owned(),
+            command_wire_name: "query_paths".to_owned(),
+            command_semantic_contract_version: "1".to_owned(),
+            selected_environment_revision: identity.selected_environment_revision.clone(),
+        })
+        .unwrap(),
+        command_wire_name: "query_paths".to_owned(),
+        daemon_runtime_contract_digest: "c".repeat(64),
+        installation_identifier: InstallationIdentifier::parse(&"a1".repeat(32)).unwrap(),
+        operation_identifier: identity.operation_identifier.clone(),
+        selected_environment_revision: identity.selected_environment_revision.clone(),
+        workflow_correlation_identifier: None,
+    };
+    local.admit(&admission, NOW).unwrap();
+    local
+        .apply(
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+            1,
+            &OperationFact::Recovery {
+                recovery: RecoveryFact {
+                    attempt_count: 1,
+                    category: RecoveryCategory::OperationLookup,
+                    detail: "retry".to_owned(),
+                    evidence: RecoveryExecutionEvidence::ExecutionCertainty {
+                        certainty: OperationExecutionCertainty::SubmissionUnknown,
+                    },
+                    manual_resume_eligible: true,
+                    retry_delay_milliseconds: 1,
+                    retry_observed_at_unix_milliseconds: NOW,
+                },
+            },
+            NOW,
+        )
+        .unwrap();
+    assert!(reconcile(1).is_err(), "late response must not use a stale local revision");
+    assert_eq!(
+        remote
+            .read(&identity.author_target_identity_digest, &identity.agent_operation_identifier)
+            .unwrap()
+            .unwrap(),
+        expected
+    );
+    assert!(
+        remote
+            .physical_jobs(
+                &identity.author_target_identity_digest,
+                &identity.agent_operation_identifier
+            )
+            .unwrap()
+            .is_empty()
+    );
+    reconcile(2).unwrap();
+    assert_eq!(
+        remote
+            .read(&identity.author_target_identity_digest, &identity.agent_operation_identifier)
+            .unwrap()
+            .unwrap()
+            .snapshot_watermark,
+        JobEventSequence::of(2)
+    );
+    let retained = remote
+        .read(&identity.author_target_identity_digest, &identity.agent_operation_identifier)
+        .unwrap()
+        .unwrap();
+    let receipt = local
+        .record_eligible_resume_receipt(
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+            "activation-fixture",
+            &identity.selected_environment_revision,
+            RecoveryCategory::OperationLookup,
+            2,
+            NOW + 1,
+        )
+        .unwrap();
+    let slingshot_storage::operation_repository::ResumeOutcome::Applied(receipt) = receipt else {
+        panic!("fresh receipt");
+    };
+    let activation_fault = rusqlite::Connection::open(&path).unwrap();
+    activation_fault.execute_batch("CREATE TRIGGER refuse_activation BEFORE UPDATE ON operation BEGIN SELECT RAISE(ABORT, 'activation fault'); END;").unwrap();
+    assert!(
+        local
+            .activate_retained_recovery(
+                &retained,
+                &receipt,
+                RecoveryCategory::OperationLookup,
+                NOW + 2
+            )
+            .is_err()
+    );
+    let paused = local
+        .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+        .unwrap()
+        .unwrap();
+    assert_eq!(paused.record.revision, 2);
+    assert!(paused.record.outstanding_recovery.unwrap().manual_resume_eligible);
+    activation_fault.execute_batch("DROP TRIGGER refuse_activation;").unwrap();
+    let activated = local
+        .activate_retained_recovery(&retained, &receipt, RecoveryCategory::OperationLookup, NOW + 2)
+        .unwrap()
+        .unwrap();
+    assert_eq!(activated.record.revision, 3);
+    assert!(!activated.record.outstanding_recovery.unwrap().manual_resume_eligible);
+    let reopened_activation =
+        OperationRepository::new(OperationDatabase::open_live(&path, settings()).unwrap());
+    assert!(
+        reopened_activation
+            .activate_retained_recovery(
+                &retained,
+                &receipt,
+                RecoveryCategory::OperationLookup,
+                NOW + 2
+            )
+            .unwrap()
+            .is_none()
+    );
+    let owner = local
+        .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+        .unwrap()
+        .unwrap();
+    let mut settlement = slingshot_domain::operation::SuccessfulSettlement {
+        artifacts: vec![slingshot_domain::operation::ProducedArtifact {
+            artifact_identifier: "a".repeat(64),
+            artifact_slot: "structured_result".to_owned(),
+            byte_length: 2,
+            content_digest: "b".repeat(64),
+            media_type: "application/json".to_owned(),
+        }],
+        inline_result: None,
+        expected_lifecycle_state: owner.record.lifecycle_state,
+        expected_revision: owner.record.revision,
+        settled_at_unix_milliseconds: NOW + 2,
+    };
+    let external = rusqlite::Connection::open(&path).unwrap();
+    let snapshot = slingshot_storage::agent_job_repository::SuccessfulAgentSnapshot {
+        observation: RemoteJobObservation {
+            state: AgentJobState::Succeeded,
+            applied_sequence: JobEventSequence::of(3),
+            attempt: 1,
+            progress: 100,
+        },
+        physical_sling_job_identifiers: vec!["job-a".to_owned(), "job-b".to_owned()],
+        remaining_retention_milliseconds: RETENTION / 2,
+    };
+    external.execute_batch("CREATE TRIGGER refuse_result_publication BEFORE UPDATE ON operation BEGIN SELECT RAISE(ABORT, 'injected failure'); END;").unwrap();
+    assert!(local.settle_success_for_retained_agent(&retained, &settlement).is_err());
+    assert_eq!(
+        local
+            .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+            .unwrap(),
+        Some(owner.clone())
+    );
+    assert_eq!(
+        remote
+            .read(&identity.author_target_identity_digest, &identity.agent_operation_identifier)
+            .unwrap(),
+        Some(retained.clone())
+    );
+    for table in ["artifact_blob", "artifact_association"] {
+        let count: i64 = external
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0, "{table}: failed publication must roll back earlier inserts");
+    }
+    external.execute_batch("DROP TRIGGER refuse_result_publication;").unwrap();
+    let mut changed = retained.clone();
+    changed.identity.agent_operation_identifier = "absent-child".to_owned();
+    assert!(local.settle_success_for_retained_agent(&changed, &settlement).is_err());
+    changed = retained.clone();
+    changed.contracts.submitted_command_digest = "c".repeat(64);
+    assert!(local.settle_success_for_retained_agent(&changed, &settlement).is_err());
+    external.execute_batch("CREATE TRIGGER refuse_remote_publication BEFORE UPDATE ON agent_operation BEGIN SELECT RAISE(ABORT, 'injected remote failure'); END;").unwrap();
+    assert!(local.settle_success_for_agent_snapshot(&retained, &settlement, &snapshot).is_err());
+    assert_eq!(
+        local
+            .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+            .unwrap(),
+        Some(owner)
+    );
+    assert_eq!(
+        remote
+            .read(&identity.author_target_identity_digest, &identity.agent_operation_identifier)
+            .unwrap(),
+        Some(retained.clone())
+    );
+    assert_eq!(
+        remote
+            .physical_jobs(
+                &identity.author_target_identity_digest,
+                &identity.agent_operation_identifier
+            )
+            .unwrap(),
+        vec!["job-a".to_owned()]
+    );
+    for table in ["artifact_blob", "artifact_association"] {
+        let count: i64 = external
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0, "remote publication failure rolls back local artifacts");
+    }
+    external.execute_batch("DROP TRIGGER refuse_remote_publication;").unwrap();
+    for invalid in [
+        slingshot_storage::agent_job_repository::SuccessfulAgentSnapshot {
+            physical_sling_job_identifiers: vec!["job-b".to_owned()],
+            ..snapshot.clone()
+        },
+        slingshot_storage::agent_job_repository::SuccessfulAgentSnapshot {
+            observation: running(2, 1, 10),
+            ..snapshot.clone()
+        },
+        slingshot_storage::agent_job_repository::SuccessfulAgentSnapshot {
+            observation: RemoteJobObservation {
+                applied_sequence: JobEventSequence::of(u64::MAX),
+                ..snapshot.observation
+            },
+            ..snapshot.clone()
+        },
+    ] {
+        assert!(local.settle_success_for_agent_snapshot(&retained, &settlement, &invalid).is_err());
+    }
+    let publication_database = OperationDatabase::open_live(&path, settings()).unwrap();
+    let capacity = slingshot_storage::persistent_capacity::PersistentCapacityAccount::new(
+        &publication_database,
+        slingshot_domain::persistent_capacity::PersistentCapacityPolicy::embedded(),
+    );
+    let store =
+        slingshot_storage::artifact_store::ArtifactStore::open(&root.path().join("artifacts"))
+            .unwrap();
+    let digest = <sha2::Sha256 as sha2::Digest>::digest(b"{}")
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let request = slingshot_storage::artifact_store::InstallationRequest {
+        artifact_slot: "structured_result".to_owned(),
+        author_target_identity_digest: identity.author_target_identity_digest.clone(),
+        descriptor: None,
+        installation_identifier: local
+            .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+            .unwrap()
+            .unwrap()
+            .installation_identifier,
+        media_type: "application/json".to_owned(),
+        operation_identifier: identity.operation_identifier.clone(),
+    };
+    let reservation = capacity.reserve_artifact(Some(&digest), 2).unwrap();
+    let stage = store.stage_verified(&request, &mut b"{}".as_slice(), 2, &digest).unwrap();
+    let publication = capacity.retain_staged_publication(&stage, reservation, NOW).unwrap();
+    let other_producer = capacity.retain_staged_publication(&stage, None, NOW).unwrap();
+    assert_ne!(publication.identifier(), other_producer.identifier());
+    let artifact = stage.publish().unwrap();
+    settlement.artifacts[0].artifact_identifier = artifact.artifact_identifier.as_text().to_owned();
+    settlement.artifacts[0].content_digest = artifact.content_digest;
+    external.execute_batch("CREATE TRIGGER refuse_hold_consumption BEFORE DELETE ON artifact_publication BEGIN SELECT RAISE(ABORT, 'injected final write failure'); END;").unwrap();
+    assert!(
+        local
+            .settle_success_for_publications(
+                &retained,
+                &settlement,
+                &snapshot,
+                &[publication.clone()]
+            )
+            .is_err()
+    );
+    assert_eq!(capacity.pending_publications().unwrap(), 2);
+    assert_eq!(
+        remote
+            .read(&identity.author_target_identity_digest, &identity.agent_operation_identifier)
+            .unwrap(),
+        Some(retained.clone())
+    );
+    assert!(
+        !local
+            .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+            .unwrap()
+            .unwrap()
+            .record
+            .lifecycle_state
+            .is_terminal()
+    );
+    let associations: i64 = external
+        .query_row("SELECT COUNT(*) FROM artifact_association", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(associations, 0);
+    external.execute_batch("DROP TRIGGER refuse_hold_consumption;").unwrap();
+    // Complete verified local bytes remain usable even if the author lifetime
+    // expired during transfer; do not fabricate one remaining millisecond.
+    let snapshot = slingshot_storage::agent_job_repository::SuccessfulAgentSnapshot {
+        remaining_retention_milliseconds: 0,
+        ..snapshot
+    };
+    let succeeded = local
+        .settle_success_for_publications(&retained, &settlement, &snapshot, &[publication])
+        .unwrap();
+    assert_eq!(capacity.pending_publications().unwrap(), 1, "another producer's hold must survive");
+    let ended = remote
+        .read(&identity.author_target_identity_digest, &identity.agent_operation_identifier)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ended.observation, snapshot.observation);
+    assert_eq!(ended.snapshot_watermark, snapshot.observation.applied_sequence);
+    assert_eq!(ended.terminal_disposition.as_deref(), Some("authoritative-remote-success"));
+    assert_eq!(ended.remaining_retention_milliseconds, 0);
+    assert_eq!(
+        remote
+            .physical_jobs(
+                &identity.author_target_identity_digest,
+                &identity.agent_operation_identifier
+            )
+            .unwrap(),
+        snapshot.physical_sling_job_identifiers
+    );
+    assert_eq!(
+        succeeded.record.lifecycle_state,
+        slingshot_domain::operation::OperationLifecycleState::Succeeded
+    );
+    assert!(succeeded.record.outstanding_recovery.is_none());
+    for table in ["artifact_blob", "artifact_association"] {
+        let count: i64 = external
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "{table}: a fresh publication commits the complete result");
+    }
+}
+
+#[test]
+fn snapshot_watermark_failure_rolls_back_state_physical_set_and_retention() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("snapshot.sqlite3");
+    let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    let expected = submission("snapshot-rollback");
+    repository.submit(&expected).unwrap();
+    let external = rusqlite::Connection::open(&path).unwrap();
+    external.execute_batch("CREATE TRIGGER refuse_snapshot BEFORE UPDATE OF snapshot_watermark ON agent_operation BEGIN SELECT RAISE(ABORT, 'injected failure'); END;").unwrap();
+    assert!(
+        repository
+            .reconcile_active_snapshot(
+                &expected,
+                &["job-a".to_owned()],
+                running(2, 1, 10),
+                RETENTION / 2,
+                NOW + 1
+            )
+            .is_err()
+    );
+    let identifier = &expected.identity.agent_operation_identifier;
+    assert_eq!(repository.read(TARGET, identifier).unwrap().unwrap(), expected);
+    assert!(repository.physical_jobs(TARGET, identifier).unwrap().is_empty());
+}
+
+#[test]
+fn acknowledgement_retains_the_complete_set_without_refreshing_its_lifetime() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("acknowledgement.sqlite3");
+    let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    let mut expected = submission("acknowledged");
+    expected.remaining_retention_milliseconds = 0;
+    repository.submit(&expected).unwrap();
+    let jobs = vec!["job-a".to_owned(), "job-b".to_owned()];
+    repository.acknowledge(&expected, &jobs, RETENTION, NOW + 1).unwrap();
+    repository.acknowledge(&expected, &jobs, RETENTION * 2, NOW + 2).unwrap();
+    drop(repository);
+    let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    let identifier = &expected.identity.agent_operation_identifier;
+    assert_eq!(repository.physical_jobs(TARGET, identifier).unwrap(), jobs);
+    let retained = repository.read(TARGET, identifier).unwrap().unwrap();
+    assert_eq!(retained.remaining_retention_milliseconds, RETENTION);
+    assert_eq!(retained.request_start_unix_milliseconds, NOW);
+    assert_eq!(retained.canonical_submission, expected.canonical_submission);
+    let mut wrong = expected.clone();
+    wrong.identity.selected_environment_revision = "another-revision".to_owned();
+    assert!(repository.acknowledge(&wrong, &["job-c".to_owned()], RETENTION, NOW + 3).is_err());
+    assert_eq!(repository.physical_jobs(TARGET, identifier).unwrap(), jobs);
+    for invalid in [
+        vec![],
+        vec!["job-b".to_owned(), "job-a".to_owned()],
+        vec!["job-a".to_owned(), "job-a".to_owned()],
+    ] {
+        assert!(repository.acknowledge(&expected, &invalid, RETENTION, NOW + 3).is_err());
+    }
+    assert_eq!(repository.read(TARGET, identifier).unwrap().unwrap(), retained);
+}
+
+#[test]
+fn acknowledgement_rolls_back_prior_inserts_when_a_later_statement_fails() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("acknowledgement.sqlite3");
+    let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    let mut expected = submission("rollback");
+    expected.remaining_retention_milliseconds = 0;
+    repository.submit(&expected).unwrap();
+    let external = rusqlite::Connection::open(&path).unwrap();
+    external.execute_batch("CREATE TRIGGER refuse_acknowledgement_lifetime BEFORE UPDATE OF remaining_retention_milliseconds ON agent_operation BEGIN SELECT RAISE(ABORT, 'injected failure'); END;").unwrap();
+    let jobs = vec!["job-a".to_owned(), "job-b".to_owned()];
+    assert!(repository.acknowledge(&expected, &jobs, RETENTION, NOW + 1).is_err());
+    let identifier = &expected.identity.agent_operation_identifier;
+    assert!(repository.physical_jobs(TARGET, identifier).unwrap().is_empty());
+    assert_eq!(repository.read(TARGET, identifier).unwrap().unwrap(), expected);
+}
+
 /// Returns the observation one running job with `attempt` and `progress` has.
 fn running(sequence: u64, attempt: u64, progress: u64) -> RemoteJobObservation {
     RemoteJobObservation {
@@ -516,6 +1088,594 @@ fn a_captured_high_water_position_is_the_only_way_out_of_a_disagreement() {
         ),
         Err(AgentRepositoryFailure::NoSuchSubscription { .. })
     ));
+}
+
+#[test]
+fn recovery_membership_pages_every_unsettled_generation_and_refuses_ledger_only_reset() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("operations.sqlite3");
+    let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    let ledger = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+    ledger.open_subscription(TARGET, SUBSCRIPTION, GENERATION, NOW).unwrap();
+    ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-five"), NOW).unwrap();
+    ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-other"), NOW).unwrap();
+    let empty = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+    assert!(empty.members().is_empty());
+    assert_eq!(format!("{empty:?}"), "SubscriptionRecoveryView([redacted])");
+    let mut expected = Vec::new();
+    for number in 0..257 {
+        let mut child = submission(&format!("member-{number:04}"));
+        if number == 0 {
+            child.identity.agent_event_store_generation = GENERATION - 1;
+            child.identity.selected_environment_revision = "old-revision".into();
+        }
+        // Remote terminal observation is not a completed local settlement.
+        if number == 1 {
+            child.observation = RemoteJobObservation {
+                state: AgentJobState::Succeeded, applied_sequence: JobEventSequence::of(3), attempt: 1, progress: 100,
+            };
+            child.terminal_disposition = Some("authoritative-remote-success".into());
+            use slingshot_domain::{command_fingerprint::{CommandFingerprint, FingerprintInput}, installation::InstallationIdentifier};
+            use slingshot_storage::operation_repository::{AdmissionRequest, OperationRepository};
+            let local = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+            local.admit(&AdmissionRequest {
+                author_target_identity: "opaque-target".into(), author_target_identity_digest: TARGET.into(),
+                caller_identity: None, canonical_command: "{}".into(),
+                command_fingerprint: CommandFingerprint::derive(&FingerprintInput {
+                    author_target_identity_digest: TARGET.into(), canonical_command: "{}".into(),
+                    command_wire_name: "query_paths".into(), command_semantic_contract_version: "1".into(),
+                    selected_environment_revision: child.identity.selected_environment_revision.clone(),
+                }).unwrap(),
+                command_wire_name: "query_paths".into(), daemon_runtime_contract_digest: "c".repeat(64),
+                installation_identifier: InstallationIdentifier::parse(&"a1".repeat(32)).unwrap(),
+                operation_identifier: child.identity.operation_identifier.clone(),
+                selected_environment_revision: child.identity.selected_environment_revision.clone(), workflow_correlation_identifier: None,
+            }, NOW).unwrap();
+        }
+        let observed = child.clone();
+        child.observation = RemoteJobObservation::accepted();
+        child.terminal_disposition = None;
+        repository.submit(&child).unwrap();
+        if let Some(disposition) = &observed.terminal_disposition {
+            repository.settle(&observed.identity, observed.observation, RETENTION, disposition).unwrap();
+        }
+        expected.push(observed);
+    }
+    let mut elsewhere = submission("other-subscription");
+    elsewhere.identity.daemon_subscription_identifier = "other".into();
+    repository.submit(&elsewhere).unwrap();
+    repository.submit(&submission_in(ANOTHER_TARGET, "other-target")).unwrap();
+    let mut ended = submission("settled");
+    repository.submit(&ended).unwrap();
+    ended.terminal_disposition = Some("complete".into());
+    ended.observation = RemoteJobObservation { state: AgentJobState::Succeeded, applied_sequence: JobEventSequence::of(3), attempt: 1, progress: 100 };
+    repository.settle(&ended.identity, ended.observation, RETENTION, "complete").unwrap();
+    let view = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+    assert_eq!(view.members(), expected);
+    assert_eq!(view.ledger(), empty.ledger());
+    let mut policy = PersistentCapacityPolicy::embedded();
+    policy.retained_operation_rows = 256;
+    let bounded = AgentSubscriptionLedger::bounded(OperationDatabase::open(&path, settings()).unwrap(), policy);
+    assert!(matches!(bounded.read_recovery_view(TARGET, SUBSCRIPTION), Err(AgentRepositoryFailure::Exhausted { allowed: 256, .. })));
+    assert!(ledger.read_recovery_view(TARGET, "missing").is_err());
+    assert!(matches!(ledger.install_high_water(TARGET, SUBSCRIPTION, GENERATION,
+        Some("cursor-0005"), Some("cursor-0005"), LATER_GENERATION, "cursor-0100", "high"), Err(AgentRepositoryFailure::Conflicted)));
+    assert_eq!(ledger.read_subscription(TARGET, SUBSCRIPTION).unwrap().unwrap(), *view.ledger());
+    let reopened = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+    assert_eq!(reopened.read_recovery_view(TARGET, SUBSCRIPTION).unwrap().members(), expected);
+    // A read is not a frozen membership permit: a later child must be observed.
+    let later = submission("member-9999"); repository.submit(&later).unwrap(); expected.push(later);
+    assert_eq!(reopened.read_recovery_view(TARGET, SUBSCRIPTION).unwrap().members(), expected);
+}
+
+#[test]
+fn empty_recovery_installs_a_boundary_not_a_fabricated_event_and_survives_reopen() {
+    for generation in [GENERATION, LATER_GENERATION] {
+        let root = tempfile::tempdir().unwrap(); let path = root.path().join("reset.sqlite3");
+        let ledger = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        ledger.open_subscription(TARGET, SUBSCRIPTION, GENERATION, NOW).unwrap();
+        ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-five"), NOW).unwrap();
+        ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "different"), NOW).unwrap();
+        let view = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        ledger.install_empty_recovery(&view, generation, "cursor-0100").unwrap();
+        let row = ledger.read_subscription(TARGET, SUBSCRIPTION).unwrap().unwrap();
+        assert_eq!(row.cursor.as_deref(), Some("cursor-0100"));
+        assert_eq!(row.high_water_cursor, row.cursor);
+        assert_eq!(row.compacted_below_cursor, row.cursor);
+        assert_eq!(row.canonical_digest, None);
+        assert_eq!(row.unresolved_incident, None);
+        assert_eq!((row.event_rows, row.event_bytes, row.unresolved_incident_count), (0, 0, 0));
+        assert_eq!(row.agent_event_store_generation, generation);
+        assert!(matches!(ledger.install_empty_recovery(&view, generation, "cursor-0101"), Err(AgentRepositoryFailure::SubscriptionMoved)));
+        let reopened = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        assert_eq!(reopened.read_subscription(TARGET, SUBSCRIPTION).unwrap().unwrap(), row);
+        for cursor in ["cursor-0001", "cursor-0100"] {
+            let mut event = fact(cursor, "not-a-captured-digest"); event.agent_event_store_generation = generation;
+            assert_eq!(reopened.record_event(TARGET, SUBSCRIPTION, &event, NOW).unwrap(), LedgerOutcome::StaleCursorOnly);
+        }
+        assert_eq!(reopened.read_subscription(TARGET, SUBSCRIPTION).unwrap().unwrap(), row);
+        let mut event = fact("cursor-0101", "actual-event"); event.agent_event_store_generation = generation;
+        assert_eq!(reopened.record_event(TARGET, SUBSCRIPTION, &event, NOW).unwrap(), LedgerOutcome::Advanced);
+        assert_eq!(reopened.record_event(TARGET, SUBSCRIPTION, &event, NOW).unwrap(), LedgerOutcome::ExactReplay);
+        event.canonical_digest = "different".into();
+        assert_eq!(reopened.record_event(TARGET, SUBSCRIPTION, &event, NOW).unwrap(), LedgerOutcome::IntegrityConflict);
+    }
+}
+
+/// Admits the independently retained local owner needed by a product reset.
+fn admit_reset_owner(path: &std::path::Path, child: &AgentSubmission) {
+    use slingshot_domain::{command_fingerprint::{CommandFingerprint, FingerprintInput}, installation::InstallationIdentifier};
+    use slingshot_storage::operation_repository::{AdmissionRequest, OperationRepository};
+    let identity = &child.identity;
+    OperationRepository::new(OperationDatabase::open(path, settings()).unwrap()).admit(&AdmissionRequest {
+        author_target_identity: "opaque-target".into(), author_target_identity_digest: identity.author_target_identity_digest.clone(),
+        caller_identity: None, canonical_command: "{}".into(),
+        command_fingerprint: CommandFingerprint::derive(&FingerprintInput {
+            author_target_identity_digest: identity.author_target_identity_digest.clone(), canonical_command: "{}".into(),
+            command_wire_name: "query_paths".into(), command_semantic_contract_version: "1".into(),
+            selected_environment_revision: identity.selected_environment_revision.clone(),
+        }).unwrap(), command_wire_name: "query_paths".into(), daemon_runtime_contract_digest: "c".repeat(64),
+        installation_identifier: InstallationIdentifier::parse(&"a1".repeat(32)).unwrap(),
+        operation_identifier: identity.operation_identifier.clone(), selected_environment_revision: identity.selected_environment_revision.clone(),
+        workflow_correlation_identifier: None,
+    }, NOW).unwrap();
+}
+
+#[test]
+fn probe_retry_is_one_atomic_attempt_without_replacing_execution_evidence() {
+    use slingshot_domain::operation::{OperationFact, RecoveryFact, RecoveryCategory, RecoveryExecutionEvidence, OperationExecutionCertainty};
+    use slingshot_storage::operation_repository::OperationRepository;
+    for defect in ["", "success", "submission-unknown", "evidence", "count", "physical", "ledger", "local", "owner", "rollback"] {
+        let root = tempfile::tempdir().unwrap(); let path = root.path().join("probe-retry.sqlite3");
+        let ledger = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        let operations = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        ledger.open_subscription(TARGET, SUBSCRIPTION, GENERATION, NOW).unwrap();
+        let child = submission("retry-member"); repository.submit(&child).unwrap(); admit_reset_owner(&path, &child);
+        repository.record_physical_job(&child.identity, "job-1", NOW).unwrap();
+        let recovery = RecoveryFact {
+            attempt_count: 1, category: if defect == "success" {RecoveryCategory::ResultAcquisition} else {RecoveryCategory::OperationLookup},
+            detail: "held".into(), evidence: if defect == "success" {RecoveryExecutionEvidence::AuthoritativeRemoteSuccess} else {RecoveryExecutionEvidence::ExecutionCertainty {
+                certainty: if defect == "submission-unknown" {OperationExecutionCertainty::SubmissionUnknown} else {OperationExecutionCertainty::RemoteOutcomeUnknown},
+            }}, manual_resume_eligible: false, retry_delay_milliseconds: 10, retry_observed_at_unix_milliseconds: NOW,
+        };
+        operations.apply(TARGET, &child.identity.operation_identifier, 1, &OperationFact::Recovery {recovery: recovery.clone()}, NOW).unwrap();
+        let view = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        let mut next = recovery.clone(); next.attempt_count = 2; next.detail = "next".into();
+        match defect {
+            "evidence" => next.evidence = RecoveryExecutionEvidence::ExecutionCertainty {certainty: OperationExecutionCertainty::SubmissionUnknown},
+            "count" => next.attempt_count = 3,
+            "physical" => { repository.record_physical_job(&child.identity, "job-2", NOW).unwrap(); },
+            "ledger" => { ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0001", "new"), NOW).unwrap(); },
+            "local" => { operations.apply(TARGET, &child.identity.operation_identifier, 2, &OperationFact::Recovery {recovery: next.clone()}, NOW).unwrap(); },
+            "rollback" => { rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_probe_retry BEFORE INSERT ON recovery_fact BEGIN SELECT RAISE(ABORT, 'injected recovery write failure'); END;").unwrap(); },
+            _ => {},
+        }
+        let local_before = operations.read(TARGET, &child.identity.operation_identifier).unwrap().unwrap();
+        let remote_before = repository.read(TARGET, &child.identity.agent_operation_identifier).unwrap();
+        let ledger_before = ledger.read_subscription(TARGET, SUBSCRIPTION).unwrap();
+        let another = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let result = operations.record_subscription_probe_recovery(if defect == "owner" {&another} else {&ledger}, &view, &child.identity.agent_operation_identifier, 2, next.clone(), NOW);
+        let reopened = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        let after = reopened.read(TARGET, &child.identity.operation_identifier).unwrap().unwrap();
+        if ["", "success", "submission-unknown"].contains(&defect) {
+            assert!(result.is_ok()); assert_eq!(after.record.revision, 3);
+            assert!(!after.record.lifecycle_state.is_terminal());
+            assert_eq!(after.record.outstanding_recovery.as_ref(), Some(&next));
+            assert!(operations.record_subscription_probe_recovery(&ledger, &view, &child.identity.agent_operation_identifier, 2, next, NOW).is_err());
+        } else { assert!(result.is_err(), "{defect}"); assert_eq!(after, local_before); }
+        assert_eq!(repository.read(TARGET, &child.identity.agent_operation_identifier).unwrap(), remote_before);
+        assert_eq!(ledger.read_subscription(TARGET, SUBSCRIPTION).unwrap(), ledger_before);
+    }
+}
+
+#[test]
+fn unavailable_generation_settlement_rechecks_the_complete_view_atomically() {
+    use slingshot_domain::operation::{OperationFact, RecoveryFact, RecoveryCategory,
+        RecoveryExecutionEvidence, OperationExecutionCertainty, TerminalFailureKind,
+        TerminalFailureDisposition};
+    use slingshot_storage::operation_repository::OperationRepository;
+    for defect in ["", "submission-unknown", "known-success", "known-nonexecution", "physical", "local", "ledger", "member", "owner", "same-generation", "zero-generation", "revision", "rollback", "remote", "backward-time", "overflow-time"] {
+        let root = tempfile::tempdir().unwrap(); let path = root.path().join("generation-loss.sqlite3");
+        let ledger = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        let operations = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        ledger.open_subscription(TARGET, SUBSCRIPTION, GENERATION, NOW).unwrap();
+        let child = submission("lost-member"); repository.submit(&child).unwrap(); admit_reset_owner(&path, &child);
+        repository.record_physical_job(&child.identity, "job-1", NOW).unwrap();
+        let certainty = if defect == "submission-unknown" {OperationExecutionCertainty::SubmissionUnknown} else if defect == "known-nonexecution" {OperationExecutionCertainty::ConfirmedNotExecuted} else {OperationExecutionCertainty::RemoteOutcomeUnknown};
+        let recovery = |detail: &str| OperationFact::Recovery { recovery: RecoveryFact {
+            attempt_count: 0, category: if defect == "known-success" {RecoveryCategory::ResultAcquisition} else {RecoveryCategory::OperationLookup},
+            detail: detail.into(), evidence: if defect == "known-success" {RecoveryExecutionEvidence::AuthoritativeRemoteSuccess} else {RecoveryExecutionEvidence::ExecutionCertainty {certainty}},
+            manual_resume_eligible: false, retry_delay_milliseconds: 0, retry_observed_at_unix_milliseconds: NOW,
+        }};
+        operations.apply(TARGET, &child.identity.operation_identifier, 1, &recovery("held"), NOW).unwrap();
+        let view = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        match defect {
+            "physical" => { repository.record_physical_job(&child.identity, "job-2", NOW).unwrap(); },
+            "local" => { operations.apply(TARGET, &child.identity.operation_identifier, 2, &recovery("moved"), NOW).unwrap(); },
+            "ledger" => { ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0001", "new"), NOW).unwrap(); },
+            "member" => { repository.submit(&submission("new-member")).unwrap(); },
+            "remote" => { repository.record_snapshot_watermark(&child.identity, JobEventSequence::of(2)).unwrap(); },
+            "rollback" => { rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_generation_loss BEFORE DELETE ON recovery_fact BEGIN SELECT RAISE(ABORT, 'injected recovery deletion failure'); END;").unwrap(); },
+            _ => {},
+        }
+        let before = operations.read(TARGET, &child.identity.operation_identifier).unwrap().unwrap();
+        let ledger_before = ledger.read_subscription(TARGET, SUBSCRIPTION).unwrap();
+        let remote_before = repository.read(TARGET, &child.identity.agent_operation_identifier).unwrap();
+        let physical_before = repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap();
+        let another = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let result = operations.settle_unavailable_generation(
+            if defect == "owner" {&another} else {&ledger}, &view, &child.identity.agent_operation_identifier,
+            if defect == "same-generation" {GENERATION} else if defect == "zero-generation" {0} else {GENERATION + 1},
+            if defect == "revision" {1} else {2}, if defect == "backward-time" {NOW - 1} else if defect == "overflow-time" {u64::MAX} else {NOW},
+        );
+        let reopened = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        let after = reopened.read(TARGET, &child.identity.operation_identifier).unwrap().unwrap();
+        if defect.is_empty() || defect == "submission-unknown" {
+            assert!(result.is_ok()); assert_eq!(after.record.revision, 3);
+            let failure = after.record.terminal_failure.as_ref().unwrap();
+            assert_eq!(failure.kind, TerminalFailureKind::RemoteStateLost);
+            assert_eq!(failure.disposition, TerminalFailureDisposition::FailClosedIndeterminate {certainty});
+            assert!(after.record.outstanding_recovery.is_none());
+            assert!(operations.settle_unavailable_generation(&ledger, &view, &child.identity.agent_operation_identifier, GENERATION + 1, 2, NOW).is_err());
+        } else { assert!(result.is_err(), "{defect}"); assert_eq!(after, before, "{defect}"); }
+        assert_eq!(ledger.read_subscription(TARGET, SUBSCRIPTION).unwrap(), ledger_before);
+        assert_eq!(repository.read(TARGET, &child.identity.agent_operation_identifier).unwrap(), remote_before);
+        assert_eq!(repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap(), physical_before);
+        if defect.is_empty() || defect == "submission-unknown" {
+            let complete = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+            assert!(complete.members().is_empty());
+            ledger.install_empty_recovery(&complete, GENERATION + 1, "cursor-0100").unwrap();
+            let advanced = ledger.read_subscription(TARGET, SUBSCRIPTION).unwrap().unwrap();
+            assert_eq!(advanced.agent_event_store_generation, GENERATION + 1);
+            assert_eq!(advanced.cursor.as_deref(), Some("cursor-0100"));
+            assert_eq!(repository.read(TARGET, &child.identity.agent_operation_identifier).unwrap(), remote_before);
+            assert_eq!(repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap(), physical_before);
+            let early = maintenance::preview(repository.database(), TARGET, NOW, maintenance::maximum_removals()).unwrap();
+            assert!(early.agent_removals.is_empty());
+            let aged = maintenance::preview(repository.database(), TARGET, NOW + 1, maintenance::maximum_removals()).unwrap();
+            assert_eq!(aged.agent_removals.len(), 1);
+            assert_eq!(aged.agent_removals[0].terminal_disposition, "remote_state_lost");
+            maintenance::apply(repository.database(), &aged, NOW + 2).unwrap();
+            assert!(repository.read(TARGET, &child.identity.agent_operation_identifier).unwrap().is_none());
+            assert!(repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap().is_empty());
+            assert!(operations.read(TARGET, &child.identity.operation_identifier).unwrap().is_none());
+            assert!(ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap().members().is_empty());
+        }
+    }
+}
+
+#[test]
+fn completed_event_cursor_rechecks_terminal_owners_and_rolls_back_failed_writes() {
+    use slingshot_domain::operation::{OperationFact,TerminalFailure,TerminalFailureKind,TerminalFailureDisposition,OperationExecutionCertainty};
+    use slingshot_storage::operation_repository::OperationRepository;
+    for defect in ["", "stale", "future", "generation", "physical", "ledger-moved", "physical-moved", "local-moved", "owner", "write", "wrong-subscription"] {
+        let root=tempfile::tempdir().unwrap(); let path=root.path().join("completed-event.sqlite3");
+        let ledger=AgentSubscriptionLedger::new(OperationDatabase::open(&path,settings()).unwrap());
+        let repository=AgentJobRepository::new(OperationDatabase::open(&path,settings()).unwrap());
+        let operations=OperationRepository::new(OperationDatabase::open(&path,settings()).unwrap());
+        ledger.open_subscription(TARGET,SUBSCRIPTION,GENERATION,NOW).unwrap();
+        ledger.open_subscription(TARGET,"another-subscription",GENERATION,NOW).unwrap();
+        let child=submission("completed"); repository.submit(&child).unwrap(); admit_reset_owner(&path,&child);
+        repository.record_physical_job(&child.identity,"physical-completed",NOW).unwrap();
+        repository.settle(&child.identity,RemoteJobObservation {state:AgentJobState::Failed,applied_sequence:JobEventSequence::of(2),attempt:1,progress:0},RETENTION,"authoritative-nonexecution").unwrap();
+        operations.apply(TARGET,&child.identity.operation_identifier,1,&OperationFact::Terminal {failure:TerminalFailure {
+            kind:TerminalFailureKind::Rejected,disposition:TerminalFailureDisposition::AuthoritativeNonExecution {certainty:OperationExecutionCertainty::ConfirmedNotExecuted},metadata:None,
+        }},NOW).unwrap();
+        assert!(ledger.read_recovery_view(TARGET,SUBSCRIPTION).unwrap().members().is_empty());
+        if defect == "wrong-subscription" {
+            assert!(ledger.read_completed_event(TARGET,"another-subscription",&child.identity.agent_operation_identifier).unwrap().is_none()); continue;
+        }
+        let view=ledger.read_completed_event(TARGET,SUBSCRIPTION,&child.identity.agent_operation_identifier).unwrap().unwrap();
+        assert_eq!(format!("{view:?}"),"CompletedEventView([redacted])");
+        let mut event=EventFact {agent_event_store_generation:GENERATION,agent_operation_identifier:Some(child.identity.agent_operation_identifier.clone()),canonical_digest:"a".repeat(64),cursor:"cursor-002".into(),event_bytes:256,job_sequence:Some(2)};
+        match defect {
+            "stale" => event.job_sequence=Some(1), "future" => event.job_sequence=Some(3), "generation" => event.agent_event_store_generation+=1,
+            "ledger-moved" => {ledger.record_event(TARGET,SUBSCRIPTION,&fact("cursor-001","old"),NOW).unwrap();},
+            "physical-moved" => {repository.record_physical_job(&child.identity,"concurrent",NOW).unwrap();},
+            "local-moved" => {rusqlite::Connection::open(&path).unwrap().execute("UPDATE operation SET operation_revision = operation_revision + 1",[]).unwrap();},
+            "write" => {rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_completed_event BEFORE INSERT ON subscription_event BEGIN SELECT RAISE(ABORT, 'injected cursor failure'); END;").unwrap();},
+            _ => {},
+        }
+        let before=ledger.read_subscription(TARGET,SUBSCRIPTION).unwrap().unwrap();
+        let local=operations.read(TARGET,&child.identity.operation_identifier).unwrap();
+        let remote=repository.read(TARGET,&child.identity.agent_operation_identifier).unwrap();
+        let other=AgentSubscriptionLedger::new(OperationDatabase::open(&path,settings()).unwrap());
+        let writer=if defect=="owner" {&other} else {&ledger};
+        let result=writer.record_completed_event_cursor(&view,&event,if defect=="physical" {"unknown"} else {"physical-completed"},NOW);
+        assert_eq!(result.is_ok(),["","stale"].contains(&defect),"{defect}: {result:?}");
+        let after=other.read_subscription(TARGET,SUBSCRIPTION).unwrap().unwrap();
+        if result.is_ok() {assert_eq!(after.cursor.as_deref(),Some("cursor-002"));assert_eq!(after.event_rows,1);assert_eq!(after.event_bytes,256);}
+        else {assert_eq!(after,before);}
+        assert_eq!(operations.read(TARGET,&child.identity.operation_identifier).unwrap(),local);
+        assert_eq!(repository.read(TARGET,&child.identity.agent_operation_identifier).unwrap(),remote);
+    }
+}
+
+#[test]
+fn event_conflict_is_guarded_durable_and_never_moves_cursor_or_job() {
+    for defect in ["", "repeated", "ledger-moved", "physical-moved", "owner", "write", "cursor"] {
+        let root = tempfile::tempdir().unwrap(); let path = root.path().join("event-conflict.sqlite3");
+        let ledger = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        ledger.open_subscription(TARGET, SUBSCRIPTION, GENERATION, NOW).unwrap();
+        let child = submission("conflict"); repository.submit(&child).unwrap(); admit_reset_owner(&path, &child);
+        ledger.record_event(TARGET,SUBSCRIPTION,&fact("cursor-001","first"),NOW).unwrap();
+        if defect == "repeated" {
+            let view = ledger.read_recovery_view(TARGET,SUBSCRIPTION).unwrap();
+            ledger.record_event_conflict(&view,"cursor-002").unwrap();
+        }
+        let view = ledger.read_recovery_view(TARGET,SUBSCRIPTION).unwrap();
+        match defect {
+            "ledger-moved" => { ledger.record_event(TARGET,SUBSCRIPTION,&fact("cursor-002","later"),NOW).unwrap(); },
+            "physical-moved" => { repository.record_physical_job(&child.identity,"concurrent",NOW).unwrap(); },
+            "write" => { rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_incident BEFORE UPDATE OF unresolved_incident ON subscription_ledger BEGIN SELECT RAISE(ABORT, 'injected incident failure'); END;").unwrap(); },
+            _ => {},
+        }
+        let before = ledger.read_recovery_view(TARGET,SUBSCRIPTION).unwrap();
+        let other = AgentSubscriptionLedger::new(OperationDatabase::open(&path,settings()).unwrap());
+        let writer = if defect == "owner" {&other} else {&ledger};
+        let result = writer.record_event_conflict(&view,if defect == "cursor" {"bad\r\n"} else {"cursor-003"});
+        let after = other.read_recovery_view(TARGET,SUBSCRIPTION).unwrap();
+        assert_eq!(after.members(),before.members());
+        assert_eq!(after.physical_jobs_for(&child.identity.agent_operation_identifier),before.physical_jobs_for(&child.identity.agent_operation_identifier));
+        let mut expected = before.ledger().clone();
+        if ["","repeated"].contains(&defect) {
+            assert!(result.is_ok());
+            if defect.is_empty() { expected.unresolved_incident = Some("cursor-003".into()); expected.unresolved_incident_count = 1; }
+        } else { assert!(result.is_err(),"{defect}"); }
+        assert_eq!(after.ledger(),&expected,"{defect}");
+    }
+}
+
+#[test]
+fn cursor_only_event_rechecks_the_view_and_never_invents_a_job_update() {
+    for defect in ["", "associated", "future", "half-key", "half-sequence", "moved", "wrong-owner", "write", "generation", "digest", "overflow"] {
+        let root = tempfile::tempdir().unwrap(); let path = root.path().join("cursor-only.sqlite3");
+        let ledger = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        ledger.open_subscription(TARGET, SUBSCRIPTION, GENERATION, NOW).unwrap();
+        let child = submission("cursor-only"); repository.submit(&child).unwrap(); admit_reset_owner(&path, &child);
+        let view = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        let mut event = EventFact { agent_event_store_generation: GENERATION, agent_operation_identifier: None,
+            canonical_digest: "a".repeat(64), cursor: "cursor-002".into(), event_bytes: 256, job_sequence: None };
+        match defect {
+            "associated" | "future" => { event.agent_operation_identifier = Some(child.identity.agent_operation_identifier.clone()); event.job_sequence = Some(child.observation.applied_sequence.value() + u64::from(defect == "future")); },
+            "half-key" => event.agent_operation_identifier = Some(child.identity.agent_operation_identifier.clone()),
+            "half-sequence" => event.job_sequence = Some(0),
+            "moved" => { ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-001", "old"), NOW).unwrap(); },
+            "write" => { rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_cursor_event BEFORE INSERT ON subscription_event BEGIN SELECT RAISE(ABORT, 'injected event failure'); END;").unwrap(); },
+            "generation" => event.agent_event_store_generation += 1,
+            "digest" => event.canonical_digest = "A".repeat(64),
+            "overflow" => event.event_bytes = u64::MAX,
+            _ => {},
+        }
+        let before = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        let other = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let writer = if defect == "wrong-owner" { &other } else { &ledger };
+        let result = writer.record_cursor_event(&view, &event, NOW);
+        let after = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        assert_eq!(after.members(), before.members());
+        assert!(repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap().is_empty());
+        if ["", "associated"].contains(&defect) {
+            assert_eq!(result.unwrap(), LedgerOutcome::Advanced);
+            assert_eq!(after.ledger().cursor.as_deref(), Some("cursor-002"));
+            assert_eq!(after.ledger().event_bytes, 256);
+        } else {
+            if defect == "generation" { assert_eq!(result.unwrap(), LedgerOutcome::GenerationMismatch); }
+            else { assert!(result.is_err(), "{defect}"); }
+            assert_eq!(after.ledger(), before.ledger(), "{defect}");
+        }
+    }
+}
+
+#[test]
+fn active_event_commits_cursor_job_and_physical_identity_or_rolls_back_all_three() {
+    for defect in ["", "known-physical", "job-write", "physical-write", "event-write",
+        "ledger-moved", "physical-moved", "remote-moved", "missing-owner", "wrong-owner",
+        "gap", "terminal", "generation", "wrong-job", "wrong-sequence", "bad-digest",
+        "bad-physical", "unsafe-cursor", "overflow", "backwards-time", "capacity", "incident", "known-success", "local-moved"] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("atomic-event.sqlite3");
+        let ledger = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        ledger.open_subscription(TARGET, SUBSCRIPTION, GENERATION, NOW).unwrap();
+        let child = submission("active-event");
+        repository.submit(&child).unwrap();
+        if defect != "missing-owner" { admit_reset_owner(&path, &child); }
+        let record_success = || {
+            use slingshot_domain::operation::{OperationFact, RecoveryFact, RecoveryCategory, RecoveryExecutionEvidence};
+            use slingshot_storage::operation_repository::OperationRepository;
+            OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap()).apply(
+                TARGET, &child.identity.operation_identifier, 1,
+                &OperationFact::Recovery { recovery: RecoveryFact {
+                    attempt_count: 0, category: RecoveryCategory::ResultAcquisition, detail: "pending".into(),
+                    evidence: RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
+                    manual_resume_eligible: false, retry_delay_milliseconds: 0,
+                    retry_observed_at_unix_milliseconds: NOW,
+                } }, NOW).unwrap();
+        };
+        if defect == "known-success" { record_success(); }
+        if defect == "known-physical" {
+            repository.record_physical_job(&child.identity, "physical-event", NOW).unwrap();
+        }
+        if defect == "capacity" {
+            for index in 0..PHYSICAL_JOBS_PER_SUBMISSION {
+                repository.record_physical_job(&child.identity, &format!("physical-{index}"), NOW).unwrap();
+            }
+        }
+        if defect == "incident" {
+            ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0001", "first"), NOW).unwrap();
+            ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0001", "other"), NOW).unwrap();
+        }
+        let view = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        let mut observation = RemoteJobObservation {
+            applied_sequence: JobEventSequence::of(child.observation.applied_sequence.value() + 1),
+            attempt: 1, progress: 5, state: AgentJobState::Running,
+        };
+        let mut event = EventFact {
+            agent_event_store_generation: GENERATION,
+            agent_operation_identifier: Some(child.identity.agent_operation_identifier.clone()),
+            canonical_digest: "a".repeat(64), cursor: "cursor-0002".into(), event_bytes: 256,
+            job_sequence: Some(observation.applied_sequence.value()),
+        };
+        match defect {
+            "job-write" => { rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_event_job BEFORE UPDATE OF applied_sequence ON agent_operation BEGIN SELECT RAISE(ABORT, 'injected job failure'); END;").unwrap(); },
+            "physical-write" => { rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_event_physical BEFORE INSERT ON agent_physical_job BEGIN SELECT RAISE(ABORT, 'injected physical failure'); END;").unwrap(); },
+            "event-write" => { rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_event_row BEFORE INSERT ON subscription_event BEGIN SELECT RAISE(ABORT, 'injected event failure'); END;").unwrap(); },
+            "ledger-moved" => { ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0001", "old"), NOW).unwrap(); },
+            "physical-moved" => { repository.record_physical_job(&child.identity, "concurrent", NOW).unwrap(); },
+            "remote-moved" => { repository.record_snapshot_watermark(&child.identity, JobEventSequence::of(1)).unwrap(); },
+            "gap" => { observation.applied_sequence = JobEventSequence::of(100); event.job_sequence = Some(100); },
+            "terminal" => observation.state = AgentJobState::Succeeded,
+            "generation" => event.agent_event_store_generation += 1,
+            "wrong-job" => event.agent_operation_identifier = Some("other".into()),
+            "wrong-sequence" => event.job_sequence = None,
+            "bad-digest" => event.canonical_digest = "A".repeat(64),
+            "unsafe-cursor" => event.cursor = "unsafe\r\n".into(),
+            "overflow" => observation.attempt = u64::MAX,
+            _ => {},
+        }
+        if defect == "local-moved" { record_success(); }
+        let before = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        let physical_before = repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap();
+        let other = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let writer = if defect == "wrong-owner" { &other } else { &ledger };
+        let result = writer.record_active_event(&view, &event, observation,
+            if defect == "bad-physical" { "" } else { "physical-event" },
+            if defect == "backwards-time" { NOW - 1 } else { NOW + 1 });
+        let success = ["", "known-physical"].contains(&defect);
+        assert_eq!(result.is_ok(), success, "{defect}: {result:?}");
+        let reopened = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let after = reopened.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        let physical_after = repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap();
+        if success {
+            assert_eq!(result.unwrap(), LedgerOutcome::Advanced);
+            assert_eq!(after.ledger().cursor.as_deref(), Some("cursor-0002"));
+            assert_eq!(after.ledger().event_rows, 1);
+            assert_eq!(after.ledger().event_bytes, 256);
+            let mut expected_child = child.clone(); expected_child.observation = observation;
+            assert_eq!(after.members(), &[expected_child], "retention and snapshot facts must not change");
+            assert_eq!(physical_after, ["physical-event"]);
+            assert!(ledger.record_active_event(&view, &event, observation, "physical-event", NOW + 1).is_err());
+        } else {
+            assert_eq!(after.ledger(), before.ledger(), "{defect}: cursor/accounting rolled back");
+            assert_eq!(after.members(), before.members(), "{defect}: job rolled back");
+            assert_eq!(physical_after, physical_before, "{defect}: physical association rolled back");
+        }
+    }
+}
+
+#[test]
+fn active_reset_commits_every_member_and_boundary_or_rolls_back_every_write() {
+    use slingshot_storage::agent_subscription_ledger::ActiveResetSnapshot;
+    for defect in ["", "older", "missing", "duplicate", "new-member", "remote-moved", "physical-moved", "local-moved", "delete", "second-write", "generation", "terminal", "zero-retention", "omitted-physical", "prior-generation", "missing-owner", "unsafe-watermark", "overflow", "stale-sequence"] {
+        let root = tempfile::tempdir().unwrap(); let path = root.path().join("active-reset.sqlite3");
+        let ledger = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        ledger.open_subscription(TARGET, SUBSCRIPTION, GENERATION, NOW).unwrap();
+        ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "old"), NOW).unwrap();
+        ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "conflict"), NOW).unwrap();
+        let mut snapshots = Vec::new();
+        for number in 0..2 {
+            let mut child = submission(&format!("member-{number}"));
+            if number == 1 && defect == "prior-generation" { child.identity.agent_event_store_generation -= 1; }
+            repository.submit(&child).unwrap();
+            if number != 1 || defect != "missing-owner" { admit_reset_owner(&path, &child); }
+            repository.record_physical_job(&child.identity, &format!("job-{number}-existing"), NOW).unwrap();
+            snapshots.push(ActiveResetSnapshot {
+                agent_operation_identifier: child.identity.agent_operation_identifier,
+                observation: running(3 + number, 1, 10 + number),
+                physical_sling_job_identifiers: vec![format!("job-{number}-existing"), format!("job-{number}-new")],
+                remaining_retention_milliseconds: RETENTION - 100,
+                subscription_watermark: "cursor-0100".into(),
+            });
+        }
+        let view = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        match defect {
+            "older" => snapshots[1].subscription_watermark = "cursor-0099".into(),
+            "missing" => { snapshots.pop(); },
+            "duplicate" => snapshots[1] = snapshots[0].clone(),
+            "new-member" => { repository.submit(&submission("member-2")).unwrap(); },
+            "remote-moved" => { repository.record_snapshot_watermark(&view.members()[1].identity, JobEventSequence::of(2)).unwrap(); },
+            "physical-moved" => { repository.record_physical_job(&view.members()[1].identity, "concurrent-job", NOW).unwrap(); },
+            "local-moved" => {
+                use slingshot_domain::operation::{OperationFact, RecoveryFact, RecoveryCategory, RecoveryExecutionEvidence, OperationExecutionCertainty};
+                use slingshot_storage::operation_repository::OperationRepository;
+                let child = &view.members()[1];
+                OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap()).apply(TARGET, &child.identity.operation_identifier, 1,
+                    &OperationFact::Recovery { recovery: RecoveryFact {
+                        attempt_count: 0, category: RecoveryCategory::OperationLookup, detail: "pending".into(),
+                        evidence: RecoveryExecutionEvidence::ExecutionCertainty { certainty: OperationExecutionCertainty::RemoteOutcomeUnknown },
+                        manual_resume_eligible: false, retry_delay_milliseconds: 0, retry_observed_at_unix_milliseconds: NOW,
+                    } }, NOW).unwrap();
+            },
+            "delete" => { rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_reset_delete BEFORE DELETE ON subscription_event BEGIN SELECT RAISE(ABORT, 'injected deletion failure'); END;").unwrap(); },
+            "second-write" => { rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER refuse_second_watermark BEFORE UPDATE OF snapshot_watermark ON agent_operation WHEN OLD.agent_operation_identifier = 'agent-operation-member-1' BEGIN SELECT RAISE(ABORT, 'injected second snapshot failure'); END;").unwrap(); },
+            "terminal" => snapshots[1].observation.state = AgentJobState::Succeeded,
+            "zero-retention" => snapshots[1].remaining_retention_milliseconds = 0,
+            "omitted-physical" => { snapshots[1].physical_sling_job_identifiers.remove(0); },
+            "unsafe-watermark" => snapshots[1].subscription_watermark = "z\r\nunsafe".into(),
+            "overflow" => snapshots[1].observation.applied_sequence = JobEventSequence::of(u64::MAX),
+            "stale-sequence" => snapshots[1].observation.applied_sequence = JobEventSequence::of(0),
+            _ => {},
+        }
+        let before = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        let before_physical: Vec<_> = before.members().iter().map(|child| repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap()).collect();
+        let result = ledger.install_active_snapshot_reset(&view, if defect == "generation" {LATER_GENERATION} else {GENERATION}, "cursor-0100", &snapshots, NOW + 100);
+        assert_eq!(result.is_ok(), defect.is_empty(), "{defect}: {result:?}");
+        let reopened = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let after = reopened.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        if defect.is_empty() {
+            assert_eq!(after.ledger().cursor.as_deref(), Some("cursor-0100"));
+            assert_eq!(after.ledger().canonical_digest, None);
+            assert_eq!(after.ledger().unresolved_incident, None);
+            assert_eq!(after.ledger().event_rows, 0);
+            for (child, snapshot) in after.members().iter().zip(&snapshots) {
+                assert_eq!(child.observation, snapshot.observation);
+                assert_eq!(child.snapshot_watermark, snapshot.observation.applied_sequence);
+                assert_eq!(child.remaining_retention_milliseconds, RETENTION - 100);
+                assert_eq!(repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap(), snapshot.physical_sling_job_identifiers);
+            }
+        } else {
+            assert_eq!(after.members(), before.members(), "{defect}");
+            assert_eq!(after.ledger(), before.ledger(), "{defect}");
+            for (child, physical) in after.members().iter().zip(&before_physical) {
+                assert_eq!(&repository.physical_jobs(TARGET, &child.identity.agent_operation_identifier).unwrap(), physical, "{defect}");
+            }
+        }
+    }
+}
+
+#[test]
+fn empty_recovery_rechecks_owner_membership_and_rolls_back_cursor_on_delete_failure() {
+    for defect in ["owner", "new-member", "delete", "moved", "backward", "unsafe"] {
+        let root = tempfile::tempdir().unwrap(); let path = root.path().join("reset.sqlite3");
+        let ledger = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        ledger.open_subscription(TARGET, SUBSCRIPTION, GENERATION, NOW).unwrap();
+        ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-five"), NOW).unwrap();
+        ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "different"), NOW).unwrap();
+        let view = ledger.read_recovery_view(TARGET, SUBSCRIPTION).unwrap();
+        if defect == "new-member" {
+            AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap()).submit(&submission("new")).unwrap();
+        }
+        if defect == "delete" {
+            rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TRIGGER reject_reset_delete BEFORE DELETE ON subscription_event BEGIN SELECT RAISE(ABORT, 'injected reset deletion failure'); END;").unwrap();
+        }
+        if defect == "moved" {
+            ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0006", "six"), NOW).unwrap();
+        }
+        let before = ledger.read_subscription(TARGET, SUBSCRIPTION).unwrap().unwrap();
+        let another = AgentSubscriptionLedger::new(OperationDatabase::open(&path, settings()).unwrap());
+        let receiver = if defect == "owner" { &another } else { &ledger };
+        let cursor = match defect { "backward" => "cursor-0001", "unsafe" => "bad\r\ncursor", _ => "cursor-0100" };
+        assert!(receiver.install_empty_recovery(&view, GENERATION, cursor).is_err(), "{defect}");
+        assert_eq!(ledger.read_subscription(TARGET, SUBSCRIPTION).unwrap().unwrap(), before, "{defect}");
+        assert_eq!(another.read_subscription(TARGET, SUBSCRIPTION).unwrap().unwrap(), before, "{defect}");
+        // A failed post-update delete must leave the retained event and counters intact.
+        if defect == "delete" { assert_eq!(ledger.record_event(TARGET, SUBSCRIPTION, &fact("cursor-0005", "contents-five"), NOW).unwrap(), LedgerOutcome::ExactReplay); }
+    }
 }
 
 #[test]

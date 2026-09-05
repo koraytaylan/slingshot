@@ -30,6 +30,36 @@ pub struct InspectReplicationQueueCommand {
     pub result_window: Option<ResultWindow>,
 }
 
+/// Closed anchor/inventory failure categories for this listing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InspectReplicationQueueFailure {
+    /// The listing failed with the registry's AgentNotFound category.
+    AgentNotFound,
+    /// The listing failed with the registry's AgentAccessDenied category.
+    AgentAccessDenied,
+    /// The listing failed with the registry's QueueInventoryFailed category.
+    QueueInventoryFailed,
+}
+
+/// A listing refusal without partial results or a continuation token.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InspectReplicationQueueRefusal {
+    /// The requested listing anchor.
+    pub agent_identifier: ReplicationAgentIdentifier,
+    /// The command-specific failure.
+    pub failure: InspectReplicationQueueFailure,
+}
+
+impl InspectReplicationQueueRefusal {
+    /// Requires the exact anchor named by the retained command.
+    pub fn require_answers(&self, command: &InspectReplicationQueueCommand) -> Result<(), crate::command::query_paths::DiscoveryResultFailure> {
+        if self.agent_identifier == command.agent_identifier { Ok(()) }
+        else { Err(crate::command::query_paths::DiscoveryResultFailure::NotThisRequest) }
+    }
+}
+
 impl InspectReplicationQueueCommand {
     /// Returns the page this request asks for, stated or resolved.
     #[must_use]

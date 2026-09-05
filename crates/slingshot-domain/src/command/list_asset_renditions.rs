@@ -60,6 +60,36 @@ pub struct ListAssetRenditionsCommand {
     pub result_window: Option<ResultWindow>,
 }
 
+/// Closed anchor/inventory failure categories for this listing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ListAssetRenditionsFailure {
+    /// The listing failed with the registry's AssetNotFound category.
+    AssetNotFound,
+    /// The listing failed with the registry's AssetAccessDenied category.
+    AssetAccessDenied,
+    /// The listing failed with the registry's AssetInvalid category.
+    AssetInvalid,
+}
+
+/// A listing refusal without partial results or a continuation token.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ListAssetRenditionsRefusal {
+    /// The requested listing anchor.
+    pub asset_path: RepositoryPath,
+    /// The command-specific failure.
+    pub failure: ListAssetRenditionsFailure,
+}
+
+impl ListAssetRenditionsRefusal {
+    /// Requires the exact anchor named by the retained command.
+    pub fn require_answers(&self, command: &ListAssetRenditionsCommand) -> Result<(), crate::command::query_paths::DiscoveryResultFailure> {
+        if self.asset_path == command.asset_path { Ok(()) }
+        else { Err(crate::command::query_paths::DiscoveryResultFailure::NotThisRequest) }
+    }
+}
+
 impl ListAssetRenditionsCommand {
     /// Returns the page this request asks for, stated or resolved.
     #[must_use]

@@ -62,6 +62,119 @@ fn repository() -> OperationRepository {
     OperationRepository::new(OperationDatabase::open_in_memory(settings()).expect("a database"))
 }
 
+#[test]
+fn missing_lookup_grace_survives_restart_and_exhaustion_never_proves_nonexecution() {
+    use slingshot_daemon::operation::durable_author_lookup::record_missing_lookup;
+    use slingshot_daemon::operation::recovery_and_event_supervisor::automatic_attempt_cap;
+    use slingshot_domain::operation_executor::ExecutionIdentity;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("lookup.sqlite3");
+    let digest = served().author_target_identity_digest;
+    let request = request(&digest, REVISION, "operation-1");
+    let store = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    store.admit(&request.admission, NOW).unwrap();
+    let identity = ExecutionIdentity {
+        attempt: 1,
+        author_target_identity_digest: digest.clone(),
+        operation_identifier: "operation-1".to_owned(),
+        selected_environment_revision: REVISION.to_owned(),
+    };
+    let first = record_missing_lookup(&store, &identity, 1, NOW, NOW + 1000).unwrap();
+    let grace = first.record.outstanding_recovery.as_ref().unwrap();
+    assert_eq!(grace.retry_delay_milliseconds, 29000);
+    assert!(!grace.manual_resume_eligible);
+    assert_eq!(
+        grace.evidence,
+        RecoveryExecutionEvidence::ExecutionCertainty {
+            certainty: OperationExecutionCertainty::SubmissionUnknown
+        }
+    );
+    assert!(record_missing_lookup(&store, &identity, 1, NOW, NOW + 1001).is_err());
+    drop(store);
+    let store = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    assert_eq!(store.read(&digest, "operation-1").unwrap().unwrap(), first);
+    let mut held =
+        record_missing_lookup(&store, &identity, first.record.revision, NOW, NOW + 2000).unwrap();
+    assert_eq!(held.record.outstanding_recovery.as_ref().unwrap().retry_delay_milliseconds, 28000);
+    for _ in 2..automatic_attempt_cap() {
+        held = record_missing_lookup(&store, &identity, held.record.revision, NOW, NOW + 40000)
+            .unwrap();
+    }
+    let recovery = held.record.outstanding_recovery.as_ref().unwrap();
+    assert!(recovery.manual_resume_eligible);
+    assert!(!held.record.lifecycle_state.is_terminal());
+    assert_eq!(recovery.attempt_count as u64, automatic_attempt_cap());
+    assert_eq!(recovery.evidence, grace.evidence);
+    assert_eq!(
+        record_missing_lookup(&store, &identity, held.record.revision, NOW, NOW + 90000).unwrap(),
+        held
+    );
+}
+
+#[test]
+fn missing_lookup_preserves_success_and_does_not_confuse_resume_eligibility_with_exhaustion() {
+    use slingshot_daemon::operation::durable_author_lookup::record_missing_lookup;
+    use slingshot_domain::operation::{OperationFact, RecoveryFact};
+    use slingshot_domain::operation_executor::ExecutionIdentity;
+    let store = repository();
+    let digest = served().author_target_identity_digest;
+    let request = request(&digest, REVISION, "operation-1");
+    store.admit(&request.admission, NOW).unwrap();
+    let identity = ExecutionIdentity {
+        attempt: 1,
+        author_target_identity_digest: digest.clone(),
+        operation_identifier: "operation-1".to_owned(),
+        selected_environment_revision: REVISION.to_owned(),
+    };
+    assert!(record_missing_lookup(&store, &identity, 1, NOW, NOW - 1).is_err());
+    assert_eq!(store.read(&digest, "operation-1").unwrap().unwrap().record.revision, 1);
+    let recovery = RecoveryFact {
+        attempt_count: 1,
+        category: RecoveryCategory::OperationLookup,
+        detail: "eligible but automatic attempts remain".to_owned(),
+        evidence: RecoveryExecutionEvidence::ExecutionCertainty {
+            certainty: OperationExecutionCertainty::SubmissionUnknown,
+        },
+        manual_resume_eligible: true,
+        retry_delay_milliseconds: 0,
+        retry_observed_at_unix_milliseconds: NOW,
+    };
+    let held = store
+        .apply(
+            &digest,
+            "operation-1",
+            1,
+            &OperationFact::Recovery { recovery: recovery.clone() },
+            NOW,
+        )
+        .unwrap();
+    let held =
+        record_missing_lookup(&store, &identity, held.record.revision, NOW, NOW + 40000).unwrap();
+    let fact = held.record.outstanding_recovery.as_ref().unwrap();
+    assert_eq!(fact.attempt_count, 2);
+    assert!(!fact.manual_resume_eligible);
+    assert!(fact.retry_delay_milliseconds <= slingshot_daemon::operation::recovery_and_event_supervisor::jitter_ceiling_milliseconds(2));
+    let held = store
+        .apply(
+            &digest,
+            "operation-1",
+            held.record.revision,
+            &OperationFact::Recovery {
+                recovery: RecoveryFact {
+                    category: RecoveryCategory::ResultAcquisition,
+                    evidence: RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
+                    ..recovery
+                },
+            },
+            NOW + 40001,
+        )
+        .unwrap();
+    assert!(
+        record_missing_lookup(&store, &identity, held.record.revision, NOW, NOW + 40002).is_err()
+    );
+    assert_eq!(store.read(&digest, "operation-1").unwrap().unwrap(), held);
+}
+
 /// Returns what this daemon serves.
 fn served() -> ServedTarget {
     ServedTarget {

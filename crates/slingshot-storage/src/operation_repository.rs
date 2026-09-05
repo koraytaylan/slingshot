@@ -56,6 +56,9 @@ fn statement(purpose: &str) -> &'static str {
 /// Reason a repository call could not do what it was asked.
 #[derive(Debug, thiserror::Error)]
 pub enum RepositoryFailure {
+    /// Remote evidence changed or disappeared before local mutation.
+    #[error("the retained remote observation changed")]
+    RemoteObservationMoved,
     /// The database itself refused.
     #[error(transparent)]
     Database(#[from] DatabaseFailure),
@@ -271,6 +274,24 @@ pub struct OperationSummary {
     pub workflow_correlation_identifier: Option<String>,
 }
 
+/// Execution input read together with its lifecycle and revision in one
+/// database snapshot. Reading this value does not claim or authorize execution;
+/// the scheduler must still acquire the applicable durable fence.
+pub struct RetainedExecutionInput {
+    /// Identity and lifecycle from the same read transaction as the payload.
+    pub summary: OperationSummary,
+    /// Exact admitted bytes, preserved for submission and recovery.
+    pub canonical_command: String,
+    /// Runtime contract under which these bytes were admitted.
+    pub daemon_runtime_contract_digest: String,
+}
+
+impl core::fmt::Debug for RetainedExecutionInput {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("RetainedExecutionInput([redacted])")
+    }
+}
+
 /// What admitting an operation did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdmissionOutcome {
@@ -451,7 +472,7 @@ impl OperationRepository {
             )?;
         }
         let transaction = write_transaction(self.database.connection())?;
-        let outcome = match self.read_within(
+        let outcome = match Self::read_within(
             &transaction,
             &request.author_target_identity_digest,
             &request.operation_identifier,
@@ -548,20 +569,48 @@ impl OperationRepository {
     ) -> Result<Option<OperationSummary>, RepositoryFailure> {
         let transaction = self.database.connection().unchecked_transaction()?;
         let found =
-            self.read_within(&transaction, author_target_identity_digest, operation_identifier)?;
+            Self::read_within(&transaction, author_target_identity_digest, operation_identifier)?;
         transaction.commit()?;
         Ok(found)
     }
 
     /// Reads one operation and its outstanding recovery in one transaction.
-    fn read_within(
+    ///
+    /// Payload reads are separate from status reads so command arguments never
+    /// travel through the public operation summary by accident.
+    pub fn read_execution_input(
         &self,
+        author_target_identity_digest: &str,
+        operation_identifier: &str,
+    ) -> Result<Option<RetainedExecutionInput>, RepositoryFailure> {
+        let transaction = self.database.connection().unchecked_transaction()?;
+        let Some(summary) =
+            Self::read_within(&transaction, author_target_identity_digest, operation_identifier)?
+        else {
+            transaction.commit()?;
+            return Ok(None);
+        };
+        let (canonical_command, daemon_runtime_contract_digest) = transaction.query_row(
+            statement("read retained execution input inside its target partition"),
+            (author_target_identity_digest, operation_identifier),
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        transaction.commit()?;
+        Ok(Some(RetainedExecutionInput {
+            summary,
+            canonical_command,
+            daemon_runtime_contract_digest,
+        }))
+    }
+
+    /// Reads one operation and its outstanding recovery in one transaction.
+    pub(crate) fn read_within(
         transaction: &rusqlite::Transaction<'_>,
         author_target_identity_digest: &str,
         operation_identifier: &str,
     ) -> Result<Option<OperationSummary>, RepositoryFailure> {
         let recovery =
-            self.read_recovery(transaction, author_target_identity_digest, operation_identifier)?;
+            Self::read_recovery(transaction, author_target_identity_digest, operation_identifier)?;
         let digest = author_target_identity_digest.to_owned();
         let identifier = operation_identifier.to_owned();
         let mut statement =
@@ -584,7 +633,7 @@ impl OperationRepository {
         author_target_identity_digest: &str,
         operation_identifier: &str,
     ) -> Result<OperationSummary, RepositoryFailure> {
-        self.read_within(transaction, author_target_identity_digest, operation_identifier)?
+        Self::read_within(transaction, author_target_identity_digest, operation_identifier)?
             .ok_or_else(|| RepositoryFailure::NoSuchOperation {
                 identifier: operation_identifier.to_owned(),
             })
@@ -655,7 +704,6 @@ impl OperationRepository {
 
     /// Reads the one recovery fact an operation is waiting on.
     fn read_recovery(
-        &self,
         transaction: &rusqlite::Transaction<'_>,
         author_target_identity_digest: &str,
         operation_identifier: &str,
@@ -713,6 +761,7 @@ impl OperationRepository {
             author_target_identity_digest,
             operation_identifier,
             expected_revision,
+            None,
             |stored| {
                 let folded = stored.record.fold(fact)?;
                 let settled = Self::settlement(stored, &folded, now_unix_milliseconds);
@@ -720,6 +769,283 @@ impl OperationRepository {
                     .then(|| (stored.clone(), folded, settled)))
             },
         )
+    }
+
+    /// Applies a local fact only while the exact remote child used to validate
+    /// it remains current. Both records are checked in one write transaction.
+    pub fn apply_for_retained_agent(
+        &self,
+        expected: &crate::agent_job_repository::AgentSubmission,
+        expected_revision: u64,
+        fact: &OperationFact,
+        now_unix_milliseconds: u64,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        Self::require_bounded(fact)?;
+        self.mutate(
+            &expected.identity.author_target_identity_digest,
+            &expected.identity.operation_identifier,
+            expected_revision,
+            Some(expected),
+            |stored| {
+                if stored.selected_environment_revision
+                    != expected.identity.selected_environment_revision
+                {
+                    return Err(RepositoryFailure::RemoteObservationMoved);
+                }
+                let folded = stored.record.fold(fact)?;
+                let settled = Self::settlement(stored, &folded, now_unix_milliseconds);
+                Ok((folded.revision != stored.record.revision)
+                    .then(|| (stored.clone(), folded, settled)))
+            },
+        )
+    }
+
+    /// Records one failed recovery attempt while the entire captured subscription
+    /// context still matches. This changes only local recovery scheduling and
+    /// cannot replace existing execution evidence or mark the operation terminal.
+    pub fn record_subscription_probe_recovery(
+        &self,
+        ledger: &crate::agent_subscription_ledger::AgentSubscriptionLedger,
+        expected: &crate::agent_subscription_ledger::SubscriptionRecoveryView<'_>,
+        agent_operation_identifier: &str,
+        expected_revision: u64,
+        recovery: RecoveryFact,
+        now: u64,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        let refuse = || RepositoryFailure::RemoteObservationMoved;
+        if !self.database.shares_database_with(ledger.database()) || now > i64::MAX as u64 {
+            return Err(refuse());
+        }
+        let member = expected.members().iter().find(|member| {
+            member.identity.agent_operation_identifier == agent_operation_identifier
+        }).ok_or_else(refuse)?;
+        if now < member.recorded_at_unix_milliseconds { return Err(refuse()); }
+        let fact = OperationFact::Recovery { recovery: recovery.clone() };
+        Self::require_bounded(&fact)?;
+        let transaction = write_transaction(self.database.connection())?;
+        ledger.require_recovery_current(&transaction, expected).map_err(|_| refuse())?;
+        let identity = &member.identity;
+        let stored = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        require_revision(&stored, expected_revision)?;
+        let previous = stored.record.outstanding_recovery.as_ref();
+        if stored.record.lifecycle_state.is_terminal()
+            || stored.selected_environment_revision != identity.selected_environment_revision
+            || previous.is_some_and(|held| held.evidence != recovery.evidence)
+            || recovery.attempt_count != previous.map_or(Some(1), |held| held.attempt_count.checked_add(1)).ok_or_else(refuse)?
+        {
+            return Err(refuse());
+        }
+        let folded = stored.record.fold(&fact)?;
+        self.write_folded(&transaction, &stored, &folded, Self::settlement(&stored, &folded, now))?;
+        let result = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        transaction.commit()?;
+        Ok(result)
+    }
+
+    /// Settles unavailable prior-generation truth only while the complete
+    /// subscription recovery view still matches in one write transaction.
+    /// The caller must authenticate the generation change and establish missing
+    /// physical truth first. Network refusal is not this evidence. Known success
+    /// must instead continue its separate result-acquisition path.
+    pub fn settle_unavailable_generation(
+        &self,
+        ledger: &crate::agent_subscription_ledger::AgentSubscriptionLedger,
+        expected: &crate::agent_subscription_ledger::SubscriptionRecoveryView<'_>,
+        agent_operation_identifier: &str,
+        current_generation: u64,
+        expected_revision: u64,
+        now: u64,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        use slingshot_domain::operation::{OperationExecutionCertainty, RecoveryExecutionEvidence,
+            TerminalFailure, TerminalFailureDisposition, TerminalFailureKind};
+        let refuse = || RepositoryFailure::RemoteObservationMoved;
+        if !self.database.shares_database_with(ledger.database())
+            || current_generation == 0
+            || current_generation == expected.ledger().agent_event_store_generation
+            || now > i64::MAX as u64
+        {
+            return Err(refuse());
+        }
+        let member = expected.members().iter().find(|member| {
+            member.identity.agent_operation_identifier == agent_operation_identifier
+        }).ok_or_else(refuse)?;
+        if member.identity.agent_event_store_generation == current_generation
+            || now < member.recorded_at_unix_milliseconds
+            || member.observation.state.is_terminal()
+            || member.terminal_disposition.is_some()
+        {
+            return Err(refuse());
+        }
+        let transaction = write_transaction(self.database.connection())?;
+        ledger.require_recovery_current(&transaction, expected).map_err(|_| refuse())?;
+        let identity = &member.identity;
+        let stored = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        require_revision(&stored, expected_revision)?;
+        if stored.record.lifecycle_state.is_terminal()
+            || stored.selected_environment_revision != identity.selected_environment_revision
+            || stored.record.outstanding_recovery.as_ref().is_some_and(|recovery| {
+                matches!(recovery.evidence,
+                    RecoveryExecutionEvidence::AuthoritativeRemoteSuccess
+                    | RecoveryExecutionEvidence::ExecutionCertainty {
+                        certainty: OperationExecutionCertainty::ConfirmedNotExecuted
+                    })
+            })
+        {
+            return Err(refuse());
+        }
+        let certainty = stored.record.outstanding_recovery.as_ref().and_then(|recovery| {
+            match recovery.evidence {
+                RecoveryExecutionEvidence::ExecutionCertainty { certainty }
+                    if certainty != OperationExecutionCertainty::ConfirmedNotExecuted => Some(certainty),
+                _ => None,
+            }
+        }).unwrap_or(OperationExecutionCertainty::RemoteOutcomeUnknown);
+        let fact = OperationFact::Terminal { failure: TerminalFailure {
+            kind: TerminalFailureKind::RemoteStateLost,
+            disposition: TerminalFailureDisposition::FailClosedIndeterminate { certainty },
+            metadata: None,
+        }};
+        let folded = stored.record.fold(&fact)?;
+        self.write_folded(&transaction, &stored, &folded, Some(now))?;
+        let result = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        transaction.commit()?;
+        Ok(result)
+    }
+
+    /// Atomically records a command-validated no-effect refusal and its complete
+    /// failed remote snapshot. Callers must authenticate and classify the failure
+    /// first; unknown outcomes must never enter this method.
+    pub fn settle_rejected_agent_snapshot(
+        &self,
+        expected: &crate::agent_job_repository::AgentSubmission,
+        expected_revision: u64,
+        snapshot: &crate::agent_job_repository::FailedAgentSnapshot,
+        diagnosis: Option<crate::agent_job_repository::RejectedAgentDiagnosis>,
+        now: u64,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        self.settle_failed_agent_snapshot(expected, expected_revision, snapshot, diagnosis, false, now)
+    }
+
+    /// Atomically settles a command-validated positive replication admission
+    /// count as remote failure, never as nonexecution or publisher delivery.
+    pub fn settle_partial_admission_snapshot(
+        &self,
+        expected: &crate::agent_job_repository::AgentSubmission,
+        expected_revision: u64,
+        snapshot: &crate::agent_job_repository::FailedAgentSnapshot,
+        now: u64,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        self.settle_failed_agent_snapshot(expected, expected_revision, snapshot, None, true, now)
+    }
+
+    fn settle_failed_agent_snapshot(
+        &self,
+        expected: &crate::agent_job_repository::AgentSubmission,
+        expected_revision: u64,
+        snapshot: &crate::agent_job_repository::FailedAgentSnapshot,
+        diagnosis: Option<crate::agent_job_repository::RejectedAgentDiagnosis>,
+        partial_admission: bool,
+        now: u64,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        use slingshot_domain::operation::{RecoveryExecutionEvidence, TerminalFailure, TerminalFailureDisposition, TerminalFailureKind, OperationExecutionCertainty};
+        let refuse = || RepositoryFailure::RemoteObservationMoved;
+        let transaction = write_transaction(self.database.connection())?;
+        let identity = &expected.identity;
+        let current = crate::agent_job_repository::read_submission(
+            &transaction, &identity.author_target_identity_digest, &identity.agent_operation_identifier,
+        ).map_err(|_| refuse())?;
+        if current.as_ref() != Some(expected) || expected.terminal_disposition.is_some() {
+            return Err(refuse());
+        }
+        let stored = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        require_revision(&stored, expected_revision)?;
+        if stored.selected_environment_revision != identity.selected_environment_revision
+            || stored.record.lifecycle_state.is_terminal()
+            || stored.record.outstanding_recovery.as_ref().is_some_and(|fact| fact.evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess)
+        { return Err(refuse()); }
+        let fact = OperationFact::Terminal { failure: TerminalFailure {
+            kind: if partial_admission { TerminalFailureKind::RemoteFailed } else { TerminalFailureKind::Rejected },
+            disposition: if partial_admission { TerminalFailureDisposition::AuthoritativeRemoteFailure } else { TerminalFailureDisposition::AuthoritativeNonExecution { certainty: OperationExecutionCertainty::ConfirmedNotExecuted } },
+            metadata: diagnosis.map(|diagnosis| diagnosis.as_text().to_owned()),
+        } };
+        Self::require_bounded(&fact)?;
+        let folded = stored.record.fold(&fact)?;
+        self.write_folded(&transaction, &stored, &folded, Some(now))?;
+        crate::agent_job_repository::write_failed_snapshot(&transaction, expected, snapshot, partial_admission, now)
+            .map_err(|_| refuse())?;
+        let result = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        transaction.commit()?;
+        Ok(result)
+    }
+
+    /// Records or reuses the first artifact-acquisition start while the local
+    /// revision and full retained child still match. The anchor cannot drift
+    /// to a different artifact or be refreshed by a retry.
+    pub fn begin_artifact_acquisition(
+        &self,
+        expected: &crate::agent_job_repository::AgentSubmission,
+        expected_revision: u64,
+        artifact_identifier: &str,
+        artifact_slot: &str,
+        content_digest: &str,
+        now: u64,
+    ) -> Result<u64, RepositoryFailure> {
+        let refuse = || RepositoryFailure::RemoteObservationMoved;
+        if [artifact_identifier, content_digest].iter().any(|text| {
+            text.len() != 64
+                || !text.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        }) || !matches!(artifact_slot, "content_package" | "loaded_content_json")
+        {
+            return Err(refuse());
+        }
+        let now = i64::try_from(now).map_err(|_| refuse())?;
+        let transaction = write_transaction(self.database.connection())?;
+        let identity = &expected.identity;
+        let current = crate::agent_job_repository::read_submission(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.agent_operation_identifier,
+        )
+        .map_err(|_| refuse())?;
+        if current.as_ref() != Some(expected) || expected.terminal_disposition.is_some() {
+            return Err(refuse());
+        }
+        let stored = self.read_required(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )?;
+        require_revision(&stored, expected_revision)?;
+        if stored.selected_environment_revision != identity.selected_environment_revision
+            || stored.record.lifecycle_state.is_terminal()
+            || !stored.record.outstanding_recovery.as_ref().is_some_and(|fact| fact.evidence == slingshot_domain::operation::RecoveryExecutionEvidence::AuthoritativeRemoteSuccess)
+        { return Err(refuse()); }
+        transaction.execute(
+            statement("record the first artifact acquisition for one retained child"),
+            rusqlite::params![
+                artifact_identifier,
+                artifact_slot,
+                content_digest,
+                now,
+                identity.author_target_identity_digest,
+                identity.agent_operation_identifier
+            ],
+        )?;
+        let (identifier, slot, digest, started): (String, String, String, i64) = transaction
+            .query_row(
+                statement("read one retained artifact acquisition anchor"),
+                rusqlite::params![
+                    identity.author_target_identity_digest,
+                    identity.agent_operation_identifier
+                ],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+        if identifier != artifact_identifier || slot != artifact_slot || digest != content_digest {
+            return Err(refuse());
+        }
+        let started = u64::try_from(started).map_err(|_| refuse())?;
+        transaction.commit()?;
+        Ok(started)
     }
 
     /// Commits a complete successful result and its terminal lifecycle together.
@@ -734,13 +1060,106 @@ impl OperationRepository {
         operation_identifier: &str,
         settlement: &SuccessfulSettlement,
     ) -> Result<OperationSummary, RepositoryFailure> {
+        self.settle_success_guarded(
+            author_target_identity_digest,
+            operation_identifier,
+            settlement,
+            None,
+            None,
+            &[],
+        )
+    }
+
+    /// Publishes a verified remote result only while the exact retained child
+    /// and local owner revision still match, in the same immediate transaction.
+    /// This is a persistence guard, not proof of wire/result validation.
+    pub fn settle_success_for_retained_agent(
+        &self,
+        expected: &crate::agent_job_repository::AgentSubmission,
+        settlement: &SuccessfulSettlement,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        self.settle_success_guarded(
+            &expected.identity.author_target_identity_digest,
+            &expected.identity.operation_identifier,
+            settlement,
+            Some(expected),
+            None,
+            &[],
+        )
+    }
+
+    /// Atomically publishes the successful remote snapshot and complete local result.
+    /// The exact child and local revision guards apply to all writes.
+    pub fn settle_success_for_agent_snapshot(
+        &self,
+        expected: &crate::agent_job_repository::AgentSubmission,
+        settlement: &SuccessfulSettlement,
+        snapshot: &crate::agent_job_repository::SuccessfulAgentSnapshot,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        self.settle_success_guarded(
+            &expected.identity.author_target_identity_digest,
+            &expected.identity.operation_identifier,
+            settlement,
+            Some(expected),
+            Some(snapshot),
+            &[],
+        )
+    }
+
+    /// Publishes a complete artifact result and consumes exactly its producer
+    /// holds in the same guarded transaction. A failure preserves every hold.
+    pub fn settle_success_for_publications(
+        &self,
+        expected: &crate::agent_job_repository::AgentSubmission,
+        settlement: &SuccessfulSettlement,
+        snapshot: &crate::agent_job_repository::SuccessfulAgentSnapshot,
+        publications: &[crate::persistent_capacity::ArtifactPublication],
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        if publications.len() != settlement.artifacts.len() || publications.is_empty() {
+            return Err(RepositoryFailure::RemoteObservationMoved);
+        }
+        self.settle_success_guarded(
+            &expected.identity.author_target_identity_digest,
+            &expected.identity.operation_identifier,
+            settlement,
+            Some(expected),
+            Some(snapshot),
+            publications,
+        )
+    }
+
+    fn settle_success_guarded(
+        &self,
+        author_target_identity_digest: &str,
+        operation_identifier: &str,
+        settlement: &SuccessfulSettlement,
+        remote: Option<&crate::agent_job_repository::AgentSubmission>,
+        snapshot: Option<&crate::agent_job_repository::SuccessfulAgentSnapshot>,
+        publications: &[crate::persistent_capacity::ArtifactPublication],
+    ) -> Result<OperationSummary, RepositoryFailure> {
         let disposition = settlement.disposition()?;
         if let Some(inline) = &settlement.inline_result {
             require_within("inline result", "maximum_inline_machine_result_bytes", inline)?;
         }
         let transaction = write_transaction(self.database.connection())?;
+        if let Some(expected) = remote {
+            let current = crate::agent_job_repository::read_submission(
+                &transaction,
+                &expected.identity.author_target_identity_digest,
+                &expected.identity.agent_operation_identifier,
+            )
+            .map_err(|_| RepositoryFailure::RemoteObservationMoved)?;
+            if current.as_ref() != Some(expected) || expected.terminal_disposition.is_some() {
+                return Err(RepositoryFailure::RemoteObservationMoved);
+            }
+        }
         let stored =
             self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
+        if remote.is_some_and(|expected| {
+            stored.selected_environment_revision != expected.identity.selected_environment_revision
+        }) {
+            return Err(RepositoryFailure::RemoteObservationMoved);
+        }
         require_revision(&stored, settlement.expected_revision)?;
         if stored.record.lifecycle_state != settlement.expected_lifecycle_state {
             return Err(RepositoryFailure::LifecycleMoved {
@@ -772,6 +1191,28 @@ impl OperationRepository {
             &folded,
             Some(settlement.settled_at_unix_milliseconds),
         )?;
+        if let Some(snapshot) = snapshot {
+            crate::agent_job_repository::write_successful_snapshot(
+                &transaction,
+                remote.ok_or(RepositoryFailure::RemoteObservationMoved)?,
+                snapshot,
+                settlement.settled_at_unix_milliseconds,
+            )
+            .map_err(|_| RepositoryFailure::RemoteObservationMoved)?;
+        }
+        for (publication, artifact) in publications.iter().zip(&settlement.artifacts) {
+            let changed = transaction.execute(
+                statement("consume one completed artifact publication"),
+                rusqlite::params![
+                    publication.identifier(),
+                    artifact.artifact_identifier,
+                    artifact.content_digest
+                ],
+            )?;
+            if changed != 1 {
+                return Err(RepositoryFailure::RemoteObservationMoved);
+            }
+        }
         let current =
             self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
         transaction.commit()?;
@@ -841,9 +1282,21 @@ impl OperationRepository {
         author_target_identity_digest: &str,
         operation_identifier: &str,
         expected_revision: u64,
+        remote: Option<&crate::agent_job_repository::AgentSubmission>,
         change: impl FnOnce(&OperationSummary) -> Result<Change, RepositoryFailure>,
     ) -> Result<OperationSummary, RepositoryFailure> {
         let transaction = write_transaction(self.database.connection())?;
+        if let Some(expected) = remote {
+            let current = crate::agent_job_repository::read_submission(
+                &transaction,
+                &expected.identity.author_target_identity_digest,
+                &expected.identity.agent_operation_identifier,
+            )
+            .map_err(|_| RepositoryFailure::RemoteObservationMoved)?;
+            if current.as_ref() != Some(expected) || expected.terminal_disposition.is_some() {
+                return Err(RepositoryFailure::RemoteObservationMoved);
+            }
+        }
         let stored =
             self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
         require_revision(&stored, expected_revision)?;
@@ -1165,6 +1618,83 @@ impl OperationRepository {
         } else {
             Err(RepositoryFailure::ReceiptsExhausted { allowed: facts.limit })
         }
+    }
+
+    /// Activates the exact persisted resume receipt once, guarded by the local
+    /// source revision and complete remote child. A stale/replayed receipt does
+    /// not clear a later pause. This is not a scheduler lease or permission to POST.
+    pub fn activate_retained_recovery(
+        &self,
+        expected: &crate::agent_job_repository::AgentSubmission,
+        receipt: &RecoveryResumeReceipt,
+        category: RecoveryCategory,
+        now_unix_milliseconds: u64,
+    ) -> Result<Option<OperationSummary>, RepositoryFailure> {
+        let identity = &expected.identity;
+        if receipt.operation_identifier != identity.operation_identifier
+            || receipt.selected_environment_revision != identity.selected_environment_revision
+            || now_unix_milliseconds < receipt.recorded_at_unix_milliseconds
+        {
+            return Err(RepositoryFailure::RemoteObservationMoved);
+        }
+        let transaction = write_transaction(self.database.connection())?;
+        let persisted = Self::receipt_within(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+            &receipt.source_fingerprint,
+        )?;
+        if persisted.as_ref() != Some(receipt) {
+            return Err(RepositoryFailure::RemoteObservationMoved);
+        }
+        let stored = self.read_required(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )?;
+        if stored.record.revision != receipt.applied_operation_revision
+            || stored.record.lifecycle_state.is_terminal()
+        {
+            return Ok(None);
+        }
+        let remote = crate::agent_job_repository::read_submission(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.agent_operation_identifier,
+        )
+        .map_err(|_| RepositoryFailure::RemoteObservationMoved)?;
+        if remote.as_ref() != Some(expected)
+            || expected.terminal_disposition.is_some()
+            || stored.selected_environment_revision != receipt.selected_environment_revision
+        {
+            return Err(RepositoryFailure::RemoteObservationMoved);
+        }
+        let recovery = stored
+            .record
+            .outstanding_recovery
+            .as_ref()
+            .filter(|fact| fact.manual_resume_eligible && fact.category == category)
+            .ok_or(RepositoryFailure::RemoteObservationMoved)?;
+        let fact = OperationFact::Recovery {
+            recovery: RecoveryFact {
+                manual_resume_eligible: false,
+                attempt_count: 0,
+                retry_delay_milliseconds: 0,
+                retry_observed_at_unix_milliseconds: now_unix_milliseconds,
+                detail: "recovery activated by a persisted resume receipt".to_owned(),
+                ..recovery.clone()
+            },
+        };
+        Self::require_bounded(&fact)?;
+        let folded = stored.record.fold(&fact)?;
+        self.write_folded(&transaction, &stored, &folded, None)?;
+        let activated = self.read_required(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )?;
+        transaction.commit()?;
+        Ok(Some(activated))
     }
 
     /// Returns one recovery-resume receipt, or nothing.

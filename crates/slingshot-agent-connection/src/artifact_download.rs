@@ -36,13 +36,7 @@ use crate::author_hypertext_transfer_protocol_policy::{ResponseHead, ResponseRef
 use crate::structured_job_result::STRUCTURED_RESULT_SLOT;
 
 /// The fixed route artifacts are fetched from, beneath the author's base.
-pub const ARTIFACT_ROUTE: &str = "/libs/slingshot/agent/artifacts";
-
-/// The query member naming which operation's artifact is wanted.
-pub const OPERATION_QUERY_MEMBER: &str = "agent_operation_identifier";
-
-/// The query member naming which slot is wanted.
-pub const SLOT_QUERY_MEMBER: &str = "artifact_slot";
+pub const ARTIFACT_ROUTE: &str = "/bin/slingshot-agent/operations";
 
 /// Characters a route segment keeps as itself.
 const UNRESERVED: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
@@ -60,9 +54,90 @@ pub const REMOTE_SLOT_MEDIA_TYPES: &[(&str, &str)] = &[
     (LOADED_CONTENT_SLOT, LOADED_CONTENT_MEDIA_TYPE),
 ];
 
+/// A bounded, identity-checked unavailable document. Only this evidence may
+/// reach unavailable/grace classification; raw status codes prove nothing.
+#[derive(Debug)]
+pub struct ValidatedArtifactUnavailable {
+    reason: slingshot_agent_protocol::artifact_unavailable::UnavailableReason,
+}
+
+impl ValidatedArtifactUnavailable {
+    /// The reason paired with its required HTTP status.
+    pub fn reason(&self) -> slingshot_agent_protocol::artifact_unavailable::UnavailableReason {
+        self.reason
+    }
+}
+
+/// Opaque protocol refusal without remote metadata in diagnostics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("artifact unavailable response is not verified")]
+pub struct UnavailableDecodeRefusal;
+
+/// Decodes a closed unavailable body against the retained submission and local
+/// artifact derivation. The caller must first validate the HTTP head/framing
+/// and bind the submission to its selected connection and retained command.
+pub fn decode_artifact_unavailable(
+    status: u16,
+    body: &[u8],
+    submission: &crate::command_submission::Submission,
+    artifact_identifier: &str,
+    artifact_slot: &str,
+) -> Result<ValidatedArtifactUnavailable, UnavailableDecodeRefusal> {
+    use slingshot_agent_protocol::artifact_unavailable::{ArtifactUnavailable, UnavailableReason};
+    if body.len() as u64
+        > AuthorAgentTransportContract::embedded().limit("maximum_agent_protocol_document_bytes")
+        || artifact_identifier.is_empty()
+        || artifact_identifier.len() > 128
+        || submission.operation.agent_event_store_generation == 0
+        || submission.operation.agent_operation_identifier.len() != 64
+        || !submission
+            .operation
+            .agent_operation_identifier
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(UnavailableDecodeRefusal);
+    }
+    require_remote_slot(artifact_slot).map_err(|_| UnavailableDecodeRefusal)?;
+    let document: ArtifactUnavailable =
+        serde_json::from_slice(body).map_err(|_| UnavailableDecodeRefusal)?;
+    let installed = slingshot_domain::selected_command_contract_identity::SelectedCommandContractIdentity::installed(&submission.provenance.command_contract.command_wire_name).map_err(|_| UnavailableDecodeRefusal)?;
+    slingshot_agent_protocol::wire_contract::ExpectedProvenance {
+        command_contract: installed,
+        canonical_json_contract_digest:
+            slingshot_domain::command::schema::canonical_contract_digest(),
+        transport_contract_digest: AuthorAgentTransportContract::embedded_digest(),
+    }
+    .require_matching(&document.provenance)
+    .map_err(|_| UnavailableDecodeRefusal)?;
+    if document.provenance != submission.provenance
+        || document.agent_event_store_generation
+            != submission.operation.agent_event_store_generation
+        || document.agent_operation_identifier != submission.operation.agent_operation_identifier
+        || document.artifact_identifier != artifact_identifier
+        || document.artifact_slot != artifact_slot
+        || !matches!(
+            (status, document.reason),
+            (404, UnavailableReason::Missing) | (410, UnavailableReason::RetentionExpired)
+        )
+    {
+        return Err(UnavailableDecodeRefusal);
+    }
+    Ok(ValidatedArtifactUnavailable { reason: document.reason })
+}
+
 /// Why one artifact could not be fetched or published.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DownloadRefusal {
+    /// A route placeholder was not in the protocol's canonical ASCII grammar.
+    #[error("the artifact route contains a noncanonical placeholder")]
+    InvalidRouteSegment,
+    /// The operation belongs to a different frozen author connection.
+    ///
+    /// No request was made.  This is distinct from a server redirect because
+    /// the mismatch was found locally before any response existed.
+    #[error("the operation belongs to another selected author connection")]
+    SelectedConnectionMismatch,
     /// The response head is one the shared policy refuses.
     #[error(transparent)]
     Head(#[from] ResponseRefusal),
@@ -145,20 +220,30 @@ pub fn encoded_segment(segment: &str) -> String {
 /// Returns the one route this artifact is fetched from.
 ///
 /// Built from the snapshot's own base and nothing a response said. Every
-/// segment is encoded once, so an operation identifier or a slot carrying a
-/// separator asks for the artifact it names rather than choosing a route.
+/// placeholder must already have the protocol's canonical ASCII spelling.
 #[must_use]
 pub fn artifact_route(
     author_base: &str,
     agent_operation_identifier: &str,
     artifact_slot: &str,
-) -> String {
-    format!(
-        "{}{ARTIFACT_ROUTE}?{OPERATION_QUERY_MEMBER}={}&{SLOT_QUERY_MEMBER}={}",
+) -> Result<String, DownloadRefusal> {
+    let maximum =
+        AuthorAgentTransportContract::embedded().limit("maximum_agent_operation_identifier_bytes");
+    if agent_operation_identifier.is_empty()
+        || agent_operation_identifier.len() as u64 > maximum
+        || !agent_operation_identifier.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
+        })
+    {
+        return Err(DownloadRefusal::InvalidRouteSegment);
+    }
+    require_remote_slot(artifact_slot)?;
+    Ok(format!(
+        "{}{ARTIFACT_ROUTE}/{}/artifacts/{}",
         author_base.trim_end_matches('/'),
         encoded_segment(agent_operation_identifier),
         encoded_segment(artifact_slot)
-    )
+    ))
 }
 
 /// Requires a slot to be one a remote artifact may fill.
@@ -331,7 +416,9 @@ impl ArtifactTransfer {
     }
 }
 
-/// What an agent said when an artifact was not there.
+/// Legacy metadata-only input for unavailable policy tests. This is not the
+/// wire document and does not prove the protocol's artifact-identifier echo;
+/// network callers must use `decode_artifact_unavailable` first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactUnavailable {
     /// Which operation it claims to be about.

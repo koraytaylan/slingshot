@@ -455,6 +455,7 @@ fn publish_staged_no_replace(
     content: &Path,
     staging: &Path,
     content_digest: &str,
+    expected: HandleSnapshot,
 ) -> Result<(), ArtifactFailure> {
     use rustix::fs::{AtFlags, CWD, Mode, OFlags, linkat, openat};
     use std::os::fd::AsRawFd as _;
@@ -473,6 +474,9 @@ fn publish_staged_no_replace(
     .map_err(|failure| ArtifactFailure::FilesystemRefused(failure.to_string()))?;
     let staged = std::fs::File::from(staged);
     let snapshot = HandleSnapshot::of(&staged)?;
+    if snapshot != expected {
+        return Err(ArtifactFailure::FilesystemRefused("the private stage changed".to_owned()));
+    }
     if staged.metadata().map_err(refused)?.nlink() != 1 {
         return Err(ArtifactFailure::NotPrivate);
     }
@@ -501,6 +505,7 @@ fn publish_staged_no_replace(
     _content: &Path,
     _staging: &Path,
     _content_digest: &str,
+    _expected: HandleSnapshot,
 ) -> Result<(), ArtifactFailure> {
     Err(ArtifactFailure::FilesystemRefused(
         "this platform has no verified no-replace publication primitive".to_owned(),
@@ -512,6 +517,173 @@ fn publish_staged_no_replace(
 pub struct ArtifactStore {
     /// Where addressed content lives.
     content: PathBuf,
+}
+
+/// A private stage owned by this invocation, never a digest-addressed artifact.
+struct PrivateStage {
+    path: PathBuf,
+    identity: HandleSnapshot,
+}
+
+impl Drop for PrivateStage {
+    fn drop(&mut self) {
+        // Do not remove a different file installed at a replaced staging name.
+        if std::fs::symlink_metadata(&self.path).is_ok_and(|metadata| {
+            metadata.is_file()
+                && file_identity(&metadata) == (self.identity.device, self.identity.number)
+        }) {
+            std::fs::remove_file(&self.path).ok();
+        }
+    }
+}
+
+/// Verified private content awaiting an explicit publication decision.
+/// Dropping it removes only its own stage. The caller must keep its capacity
+/// reservation alive through staging and the eventual database handoff.
+#[must_use = "retain the stage until publication, or drop it to abandon the transfer"]
+pub struct StagedArtifact<'store> {
+    store: &'store ArtifactStore,
+    stage: PrivateStage,
+    metadata: ArtifactMetadata,
+}
+
+/// Incremental private staging for an asynchronous transport's bounded chunks.
+/// Abandonment removes the private stage. Finishing verifies bytes but does not
+/// establish transport framing; the caller must prove that before publication.
+#[must_use = "keep the writer until the framed transfer finishes or abandon it"]
+pub struct ArtifactStageWriter<'store> {
+    store: &'store ArtifactStore,
+    stage: PrivateStage,
+    file: std::fs::File,
+    request: InstallationRequest,
+    hasher: Sha256,
+    received: u64,
+    allowed: u64,
+    expected: Option<(u64, String)>,
+    poisoned: bool,
+}
+
+impl core::fmt::Debug for ArtifactStageWriter<'_> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("ArtifactStageWriter([redacted])")
+    }
+}
+
+impl<'store> ArtifactStageWriter<'store> {
+    /// Appends one chunk without retaining it. An error permanently refuses
+    /// this writer, even if a caller attempts to continue or finish it.
+    pub fn write_chunk(&mut self, bytes: &[u8]) -> Result<(), ArtifactFailure> {
+        if self.poisoned {
+            return Err(ArtifactFailure::FilesystemRefused(
+                "the artifact stage was refused".to_owned(),
+            ));
+        }
+        self.poisoned = true;
+        let length = self.received.saturating_add(bytes.len() as u64);
+        if length > self.allowed {
+            return Err(ArtifactFailure::ContentTooLong { actual: length, allowed: self.allowed });
+        }
+        self.file.write_all(bytes).map_err(refused)?;
+        self.hasher.update(bytes);
+        self.received = length;
+        self.poisoned = false;
+        Ok(())
+    }
+
+    /// Verifies complete length/digest and synchronizes the still-private file.
+    pub fn finish(mut self) -> Result<StagedArtifact<'store>, ArtifactFailure> {
+        if self.poisoned {
+            return Err(ArtifactFailure::FilesystemRefused(
+                "the artifact stage was refused".to_owned(),
+            ));
+        }
+        let digest = render(&self.hasher.finalize());
+        if let Some((length, expected)) = &self.expected {
+            if self.received != *length {
+                return Err(ArtifactFailure::LengthMismatch {
+                    actual: self.received,
+                    expected: *length,
+                });
+            }
+            if digest != *expected {
+                return Err(ArtifactFailure::DigestMismatch {
+                    actual: digest,
+                    expected: expected.clone(),
+                });
+            }
+        }
+        self.file.sync_all().map_err(refused)?;
+        let current = HandleSnapshot::of(&self.file)?;
+        if current.byte_length != self.received {
+            return Err(ArtifactFailure::LengthMismatch {
+                actual: current.byte_length,
+                expected: self.received,
+            });
+        }
+        self.stage.identity = current;
+        Ok(StagedArtifact {
+            store: self.store,
+            stage: self.stage,
+            metadata: ArtifactMetadata {
+                artifact_identifier: ArtifactIdentifier::derive(
+                    &self.request.installation_identifier,
+                    &self.request.author_target_identity_digest,
+                    &self.request.operation_identifier,
+                    &self.request.artifact_slot,
+                ),
+                artifact_slot: self.request.artifact_slot,
+                byte_length: self.received,
+                content_digest: digest,
+                descriptor: self.request.descriptor,
+                media_type: self.request.media_type,
+            },
+        })
+    }
+}
+
+impl core::fmt::Debug for StagedArtifact<'_> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("StagedArtifact([redacted])")
+    }
+}
+
+impl StagedArtifact<'_> {
+    /// Metadata measured from the private content; no readable association exists yet.
+    pub fn metadata(&self) -> &ArtifactMetadata {
+        &self.metadata
+    }
+
+    /// Opens the still-private bytes for semantic validation without exposing a
+    /// filesystem path or publishing content. The consumer must finish the
+    /// reader successfully before relying on the bytes it observed.
+    pub fn open_verified(&self) -> Result<VerifiedArtifactReader, ArtifactFailure> {
+        let file = open_without_following(&self.stage.path)?;
+        if HandleSnapshot::of(&file)? != self.stage.identity {
+            return Err(ArtifactFailure::FilesystemRefused("the private stage changed".to_owned()));
+        }
+        VerifiedArtifactReader::from_file(file, &self.metadata)
+    }
+
+    /// Publishes verified content without replacing an existing digest object.
+    /// This does not commit a database association or release caller capacity.
+    pub fn publish(self) -> Result<ArtifactMetadata, ArtifactFailure> {
+        let file = open_without_following(&self.stage.path)?;
+        if HandleSnapshot::of(&file)? != self.stage.identity {
+            return Err(ArtifactFailure::FilesystemRefused("the private stage changed".to_owned()));
+        }
+        self.store.require_existing(
+            &self.stage.path,
+            &self.metadata.content_digest,
+            self.metadata.byte_length,
+        )?;
+        self.store.publish(
+            &self.stage.path,
+            &self.metadata.content_digest,
+            self.metadata.byte_length,
+            self.stage.identity,
+        )?;
+        Ok(self.metadata.clone())
+    }
 }
 
 impl ArtifactStore {
@@ -554,57 +726,103 @@ impl ArtifactStore {
         request: &InstallationRequest,
         source: &mut Source,
     ) -> Result<ArtifactMetadata, ArtifactFailure> {
+        self.stage_expected(request, source, None)?.publish()
+    }
+
+    /// Installs only the exact content described by validated result metadata.
+    /// Length and digest are checked before a digest-named file is published.
+    /// The caller reserves capacity and validates command/slot provenance first.
+    ///
+    /// # Errors
+    ///
+    /// Refuses noncanonical digests, excessive or mismatched lengths, digest
+    /// disagreement and the same filesystem failures as [`Self::install`].
+    pub fn install_verified<Source: std::io::Read>(
+        &self,
+        request: &InstallationRequest,
+        source: &mut Source,
+        expected_byte_length: u64,
+        expected_digest: &str,
+    ) -> Result<ArtifactMetadata, ArtifactFailure> {
+        self.stage_verified(request, source, expected_byte_length, expected_digest)?.publish()
+    }
+
+    /// Verifies content in a private stage without publishing a digest object.
+    /// The caller must reserve capacity before invoking this method.
+    pub fn stage_verified<Source: std::io::Read>(
+        &self,
+        request: &InstallationRequest,
+        source: &mut Source,
+        expected_byte_length: u64,
+        expected_digest: &str,
+    ) -> Result<StagedArtifact<'_>, ArtifactFailure> {
+        if !is_canonical_digest(expected_digest) {
+            return Err(ArtifactFailure::DigestNotCanonical);
+        }
+        self.stage_expected(request, source, Some((expected_byte_length, expected_digest)))
+    }
+
+    /// Opens a private writer after the caller has reserved capacity.
+    pub fn begin_verified(
+        &self,
+        request: &InstallationRequest,
+        expected_byte_length: u64,
+        expected_digest: &str,
+    ) -> Result<ArtifactStageWriter<'_>, ArtifactFailure> {
+        if !is_canonical_digest(expected_digest) {
+            return Err(ArtifactFailure::DigestNotCanonical);
+        }
+        self.begin_staging(request, Some((expected_byte_length, expected_digest)))
+    }
+
+    fn begin_staging(
+        &self,
+        request: &InstallationRequest,
+        expected: Option<(u64, &str)>,
+    ) -> Result<ArtifactStageWriter<'_>, ArtifactFailure> {
         request.require_bounded()?;
-        let staging = self.content.join(format!("{}{STAGING_SUFFIX}", uuid::Uuid::new_v4()));
-        let (content_digest, byte_length) = match self.stream_into(&staging, source) {
-            Ok(completed) => completed,
-            Err(failure) => {
-                std::fs::remove_file(&staging).ok();
-                return Err(failure);
-            }
-        };
-        self.publish(&staging, &content_digest, byte_length)?;
-        Ok(ArtifactMetadata {
-            artifact_identifier: ArtifactIdentifier::derive(
-                &request.installation_identifier,
-                &request.author_target_identity_digest,
-                &request.operation_identifier,
-                &request.artifact_slot,
-            ),
-            artifact_slot: request.artifact_slot.clone(),
-            byte_length,
-            content_digest,
-            descriptor: request.descriptor.clone(),
-            media_type: request.media_type.clone(),
+        let maximum =
+            DaemonRuntimeContract::embedded().formula("maximum_individual_artifact_bytes");
+        let allowed = expected.map_or(maximum, |(length, _)| length);
+        if allowed > maximum {
+            return Err(ArtifactFailure::ContentTooLong { actual: allowed, allowed: maximum });
+        }
+        let path = self.content.join(format!("{}{STAGING_SUFFIX}", uuid::Uuid::new_v4()));
+        let file = create_private(&path)?;
+        let stage = PrivateStage { path, identity: HandleSnapshot::of(&file)? };
+        Ok(ArtifactStageWriter {
+            store: self,
+            stage,
+            file,
+            request: request.clone(),
+            hasher: Sha256::new(),
+            received: 0,
+            allowed,
+            expected: expected.map(|(length, digest)| (length, digest.to_owned())),
+            poisoned: false,
         })
     }
 
-    /// Writes every byte of `source` into `staging`, measuring as it goes.
-    fn stream_into<Source: std::io::Read>(
+    fn stage_expected<Source: std::io::Read>(
         &self,
-        staging: &Path,
+        request: &InstallationRequest,
         source: &mut Source,
-    ) -> Result<(String, u64), ArtifactFailure> {
-        let allowed =
-            DaemonRuntimeContract::embedded().formula("maximum_individual_artifact_bytes");
-        let mut file = create_private(staging)?;
-        let mut hasher = Sha256::new();
-        let mut byte_length = 0_u64;
+        expected: Option<(u64, &str)>,
+    ) -> Result<StagedArtifact<'_>, ArtifactFailure> {
+        let mut writer = self.begin_staging(request, expected)?;
         let mut transfer = vec![0_u8; TRANSFER_BYTES];
         loop {
-            let read = source.read(&mut transfer).map_err(refused)?;
+            let wanted =
+                usize::try_from(writer.allowed.saturating_sub(writer.received).saturating_add(1))
+                    .unwrap_or(TRANSFER_BYTES)
+                    .min(TRANSFER_BYTES);
+            let read = source.read(&mut transfer[..wanted]).map_err(refused)?;
             if read == 0 {
                 break;
             }
-            byte_length = byte_length.saturating_add(read as u64);
-            if byte_length > allowed {
-                return Err(ArtifactFailure::ContentTooLong { actual: byte_length, allowed });
-            }
-            hasher.update(&transfer[..read]);
-            file.write_all(&transfer[..read]).map_err(refused)?;
+            writer.write_chunk(&transfer[..read])?;
         }
-        file.sync_all().map_err(refused)?;
-        Ok((render(&hasher.finalize()), byte_length))
+        writer.finish()
     }
 
     /// Publishes one staged file as the content it turned out to hold.
@@ -613,6 +831,7 @@ impl ArtifactStore {
         staging: &Path,
         content_digest: &str,
         byte_length: u64,
+        expected: HandleSnapshot,
     ) -> Result<(), ArtifactFailure> {
         let destination = self.content.join(content_digest);
         if destination.symlink_metadata().is_ok() {
@@ -620,7 +839,7 @@ impl ArtifactStore {
             std::fs::remove_file(staging).map_err(refused)?;
             return Ok(());
         }
-        match publish_staged_no_replace(&self.content, staging, content_digest) {
+        match publish_staged_no_replace(&self.content, staging, content_digest, expected) {
             Ok(()) => {}
             Err(ArtifactFailure::ContentAlreadyPresent(_)) => {
                 self.require_existing(&destination, content_digest, byte_length)?;
@@ -715,19 +934,7 @@ impl ArtifactStore {
         if !path.exists() {
             return Err(ArtifactFailure::NoSuchContent(metadata.content_digest.clone()));
         }
-        let mut file = open_without_following(&path)?;
-        let opened = HandleSnapshot::of(&file)?;
-        let (digest, byte_length) = measure(&mut file)?;
-        require_matches(metadata, &digest, byte_length)?;
-        file.rewind().map_err(refused)?;
-        Ok(VerifiedArtifactReader {
-            byte_length: 0,
-            expected_digest: metadata.content_digest.clone(),
-            expected_length: metadata.byte_length,
-            file,
-            hasher: Sha256::new(),
-            opened,
-        })
+        VerifiedArtifactReader::from_file(open_without_following(&path)?, metadata)
     }
 }
 
@@ -789,7 +996,34 @@ pub struct VerifiedArtifactReader {
     opened: HandleSnapshot,
 }
 
+impl std::io::Read for VerifiedArtifactReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        self.read_into(buffer).map_err(|_| std::io::Error::other("artifact read refused"))
+    }
+}
+
 impl VerifiedArtifactReader {
+    fn from_file(
+        mut file: std::fs::File,
+        metadata: &ArtifactMetadata,
+    ) -> Result<Self, ArtifactFailure> {
+        let opened = HandleSnapshot::of(&file)?;
+        let (digest, byte_length) = measure(&mut file)?;
+        require_matches(metadata, &digest, byte_length)?;
+        if HandleSnapshot::of(&file)? != opened {
+            return Err(ArtifactFailure::HandleMoved);
+        }
+        file.rewind().map_err(refused)?;
+        Ok(Self {
+            byte_length: 0,
+            expected_digest: metadata.content_digest.clone(),
+            expected_length: metadata.byte_length,
+            file,
+            hasher: Sha256::new(),
+            opened,
+        })
+    }
+
     /// Returns how many bytes this reader has handed out.
     #[must_use]
     pub fn transferred_bytes(&self) -> u64 {

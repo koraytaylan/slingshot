@@ -93,7 +93,7 @@ pub struct DecodedHead {
 }
 
 /// One complete decoded response.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct DecodedResponse {
     /// Informational heads that arrived before the final one.
     pub informational: Vec<DecodedHead>,
@@ -103,6 +103,15 @@ pub struct DecodedResponse {
     pub body: Vec<u8>,
     /// The trailer section, when the response carried one.
     pub trailer: Option<DecodedSection>,
+}
+
+impl core::fmt::Debug for DecodedResponse {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("DecodedResponse([redacted])")
+    }
+}
+impl Drop for DecodedResponse {
+    fn drop(&mut self) { let _secret = SecretValue::from_bytes(std::mem::take(&mut self.body)); }
 }
 
 /// Carries one exchange request and returns what came back.
@@ -197,7 +206,7 @@ impl<Transport: IdentityManagementTransport, Clock: MonotonicClock>
     ) -> Result<AccessToken, ExchangeFailure> {
         let body = build_form_body(credentials, assertion)?;
         let anchor = self.clock.reading_milliseconds();
-        let response = self.transport.exchange(&body)?;
+        let response = self.transport.exchange(body.expose_secret_bytes())?;
         let receipt = self.clock.reading_milliseconds();
         let document = accept_response(&response)?;
         install(document, anchor, receipt)
@@ -205,44 +214,76 @@ impl<Transport: IdentityManagementTransport, Clock: MonotonicClock>
 }
 
 /// One accepted response document.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TokenDocument {
+#[derive(Debug)]
+pub(super) struct TokenDocument {
     /// The token itself.
-    access_token: String,
+    access_token: SecretValue,
     /// The lifetime the response advertised, in milliseconds.
     expires_in: u64,
 }
 
 /// Builds the exact form body the exchange sends.
-fn build_form_body(
+pub(super) fn build_form_body(
     credentials: &CloudServiceCredentials,
     assertion: &ServiceCredentialAssertion,
-) -> Result<Vec<u8>, ExchangeFailure> {
+) -> Result<SecretValue, ExchangeFailure> {
     let contract = ProfileAuthenticationContract::embedded();
     let names = &contract.literals.identity_management_request_fields;
-    let assertion_bytes = assertion.lend_compact_bytes(<[u8]>::to_vec);
-    let values = [
-        credentials.technical_account_client_identifier().as_bytes().to_vec(),
-        credentials.client_secret().expose_secret_bytes().to_vec(),
-        assertion_bytes,
-    ];
-    let mut body = Vec::new();
-    for (position, name) in [CLIENT_FIELD, SECRET_FIELD, ASSERTION_FIELD].into_iter().zip(names) {
-        if !body.is_empty() {
-            body.push(b'&');
+    assertion.lend_compact_bytes(|assertion_bytes| {
+        let values = [
+            credentials.technical_account_client_identifier().as_bytes(),
+            credentials.client_secret().expose_secret_bytes(),
+            assertion_bytes,
+        ];
+        // Allocate once: growing a credential-bearing buffer could leave its old
+        // allocation unsanitized when the allocator moves it.
+        let exceeded = || {
+            ExchangeFailure::new(
+                ConfigurationFailureCode::IdentityManagementResponseHeadLimitExceeded,
+            )
+        };
+        let mut capacity = names.len().saturating_sub(1);
+        for (position, name) in [CLIENT_FIELD, SECRET_FIELD, ASSERTION_FIELD].into_iter().zip(names)
+        {
+            capacity = capacity
+                .checked_add(name.len())
+                .and_then(|length| length.checked_add(1))
+                .ok_or_else(exceeded)?;
+            for byte in values[position] {
+                let width =
+                    if *byte == b' ' || byte.is_ascii_alphanumeric() || b"*-._".contains(byte) {
+                        1
+                    } else {
+                        3
+                    };
+                capacity = capacity.checked_add(width).ok_or_else(exceeded)?;
+            }
         }
-        body.extend_from_slice(name.as_bytes());
-        body.push(b'=');
-        body.extend_from_slice(form_encode(&values[position]).as_bytes());
-    }
-    if u64::try_from(body.len()).unwrap_or(u64::MAX)
-        > contract.limits.maximum_identity_management_request_body_bytes
-    {
-        return Err(ExchangeFailure::new(
-            ConfigurationFailureCode::IdentityManagementResponseHeadLimitExceeded,
-        ));
-    }
-    Ok(body)
+        if u64::try_from(capacity).unwrap_or(u64::MAX)
+            > contract.limits.maximum_identity_management_request_body_bytes
+        {
+            return Err(exceeded());
+        }
+        let mut body = Vec::with_capacity(capacity);
+        for (position, name) in [CLIENT_FIELD, SECRET_FIELD, ASSERTION_FIELD].into_iter().zip(names)
+        {
+            if !body.is_empty() {
+                body.push(b'&');
+            }
+            body.extend_from_slice(name.as_bytes());
+            body.push(b'=');
+            form_encode(values[position], &mut body);
+        }
+        let body = SecretValue::from_bytes(body);
+        if u64::try_from(body.secret_byte_length()).unwrap_or(u64::MAX)
+            > contract.limits.maximum_identity_management_request_body_bytes
+        {
+            return Err(ExchangeFailure::new(
+                ConfigurationFailureCode::IdentityManagementResponseHeadLimitExceeded,
+            ));
+        }
+        Ok(body)
+    })
 }
 
 /// Encodes one field value exactly as the contract spells it.
@@ -251,22 +292,27 @@ fn build_form_body(
 /// bytes stay as they are; every other byte becomes an uppercase percent
 /// escape. The rule is written out because the reachable maximum body size is
 /// derived from it, and a more generous encoder would make that maximum wrong.
-fn form_encode(value: &[u8]) -> String {
-    let mut encoded = String::with_capacity(value.len());
+fn form_encode(value: &[u8], encoded: &mut Vec<u8>) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
     for byte in value {
         match byte {
-            b' ' => encoded.push('+'),
+            b' ' => encoded.push(b'+'),
             _ if byte.is_ascii_alphanumeric() || b"*-._".contains(byte) => {
-                encoded.push(char::from(*byte));
+                encoded.push(*byte);
             }
-            _ => encoded.push_str(&format!("%{byte:02X}")),
+            _ => encoded.extend_from_slice(&[
+                b'%',
+                HEX[usize::from(byte >> 4)],
+                HEX[usize::from(byte & 15)],
+            ]),
         }
     }
-    encoded
 }
 
 /// Charges and validates one response, in the contract's precedence order.
-fn accept_response(response: &DecodedResponse) -> Result<TokenDocument, ExchangeFailure> {
+pub(super) fn accept_response(
+    response: &DecodedResponse,
+) -> Result<TokenDocument, ExchangeFailure> {
     let contract = ProfileAuthenticationContract::embedded();
     let limits = &contract.limits;
     // Only the first informational head is charged and reported: the contract
@@ -356,7 +402,7 @@ fn refuse_trailers(response: &DecodedResponse, base: u64) -> Result<(), Exchange
 }
 
 /// Accepts only the media type and coding the contract names.
-fn accept_media(fields: &[(String, String)]) -> Result<(), ExchangeFailure> {
+pub(super) fn accept_media(fields: &[(String, String)]) -> Result<(), ExchangeFailure> {
     let literals = &ProfileAuthenticationContract::embedded().literals;
     let invalid =
         || ExchangeFailure::new(ConfigurationFailureCode::IdentityManagementResponseMediaInvalid);
@@ -408,6 +454,7 @@ fn accept_document(body: &[u8]) -> Result<TokenDocument, ExchangeFailure> {
         ExchangeFailure::new(ConfigurationFailureCode::IdentityManagementResponseDocumentInvalid)
     };
     let document: ResponseDocument = serde_json::from_slice(body).map_err(|_| invalid())?;
+    let access_token = SecretValue::from_text(document.access_token);
     if !document.token_type.eq_ignore_ascii_case(&contract.literals.response_token_type)
         || document.token_type != contract.literals.response_token_type
     {
@@ -415,10 +462,10 @@ fn accept_document(body: &[u8]) -> Result<TokenDocument, ExchangeFailure> {
             ConfigurationFailureCode::IdentityManagementTokenTypeInvalid,
         ));
     }
-    let length = u64::try_from(document.access_token.len()).unwrap_or(u64::MAX);
-    if document.access_token.is_empty()
+    let length = u64::try_from(access_token.secret_byte_length()).unwrap_or(u64::MAX);
+    if length == 0
         || length > limits.maximum_access_token_bytes
-        || !document.access_token.bytes().all(is_token_byte)
+        || !access_token.expose_secret_bytes().iter().copied().all(is_token_byte)
     {
         return Err(invalid());
     }
@@ -429,7 +476,7 @@ fn accept_document(body: &[u8]) -> Result<TokenDocument, ExchangeFailure> {
             ConfigurationFailureCode::IdentityManagementTokenLifetimeInvalid,
         ));
     }
-    Ok(TokenDocument { access_token: document.access_token, expires_in: document.expires_in })
+    Ok(TokenDocument { access_token, expires_in: document.expires_in })
 }
 
 /// Reports whether one byte may appear in an access token.
@@ -438,7 +485,7 @@ fn is_token_byte(byte: u8) -> bool {
 }
 
 /// The response document exactly as it is spelled.
-#[derive(Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ResponseDocument {
     /// The token itself.
@@ -455,7 +502,7 @@ struct ResponseDocument {
 /// byte, never from the moment the body arrived, so writing, waiting, and
 /// reading all consume the lifetime the endpoint advertised rather than
 /// extending it.
-fn install(
+pub(super) fn install(
     document: TokenDocument,
     anchor: u64,
     receipt: u64,
@@ -471,10 +518,7 @@ fn install(
     if usable <= required {
         return Err(too_short());
     }
-    Ok(AccessToken {
-        token: SecretValue::from_text(document.access_token),
-        deadline_milliseconds: deadline,
-    })
+    Ok(AccessToken { token: document.access_token, deadline_milliseconds: deadline })
 }
 
 /// Returns the complete endpoint the exchange constructs for itself.

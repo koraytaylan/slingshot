@@ -19,6 +19,9 @@
 //! this says they are rather than what a fake transport was told to report.
 
 use std::cell::Cell;
+
+#[path = "identity_management_exchange/async_cases.rs"]
+mod async_cases;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -416,6 +419,7 @@ fn the_request_that_reaches_the_endpoint_is_the_one_this_contract_describes() {
 
 #[test]
 fn no_rendering_of_a_failure_or_a_token_carries_a_secret() {
+    assert_eq!(format!("{:?}", success(COMFORTABLE_LIFETIME)), "DecodedResponse([redacted])");
     let (produced, _) = run(Ok(success(COMFORTABLE_LIFETIME)), vec![0, 0]);
     let token = produced.expect("the exchange succeeds");
     let rendered = format!("{token:?}");

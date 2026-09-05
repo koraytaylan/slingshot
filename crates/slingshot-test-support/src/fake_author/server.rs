@@ -11,6 +11,15 @@
 
 use std::sync::{Arc, Mutex};
 
+use bytes::Bytes;
+use http::{Request, Response, StatusCode, header};
+use http_body_util::Full;
+use hyper::body::Incoming;
+use hyper::service::service_fn;
+use hyper_util::rt::TokioIo;
+use tokio::net::TcpListener;
+use tokio::sync::oneshot;
+
 use crate::fake_author::recording::{CredentialKind, RecordedRequest, Recording};
 use crate::fake_author::script::{PUBLISHER_PREFIXES, Script, ScriptedResponse};
 
@@ -157,6 +166,132 @@ impl FakeAuthor {
     pub fn script_is_exhausted(&self) -> bool {
         self.script.lock().map(|held| held.is_exhausted()).unwrap_or(true)
     }
+}
+
+/// A running loopback HTTP server backed by one [`FakeAuthor`] script.
+///
+/// It is deliberately HTTP/1.1 and loopback-only. Transport tests can attach
+/// a real client socket to it without creating a routable endpoint or a second
+/// interpretation of the fake author's script.
+pub struct LoopbackAuthorServer {
+    /// The exact loopback origin the operating system assigned.
+    endpoint: String,
+    /// Ends the accept loop before the task is dropped.
+    shutdown: Option<oneshot::Sender<()>>,
+    /// Owns the server task so it cannot outlive the harness.
+    task: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl ::core::fmt::Debug for LoopbackAuthorServer {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        formatter.write_str("LoopbackAuthorServer([loopback])")
+    }
+}
+
+impl LoopbackAuthorServer {
+    /// Returns the loopback endpoint clients may connect to during this test.
+    #[must_use]
+    pub fn endpoint(&self) -> &str {
+        &self.endpoint
+    }
+
+    /// Stops accepting test connections and waits for the server task.
+    pub async fn stop(mut self) {
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ignored = shutdown.send(());
+        }
+        if let Some(task) = self.task.take() {
+            let _ignored = task.await;
+        }
+    }
+}
+
+impl Drop for LoopbackAuthorServer {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ignored = shutdown.send(());
+        }
+        if let Some(task) = self.task.take() {
+            task.abort();
+        }
+    }
+}
+
+impl FakeAuthor {
+    /// Serves this script on one ephemeral loopback HTTP/1.1 endpoint.
+    ///
+    /// The caller holds the author in an [`Arc`] so the server and its test can
+    /// inspect the same recording. No credentials are retained: the network
+    /// adapter passes the Authorization header only to [`FakeAuthor::answer`],
+    /// which reduces it to a credential kind before recording.
+    pub async fn serve_loopback(self: Arc<Self>) -> Result<LoopbackAuthorServer, std::io::Error> {
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
+        let endpoint = format!("http://{}", listener.local_addr()?);
+        let (shutdown, mut stopped) = oneshot::channel();
+        let task = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                let accepted = tokio::select! {
+                    _ = &mut stopped => break,
+                    _ = connections.join_next(), if !connections.is_empty() => continue,
+                    accepted = listener.accept() => accepted,
+                };
+                let Ok((stream, _peer)) = accepted else {
+                    break;
+                };
+                let author = Arc::clone(&self);
+                connections.spawn(async move {
+                    let service =
+                        service_fn(move |request| answer_http(Arc::clone(&author), request));
+                    let _ignored = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(TokioIo::new(stream), service)
+                        .await;
+                });
+            }
+            connections.shutdown().await;
+        });
+        Ok(LoopbackAuthorServer { endpoint, shutdown: Some(shutdown), task: Some(task) })
+    }
+}
+
+/// Adapts an HTTP request to the scripted author without retaining secret text.
+async fn answer_http(
+    author: Arc<FakeAuthor>,
+    request: Request<Incoming>,
+) -> Result<Response<Full<Bytes>>, std::io::Error> {
+    let incoming = IncomingRequest {
+        authorization: request
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned),
+        author_target_identity_digest: request
+            .headers()
+            .get("x-slingshot-author-target-identity-digest")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned),
+        route: request.uri().path().to_owned(),
+        selected_environment_revision: request
+            .headers()
+            .get("x-slingshot-selected-environment-revision")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned),
+    };
+    let (status, body) = match author.answer(&incoming) {
+        Answer::Responded { body, status } => (status, body),
+        Answer::RouteRefused => (StatusCode::NOT_FOUND.as_u16(), Vec::new()),
+        Answer::Unauthenticated => (StatusCode::UNAUTHORIZED.as_u16(), Vec::new()),
+        Answer::ScriptExhausted => (StatusCode::GONE.as_u16(), Vec::new()),
+        // A route codec must classify an incomplete answer as uncertainty, so
+        // the harness terminates the HTTP connection without a response head.
+        Answer::Closed => return Err(std::io::Error::other("scripted close")),
+    };
+    let response = Response::builder()
+        .status(status)
+        .header("content-type", "application/json")
+        .body(Full::new(Bytes::from(body)))
+        .unwrap_or_else(|_| Response::new(Full::new(Bytes::new())));
+    Ok(response)
 }
 
 /// The status a served request answers with.

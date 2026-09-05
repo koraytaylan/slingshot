@@ -32,7 +32,7 @@ const ABSENT: &str = include_str!("fixtures/migrations/absent-columns.jsonl");
 const CONSTRAINTS: &str = include_str!("fixtures/migrations/constraints.jsonl");
 
 /// The schema version this binary migrates to.
-const CURRENT_SCHEMA_VERSION: u32 = 9;
+const CURRENT_SCHEMA_VERSION: u32 = 11;
 
 /// A schema version no binary in this workspace applies.
 const NEWER_SCHEMA_VERSION: u32 = 99;
@@ -106,6 +106,39 @@ fn no_column_holds_a_principal_a_secret_or_a_trust_decision() {
     }
     assert!(schema.contains("author_target_identity_digest"), "the opaque target is a column");
     assert!(schema.contains("selected_environment_revision"), "and so is the revision");
+}
+
+#[test]
+fn composition_compares_database_objects_not_equal_contents() {
+    let root = tempfile::tempdir().unwrap();
+    let first_path = root.path().join("first.sqlite3");
+    let second_path = root.path().join("second.sqlite3");
+    let first = OperationDatabase::open(&first_path, settings()).unwrap();
+    let live = OperationDatabase::open_live(&first_path, settings()).unwrap();
+    let other = OperationDatabase::open(&second_path, settings()).unwrap();
+    let memory = OperationDatabase::open_in_memory(settings()).unwrap();
+    let another_memory = OperationDatabase::open_in_memory(settings()).unwrap();
+    assert!(first.shares_database_with(&first));
+    assert!(first.shares_database_with(&live));
+    assert!(live.shares_database_with(&first));
+    assert!(!first.shares_database_with(&other));
+    assert!(!first.shares_database_with(&memory));
+    assert!(!memory.shares_database_with(&another_memory));
+    assert!(memory.shares_database_with(&memory));
+    let account = slingshot_storage::persistent_capacity::PersistentCapacityAccount::new(
+        &live,
+        slingshot_domain::persistent_capacity::PersistentCapacityPolicy::embedded(),
+    );
+    assert!(account.belongs_to(&first));
+    assert!(!account.belongs_to(&other));
+    let moved = root.path().join("temporarily-moved-database");
+    std::fs::rename(&first_path, &moved).unwrap();
+    let no_longer_bound = !first.shares_database_with(&live)
+        && !first.shares_database_with(&first)
+        && !account.belongs_to(&first);
+    std::fs::rename(&moved, &first_path).unwrap();
+    assert!(no_longer_bound, "a missing database pathname cannot authenticate the old connection");
+    assert!(first.shares_database_with(&live));
 }
 
 #[test]
@@ -236,7 +269,56 @@ fn no_spill_canary_leaves_no_temporary_database_files() {
 }
 
 #[test]
+fn artifact_acquisition_anchor_is_an_all_or_nothing_validated_tuple() {
+    let _initialized = OperationDatabase::open_in_memory(settings()).expect("product SQLite initialization precedes raw fixtures");
+    let database = rusqlite::Connection::open_in_memory().unwrap();
+    // Exercise the actual additive migration against a pre-existing child row.
+    database.execute_batch("CREATE TABLE agent_operation (id INTEGER PRIMARY KEY) STRICT; INSERT INTO agent_operation VALUES (1);").unwrap();
+    database
+        .execute_batch(MIGRATIONS.iter().find(|(version, _)| *version == 11).unwrap().1)
+        .unwrap();
+    let identifier = "a".repeat(64);
+    let digest = "b".repeat(64);
+    for (id, slot, hash, started, accepted) in [
+        (None, None, None, None, true),
+        (Some(identifier.as_str()), None, None, None, false),
+        (None, Some("content_package"), Some(digest.as_str()), Some(0), false),
+        (Some(identifier.as_str()), Some("content_package"), Some(digest.as_str()), None, false),
+        (
+            Some(identifier.as_str()),
+            Some("content_package"),
+            Some(digest.as_str()),
+            Some(-1),
+            false,
+        ),
+        (Some("short"), Some("content_package"), Some(digest.as_str()), Some(0), false),
+        (
+            Some(identifier.as_str()),
+            Some("structured_result"),
+            Some(digest.as_str()),
+            Some(0),
+            false,
+        ),
+        (Some(identifier.as_str()), Some("content_package"), Some("invalid"), Some(0), false),
+        (Some(identifier.as_str()), Some("content_package"), Some(digest.as_str()), Some(0), true),
+        (
+            Some(identifier.as_str()),
+            Some("loaded_content_json"),
+            Some(digest.as_str()),
+            Some(1),
+            true,
+        ),
+    ] {
+        assert_eq!(database.execute(
+            "UPDATE agent_operation SET acquisition_artifact_identifier = ?, acquisition_artifact_slot = ?, acquisition_content_digest = ?, acquisition_started_at_unix_milliseconds = ? WHERE id = 1",
+            rusqlite::params![id, slot, hash, started],
+        ).is_ok(), accepted);
+    }
+}
+
+#[test]
 fn every_constraint_refuses_what_the_fixture_says_it_refuses() {
+    let _initialized = OperationDatabase::open_in_memory(settings()).expect("product SQLite initialization precedes raw fixtures");
     for row in &rows(CONSTRAINTS) {
         let database = rusqlite::Connection::open_in_memory().expect("a fixture database");
         for (_, migration) in MIGRATIONS {

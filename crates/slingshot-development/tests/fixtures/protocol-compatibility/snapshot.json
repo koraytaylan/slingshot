@@ -1,514 +1,514 @@
 {
   "commands": [
     {
-      "arguments_schema_sha256": "4fe9ef2b13fa2d169657662aa58f28fabf5521ae2b35c7c69c81477846d8a0aa",
+      "arguments_schema_sha256": "14245720835f814bb8278bf3274c5a71d3f4b61db6e0e165fff30761e4768d94",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "b22e54ab4064ef6f9bb2ee7c605e22521ff8901898e8c04b3dd329fcc6d724eb",
+      "result_schema_sha256": "db9afb554ad8ea1a2e1a3aa305be0143d5c6dc910853087797da1a4e28bde3c6",
       "semantic_version": "1.0.0",
       "wire_name": "add_component"
     },
     {
-      "arguments_schema_sha256": "3dd91e604e4b1ddbbea63c1f053c035a3369c12c668541692683158970fc28ec",
+      "arguments_schema_sha256": "4b8fca068531badf3a9127f384d6705d1620197bd1154889304af1a7c1a781fb",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "9cd0e961a0c451264d0c375f3d93ff30406ee052e2b9d18f322c376284555d30",
+      "result_schema_sha256": "bb893a55d4331a5659bc21d054754f17bda3ba01104892ab125600d11db00ce0",
       "semantic_version": "1.0.0",
       "wire_name": "add_group_member"
     },
     {
-      "arguments_schema_sha256": "6a8b7c04b466fbee144fcd8eb054940825c15019d0d2114599afcdc13cfa0da5",
+      "arguments_schema_sha256": "60f397b89b51cd96817529b87e6294da9dd81cf086e5216094860a4aa8e9d0ca",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "dbce4c05ccf975ebe81c484326ae49f488afcf0b4a967682a66fb46eafee9016",
+      "result_schema_sha256": "00d25b3327aef42a588d8e7101d557a6c8fb6c9ba4c12351db401b8395dbec48",
       "semantic_version": "1.0.0",
       "wire_name": "cancel_sling_job"
     },
     {
-      "arguments_schema_sha256": "099006916b1474f0523cca9c731ea7f78b8ec7d7281747dfcdf75d483119544d",
+      "arguments_schema_sha256": "d4d823555538943c4220f4f022707957bbe880b870d30e444973e79e70c4df26",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "0e431327fa7795a496e031fe087f918f3b90393154b800990ba4f6dd8cb94717",
+      "result_schema_sha256": "4087fda96a4a2aae01f501ce418ee2b7c98a4aec0e8af1fcd346a44400752d48",
       "semantic_version": "1.0.0",
       "wire_name": "create_asset"
     },
     {
-      "arguments_schema_sha256": "1bffc93da273f617302ce81897e3bb2ab2f8d00f49578164055d0d6309735a17",
+      "arguments_schema_sha256": "f6c7fa5e5c04fa80e71f9df166c046ee2dddfc3f34940ff9f2880e913905fd6b",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "81fe214dece03d3f0d9a199e54eef442cb4dee6aff79ada99d9e34503c121329",
+      "result_schema_sha256": "fd6ce1cf10efad1494f94fcef83cf5b2cc4c65c74f9548a51dfb41dea3e62f5b",
       "semantic_version": "1.0.0",
       "wire_name": "create_asset_folder"
     },
     {
-      "arguments_schema_sha256": "76fee871cb4f85eb136b94eb8d9333c53883ed2a8145ea6c039fb029c10cfac1",
+      "arguments_schema_sha256": "ac7e1827fd601744adbc9150c2cf7444c52baf8718f53b3346160c0ccecf5cc7",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "264921597f5d936206f644f43457cc6562c33e1f31d49feda30ffff9a7487973",
+      "result_schema_sha256": "fecdc9282b6ac51c41626ab6051a7918172cac7f0ba5a90825ab3d6f002760a7",
       "semantic_version": "1.0.0",
       "wire_name": "create_content_fragment"
     },
     {
-      "arguments_schema_sha256": "79d10a98d4a8ec10bce80eed274e683d1a7bc3dc8cb02fd9540710b8c8a1dd23",
+      "arguments_schema_sha256": "c5d62dd7a017999fcb0028188900292fe18b6195bbd6005b642446bbfecdc176",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "f150397926cf07c98d76c6adf1db0826d934adfef9ac9b6ffd19782f98ef9b6f",
+      "result_schema_sha256": "48df52a0c4f9caf11ad501fb521a419892543bf41d6bc4c7b92c27cc435aad4e",
       "semantic_version": "1.0.0",
       "wire_name": "create_experience_fragment"
     },
     {
-      "arguments_schema_sha256": "91a79e8c8d23d299723bf3ee451914114d772bec1f05514896b18eeb635e7ec8",
+      "arguments_schema_sha256": "e31a8c65a365346874ab38619380999adb2c8ae0417918e681b59f35852e0d35",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "3de65f9000b42b7f99fe3a4c0e785d0991e186af3344236832ce8df239bf1604",
+      "result_schema_sha256": "06f4624be5fda22db7c31752f1d7f701c12e70d36827bf96a46b29a6fe7c5cd7",
       "semantic_version": "1.0.0",
       "wire_name": "create_group"
     },
     {
-      "arguments_schema_sha256": "3663def2497a6f61494697c02ac047bce3d81f5e8c38c1097e1819000d786a3a",
+      "arguments_schema_sha256": "3c9931c617f3da6c78aedb78201f6f5eb6afae1a1ca54daef5d6202d7ca9f68e",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "52703c1c0f1f71aa0fa3423f3f7b6858887b719e7ebf2f7ce8fcf5af3667bf23",
+      "result_schema_sha256": "205b50c047343d96edb58543f51e2921b12faba422b6f9e478941d56b882dd9a",
       "semantic_version": "1.0.0",
       "wire_name": "create_page"
     },
     {
-      "arguments_schema_sha256": "66b5b862f6e369548120c38121acbf20f1098b7a93c17f90c8a0e87223ffd2b4",
+      "arguments_schema_sha256": "b5760855101ee71636867e97d5aa2630c8049408d4cd7decac9a538e3fff1e81",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "15dfde3300c0f2955656d68898f2b642d48784a4be133883d6ebf3009d4bc381",
+      "result_schema_sha256": "135d7017761814d5f2290b5f94f69d9cba1439c6eb20dc9d3218001b708d94d0",
       "semantic_version": "1.0.0",
       "wire_name": "create_user"
     },
     {
-      "arguments_schema_sha256": "af28b7c29a4cb63d0972b5fcc12661d882cf67d70f59a96b83e582625eaa0843",
+      "arguments_schema_sha256": "6cf43cf657acc219531325e60900d66370d1a313a9f0632ee21c7c2e14e1aa34",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "c83ee28a77fbe5667163949eeb74e0c6c39d422d2c6cc2841f64f0857942fe63",
+      "result_schema_sha256": "14b2c3dea377d1d49c3bde963c74c5e178da773df618e936b86b1ee377a27323",
       "semantic_version": "1.0.0",
       "wire_name": "delete_asset"
     },
     {
-      "arguments_schema_sha256": "c3dac081cf69702272167e534eb0b461314823b217b8367dcdf28608299ec3fc",
+      "arguments_schema_sha256": "267736d92ccae78e5764d9ba14ba70df4153ac75d4e3c9185a84ab75ed90c48a",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "5805c31c65673e5611e5e6dddc613e8ea72d54c73bd2b23f3bf7d10431e52cc1",
+      "result_schema_sha256": "79cab7f7cc16d2e1a8455caf607f953e95786f1c50806dda2286cd580dec67ca",
       "semantic_version": "1.0.0",
       "wire_name": "delete_authorizable"
     },
     {
-      "arguments_schema_sha256": "e8e9da920e1f4e61170fb10e83a5258423e4bc41138d84aa900226b3ce6de663",
+      "arguments_schema_sha256": "3b0af32330c67aeae9e3aa0eba44209d4acf8bab5748f499f7c85bc6896405a8",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "0981b8ade6007b9a9bc62493d9997f16b7811ad365c9b4e19a727e1ecb300d67",
+      "result_schema_sha256": "28e3a9b676375624cf5f2a67a5148897c49d146a4158a6876cf525094e73e357",
       "semantic_version": "1.0.0",
       "wire_name": "delete_component"
     },
     {
-      "arguments_schema_sha256": "4aceb5f05ed5c76e9a1bc9bec49f95c662aa1bcfb308bdcfbef23814581acb9a",
+      "arguments_schema_sha256": "522bcbf6a3a6135bad45dfea4c427816ecf0fbc1809f1c964bff13465289864c",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "3545c7ca388b3a42fc2839cfd913a09e0c96f96ece9dc52679c8f1c0e017d9b2",
+      "result_schema_sha256": "980358aff16af1d230cf6b89cee42d09029ac8c859991f30a3feaef3f4c6401a",
       "semantic_version": "1.0.0",
       "wire_name": "delete_content_fragment"
     },
     {
-      "arguments_schema_sha256": "4f2504ff927040099a89ee977bc9a8f26879b1832a4e642598eb57adcb1a5027",
+      "arguments_schema_sha256": "9f50dec34afae1c7f584316cdec1267abfb00acc5a1a5b2b2a7be37e509967f0",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "b11d8773f9c8f369b83606a7805aa2d9a832b51ce5959bba5bf05c97322b4245",
+      "result_schema_sha256": "81891442aedca2cc3bff2ae84d1e9d0d8ec1008162474afc8e6297d3edffb2cd",
       "semantic_version": "1.0.0",
       "wire_name": "delete_experience_fragment"
     },
     {
-      "arguments_schema_sha256": "32b796050b5d173df42126898e0b63371ea038572035138395a8535c10f71939",
+      "arguments_schema_sha256": "5b3b9a4f8a78d69223fbe444022fd33d011eba53b13b9029f4c6c9e510b402e5",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "8cd2cc016f95fba48bc979a5c15401b8c5f5b47ad714360d52aba4b20d3ce8c8",
+      "result_schema_sha256": "6540c85a2e45a2320fbdee2696f71b0394f20cf11576ef887bd933db14509296",
       "semantic_version": "1.0.0",
       "wire_name": "delete_open_service_gateway_initiative_configuration"
     },
     {
-      "arguments_schema_sha256": "24c6cf946118ab86a98ca6f433f246fd06f0aa11e6c727d59a4122a6cb1404e9",
+      "arguments_schema_sha256": "1ddcffd31ceeb94dacb5c8e0c4f6a8fb6165b7fecb3f1b1d517a718aa6374eab",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "e2509d0c2968d96a5516509a9197127a75c4ed2d9943c536baba2282e43c392d",
+      "result_schema_sha256": "bab2b596d2ef3b5c250e2d0c3beac0d7c29b450272e4e8ee982844f18e8ec03a",
       "semantic_version": "1.0.0",
       "wire_name": "delete_page"
     },
     {
-      "arguments_schema_sha256": "a0185592d20955b10986d323edd0758af24783249fba5555cdc69e49cecf2bcc",
+      "arguments_schema_sha256": "a82d363de6c4d4459d3638460da48df0fa9fe53a9b487aebd330730b69d525d1",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "640ff1ad40d6b5d9c581b0b153771af11f7dba9a5691bf5396a4b317dd0816da",
+      "result_schema_sha256": "7391c92867a64d37783f15e5d643837c2852cb134d471bb56c901e92fea3feb6",
       "semantic_version": "1.0.0",
       "wire_name": "download_content_package"
     },
     {
-      "arguments_schema_sha256": "0db3980580b897e9b29ad2af2d6ee1a3ef8b12bdebd031a72de4fb12b35177cf",
+      "arguments_schema_sha256": "8e86e5cb082b478d14743ceaf2d8982b721541577fee29fd47505dd3704eb73b",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "7594ec305844359651c26b1c441794a39007bf8d8e16a7e625ec8a42c7d2ee50",
+      "result_schema_sha256": "7cdcd5b43accc472b73b5e30153f36aba3b8162a904f26729441812859a7c46c",
       "semantic_version": "1.0.0",
       "wire_name": "find_assets_by_metadata"
     },
     {
-      "arguments_schema_sha256": "2d67976d970030a2e017221390bd208d47a8e6953fe65f497ec394421555f8ed",
+      "arguments_schema_sha256": "4988b69a2dd3930c4c5ba57ddccf306cad0fdc06ff67ea07d2f55c670a2ce76c",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "92894692f981f72133a7f7919f51cb66c4d19a75413d1fc51e59f192bd56e9dd",
+      "result_schema_sha256": "e1a6beea8fcae2dbc1add1fb0afaa4a47a289a7cd7a48c86c530501b70777693",
       "semantic_version": "1.0.0",
       "wire_name": "find_assets_referenced_by_page"
     },
     {
-      "arguments_schema_sha256": "786f2e5620b75fc52b7caa82f2c33b78e71ec53bfe4095a883e7db6600ba1bb6",
+      "arguments_schema_sha256": "b5ce2050621bb4aaf9304a52bec14ee1eaf1f4c8b237884fd0796f4014257fbc",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "29a0754c0766e23eead8bff2796b99035a19940b4799581b23b431aa62aec49c",
+      "result_schema_sha256": "f7e1b19c9fc392f12870d821972330fb3e79332b12ae63cbaca9a895efcd0526",
       "semantic_version": "1.0.0",
       "wire_name": "find_open_service_gateway_initiative_configurations"
     },
     {
-      "arguments_schema_sha256": "e94092a7302c90e2f77c71951e12a1a7273f5fbde11de9894163ef30bb731f6d",
+      "arguments_schema_sha256": "b0ce3c4a06c47bddaff82ff3373011fe5d862a7e273ee3fc84f3aaef5486d48e",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "414c0b1ddeef64a127eafa66630435736fbe5a6342f8b6d131b3e389756a47e1",
+      "result_schema_sha256": "22fd2ab53251791498496b2b4809a16dff3dc819298bc2e443c58d6cb319495c",
       "semantic_version": "1.0.0",
       "wire_name": "find_pages_by_template"
     },
     {
-      "arguments_schema_sha256": "2658e81020917dfe19cc94eadb4593303f657d484752e80b9bc857727fd6f17b",
+      "arguments_schema_sha256": "554a5c0381959713830e32309bc93bd70097d2db99c55f5e9c60770534a924ec",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "d7134761b15809270dfe7096834ef084352746dae9263f4f26be24c20a559ce2",
+      "result_schema_sha256": "6898a278056614fbbe46d1a14214e78450b306a5e69304d5f9079530bcd38a4c",
       "semantic_version": "1.0.0",
       "wire_name": "find_pages_containing_phrase"
     },
     {
-      "arguments_schema_sha256": "5c9d5c9b5816c1e30788eeb735c87fa49004a7cebc3cee27fd5f0be4b2037b36",
+      "arguments_schema_sha256": "35cee59aca33d9e2ed6592978532d3e58f57de3e4d13f6a2fff3442d4ecb3356",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "ff55f16ff91be0053dbfc0042ad1c1be5027e531d668c765f8136fc360969b84",
+      "result_schema_sha256": "a9eccd17c693359da26ead8a3cdae5e25b1242a2ce20714b7604f0de05ec15d8",
       "semantic_version": "1.0.0",
       "wire_name": "find_pages_using_components"
     },
     {
-      "arguments_schema_sha256": "9919b2459398e038c50b1ca650174db1b3e5f1b84281f3c2a74e6da3e1b509b7",
+      "arguments_schema_sha256": "52eeec48ab84017fe27ef29e72a799058011ba8464dc6ce5d42f86dde9cc4338",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "cd65a9be9007a6bf6fd3077cd6bac4587c2aef72cd4c7b8a8c801cea43b884b7",
+      "result_schema_sha256": "805cd9fc695fdd54625160e9f11efb1ebfe607e4595822653e81ccc23a15e56c",
       "semantic_version": "1.0.0",
       "wire_name": "find_sling_jobs"
     },
     {
-      "arguments_schema_sha256": "4d47fb35cea2afa983da2ddb6bb9b9b55e227a4fc0aa71143505b3d7d4146029",
+      "arguments_schema_sha256": "a5cba8602e94199c6141282c3882a9f7c7a27dd1ed9e2d3a93aaac59fc62a9a8",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "ab48ebc6a493a1effcc015f0c52ce0586ff95a27df8c1c961748808676508723",
+      "result_schema_sha256": "97a44bb7736e8458bc0e59b6a25103ec141c0501510151440d1460a09c7e3e2b",
       "semantic_version": "1.0.0",
       "wire_name": "find_workflow_instances"
     },
     {
-      "arguments_schema_sha256": "54150f44119165af1a232fe1b6aebc11cac5ba02d7700be1d72dc51f7f24c167",
+      "arguments_schema_sha256": "f8b75ba7ff4290e6c9bb486c7b00d7b22bae459e553ba87afb74b08f63190140",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "3a2ce2ba9450b6da13c4ba1b48260ecadc98776060c93f18b07c30e9074c6e09",
+      "result_schema_sha256": "8518ae5cb0001b2ef0ac60b4de8b47f3ad04bdcb781dd7efc8dd5f72e2d9f672",
       "semantic_version": "1.0.0",
       "wire_name": "flush_replication_queue"
     },
     {
-      "arguments_schema_sha256": "8593c1b9059c273a9431494187ea63e8f1f6144cfb1c708e94b980e631c69c15",
+      "arguments_schema_sha256": "83d3f7c70f628f3b22f09e99b5f8b9427fee21637e575c423b8f030bf7a360d4",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "010402539ed42f078c028e82b894e28b810fd8b58682ff2ebed85e4606ebb6cc",
+      "result_schema_sha256": "0e9bc75d4cfcb576a2a5e093e0be8979e2c75ce4eeac7bc11cff8fc1f6a37fc9",
       "semantic_version": "1.0.0",
       "wire_name": "inspect_open_service_gateway_initiative_configuration"
     },
     {
-      "arguments_schema_sha256": "82faab99cb4774dae0c22ae8f882deacabb2be0f674f4a2452f573f9e0205d5b",
+      "arguments_schema_sha256": "40c16f9919dac42951964d9cbedf6a843fd232dae8a7b8306e1f58328764325a",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 262144,
-      "result_schema_sha256": "38336dca6bff96c7d227a2132d61dec80edb4c2ccb843ed9719e66b040b72a50",
+      "result_schema_sha256": "044ae0583e34c7918e2a3b5170ad053ab81d385c21e22c08d6612e35df57bd81",
       "semantic_version": "1.0.0",
       "wire_name": "inspect_replication_agent"
     },
     {
-      "arguments_schema_sha256": "7561ed424802b041a5df0aa5d3db27c849502acff4ed9f143d29f49b00d42c8c",
+      "arguments_schema_sha256": "55a7fbefbd7c823c57b09af4f0af9b39436867aaef65386daf864c9bd74e27a6",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "e06f4be09f77818f2b7ea53b9d3d21ae4f90a34e5f9e387abffc49bb9e1bdd28",
+      "result_schema_sha256": "855efcbce574ee155c6bc0bc945efd53b9c743c283debd3094511d34f2d9b7e9",
       "semantic_version": "1.0.0",
       "wire_name": "inspect_replication_queue"
     },
     {
-      "arguments_schema_sha256": "f897a58462860c8f8e1103ec2964c6485aa0f391eb5523df30bf80a22abf9217",
+      "arguments_schema_sha256": "c9ba5f77975890748d4d2e77acca5df7195e88921101f14ad78cc26fdf2c6835",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 262144,
-      "result_schema_sha256": "f046638811355f795e767489d6117a40d0d1780261acdf8205d8f18cacf5dffd",
+      "result_schema_sha256": "f91354c16ab7291b493f451233b3871933dd3137bb6b2d08822dfb23db2dab0a",
       "semantic_version": "1.0.0",
       "wire_name": "inspect_sling_job"
     },
     {
-      "arguments_schema_sha256": "6e389081a152870bf98317d684fd7a7a45e34354abc291d130c44d41bd8b5239",
+      "arguments_schema_sha256": "244660c364734362086efa1b4ebc0e9581ceac6211a94e712e127eb60aab9233",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 262144,
-      "result_schema_sha256": "96159b3709f1e3b1599bef7889f52528b141353cbb938863d83cdaceb577dbb9",
+      "result_schema_sha256": "5b95e31b59ecb47f555d42db233139e1dc3bef15db146cfb33e9beb8b3971b25",
       "semantic_version": "1.0.0",
       "wire_name": "inspect_workflow_instance"
     },
     {
-      "arguments_schema_sha256": "3ab8235aba848d2486c1bc5a78eedae7d98edfa868478fd5c4dfb61b386dcce8",
+      "arguments_schema_sha256": "03605df2c6203b7466c2a61dced34df0de6e02e37d8391c349399c5d11a45734",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "1f17a47edefe39fee76c3e7124ed8ba98734af2b0b9ec157d5d7e9ebd3a82b9b",
+      "result_schema_sha256": "53bc2f8b5593c2f8a7ee95d0d0ea07bae0bf3aa56b891d962705319bbbc3f9af",
       "semantic_version": "1.0.0",
       "wire_name": "list_asset_renditions"
     },
     {
-      "arguments_schema_sha256": "84f1647a938d9a20b7bffb02d8645f09613e0c85ba52d7958b0e0d24dca47b01",
+      "arguments_schema_sha256": "fc3b9bbce7e0762fa2761416c7db7f5be0f72f34ff0acafa82a611179c27ae67",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "03a335cc9adb82f0663de79ab61a5a88bfc9859dae4d892d9c9f6ec945a82459",
+      "result_schema_sha256": "69e1508cf13f34ae9f72dc3e1f4812622fb6d153f8524995e9252103894e4f07",
       "semantic_version": "1.0.0",
       "wire_name": "list_child_pages"
     },
     {
-      "arguments_schema_sha256": "9d22d3aa92a420183f4ed050974cf2f5ef40e130a6ce524ccebea399c8815222",
+      "arguments_schema_sha256": "0b051bedd30f6a8e68eb9d592c868ced9b3859d4630aea9d6bdfdd5549ff558e",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "6b769dd84343610778ae83d54e5f0f2fa4bdc099be68928d5702eda14a4771b1",
+      "result_schema_sha256": "d376958b66e0a0f1ba92fd01ba5a968cb6652668873486b29240d54a9537324a",
       "semantic_version": "1.0.0",
       "wire_name": "list_group_members"
     },
     {
-      "arguments_schema_sha256": "75779108db0f7cbf3b9f83df58397828cb3459263114e04c267167e76b2a4349",
+      "arguments_schema_sha256": "59752f29e5cf55db26cdb26bf86df05c28a5817cebc997601ff796c40d081638",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "11b8c15f17e654a018be8cc7bbe99643bbf83f0ad911019ca2f28e3acca6d4b1",
+      "result_schema_sha256": "da91fffb64376e31bd0795137d5427f7398b6077db31dfa2200dacec5cc378a2",
       "semantic_version": "1.0.0",
       "wire_name": "list_open_service_gateway_initiative_bundles"
     },
     {
-      "arguments_schema_sha256": "97e79089ae5d5ffda146901cda6e95989b87eb7d259a1af1b2640aead5a00502",
+      "arguments_schema_sha256": "95243407335225778c7a215942d1c4942824404c08e135415890ad3754768303",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "f95695f4e0b3e543cc24b0f4fb829e94959576f9c68c7c32118aad02f812241b",
+      "result_schema_sha256": "512d9e35b7abddf5c9c3de8e4f46789bcd35affa0ba148aaf053c5d8cf6c1b10",
       "semantic_version": "1.0.0",
       "wire_name": "list_open_service_gateway_initiative_components"
     },
     {
-      "arguments_schema_sha256": "1dfb56b097f1720c5c59b4ef029b63b87bf5cb2882f5048ea295540de478deb5",
+      "arguments_schema_sha256": "eeb637ef101d22c714e2b591b0d55237c85fbc2cac973f91b3cefbf88a8f9774",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "b25797318956878aedc0195dc4f8dcd39d1abdb848201b9f5b32c9563dab414c",
+      "result_schema_sha256": "bfd43999cb9733919ed93eead8862d22a7ae53fbf2092678b06a5139f3015b42",
       "semantic_version": "1.0.0",
       "wire_name": "list_replication_agents"
     },
     {
-      "arguments_schema_sha256": "019532d4a85f3931b774019c68efc0ddca44f0a4e5345e2c8170d7d87b01529a",
+      "arguments_schema_sha256": "664298fcd36ab49a44dde4c3a3927adb2c86def2c62abf2763b8b7d715144572",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "2e4ce35425f563c69e207952ddb2a4362e65aacb29561f6a0701b1c7a3256e06",
+      "result_schema_sha256": "83c95939a8815c1660f9b0d43fb59f80253e11a41cd02601c37a7a9f89a7ff5d",
       "semantic_version": "1.0.0",
       "wire_name": "list_resource_mappings"
     },
     {
-      "arguments_schema_sha256": "9698303d56a78fb7d78050616305d9a6b6f050790ad9b60f308c65bd6f142133",
+      "arguments_schema_sha256": "b34cb2bb6d3b74bf5bbb20c12fb7e5158fe11ed29a825f122ab9b8ed3601baf4",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "43429dd496f464b3393ce3199ba4f4d643a0240e1ad6b1f9d7ef931b41f6dd11",
+      "result_schema_sha256": "519b8d1917446699c85ae194ed05dccb59aa80d67c8d07820fa06f9c012632e5",
       "semantic_version": "1.0.0",
       "wire_name": "list_sling_job_queues"
     },
     {
-      "arguments_schema_sha256": "19d7b708d0eca21da00951ec737bd551086d516664297d8e68b7953bd6dd6eb6",
+      "arguments_schema_sha256": "c141c61ca214ed9b02c46c4636ab9d1905729d3fbf9c25dae5646fcaf0eb7d6c",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "602830c1e5f8ca53dc2cd36dd9e7e3cacdd3b2874d6b682f38b19fe31a60af11",
+      "result_schema_sha256": "aa7850a8cc893a278b9c967de01fa59df7c66c9349eaf92c7dc52e0017362f1d",
       "semantic_version": "1.0.0",
       "wire_name": "list_workflow_models"
     },
     {
-      "arguments_schema_sha256": "aa891881e9ffe9cf2fc372f8d2f785f822080205b8e172a6012208d0973a62b0",
+      "arguments_schema_sha256": "9b08c558daa41ceaf3761755f4c466d7e09b6731f7463f7e21519f1df5e8ecfd",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "08a8c17ba6e9039410123e53ee60696d419b1c17f002aa33a5473101d1e21312",
+      "result_schema_sha256": "f52fb1eb8e9629b3e82cd1d4db6587b90e3babcbf97e5259f63619dc02df3168",
       "semantic_version": "1.0.0",
       "wire_name": "load_content_as_json"
     },
     {
-      "arguments_schema_sha256": "779fb77b5a2168d18e90e402616f51565cbb9a16ac6989ef3832b79e63134d3e",
+      "arguments_schema_sha256": "7b64fbad95f1d6d69fb8ce1830f65765eff274017590a97562564ceeabe617f1",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 262144,
-      "result_schema_sha256": "ff31b2924b1996be1224edac084569b90b3e1693839d47b1ad85cc92cf89fcf8",
+      "result_schema_sha256": "349664b26d1cf2d35f2109b781e58500905b1d8727349fde09df684bf721741f",
       "semantic_version": "1.0.0",
       "wire_name": "map_resource_path"
     },
     {
-      "arguments_schema_sha256": "4c2aea9ae5d69c0bdb31885144eb1a06e1165ae50bc3ef4e08c55fe33e96006e",
+      "arguments_schema_sha256": "62146c305b31557a2283e9c10d1d742e244e4ad44141c50a36d100d108c5ee8b",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "aaf47756aeaa9b8443b95b261f45d6afc4f19d0247faffd3ee587432d367113f",
+      "result_schema_sha256": "908a2e60f6c9ffbbb23d88436744972ea6997a13578c2ddb8cb74a88de12c2b4",
       "semantic_version": "1.0.0",
       "wire_name": "move_asset"
     },
     {
-      "arguments_schema_sha256": "e4bb593d103550a325e2fc197f75c2520926f8aa11c3943e4a2434ed1915993f",
+      "arguments_schema_sha256": "321e06ee0b323c407c09472e175c22706fd4f7dd8515845e3a8cc10cf5439fb2",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "8f16ded0146550e79af40559dd2d01cc40be10f2a49eda61803dec3f236d6354",
+      "result_schema_sha256": "bf2bd5b32dccd1311b8e59efa9249aae52de670630bacf3d58996852392470a6",
       "semantic_version": "1.0.0",
       "wire_name": "move_page"
     },
     {
-      "arguments_schema_sha256": "10a0d10dcc0c9cccb25ebd074306231042bc82886c8d80bfb5e6723fdeb94c5c",
+      "arguments_schema_sha256": "1020522088e9c27abfd832c16bf2d00288d05e36f3c7a5f25cd1c49aaad5239c",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 1048576,
-      "result_schema_sha256": "f4fce3d870747b7208a8d14081c00fac4724c129c1edcbd9ee9a6e06adca5691",
+      "result_schema_sha256": "1dea78b3f887cfa16b44b6bb92bebc38718d48ca9f658f75953678977f5a1124",
       "semantic_version": "1.0.0",
       "wire_name": "query_paths"
     },
     {
-      "arguments_schema_sha256": "243f599dc382469c6e51a6864ada83ed072b9180dd09e43b618c48b0e7dad732",
+      "arguments_schema_sha256": "4908f8fc555debabba6e846aa5325b95b431a564979d0a3f7ee414c20a42f640",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 262144,
-      "result_schema_sha256": "2346768e786aaa4278194c716509b14eb69d0488e3427997864e20f2db4826f0",
+      "result_schema_sha256": "b9e1f066d5ae58aee0c98503317138d3f8a7b97a751c371d0c0548fc35665f66",
       "semantic_version": "1.0.0",
       "wire_name": "read_content_fragment"
     },
     {
-      "arguments_schema_sha256": "eaf34767efb8490639bb8774e9f75abbb74c535813ec95bcc850630e3c0aeeb9",
+      "arguments_schema_sha256": "78b89ab3e07983c1c3b0bb376e6fe5063c0055a66a73951874f7b434ff32cd08",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "4b461573df6347a4ef9aecb33d662f782714b019702fa7c171017d21d80d28ff",
+      "result_schema_sha256": "f4e4c17724295a023bf4fbcf88b6c5d254963dceb926cebad227f724c92d97c6",
       "semantic_version": "1.0.0",
       "wire_name": "remove_group_member"
     },
     {
-      "arguments_schema_sha256": "69e22ae3092263c041688fe59fc57c3e03d4da50cf4938f51c1cecdf22133000",
+      "arguments_schema_sha256": "fa1e0487b455c17e7d4e03ec77371a3f697b3b7dd0d46042e39a319a2523ca15",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "f7828b5e22d922711a0da6e7e52ee6de62046bf41f78ad3c86a3c6f93f1399fa",
+      "result_schema_sha256": "10f427c3411d22ddf371cf54484f18c9a97cb689f5e935237fd2d1d1daf8e831",
       "semantic_version": "1.0.0",
       "wire_name": "reorder_component"
     },
     {
-      "arguments_schema_sha256": "6efc243f2e29c281ce8a09f1452674080cf7d5aa7224f439b5c058eeeaf8029b",
+      "arguments_schema_sha256": "2968c78fde05775d0cf4683875f16aa979bb774aa3f464c21e78c928fdb5cfa3",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "a92460ba72215b7c0931be9cba38a6838cd01ae3a994bcbd7a572899e70cda85",
+      "result_schema_sha256": "3baffe744b36ba5920e6af116fb30ed233d711b9380421ece6c9db6d5991f3b3",
       "semantic_version": "1.0.0",
       "wire_name": "replicate_content"
     },
     {
-      "arguments_schema_sha256": "d24ce52de8080218acc6f7040a2f12b7ba3a0155bcb3db50f2f8426104bde264",
+      "arguments_schema_sha256": "8acee9e65f5431832ad2830a0077a2b1b83f9561625dd1f26ab6305ac5d5c133",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 262144,
-      "result_schema_sha256": "fd7f9ef5903716ecb427e94644079de513b37332a4c8eb4e5df94ca0d86ce35e",
+      "result_schema_sha256": "3e1ec9d378fcdce0fc9ce71c010e8dc89c037a476fbec524062a53fbc79d4882",
       "semantic_version": "1.0.0",
       "wire_name": "resolve_resource_path"
     },
     {
-      "arguments_schema_sha256": "dbedde18634b72fe73a3b58a2cbca6230dc377b2d71787b39107fe9c22e62674",
+      "arguments_schema_sha256": "a83508198697d8b87d1be64b5ee1608faa4288bfd4a6f051eed7498e9a48b774",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "5e6de4e5c8ea3c8154ca72f3199e20f93057f411561b27da0c18276c427dd315",
+      "result_schema_sha256": "b4d362899cf95226e7ad90a5fe80560ad59678fa16a17111afe8d9f12e33cc8a",
       "semantic_version": "1.0.0",
       "wire_name": "retry_replication_queue_entry"
     },
     {
-      "arguments_schema_sha256": "2c11e794cc9b081ffed2c42c0342803828dcc565e48a596246c195803ab22717",
+      "arguments_schema_sha256": "c66f1d2fc415f34aaa550d74b210bca9e8efb0fc65cbff0a1c2be9fa2552cfc3",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "0b1777825307b9b9c5b0be111000cbb6479aad32f30455ef092af5432f3b2cd1",
+      "result_schema_sha256": "3574a2dccd402c407fbb8008e90cc046f1618eb6dcba4eef987d492460c9ab72",
       "semantic_version": "1.0.0",
       "wire_name": "set_open_service_gateway_initiative_bundle_state"
     },
     {
-      "arguments_schema_sha256": "6ca69b1d3e1707b0b6ae09b2323a135ed578fd67ede9e88660a8b8d64e0438af",
+      "arguments_schema_sha256": "ad6e990da5fe0a23d0e9d835c842474018354f8ca4ac87a7295fca7c40ae862b",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "1549ec5c6e553266fc68c86ef2e8f7b0fd7a1c9d41a4a71269e190c5e9a1c7f7",
+      "result_schema_sha256": "bc1e9d64e2740addf57ddd0e8882e0aadcba5c59a80c9827bfc6901f58f86ca7",
       "semantic_version": "1.0.0",
       "wire_name": "set_user_disabled"
     },
     {
-      "arguments_schema_sha256": "ff3bc215ba94578b53f71702d8f72715ee2745fae67a66fe01f092a15965545c",
+      "arguments_schema_sha256": "2766dbd2cc96a618a02b2725b83878b29671c9fe8f7f6bc75529801d6ad8843b",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "8a936b4d836cb2574e4a5cef4f7f8c824c613456478189e5417b70aa9cf3dfb3",
+      "result_schema_sha256": "fc922a53364701155c7c4aabf2223652fb7eb3be1840805190b01b1e807170ff",
       "semantic_version": "1.0.0",
       "wire_name": "set_workflow_instance_suspension"
     },
     {
-      "arguments_schema_sha256": "b7069f9f5510c53e21c5db98d0bb31ec3ff20ca5eb83887eb08e67e029a0aba0",
+      "arguments_schema_sha256": "361d6e6a1f003fbfd17416d20a4f6dc3fd64214538826d535fb36b2c6c8d0874",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "7cc8b6e00bb17a451d23e82fff2be655cb6ca75533feb1b7291af2d2671521e5",
+      "result_schema_sha256": "95a5fc485f27420457492244d5ef7385ed9281c071a7a491b7c54a5253f8c5fb",
       "semantic_version": "1.0.0",
       "wire_name": "start_workflow"
     },
     {
-      "arguments_schema_sha256": "6feda6ee8d8856f82c122f381c94a040d73bc19ab808f64df736794b55e26aac",
+      "arguments_schema_sha256": "4167e471ec85a7043c2ee663b06f582c8cd8472b19b36e73d31733913c64bf2c",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "15d46982a2013dcf3855c52ebee9317c1b70ac9d3452b86726e458361dc5d556",
+      "result_schema_sha256": "1d52142ccb73469137273ba42d7e30929152b694d82a571591d4c105b5d13064",
       "semantic_version": "1.0.0",
       "wire_name": "terminate_workflow_instance"
     },
     {
-      "arguments_schema_sha256": "948ea8aaa5f2c681340653ebd3e8dcedbedc1020fb6b25ce663d2934db5ada56",
+      "arguments_schema_sha256": "4f796bceb7ed3724e742c8a29a5539af72e161000e73850a42c33f83235990dc",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "891828725a9b828899dc5e7ef303a00900082fa693c995274a5ad1e71209e437",
+      "result_schema_sha256": "3207ab677072922e78bc8eb465cbec915260c40ab511f765e1917ef5b2a8beb6",
       "semantic_version": "1.0.0",
       "wire_name": "update_asset_metadata"
     },
     {
-      "arguments_schema_sha256": "3ce28d9d41b7fd14a287b94196824bb0dd8fd78fd5a16b5a837ed1b058f37ae2",
+      "arguments_schema_sha256": "e0ff42b0d3a506784ec2bcffb9df01e79ddad27b496c3b3344070888a4fed3d5",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "e2eb85e24c342a728588876c93b05c66ea2bf1087a0a659a776cd3beff364d7e",
+      "result_schema_sha256": "c861c5604a902705b32c23db5ccb77f86a906000abf9318a60e93b9060cd1357",
       "semantic_version": "1.0.0",
       "wire_name": "update_component"
     },
     {
-      "arguments_schema_sha256": "1aa686fd8345a3893635267e801ef6d9a9771c098d1028205627e9c143f79b4f",
+      "arguments_schema_sha256": "a4c4970700529048d19a5ad93a68e7b11198ec9db40d102ff52c1da4cc33a344",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "12de160c85da3c400c6a9e14012c52d94271933e77ccbec1645e959c38bc5e6c",
+      "result_schema_sha256": "b7da8c7d96408d48ff93175746ce1b555cf3bfcc48b3d985892cc340fb2d4b0b",
       "semantic_version": "1.0.0",
       "wire_name": "update_content_fragment"
     },
     {
-      "arguments_schema_sha256": "750d3324aa27bc6751aafbf086bec7375c56ee113941c6e6c8fd639006e06ebe",
+      "arguments_schema_sha256": "46cd6a826d0a0c8bc9336fddea3439dd82def2b0199c247579e2c7b7d0cb2e59",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "7a82e864659a453835b477f2e0acb335e57aeaa0c606e874e68ffcef3e0a5b6f",
+      "result_schema_sha256": "2e66ddebe0b8c493f156b42987e678d7218251e2e4ec09a934f5facdb44a3d15",
       "semantic_version": "1.0.0",
       "wire_name": "update_experience_fragment"
     },
     {
-      "arguments_schema_sha256": "5dd16864706d8aa49762af584418755d399e6274a675a21335d954479698d71c",
+      "arguments_schema_sha256": "7ed3d651efe8a6f683301376a9678c632b0a681796385bb5f38faf1421b52919",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "f3ec37c0b8d2c8069909d04eae68af1fad0883c4e8269d50c130cb1017e69ea5",
+      "result_schema_sha256": "230713b74bdfe962327a44773c3032b78c9ae869f8780d6728ee20b1e22a699d",
       "semantic_version": "1.0.0",
       "wire_name": "update_open_service_gateway_initiative_configuration"
     },
     {
-      "arguments_schema_sha256": "aedbd7c37a01290689cee8ac78196bd316368592e811252cfe7426d18dd339c3",
+      "arguments_schema_sha256": "29985aedd490638a11794908eb2dbebd3ad8f9e3feaed7b0dfc73f32a00f468c",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "209468892977c01f14da23a24064788f13a75b21f2a77217a90d239864c10b3b",
+      "result_schema_sha256": "18ecbeb6ba4cd47342d511a830c51f25e6f75c185bc5ea11419a954b64ec5240",
       "semantic_version": "1.0.0",
       "wire_name": "update_page"
     },
     {
-      "arguments_schema_sha256": "0831d9cf1c20b2f61ed41f76bbf8586c1c39b48fcc04d827f0271f7ee7dcc19a",
+      "arguments_schema_sha256": "376f5a69720ccb53a18853e6a481483a4f435ea6385ce2b7283f782ebd92d79d",
       "command_contract_limits_sha256": "c1d75299a29c1f4ab3495e5fff3f04bf483475573582d2976cfdf018fe46c255",
       "maximum_result_bytes": 16384,
-      "result_schema_sha256": "35d540914ada37e8f562cdadeb8a5fa25d19f21e6fabc4f3932d537cd8b70a90",
+      "result_schema_sha256": "6fce9802ae44f6119d74caa0e8a7362f4b78cf9aee52892eff02c8eb7937b218",
       "semantic_version": "1.0.0",
       "wire_name": "update_user_profile"
     }

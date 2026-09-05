@@ -24,7 +24,7 @@ use slingshot_agent_connection::command_submission::{
     Exchange, ExpectedArtifactManifest, IDEMPOTENCY_KEY_HEADER, ManifestKind, NonExecution,
     REFERER_HEADER, RESERVED_HEADERS, RecoveryPreconditions, StatusClass, Submission,
     SubmissionAcknowledgement, SubmissionOutcome, SubmissionRefusal, UnknownCause, classify_status,
-    remaining_retention_milliseconds,
+    parse_acknowledgement, remaining_retention_milliseconds,
 };
 use slingshot_agent_protocol::identity::WireOperationIdentity;
 use slingshot_agent_protocol::wire_contract::ExpectedProvenance;
@@ -183,6 +183,143 @@ fn submission() -> Submission {
     submission_of(&expected_for("query_paths"), ExpectedArtifactManifest::empty())
 }
 
+#[test]
+fn wire_body_retains_the_canonical_argument_bytes_and_bound_identity() {
+    let submission = submission();
+    let body = String::from_utf8(submission.wire_body().expect("the fixture is JSON"))
+        .expect("JSON is UTF-8");
+    let decoded: serde_json::Value = serde_json::from_str(&body).expect("one wire document");
+    assert_eq!(decoded["canonical_arguments"].as_str(), Some(ARGUMENTS));
+    assert_eq!(decoded["artifact_manifest"]["kind"], "empty");
+    assert!(decoded.get("arguments").is_none());
+    assert!(decoded.get("manifest").is_none());
+    assert_eq!(
+        decoded["operation"]["author_target_identity_digest"],
+        serde_json::Value::String(TARGET.to_owned())
+    );
+    assert_eq!(
+        decoded["operation"]["selected_environment_revision"],
+        serde_json::Value::String(REVISION.to_owned())
+    );
+}
+
+/// The acknowledgement codec accepts the closed document that the submission
+/// route later binds back to its operation, and no future/typo field.
+#[test]
+fn acknowledgement_codec_refuses_unknown_fields() {
+    let submission = submission();
+    let body = format!(
+        concat!(
+            "{{\"agent_event_store_generation\":{},",
+            "\"provenance\":{},\"selected_environment_revision\":\"{}\",",
+            "\"agent_operation_identifier\":\"{}\",",
+            "\"author_target_identity_digest\":\"{}\",",
+            "\"already_accepted\":false,",
+            "\"daemon_subscription_identifier\":\"{}\",",
+            "\"granted_retention_milliseconds\":{},",
+            "\"non_execution\":null,",
+            "\"physical_sling_job_identifiers\":[\"job-one\"],",
+            "\"retired\":false,",
+            "\"submitted_command_digest\":\"{}\"}}"
+        ),
+        GENERATION,
+        serde_json::to_string(&submission.provenance).unwrap(),
+        REVISION,
+        submission.operation.agent_operation_identifier,
+        TARGET,
+        SUBSCRIPTION,
+        GRANTED_RETENTION,
+        submission.submitted_command_digest,
+    );
+    assert_eq!(
+        parse_acknowledgement(body.as_bytes()).expect("the closed acknowledgement parses"),
+        acknowledgement_of(&submission, &["job-one"]),
+    );
+    let unknown = body.replacen("}", ",\"unexpected\":true}", 1);
+    assert_eq!(
+        parse_acknowledgement(unknown.as_bytes()),
+        Err(SubmissionRefusal::AcknowledgementMalformed)
+    );
+    for required in ["provenance", "selected_environment_revision"] {
+        let mut document: serde_json::Value = serde_json::from_str(&body).unwrap();
+        document.as_object_mut().unwrap().remove(required);
+        assert_eq!(
+            parse_acknowledgement(serde_json::to_string(&document).unwrap().as_bytes()),
+            Err(SubmissionRefusal::AcknowledgementMalformed)
+        );
+    }
+}
+
+#[test]
+fn no_acknowledgement_crosses_revision_or_any_provenance_member() {
+    let submission = submission();
+    for field in [
+        "format",
+        "transport",
+        "canonical",
+        "arguments",
+        "results",
+        "limits",
+        "version",
+        "command",
+        "revision",
+    ] {
+        let mut acknowledgement = acknowledgement_of(&submission, &["job-one"]);
+        let provenance = &mut acknowledgement.provenance;
+        let member = match field {
+            "format" => &mut provenance.format,
+            "transport" => &mut provenance.transport_contract_digest,
+            "canonical" => &mut provenance.canonical_json_contract_digest,
+            "arguments" => &mut provenance.command_contract.argument_schema_digest,
+            "results" => &mut provenance.command_contract.result_schema_digest,
+            "limits" => &mut provenance.command_contract.command_contract_limits_digest,
+            "version" => &mut provenance.command_contract.command_semantic_contract_version,
+            "command" => &mut provenance.command_contract.command_wire_name,
+            "revision" => &mut acknowledgement.selected_environment_revision,
+            _ => unreachable!(),
+        };
+        *member = "another".to_owned();
+        for status in [200, 202, 400, 409, 422] {
+            let mut exchange = exchange_of(acknowledgement.clone());
+            exchange.status = status;
+            assert_eq!(
+                submission.interpret(&exchange),
+                SubmissionOutcome::SubmissionUnknown {
+                    cause: if field == "revision" {
+                        UnknownCause::Revision
+                    } else {
+                        UnknownCause::Provenance
+                    },
+                },
+                "{field} on status {status}"
+            );
+        }
+    }
+}
+
+#[test]
+fn contradictory_nonexecution_never_authorizes_another_effect() {
+    let submission = submission();
+    for contradiction in ["accepted", "retired", "physical-job"] {
+        let mut acknowledgement = acknowledgement_of(&submission, &[]);
+        acknowledgement.non_execution = Some(NonExecution::Semantic);
+        match contradiction {
+            "accepted" => acknowledgement.already_accepted = true,
+            "retired" => acknowledgement.retired = true,
+            "physical-job" => {
+                acknowledgement.physical_sling_job_identifiers.push("job-one".to_owned())
+            }
+            _ => unreachable!(),
+        }
+        let mut exchange = exchange_of(acknowledgement);
+        exchange.status = 422;
+        assert_eq!(
+            submission.interpret(&exchange),
+            SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Body }
+        );
+    }
+}
+
 /// Returns a token this author issued.
 fn token() -> CrossSiteRequestForgeryToken {
     CrossSiteRequestForgeryToken {
@@ -207,6 +344,8 @@ fn clean_head() -> ResponseHead {
 /// Returns what an agent that accepted `submission` says about it.
 fn acknowledgement_of(submission: &Submission, jobs: &[&str]) -> SubmissionAcknowledgement {
     SubmissionAcknowledgement {
+        provenance: submission.provenance.clone(),
+        selected_environment_revision: submission.operation.selected_environment_revision.clone(),
         agent_event_store_generation: submission.operation.agent_event_store_generation,
         agent_operation_identifier: submission.operation.agent_operation_identifier.clone(),
         author_target_identity_digest: submission.operation.author_target_identity_digest.clone(),
@@ -471,8 +610,8 @@ fn the_idempotency_key_is_derived_so_a_restart_arrives_at_the_same_submission() 
         .find(|(name, _)| name == IDEMPOTENCY_KEY_HEADER)
         .expect("a submission carries an idempotency key");
     assert_eq!(
-        key.1, first.submitted_command_digest,
-        "a key that were not the digest would let one submission be resent as another"
+        key.1, first.operation.agent_operation_identifier,
+        "the protocol binds retries to the same logical operation, not only equal command bytes"
     );
     assert!(headers.iter().any(|(name, value)| name == TOKEN_HEADER && value == TOKEN_VALUE));
     assert!(
@@ -800,9 +939,22 @@ fn a_conflict_is_not_a_retry_and_a_retry_waits_a_bounded_time() {
     conflicting.status = CONFLICT_STATUS;
     assert_eq!(submission.interpret(&conflicting), SubmissionOutcome::Conflict);
     assert!(!submission.interpret(&conflicting).provably_not_recorded());
+    let mut unrelated = conflicting.clone();
+    unrelated.acknowledgement.as_mut().unwrap().agent_operation_identifier = "another".to_owned();
+    assert_eq!(
+        submission.interpret(&unrelated),
+        SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Identity }
+    );
+    unrelated.acknowledgement = None;
+    assert_eq!(
+        submission.interpret(&unrelated),
+        SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Body }
+    );
 
     let mut retrying = exchange_of(acknowledgement_of(&submission, &[]));
     retrying.status = RETRYABLE_STATUS;
+    assert!(submission.interpret(&retrying).requires_reconciliation());
+    assert!(!submission.interpret(&retrying).provably_not_recorded());
     let base = AuthorAgentTransportContract::embedded().limit("retry_base_milliseconds");
     assert_eq!(
         submission.interpret(&retrying),
@@ -989,4 +1141,20 @@ fn nothing_this_module_reports_carries_a_credential_or_a_response_body() {
         assert!(!line.contains(TOKEN_VALUE), "a credential must never reach a log: {line}");
         assert!(!line.contains(RESPONSE_BODY), "a remote string must never reach a log: {line}");
     }
+}
+
+#[test]
+fn submission_debug_redacts_arguments_and_identity_without_rewriting_wire_bytes() {
+    let mut held = submission();
+    held.canonical_arguments = r#"{"password":"private-command-sentinel"}"#.to_owned();
+    held.daemon_subscription_identifier = "private-subscription-sentinel".to_owned();
+    held.operation.author_target_identity_digest = "private-target-sentinel".to_owned();
+    held.operation.agent_operation_identifier = "private-operation-sentinel".to_owned();
+    let before = held.wire_body().unwrap();
+    assert_eq!(format!("{held:?}"), "Submission([redacted])");
+    assert_eq!(format!("{held:#?}"), "Submission([redacted])");
+    assert_eq!(held.clone().wire_body().unwrap(), before);
+    let wire: serde_json::Value = serde_json::from_slice(&before).unwrap();
+    assert_eq!(wire["canonical_arguments"], held.canonical_arguments);
+    assert!(String::from_utf8(before).unwrap().contains("private-command-sentinel"));
 }

@@ -16,6 +16,8 @@ pub mod artifact;
 pub mod authorizable_identity;
 pub mod cancel_sling_job;
 pub mod canonical_json;
+pub mod canonical_json_reader;
+pub mod loaded_document_reader;
 pub mod catalog;
 pub mod classification;
 pub mod classification_administration;
