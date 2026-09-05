@@ -1,0 +1,2 @@
+# Preserve the intentional wire-level carriage-return delimiters in this fixture.
+carriage-return.sse -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

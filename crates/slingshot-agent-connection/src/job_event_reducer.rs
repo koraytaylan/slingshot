@@ -34,7 +34,7 @@ use slingshot_domain::remote_job::{
     AgentJobState, JobEventSequence, RemoteJobFailure, RemoteJobObservation,
 };
 
-use crate::server_sent_event_decoder::TerminalCorrelation;
+use crate::server_sent_event_decoder::{DecodedEvent, TerminalCorrelation};
 
 /// What one event did to one job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +68,9 @@ impl JobDisposition {
 /// Why one event cannot be reduced against this job at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ReducerRefusal {
+    /// The event belongs to another retained operation or event-store generation.
+    #[error("this event does not belong to the retained job")]
+    AnotherJob,
     /// The event was produced under another environment revision.
     #[error("this operation was submitted under {held}, and this event names {named}")]
     AnotherRevision {
@@ -146,6 +149,41 @@ pub struct RetainedJob {
     /// events, so an event from down there needs no retained row to compare
     /// against and no digest to agree with. It is simply old news.
     pub snapshot_watermark: JobEventSequence,
+}
+
+/// Reduces a decoded event against an already associated retained job.
+///
+/// The operation key and generation must come from the retained association,
+/// not from the event. The selected revision likewise comes from its binding:
+/// events cannot select or replace that local configuration. Missing counters
+/// preserve the retained values; explicit zero is never treated as omission.
+/// This is a pure observation fold, not permission to settle a local operation
+/// or to persist a cursor separately from the job update.
+///
+/// # Errors
+///
+/// Refuses another operation/generation or any transition refused by [`reduce`].
+pub fn reduce_decoded(
+    retained: &RetainedJob,
+    binding: &AssociationBinding,
+    generation: u64,
+    agent_operation_identifier: &str,
+    event: &DecodedEvent,
+) -> Result<(JobDisposition, Option<RemoteJobObservation>), ReducerRefusal> {
+    if event.event.agent_event_store_generation != generation
+        || event.event.agent_operation_identifier != agent_operation_identifier
+    {
+        return Err(ReducerRefusal::AnotherJob);
+    }
+    let observed = ObservedJobEvent {
+        attempt: event.attempt.unwrap_or(retained.observation.attempt),
+        correlation: event.terminal.clone(),
+        kind: event.event.kind,
+        progress: event.progress.unwrap_or(retained.observation.progress),
+        selected_environment_revision: binding.selected_environment_revision.clone(),
+        sequence: JobEventSequence::of(event.event.sequence),
+    };
+    reduce(Some(retained), binding, &observed)
 }
 
 /// Returns what one event does to a job, and what the job becomes.

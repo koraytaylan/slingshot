@@ -72,12 +72,14 @@ pub enum ScriptFailure {
 
 /// Routes this author serves.
 pub const AUTHOR_ROUTES: &[&str] = &[
-    "/bin/slingshot/agent/capabilities",
-    "/bin/slingshot/agent/submit",
-    "/bin/slingshot/agent/events",
-    "/bin/slingshot/agent/snapshot",
-    "/bin/slingshot/agent/artifact",
-    "/libs/granite/csrf/token",
+    "/bin/slingshot-agent/capabilities",
+    "/bin/slingshot-agent/jobs",
+    "/bin/slingshot-agent/events",
+    "/bin/slingshot-agent/events/high-water",
+    "/bin/slingshot-agent/jobs/snapshot",
+    "/bin/slingshot-agent/operations/lookup",
+    "/bin/slingshot-agent/operations/operation-one/artifacts/content_package",
+    "/libs/granite/csrf/token.json",
 ];
 
 /// Route prefixes a publisher would serve and this author never does.
@@ -137,7 +139,18 @@ pub fn require_author_route(route: &str) -> Result<(), ScriptFailure> {
     if PUBLISHER_PREFIXES.iter().any(|prefix| route.starts_with(prefix)) {
         return Err(ScriptFailure::PublisherRoute { route: route.to_owned() });
     }
-    if !AUTHOR_ROUTES.contains(&route) {
+    let artifact = route
+        .strip_prefix("/bin/slingshot-agent/operations/")
+        .and_then(|tail| tail.split_once("/artifacts/"))
+        .is_some_and(|(operation, slot)| {
+            !operation.is_empty()
+                && operation.len() as u64 <= slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded().limit("maximum_agent_operation_identifier_bytes")
+                && operation.bytes().all(|b| {
+                    b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'-' | b'_')
+                })
+                && matches!(slot, "content_package" | "loaded_content_json")
+        });
+    if !AUTHOR_ROUTES.contains(&route) && !artifact {
         return Err(ScriptFailure::UnknownRoute { route: route.to_owned() });
     }
     Ok(())

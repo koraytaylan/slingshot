@@ -143,6 +143,99 @@ fn unclaimed() -> FenceFacts {
     FenceFacts { execution_checkpoint: None, outbox_attempts: 0, worker_fence: None }
 }
 
+#[test]
+fn a_dropped_initial_send_permit_survives_restart_as_lookup_only() {
+    use slingshot_daemon::operation::durable_author_submission::{
+        DurableSubmissionRefusal, prepare_initial_submission,
+    };
+    use slingshot_domain::operation_executor::ExecutionIdentity;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("operations.sqlite3");
+    let identity = ExecutionIdentity {
+        attempt: 1,
+        author_target_identity_digest: TARGET.to_owned(),
+        selected_environment_revision: REVISION.to_owned(),
+        operation_identifier: LOCAL_OPERATION.to_owned(),
+    };
+    let submitted = submission();
+    let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    let mut drifted = submitted.clone();
+    drifted.submitted_command_digest = "another-digest".to_owned();
+    assert!(matches!(
+        prepare_initial_submission(&repository, &identity, &drifted, 100),
+        Err(DurableSubmissionRefusal::Preflight)
+    ));
+    assert!(
+        repository.read(TARGET, &submitted.operation.agent_operation_identifier).unwrap().is_none()
+    );
+    let permit =
+        prepare_initial_submission(&repository, &identity, &submitted, 100).unwrap().unwrap();
+    let retained =
+        repository.read(TARGET, &submitted.operation.agent_operation_identifier).unwrap().unwrap();
+    assert_eq!(retained.canonical_submission.as_bytes(), submitted.wire_body().unwrap());
+    assert_eq!(retained.remaining_retention_milliseconds, 0);
+    assert!(
+        repository
+            .physical_jobs(TARGET, &submitted.operation.agent_operation_identifier)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!format!("{permit:?}").contains(TARGET));
+    drop(permit);
+    drop(repository);
+    let reopened = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    let later = ExecutionIdentity { attempt: 9, ..identity.clone() };
+    assert!(prepare_initial_submission(&reopened, &later, &submitted, 999).unwrap().is_none());
+    let changed = derived(&installed(), OTHER_ARGUMENTS);
+    assert!(matches!(
+        prepare_initial_submission(&reopened, &later, &changed, 999),
+        Err(DurableSubmissionRefusal::Conflict)
+    ));
+    assert_eq!(
+        reopened.read(TARGET, &submitted.operation.agent_operation_identifier).unwrap().unwrap(),
+        retained
+    );
+}
+
+#[test]
+fn racing_initial_admissions_issue_only_one_send_permit() {
+    use slingshot_daemon::operation::durable_author_submission::prepare_initial_submission;
+    use slingshot_domain::operation_executor::ExecutionIdentity;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("operations.sqlite3");
+    drop(OperationDatabase::open(&path, settings()).unwrap());
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let handles: Vec<_> = (0..2)
+        .map(|index| {
+            let path = path.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                let repository =
+                    AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+                let identity = ExecutionIdentity {
+                    attempt: index + 1,
+                    author_target_identity_digest: TARGET.to_owned(),
+                    selected_environment_revision: REVISION.to_owned(),
+                    operation_identifier: LOCAL_OPERATION.to_owned(),
+                };
+                let submitted = submission();
+                barrier.wait();
+                prepare_initial_submission(
+                    &repository,
+                    &identity,
+                    &submitted,
+                    100 + u64::from(index),
+                )
+                .unwrap()
+                .is_some()
+            })
+        })
+        .collect();
+    let count =
+        handles.into_iter().map(|handle| usize::from(handle.join().unwrap())).sum::<usize>();
+    assert_eq!(count, 1);
+}
+
 /// Returns a fence whose work has passed the point of no return.
 fn started() -> FenceFacts {
     FenceFacts {
@@ -175,6 +268,9 @@ fn outcome_named(spelling: &str) -> SubmissionOutcome {
         "submission-unknown" => SubmissionOutcome::SubmissionUnknown {
             cause: slingshot_agent_connection::command_submission::UnknownCause::Framing,
         },
+        "lookup-required" => SubmissionOutcome::SubmissionUnknown {
+            cause: slingshot_agent_connection::command_submission::UnknownCause::LookupRequired,
+        },
         other => panic!("{other} is an outcome this suite does not name"),
     }
 }
@@ -189,6 +285,7 @@ fn disposition_spelling(disposition: &HandoffDisposition) -> &'static str {
         HandoffDisposition::Conflict => "conflict",
         HandoffDisposition::RetryAfter { .. } => "retry-after",
         HandoffDisposition::Unknown => "unknown",
+        HandoffDisposition::ReconcileRetained => "reconcile-retained",
     }
 }
 
@@ -322,7 +419,7 @@ fn every_crash_boundary_reaches_the_conclusion_its_vector_states() {
 }
 
 #[test]
-fn every_outcome_maps_to_one_disposition_and_only_two_permit_another_send() {
+fn every_outcome_maps_to_one_disposition_and_only_nonexecution_permits_another_send() {
     for vector in vectors_of("disposition") {
         let name = vector["name"].as_str().expect("a name");
         let disposition = disposition_of(&outcome_named(vector["outcome"].as_str().expect("one")));

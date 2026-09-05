@@ -12,6 +12,163 @@ use slingshot_storage::artifact_store::{
 use crate::fixtures::*;
 
 #[test]
+fn incremental_chunks_share_verified_publication_and_refusal_cleanup() {
+    let (directory, store) = store();
+    let request = request(&partition(FIRST_PRINCIPAL), "incremental", "content_package");
+    let digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let content = directory.path().join("content");
+    {
+        let mut writer = store.begin_verified(&request, 3, digest).unwrap();
+        assert_eq!(format!("{writer:?}"), "ArtifactStageWriter([redacted])");
+        writer.write_chunk(b"a").unwrap();
+        // Dropping the sink is also what cancellation of its owning future does.
+    }
+    assert_eq!(std::fs::read_dir(&content).unwrap().count(), 0);
+    let mut writer = store.begin_verified(&request, 3, digest).unwrap();
+    writer.write_chunk(b"abc").unwrap();
+    assert!(writer.write_chunk(b"d").is_err());
+    assert!(writer.write_chunk(b"").is_err(), "a later empty chunk cannot clear refusal");
+    assert!(writer.finish().is_err());
+    assert_eq!(std::fs::read_dir(&content).unwrap().count(), 0);
+    for invalid in [b"ab".as_slice(), b"abd".as_slice()] {
+        let mut writer = store.begin_verified(&request, 3, digest).unwrap();
+        writer.write_chunk(invalid).unwrap();
+        assert!(writer.finish().is_err());
+        assert_eq!(std::fs::read_dir(&content).unwrap().count(), 0);
+    }
+    for split in 0..=3 {
+        let mut writer = store.begin_verified(&request, 3, digest).unwrap();
+        writer.write_chunk(&b"abc"[..split]).unwrap();
+        writer.write_chunk(&b"abc"[split..]).unwrap();
+        let stage = writer.finish().unwrap();
+        assert_eq!(stage.metadata().byte_length, 3);
+        stage.publish().unwrap();
+        assert_eq!(std::fs::read(content.join(digest)).unwrap(), b"abc");
+        assert_eq!(std::fs::read_dir(&content).unwrap().count(), 1);
+    }
+}
+
+#[test]
+fn private_verified_stage_is_unpublished_until_consumed_and_drop_removes_it() {
+    let (directory, store) = store();
+    let request = request(&partition(FIRST_PRINCIPAL), "staged-operation", "content_package");
+    let digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let content = directory.path().join("content");
+    let stage = store.stage_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+    assert_eq!(stage.metadata().content_digest, digest);
+    assert_eq!(format!("{stage:?}"), "StagedArtifact([redacted])");
+    assert!(!content.join(digest).exists());
+    assert!(store.open_verified(stage.metadata()).is_err());
+    assert_eq!(std::fs::read_dir(&content).unwrap().count(), 1);
+    drop(stage);
+    assert_eq!(std::fs::read_dir(&content).unwrap().count(), 0);
+    let installed = store
+        .stage_verified(&request, &mut b"abc".as_slice(), 3, digest)
+        .unwrap()
+        .publish()
+        .unwrap();
+    assert_eq!(std::fs::read(content.join(digest)).unwrap(), b"abc");
+    assert_eq!(installed.byte_length, 3);
+    let abandoned_duplicate =
+        store.stage_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+    drop(abandoned_duplicate);
+    assert_eq!(std::fs::read_dir(&content).unwrap().count(), 1);
+    assert_eq!(std::fs::read(content.join(digest)).unwrap(), b"abc");
+}
+
+#[test]
+fn private_stage_reads_are_verified_and_never_create_a_public_address() {
+    let (directory, store) = store();
+    let request = request(&partition(FIRST_PRINCIPAL), "private-read", "content_package");
+    let digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let content = directory.path().join("content");
+    let stage = store.stage_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+    let mut reader = stage.open_verified().unwrap();
+    let mut bytes = [0; 2];
+    assert_eq!(reader.read_into(&mut bytes).unwrap(), 2);
+    assert_eq!(&bytes, b"ab");
+    assert!(reader.finish().is_err(), "partial validation cannot succeed");
+    let mut reader = stage.open_verified().unwrap();
+    let mut bytes = [0; 4];
+    assert_eq!(reader.read_into(&mut bytes).unwrap(), 3);
+    assert_eq!(&bytes[..3], b"abc");
+    assert_eq!(reader.read_into(&mut bytes).unwrap(), 0);
+    reader.finish().unwrap();
+    assert!(!content.join(digest).exists());
+    assert!(store.open_verified(stage.metadata()).is_err());
+    let mut reader = stage.open_verified().unwrap();
+    let name = std::fs::read_dir(&content).unwrap().next().unwrap().unwrap().path();
+    std::fs::write(&name, b"abd").unwrap();
+    reader.read_into(&mut bytes).unwrap();
+    assert!(reader.finish().is_err(), "same-length mutation must invalidate validation");
+    assert!(stage.open_verified().is_err());
+    assert!(stage.publish().is_err());
+    assert_eq!(std::fs::read_dir(&content).unwrap().count(), 0);
+}
+
+#[test]
+fn failed_stage_publication_cleans_only_private_content_and_preserves_the_destination() {
+    let (directory, store) = store();
+    let request = request(&partition(FIRST_PRINCIPAL), "staged-operation", "content_package");
+    let digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let content = directory.path().join("content");
+    let stage = store.stage_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+    // A conflicting existing object is not ours to replace or delete.
+    std::fs::write(content.join(digest), b"conflict").unwrap();
+    assert!(stage.publish().is_err());
+    assert_eq!(std::fs::read_dir(&content).unwrap().count(), 1);
+    assert_eq!(std::fs::read(content.join(digest)).unwrap(), b"conflict");
+}
+
+#[test]
+fn changed_private_stage_refuses_publication_and_replaced_name_is_not_deleted() {
+    let (directory, store) = store();
+    let request = request(&partition(FIRST_PRINCIPAL), "staged-operation", "content_package");
+    let digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let content = directory.path().join("content");
+    let stage = store.stage_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+    let name = std::fs::read_dir(&content).unwrap().next().unwrap().unwrap().path();
+    std::fs::write(&name, b"changed").unwrap();
+    assert!(stage.publish().is_err());
+    assert_eq!(std::fs::read_dir(&content).unwrap().count(), 0);
+    let stage = store.stage_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+    let name = std::fs::read_dir(&content).unwrap().next().unwrap().unwrap().path();
+    let displaced = directory.path().join("displaced");
+    std::fs::rename(&name, &displaced).unwrap();
+    std::fs::write(&name, b"replacement").unwrap();
+    assert!(stage.publish().is_err());
+    assert_eq!(std::fs::read(&name).unwrap(), b"replacement");
+    assert!(!content.join(digest).exists());
+}
+
+#[test]
+fn expected_content_is_checked_before_publication_and_refusals_leave_no_files() {
+    let (directory, store) = store();
+    let request = request(&partition(FIRST_PRINCIPAL), "verified-operation", "content_package");
+    // Independently known SHA-256 of the three ASCII bytes abc.
+    let digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    for (mut body, length, expected) in [
+        (b"abc".as_slice(), 3, "not-a-digest"),
+        (b"ab".as_slice(), 3, digest),
+        (b"abcd".as_slice(), 3, digest),
+        (b"abd".as_slice(), 3, digest),
+    ] {
+        assert!(store.install_verified(&request, &mut body, length, expected).is_err());
+        assert_eq!(std::fs::read_dir(directory.path().join("content")).unwrap().count(), 0);
+    }
+    let mut oversized = std::io::Cursor::new(vec![b'x'; TRANSFER_BYTES * 2]);
+    assert!(store.install_verified(&request, &mut oversized, 3, digest).is_err());
+    assert_eq!(oversized.position(), 4, "read only the expected length plus the overshoot probe");
+    let installed = store.install_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+    assert_eq!(installed.content_digest, digest);
+    assert_eq!(installed.byte_length, 3);
+    assert_eq!(std::fs::read(directory.path().join("content").join(digest)).unwrap(), b"abc");
+    assert!(store.install_verified(&request, &mut b"abd".as_slice(), 3, digest).is_err());
+    assert_eq!(std::fs::read(directory.path().join("content").join(digest)).unwrap(), b"abc");
+    assert_eq!(std::fs::read_dir(directory.path().join("content")).unwrap().count(), 1);
+}
+
+#[test]
 fn every_content_vector_installs_as_the_bytes_the_fixture_measured() {
     let (_directory, store) = store();
     let vectors = rows(CONTENTS);

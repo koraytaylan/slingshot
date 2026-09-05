@@ -12,6 +12,35 @@ use slingshot_storage::operation_repository::AdmissionOutcome;
 use crate::fixtures::*;
 
 #[test]
+fn execution_input_survives_reopen_and_is_partition_scoped_and_redacted() {
+    let directory = tempfile::tempdir().expect("a test directory");
+    let path = directory.path().join("operations.sqlite");
+    let digest = partition(FIRST_PRINCIPAL);
+    let asked =
+        request(&digest, "retained-input", "{\"private\":\"payload-sentinel\"}", "revision-1");
+    {
+        let store = repository(&path);
+        store.admit(&asked, NOW).expect("admit retained bytes");
+    }
+    let store = repository(&path);
+    let input = store
+        .read_execution_input(&digest, "retained-input")
+        .expect("read execution input")
+        .expect("the operation exists");
+    assert_eq!(input.canonical_command, asked.canonical_command);
+    assert_eq!(input.daemon_runtime_contract_digest, asked.daemon_runtime_contract_digest);
+    assert_eq!(input.summary.selected_environment_revision, asked.selected_environment_revision);
+    assert_eq!(input.summary.record.revision, 1);
+    assert!(!format!("{input:?}").contains("payload-sentinel"));
+    assert!(
+        store
+            .read_execution_input(&partition(SECOND_PRINCIPAL), "retained-input")
+            .expect("read another partition")
+            .is_none()
+    );
+}
+
+#[test]
 fn one_identifier_names_one_row_and_a_repeat_returns_that_row() {
     let store = in_memory();
     let digest = partition(FIRST_PRINCIPAL);

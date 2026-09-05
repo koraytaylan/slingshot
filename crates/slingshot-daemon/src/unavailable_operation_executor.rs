@@ -50,12 +50,13 @@ impl UnavailableOperationExecutor {
 }
 
 impl OperationExecutor for UnavailableOperationExecutor {
-    fn execute(
-        &self,
-        _identity: &ExecutionIdentity,
-        _command: &slingshot_domain::command::catalog::Command,
-        _progress: &dyn ProgressPort,
-    ) -> OperationExecutorOutcome {
-        Self::outcome()
+    fn execute<'phase>(
+        &'phase self,
+        _identity: &'phase ExecutionIdentity,
+        _command: &'phase slingshot_domain::command::catalog::Command,
+        _progress: &'phase dyn ProgressPort,
+    ) -> slingshot_domain::operation_executor::ExecutionFuture<'phase, OperationExecutorOutcome>
+    {
+        Box::pin(async { Self::outcome() })
     }
 }

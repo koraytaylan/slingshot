@@ -22,6 +22,43 @@ use slingshot_domain::command::download_content_package::{
 };
 use slingshot_domain::command::repository_path::RepositoryPath;
 
+#[test]
+fn package_failure_references_belong_to_the_exact_requested_roots_and_filters() {
+    let command: DownloadContentPackageCommand = serde_json::from_value(serde_json::json!({
+        "package_name":"example", "roots":["/content/example"],
+        "inclusion_filters":["/content/example/(.*)"]
+    }))
+    .unwrap();
+    for (payload, accepted) in [
+        (serde_json::json!({"failure":"root_not_found","root_path":"/content/example"}), true),
+        (
+            serde_json::json!({"failure":"root_access_denied","root_path":"/content/example/child"}),
+            false,
+        ),
+        (serde_json::json!({"failure":"root_not_found","root_path":"/content/other"}), false),
+        (
+            serde_json::json!({"failure":"pattern_rejected","collection":"inclusion","expression_index":0}),
+            true,
+        ),
+        (
+            serde_json::json!({"failure":"pattern_rejected","collection":"inclusion","expression_index":1}),
+            false,
+        ),
+        (
+            serde_json::json!({"failure":"pattern_rejected","collection":"exclusion","expression_index":0}),
+            false,
+        ),
+        (
+            serde_json::json!({"failure":"pattern_rejected","collection":"inclusion","expression_index":u64::MAX}),
+            false,
+        ),
+        (serde_json::json!({"failure":"artifact_publication_outcome_unknown"}), true),
+    ] {
+        let refusal: DownloadContentPackageRefusal = serde_json::from_value(payload).unwrap();
+        assert_eq!(refusal.require_answers(&command).is_ok(), accepted);
+    }
+}
+
 /// Commands this test reads.
 const COMMANDS: &str = include_str!("fixtures/commands/download_content_package/commands.jsonl");
 

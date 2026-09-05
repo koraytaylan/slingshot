@@ -249,6 +249,37 @@ fn a_restart_reconstructs_only_the_wait_it_persisted() {
 }
 
 #[test]
+fn dispatched_work_is_consumed_and_equal_deadline_retries_rotate() {
+    let mut supervisor = RecoveryAndEventSupervisor::over(TARGET);
+    supervisor.hold(work("z-first", RetryCategory::SnapshotPoll, NOW));
+    supervisor.hold(work("a-second", RetryCategory::SnapshotPoll, NOW));
+    for expected in ["z-first", "a-second", "z-first", "a-second"] {
+        let due = supervisor.next_due(NOW).unwrap();
+        assert_eq!(due.agent_operation_identifier, expected);
+        assert_eq!(supervisor.work().len(), 1);
+        supervisor.hold(due);
+    }
+    assert!(supervisor.next_due(NOW).is_some());
+    assert!(supervisor.next_due(NOW).is_some());
+    assert!(supervisor.next_due(NOW).is_none());
+}
+
+#[test]
+fn refreshing_a_pending_pair_changes_its_schedule_without_duplication() {
+    let mut supervisor = RecoveryAndEventSupervisor::over(TARGET);
+    supervisor.hold(work("one", RetryCategory::SnapshotPoll, NOW));
+    let mut refreshed = work("one", RetryCategory::SnapshotPoll, NOW + 10);
+    refreshed.paused = true;
+    supervisor.hold(refreshed.clone());
+    assert_eq!(supervisor.work(), &[refreshed]);
+    assert!(supervisor.next_due(NOW + 10).is_none());
+    supervisor.hold(work("one", RetryCategory::SnapshotPoll, NOW + 10));
+    assert!(supervisor.next_due(NOW + 9).is_none());
+    assert!(supervisor.next_due(NOW + 10).is_some());
+    assert!(supervisor.next_due(NOW + 10).is_none());
+}
+
+#[test]
 fn due_work_is_served_fairly_across_categories_rather_than_by_deadline_alone() {
     let mut supervisor = RecoveryAndEventSupervisor::over(TARGET);
     supervisor.hold(work("chatty-stream", RetryCategory::EventReconnect, NOW));
@@ -356,6 +387,7 @@ fn shutting_down_lets_go_of_work_and_cancels_nothing_remote() {
     let detached = supervisor.detach();
     assert_eq!(detached.len(), 2, "everything held is handed back rather than dropped silently");
     assert!(!supervisor.accepts_new_work());
+    supervisor.hold(work("late-completion", RetryCategory::ResultAcquisition, NOW));
     assert!(
         supervisor.work().is_empty() && supervisor.next_due(NOW).is_none(),
         "a Sling job this daemon started is the agent's to finish"

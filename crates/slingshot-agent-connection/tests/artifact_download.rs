@@ -15,9 +15,9 @@
 
 use slingshot_agent_connection::artifact_download::{
     ARTIFACT_ROUTE, ArtifactResponseHead, ArtifactTransfer, ArtifactUnavailable, DownloadRefusal,
-    ExpectedArtifact, OPERATION_QUERY_MEMBER, PERMITTED_CONTENT_CODINGS, SLOT_QUERY_MEMBER,
-    TransferEnd, UnavailableOutcome, UnavailableReason, artifact_route, encoded_segment,
-    missing_grace_milliseconds, require_remote_slot, require_streamable, unavailable_outcome,
+    ExpectedArtifact, PERMITTED_CONTENT_CODINGS, TransferEnd, UnavailableOutcome,
+    UnavailableReason, artifact_route, encoded_segment, missing_grace_milliseconds,
+    require_remote_slot, require_streamable, unavailable_outcome,
 };
 use slingshot_agent_connection::author_hypertext_transfer_protocol_policy::ResponseHead;
 use slingshot_agent_connection::structured_job_result::STRUCTURED_RESULT_SLOT;
@@ -147,10 +147,17 @@ fn every_route_is_built_here_and_every_segment_is_encoded_once() {
             vector["encoded_operation"].as_str().expect("an encoding"),
             "{name}: a separator surviving into a segment would let it choose the route"
         );
+        if name != "ordinary" {
+            assert_eq!(
+                artifact_route(AUTHOR_BASE, operation, slot),
+                Err(DownloadRefusal::InvalidRouteSegment)
+            );
+            continue;
+        }
         assert_eq!(
-            artifact_route(AUTHOR_BASE, operation, slot),
+            artifact_route(AUTHOR_BASE, operation, slot).expect("canonical route"),
             format!(
-                "{AUTHOR_BASE}{ARTIFACT_ROUTE}?{OPERATION_QUERY_MEMBER}={}&{SLOT_QUERY_MEMBER}={}",
+                "{AUTHOR_BASE}{ARTIFACT_ROUTE}/{}/artifacts/{}",
                 vector["encoded_operation"].as_str().expect("an encoding"),
                 vector["encoded_slot"].as_str().expect("an encoding")
             ),

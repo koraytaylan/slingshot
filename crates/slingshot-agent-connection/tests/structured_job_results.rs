@@ -21,8 +21,8 @@
 use slingshot_agent_connection::structured_job_result::{
     ArtifactEcho, Classification, DictionaryStep, LocalDisposition, ResultExpectation,
     ResultRefusal, STAGE_ORDER, STRUCTURED_RESULT_MEDIA_TYPE, STRUCTURED_RESULT_SLOT,
-    TerminalResultDocument, TraceRefusal, ValidationStage, declared_slots, loading_command,
-    local_disposition, maximum_agent_inline_result_bytes, maximum_document_bytes,
+    TerminalResultDocument, TraceRefusal, ValidationStage, declared_slots, decode_terminal_result,
+    loading_command, local_disposition, maximum_agent_inline_result_bytes, maximum_document_bytes,
     maximum_inline_machine_result_bytes, package_slot_and_media_type, require_declared_artifacts,
     require_two_phase_access, require_valid,
 };
@@ -35,6 +35,213 @@ use slingshot_domain::command::artifact::{
 use slingshot_domain::command::load_content_as_javascript_object_notation::maximum_agent_inline_loaded_document_bytes;
 use slingshot_domain::command::schema::canonical_contract_digest;
 use slingshot_domain::selected_command_contract_identity::SelectedCommandContractIdentity;
+
+#[test]
+fn published_terminal_envelope_rejects_invalid_shapes_even_if_expectations_match() {
+    let mut source = document("query_paths", 0, &[]);
+    source.canonical_result = r#"{"matches":[]}"#.to_owned();
+    let expected = expectation("query_paths");
+    assert!(decode_terminal_result(&serde_json::to_vec(&source).unwrap(), &expected).is_ok());
+    for subscription in [String::new(), "x".repeat(97)] {
+        let mut changed = source.clone();
+        let mut matching = expected.clone();
+        changed.daemon_subscription_identifier = subscription.clone();
+        matching.daemon_subscription_identifier = subscription;
+        assert!(decode_terminal_result(&serde_json::to_vec(&changed).unwrap(), &matching).is_err());
+    }
+    let mut changed = source.clone();
+    let mut matching = expected.clone();
+    changed.operation.agent_event_store_generation = 0;
+    matching.operation.agent_event_store_generation = 0;
+    assert!(decode_terminal_result(&serde_json::to_vec(&changed).unwrap(), &matching).is_err());
+    for artifacts in [
+        vec![echo(CONTENT_PACKAGE_SLOT, 1), echo(CONTENT_PACKAGE_SLOT, 1)],
+        vec![ArtifactEcho { slot: String::new(), ..echo(CONTENT_PACKAGE_SLOT, 1) }],
+        vec![ArtifactEcho { media_type: "x".repeat(129), ..echo(CONTENT_PACKAGE_SLOT, 1) }],
+        vec![ArtifactEcho { suggested_name: "x".repeat(256), ..echo(CONTENT_PACKAGE_SLOT, 1) }],
+    ] {
+        let mut changed = source.clone();
+        changed.declared_artifacts = artifacts;
+        assert!(decode_terminal_result(&serde_json::to_vec(&changed).unwrap(), &expected).is_err());
+    }
+}
+
+#[test]
+fn command_result_gate_checks_schema_order_types_and_retained_request() {
+    use slingshot_agent_connection::structured_job_result::decode_result_for_command;
+    use slingshot_domain::command::catalog::Command;
+    let command: Command = serde_json::from_value(serde_json::json!({
+        "command": "query_paths", "root_path": "/content/retained"
+    }))
+    .unwrap();
+    let expected = expectation("query_paths");
+    let mut source = document("query_paths", 0, &[]);
+    source.canonical_result =
+        r#"{"matches":[{"repository_path":"/content/retained/a"}]}"#.to_owned();
+    let checked =
+        decode_result_for_command(&serde_json::to_vec(&source).unwrap(), &expected, &command)
+            .unwrap();
+    assert_eq!(checked.canonical_result, source.canonical_result);
+    for payload in [
+        // Missing and surplus members, including an injected catalog tag.
+        r#"{}"#,
+        r#"{"matches":[],"private-canary":true}"#,
+        r#"{"command":"query_paths","matches":[]}"#,
+        // Serde accepts null for Option; the installed schema does not.
+        r#"{"matches":[],"next_continuation_token":null}"#,
+        // Canonical object bytes, but unordered or repeated set members.
+        r#"{"matches":[{"repository_path":"/content/retained/b"},{"repository_path":"/content/retained/a"}]}"#,
+        r#"{"matches":[{"repository_path":"/content/retained/a"},{"repository_path":"/content/retained/a"}]}"#,
+        // Schema permits this prefix; the typed repository path refuses it.
+        r#"{"matches":[{"repository_path":"/content/retained/../a"}]}"#,
+        // A valid typed result, but not for the retained root.
+        r#"{"matches":[{"repository_path":"/content/another-request/a"}]}"#,
+    ] {
+        source.canonical_result = payload.to_owned();
+        let refusal =
+            decode_result_for_command(&serde_json::to_vec(&source).unwrap(), &expected, &command)
+                .unwrap_err();
+        assert!(!format!("{refusal:?} {refusal}").contains("private-canary"));
+    }
+    source.canonical_result = r#"{"matches":[]}"#.to_owned();
+    let mut fabricated = expected.clone();
+    fabricated.expected_provenance.command_contract.result_schema_digest =
+        SUBSTITUTED_DIGEST.to_owned();
+    source.provenance.command_contract.result_schema_digest = SUBSTITUTED_DIGEST.to_owned();
+    assert!(
+        decode_result_for_command(&serde_json::to_vec(&source).unwrap(), &fabricated, &command)
+            .is_err()
+    );
+}
+
+#[test]
+fn every_installed_result_schema_compiles_without_external_resolution() {
+    use slingshot_domain::command::schema::{COMMAND_WIRE_NAMES, SchemaRole, command_schema};
+    for name in COMMAND_WIRE_NAMES {
+        assert!(
+            jsonschema::draft202012::new(&command_schema(name, SchemaRole::Result)).is_ok(),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn loaded_result_gate_checks_document_structure_not_only_outer_echo() {
+    use slingshot_agent_connection::structured_job_result::decode_result_for_command;
+    use slingshot_domain::command::{canonical_json::write_canonical, catalog::Command};
+    let wire = "load_content_as_json";
+    let command: Command = serde_json::from_value(serde_json::json!({
+        "command":wire, "path":"/content/example", "depth":1
+    }))
+    .unwrap();
+    let expected = expectation(wire);
+    let leaf = |path: &str| serde_json::json!({"children":[],"children_truncated":false,"path":path,"properties":{}});
+    let mut valid = leaf("/content/example");
+    valid["children"] = serde_json::json!([
+        leaf("/content/example/a"),
+        leaf("/content/example/a[2]"),
+        leaf("/content/example/a[10]")
+    ]);
+    for mutation in 0..6 {
+        let mut tree = valid.clone();
+        match mutation {
+            0 => {}
+            1 => tree["path"] = "/content/other".into(),
+            2 => tree["children"][0]["path"] = "/content/other/a".into(),
+            3 => tree["children"].as_array_mut().unwrap().swap(1, 2),
+            4 => {
+                tree["children"][0]["children"] =
+                    serde_json::json!([leaf("/content/example/a/deeper")])
+            }
+            5 => tree["children_truncated"] = true.into(),
+            _ => unreachable!(),
+        }
+        let mut source = document(wire, 0, &[]);
+        source.canonical_result = write_canonical(
+            &serde_json::json!({"disposition":"inline","path":"/content/example","document":tree}),
+        )
+        .unwrap();
+        let checked =
+            decode_result_for_command(&serde_json::to_vec(&source).unwrap(), &expected, &command);
+        assert_eq!(checked.is_ok(), mutation == 0, "mutation {mutation}");
+    }
+}
+
+#[test]
+fn typed_artifact_results_require_exact_matching_envelope_metadata() {
+    use slingshot_agent_connection::structured_job_result::decode_result_for_command;
+    use slingshot_domain::command::canonical_json::write_canonical;
+    use slingshot_domain::command::catalog::Command;
+    for (wire, request, slot, media, name, length) in [
+        (
+            "load_content_as_json",
+            serde_json::json!({"path":"/content/example"}),
+            LOADED_CONTENT_SLOT,
+            LOADED_CONTENT_MEDIA_TYPE,
+            "loaded-content.json",
+            262_145,
+        ),
+        (
+            "download_content_package",
+            serde_json::json!({"package_name":"example-pages","roots":["/content/example"]}),
+            CONTENT_PACKAGE_SLOT,
+            CONTENT_PACKAGE_MEDIA_TYPE,
+            "example-pages.zip",
+            4096,
+        ),
+    ] {
+        let mut tagged = request;
+        tagged["command"] = wire.into();
+        let command: Command = serde_json::from_value(tagged).unwrap();
+        let descriptor = serde_json::json!({
+            "identifier":"expected-artifact-1", "slot":slot, "media_type":media,
+            "byte_length":length, "digest":SUBMITTED_DIGEST, "suggested_file_name":name
+        });
+        let mut result = serde_json::json!({"artifact":descriptor});
+        if wire == "load_content_as_json" {
+            result["disposition"] = "artifact".into();
+            result["path"] = "/content/example".into();
+        }
+        let mut source = document(wire, 0, &[]);
+        source.canonical_result = write_canonical(&result).unwrap();
+        source.declared_artifacts = vec![ArtifactEcho {
+            byte_length: length,
+            media_type: media.to_owned(),
+            slot: slot.to_owned(),
+            suggested_name: name.to_owned(),
+        }];
+        let expected = expectation(wire);
+        let bytes = serde_json::to_vec(&source).unwrap();
+        let checked = decode_result_for_command(&bytes, &expected, &command).unwrap();
+        assert_eq!(checked.canonical_result, source.canonical_result);
+        assert_eq!(checked.declared_artifacts, source.declared_artifacts);
+        let retained = checked.remote_artifact.as_ref().unwrap();
+        assert_eq!(retained.identifier.as_text(), "expected-artifact-1");
+        assert_eq!(retained.digest.as_text(), SUBMITTED_DIGEST);
+        assert_eq!(retained.byte_length, length);
+        for mutation in 0..6 {
+            let mut changed = source.clone();
+            match mutation {
+                0 => changed.declared_artifacts.clear(),
+                1 => changed.declared_artifacts.push(changed.declared_artifacts[0].clone()),
+                2 => changed.declared_artifacts[0].byte_length += 1,
+                3 => {
+                    changed.declared_artifacts[0].media_type = "application/octet-stream".to_owned()
+                }
+                4 => changed.declared_artifacts[0].slot = "structured_result".to_owned(),
+                _ => changed.declared_artifacts[0].suggested_name = "another-name.json".to_owned(),
+            }
+            assert!(
+                decode_result_for_command(
+                    &serde_json::to_vec(&changed).unwrap(),
+                    &expected,
+                    &command
+                )
+                .is_err()
+            );
+        }
+    }
+}
 
 /// Where the vectors this suite is driven from live.
 const FIXTURES: &str = "tests/fixtures/structured-job-results";
@@ -77,6 +284,13 @@ fn installed(wire_name: &str) -> ExpectedProvenance {
 /// Returns what this daemon expects a result for `wire_name` to say.
 fn expectation(wire_name: &str) -> ResultExpectation {
     ResultExpectation {
+        operation: slingshot_agent_protocol::identity::WireOperationIdentity::of(
+            &"a".repeat(64),
+            &"b".repeat(64),
+            "retained-operation",
+            slingshot_domain::agent_identity::AgentEventStoreGeneration::of(7),
+        ),
+        daemon_subscription_identifier: "retained-subscription".to_owned(),
         expected_provenance: installed(wire_name),
         submitted_command_digest: SUBMITTED_DIGEST.to_owned(),
         wire_name: wire_name.to_owned(),
@@ -101,10 +315,108 @@ fn echo(slot: &str, bytes: u64) -> ArtifactEcho {
 /// Returns one result document for `wire_name`.
 fn document(wire_name: &str, inline_bytes: usize, slots: &[String]) -> TerminalResultDocument {
     TerminalResultDocument {
+        operation: expectation(wire_name).operation,
+        daemon_subscription_identifier: "retained-subscription".to_owned(),
         canonical_result: "r".repeat(inline_bytes),
         declared_artifacts: slots.iter().map(|slot| echo(slot, ECHO_BYTES)).collect(),
         provenance: installed(wire_name).provenance(),
         submitted_command_digest: SUBMITTED_DIGEST.to_owned(),
+    }
+}
+
+#[test]
+fn wire_decoding_preserves_canonical_bytes_without_claiming_command_validation() {
+    let mut source = document("query_paths", 0, &[]);
+    // Canonical JSON is not necessarily a valid query_paths command result.
+    source.canonical_result = r#"{"a":"private-λ","b":[]}"#.to_owned();
+    let bytes = serde_json::to_vec(&source).unwrap();
+    let decoded = decode_terminal_result(&bytes, &expectation("query_paths")).unwrap();
+    assert_eq!(decoded, source);
+    assert_eq!(format!("{decoded:?}"), "TerminalResultDocument([redacted])");
+    assert_eq!(format!("{decoded:#?}"), "TerminalResultDocument([redacted])");
+    let metadata = require_valid(&expectation("query_paths"), &decoded).unwrap();
+    assert_eq!(format!("{metadata:?}"), "ValidatedResult([redacted])");
+    assert_eq!(format!("{metadata:#?}"), "ValidatedResult([redacted])");
+}
+
+#[test]
+fn wire_decoding_refuses_noncanonical_payloads_and_unbound_envelopes() {
+    let expected = expectation("query_paths");
+    let mut source = document("query_paths", 0, &[]);
+    for payload in [" {}", "{ }", "{\"b\":0,\"a\":0}", "{\"a\":0,\"a\":1}", "not-json"] {
+        source.canonical_result = payload.to_owned();
+        assert!(decode_terminal_result(&serde_json::to_vec(&source).unwrap(), &expected).is_err());
+    }
+    source.canonical_result = "{}".to_owned();
+    let good = serde_json::to_value(&source).unwrap();
+    for field in [
+        "canonical_result",
+        "declared_artifacts",
+        "provenance",
+        "submitted_command_digest",
+        "operation",
+        "daemon_subscription_identifier",
+    ] {
+        let mut missing = good.clone();
+        missing.as_object_mut().unwrap().remove(field);
+        assert!(decode_terminal_result(&serde_json::to_vec(&missing).unwrap(), &expected).is_err());
+    }
+    let mut surplus = good.clone();
+    surplus["private-canary"] = true.into();
+    let refusal =
+        decode_terminal_result(&serde_json::to_vec(&surplus).unwrap(), &expected).unwrap_err();
+    assert!(!format!("{refusal:?} {refusal}").contains("private-canary"));
+    let bytes = serde_json::to_string(&source).unwrap();
+    let duplicate = bytes.replacen('{', "{\"canonical_result\":\"{}\",", 1);
+    assert!(decode_terminal_result(duplicate.as_bytes(), &expected).is_err());
+    source.submitted_command_digest = SUBSTITUTED_DIGEST.to_owned();
+    assert!(decode_terminal_result(&serde_json::to_vec(&source).unwrap(), &expected).is_err());
+    source.submitted_command_digest = SUBMITTED_DIGEST.to_owned();
+    source.provenance.transport_contract_digest = SUBSTITUTED_DIGEST.to_owned();
+    assert!(decode_terminal_result(&serde_json::to_vec(&source).unwrap(), &expected).is_err());
+    let mut wrong_command = expected.clone();
+    wrong_command.wire_name = "another_command".to_owned();
+    assert!(decode_terminal_result(bytes.as_bytes(), &wrong_command).is_err());
+    let mut artifact = good;
+    artifact["declared_artifacts"] = serde_json::json!([{
+        "byte_length": 1, "media_type": "application/json", "slot": "slot",
+        "suggested_name": "result.json", "unknown": true
+    }]);
+    assert!(decode_terminal_result(&serde_json::to_vec(&artifact).unwrap(), &expected).is_err());
+}
+
+#[test]
+fn wire_decoding_bounds_both_envelope_and_inline_result() {
+    let expected = expectation("query_paths");
+    assert!(
+        decode_terminal_result(&vec![b' '; maximum_document_bytes() as usize + 1], &expected)
+            .is_err()
+    );
+    let mut source = document("query_paths", 0, &[]);
+    source.canonical_result =
+        format!("\"{}\"", "x".repeat(maximum_agent_inline_result_bytes() as usize - 2));
+    assert!(decode_terminal_result(&serde_json::to_vec(&source).unwrap(), &expected).is_ok());
+    source.canonical_result.insert(1, 'x');
+    assert!(decode_terminal_result(&serde_json::to_vec(&source).unwrap(), &expected).is_err());
+}
+
+#[test]
+fn identical_command_results_cannot_cross_operation_contexts() {
+    let expected = expectation("query_paths");
+    let mut source = document("query_paths", 0, &[]);
+    source.canonical_result = "{}".to_owned();
+    for field in 0..5 {
+        let mut changed = source.clone();
+        match field {
+            0 => changed.operation.agent_event_store_generation += 1,
+            1 => changed.operation.agent_operation_identifier = "another-operation".to_owned(),
+            2 => changed.operation.author_target_identity_digest = "c".repeat(64),
+            3 => changed.operation.selected_environment_revision = "d".repeat(64),
+            _ => changed.daemon_subscription_identifier = "another-subscription".to_owned(),
+        }
+        assert_eq!(changed.submitted_command_digest, source.submitted_command_digest);
+        assert!(decode_terminal_result(&serde_json::to_vec(&changed).unwrap(), &expected).is_err());
+        assert_eq!(require_valid(&expected, &changed), Err(ResultRefusal::AnotherSubmission));
     }
 }
 
@@ -201,6 +513,8 @@ fn a_result_ending_another_submission_is_refused_before_anything_is_written() {
 fn a_document_larger_than_one_may_be_is_refused_before_it_is_read() {
     let allowed = maximum_document_bytes();
     let oversized = TerminalResultDocument {
+        operation: expectation("query_paths").operation,
+        daemon_subscription_identifier: "retained-subscription".to_owned(),
         canonical_result: "r".repeat(allowed as usize + 1),
         declared_artifacts: Vec::new(),
         provenance: installed("query_paths").provenance(),

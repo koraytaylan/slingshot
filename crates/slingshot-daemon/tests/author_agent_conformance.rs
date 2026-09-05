@@ -89,10 +89,10 @@ const BEARER_CREDENTIAL: &str = "Bearer a-token-value-nothing-records";
 const SUBSTITUTED_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 /// The capabilities route the author serves.
-const CAPABILITIES_ROUTE: &str = "/bin/slingshot/agent/capabilities";
+const CAPABILITIES_ROUTE: &str = "/bin/slingshot-agent/capabilities";
 
 /// The submission route the author serves.
-const SUBMIT_ROUTE: &str = "/bin/slingshot/agent/submit";
+const SUBMIT_ROUTE: &str = "/bin/slingshot-agent/jobs";
 
 /// What one event was at its position.
 const EVENT_CONTENTS: &str = "contents-of-this-position";
@@ -302,6 +302,8 @@ fn one_submission_is_acknowledged_under_exactly_the_names_this_build_derived() {
     assert!(matches!(answer, Answer::Responded { .. }), "the author serves the route");
 
     let acknowledgement = SubmissionAcknowledgement {
+        provenance: submission.provenance.clone(),
+        selected_environment_revision: submission.operation.selected_environment_revision.clone(),
         agent_event_store_generation: GENERATION,
         agent_operation_identifier: submission.operation.agent_operation_identifier.clone(),
         author_target_identity_digest: TARGET.to_owned(),
@@ -370,7 +372,11 @@ fn the_two_folds_agree_about_every_event_the_author_emits() {
                 applied_sequence: JobEventSequence::of(HELD_SEQUENCE),
                 attempt: 0,
                 progress: 0,
-                state: AgentJobState::Queued,
+                state: match vector.get("held_state").and_then(serde_json::Value::as_str) {
+                    None | Some("queued") => AgentJobState::Queued,
+                    Some("running") => AgentJobState::Running,
+                    Some(other) => panic!("unmapped retained fixture state: {other}"),
+                },
             },
             snapshot_watermark: JobEventSequence::of(HELD_SEQUENCE),
         });
@@ -443,6 +449,9 @@ fn a_snapshot_converges_the_work_the_stream_left_unfinished() {
         submitted_command_digest: submission.submitted_command_digest.clone(),
     };
     let snapshot = JobSnapshot {
+        subscription_watermark: slingshot_agent_connection::server_sent_event_decoder::EventStreamCursor::new("cursor-010", 96).unwrap(),
+        terminal_result: None,
+        terminal_failure: None,
         attempt: 1,
         echo: SnapshotEcho {
             agent_event_store_generation: GENERATION,

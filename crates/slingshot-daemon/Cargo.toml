@@ -8,6 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+slingshot-agent-protocol.workspace = true
 bytes.workspace = true
 directories.workspace = true
 fs4.workspace = true
@@ -28,7 +29,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
-slingshot-agent-protocol.workspace = true
+rusqlite.workspace = true
 slingshot-test-support.workspace = true
 tempfile.workspace = true
 

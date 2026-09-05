@@ -204,12 +204,38 @@ fn applying_an_event_that_does_not_apply_changes_nothing() {
 fn a_snapshot_behind_the_daemon_is_a_disagreement_rather_than_a_gap() {
     let observed = observed();
     let ahead = JobSnapshot {
+        subscription_watermark: "cursor-010".into(),
+        terminal_result: None,
+        terminal_failure: None,
+        provenance: slingshot_agent_protocol::wire_contract::ExpectedProvenance {
+            canonical_json_contract_digest: slingshot_domain::command::schema::canonical_contract_digest(),
+            command_contract: slingshot_domain::selected_command_contract_identity::SelectedCommandContractIdentity::installed("query_paths").unwrap(),
+            transport_contract_digest: slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded_digest(),
+        }.provenance(),
+        author_target_identity_digest: "target-one".to_owned(),
+        selected_environment_revision: "revision-one".to_owned(),
+        daemon_subscription_identifier: "subscription-one".to_owned(),
+        submitted_command_digest: "digest-one".to_owned(),
+        physical_sling_job_identifiers: vec!["job-one".to_owned()],
+        granted_retention_milliseconds: 120000,
+        attempt: 1,
+        progress: 100,
         agent_event_store_generation: GENERATION,
         agent_operation_identifier: operation_identifier(),
         kind: JobEventKind::Succeeded,
         sequence: APPLIED + SNAPSHOT_AHEAD,
     };
     assert!(ahead.reconciles_with(&observed), "a snapshot ahead means events were missed");
+    let serialized = serde_json::to_value(&ahead).unwrap();
+    assert_eq!(format!("{ahead:?}"), "JobSnapshot([redacted])");
+    assert_eq!(serialized["subscription_watermark"], "cursor-010");
+    let schema: serde_json::Value = serde_json::from_str(include_str!("../../../schemas/agent-protocol/job/snapshot.json")).unwrap();
+    assert!(schema["required"].as_array().unwrap().contains(&serde_json::json!("subscription_watermark")));
+    assert_eq!(schema["properties"]["subscription_watermark"]["minLength"], 1);
+    assert_eq!(schema["properties"]["subscription_watermark"]["maxLength"], 96);
+    let mut missing = serialized;
+    missing.as_object_mut().unwrap().remove("subscription_watermark");
+    assert!(serde_json::from_value::<JobSnapshot>(missing).is_err());
 
     let behind = JobSnapshot { sequence: APPLIED - 1, ..ahead.clone() };
     assert!(

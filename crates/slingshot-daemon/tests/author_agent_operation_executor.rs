@@ -18,10 +18,9 @@
 
 use std::cell::RefCell;
 
-use slingshot_agent_connection::artifact_download::DownloadRefusal;
 use slingshot_daemon::author_agent_operation_executor::{
-    AgentSettlement, AuthorAgentOperationExecutor, AuthorPorts, COMPLETING_DETAIL,
-    SUBMITTING_DETAIL, SUPERVISING_DETAIL, outcome_of_handoff,
+    AgentSettlement, ArtifactCompletion, AuthorAgentOperationExecutor, AuthorPorts,
+    COMPLETING_DETAIL, SUBMITTING_DETAIL, SUPERVISING_DETAIL, outcome_of_handoff,
 };
 use slingshot_daemon::operation::remote_submission::HandoffDisposition;
 use slingshot_daemon::startup::{SelectedTarget, StartupRefusal, install_executor};
@@ -33,7 +32,7 @@ use slingshot_domain::operation::{
     TerminalFailureDisposition, TerminalFailureKind,
 };
 use slingshot_domain::operation_executor::{
-    ExecutionIdentity, OperationExecutor, OperationExecutorOutcome, ProducedArtifact, ProgressPort,
+    ExecutionFuture, ExecutionIdentity, OperationExecutor, OperationExecutorOutcome, ProgressPort,
 };
 use slingshot_storage::database::{OperationDatabase, RequiredSettings};
 
@@ -68,7 +67,7 @@ const QUERY_ROOT: &str = "/content";
 #[derive(Debug)]
 struct ScriptedPorts {
     /// What the artifact stage answers.
-    artifacts: Result<Vec<ProducedArtifact>, DownloadRefusal>,
+    artifacts: ArtifactCompletion,
     /// What was asked, in order.
     asked: RefCell<Vec<&'static str>>,
     /// What the handoff answers.
@@ -80,28 +79,71 @@ struct ScriptedPorts {
 impl ScriptedPorts {
     /// Returns ports that accept, settle as told, and publish nothing.
     fn answering(handoff: HandoffDisposition, settlement: AgentSettlement) -> Self {
-        Self { artifacts: Ok(Vec::new()), asked: RefCell::new(Vec::new()), handoff, settlement }
+        Self {
+            artifacts: ArtifactCompletion::Published { artifacts: Vec::new() },
+            asked: RefCell::new(Vec::new()),
+            handoff,
+            settlement,
+        }
     }
 }
 
 impl AuthorPorts for ScriptedPorts {
-    fn submit(&self, _identity: &ExecutionIdentity, _command: &Command) -> HandoffDisposition {
-        self.asked.borrow_mut().push("submit");
-        self.handoff.clone()
+    fn submit<'a>(
+        &'a self,
+        _identity: &'a ExecutionIdentity,
+        _command: &'a Command,
+    ) -> ExecutionFuture<'a, HandoffDisposition> {
+        Box::pin(async move {
+            self.asked.borrow_mut().push("submit");
+            tokio::task::yield_now().await;
+            self.handoff.clone()
+        })
     }
 
-    fn settle(&self, _identity: &ExecutionIdentity) -> AgentSettlement {
-        self.asked.borrow_mut().push("settle");
-        self.settlement.clone()
+    fn settle<'a>(
+        &'a self,
+        _identity: &'a ExecutionIdentity,
+    ) -> ExecutionFuture<'a, AgentSettlement> {
+        Box::pin(async move {
+            self.asked.borrow_mut().push("settle");
+            self.settlement.clone()
+        })
     }
 
-    fn complete_artifacts(
-        &self,
-        _identity: &ExecutionIdentity,
-    ) -> Result<Vec<ProducedArtifact>, DownloadRefusal> {
-        self.asked.borrow_mut().push("complete");
-        self.artifacts.clone()
+    fn complete_artifacts<'a>(
+        &'a self,
+        _identity: &'a ExecutionIdentity,
+    ) -> ExecutionFuture<'a, ArtifactCompletion> {
+        Box::pin(async move {
+            self.asked.borrow_mut().push("complete");
+            self.artifacts.clone()
+        })
     }
+}
+
+/// Dropping local execution while handoff is pending cannot create a terminal result.
+#[test]
+fn dropping_a_pending_handoff_does_not_settle_or_publish() {
+    use std::task::{Context, Poll, Waker};
+
+    let ports = ScriptedPorts::answering(
+        HandoffDisposition::Accepted,
+        AgentSettlement::Succeeded { inline_result: Some(INLINE_RESULT.to_owned()) },
+    );
+    let executor = AuthorAgentOperationExecutor::over(&ports);
+    let identity = identity();
+    let command = command();
+    let progress = RecordedProgress::default();
+    let mut execution = executor.execute(&identity, &command, &progress);
+    assert!(ports.asked.borrow().is_empty());
+    assert!(matches!(
+        execution.as_mut().poll(&mut Context::from_waker(Waker::noop())),
+        Poll::Pending
+    ));
+    drop(execution);
+    assert_eq!(*ports.asked.borrow(), vec!["submit"]);
+    assert_eq!(*progress.reported.borrow(), vec![SUBMITTING_DETAIL]);
 }
 
 /// A progress port that remembers what it was told.
@@ -122,6 +164,7 @@ fn identity() -> ExecutionIdentity {
     ExecutionIdentity {
         attempt: 1,
         author_target_identity_digest: "ab".repeat(DIGEST_PAIRS),
+        selected_environment_revision: REVISION.to_owned(),
         operation_identifier: "operation-one".to_owned(),
     }
 }
@@ -139,8 +182,13 @@ fn command() -> Command {
 /// Returns what one execution through `ports` produced.
 fn executed(ports: &ScriptedPorts) -> (OperationExecutorOutcome, Vec<String>) {
     let progress = RecordedProgress::default();
-    let outcome =
-        AuthorAgentOperationExecutor::over(ports).execute(&identity(), &command(), &progress);
+    let runtime =
+        tokio::runtime::Builder::new_current_thread().enable_all().build().expect("test runtime");
+    let outcome = runtime.block_on(AuthorAgentOperationExecutor::over(ports).execute(
+        &identity(),
+        &command(),
+        &progress,
+    ));
     let reported = progress.reported.borrow().clone();
     (outcome, reported)
 }
@@ -237,6 +285,122 @@ fn an_unclear_submission_is_outstanding_work_rather_than_an_ending() {
 }
 
 #[test]
+fn an_existing_child_enters_lookup_without_claiming_acceptance_or_permitting_resubmission() {
+    use slingshot_agent_connection::command_submission::{SubmissionOutcome, UnknownCause};
+    use slingshot_daemon::operation::remote_submission::disposition_of;
+    use slingshot_domain::operation::RecoveryFact;
+
+    let handoff = disposition_of(&SubmissionOutcome::SubmissionUnknown {
+        cause: UnknownCause::LookupRequired,
+    });
+    assert_eq!(handoff, HandoffDisposition::ReconcileRetained);
+    assert!(handoff.requires_lookup());
+    assert!(!handoff.permits_another_send());
+    assert_eq!(outcome_of_handoff(&handoff), None);
+    let recovery = RecoveryFact {
+        category: RecoveryCategory::OperationLookup,
+        evidence: RecoveryExecutionEvidence::ExecutionCertainty {
+            certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
+        },
+        attempt_count: 3,
+        detail: String::new(),
+        manual_resume_eligible: false,
+        retry_delay_milliseconds: 234,
+        retry_observed_at_unix_milliseconds: 567,
+    };
+    let ports = ScriptedPorts::answering(
+        handoff,
+        AgentSettlement::Outstanding { recovery: recovery.clone() },
+    );
+    let (outcome, _) = executed(&ports);
+    assert_eq!(outcome, OperationExecutorOutcome::RecoveryRequired { recovery });
+    assert_eq!(*ports.asked.borrow(), vec!["submit", "settle"]);
+
+    // An ambiguous response from this attempt still yields recovery; it is
+    // not an instruction to bypass that recovery's scheduling or backoff.
+    let ambiguous =
+        disposition_of(&SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Body });
+    assert_eq!(ambiguous, HandoffDisposition::Unknown);
+    assert!(outcome_of_handoff(&ambiguous).is_some());
+}
+
+#[test]
+fn settlement_preserves_the_complete_recovery_decision_without_fetching_artifacts() {
+    use slingshot_domain::operation::RecoveryFact;
+    for (category, evidence, paused) in [
+        (
+            RecoveryCategory::ResultAcquisition,
+            RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
+            false,
+        ),
+        (
+            RecoveryCategory::PersistentCapacityUnavailable,
+            RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
+            true,
+        ),
+        (
+            RecoveryCategory::OperationLookup,
+            RecoveryExecutionEvidence::ExecutionCertainty {
+                certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
+            },
+            true,
+        ),
+    ] {
+        let recovery = RecoveryFact {
+            category,
+            evidence,
+            attempt_count: 7,
+            detail: "retained recovery decision".to_owned(),
+            manual_resume_eligible: paused,
+            retry_delay_milliseconds: if paused { 0 } else { 1234 },
+            retry_observed_at_unix_milliseconds: 987654,
+        };
+        assert!(category.admits(evidence));
+        let ports = ScriptedPorts::answering(
+            HandoffDisposition::Duplicate,
+            AgentSettlement::Outstanding { recovery: recovery.clone() },
+        );
+        let (outcome, reported) = executed(&ports);
+        assert_eq!(outcome, OperationExecutorOutcome::RecoveryRequired { recovery });
+        assert_eq!(*ports.asked.borrow(), vec!["submit", "settle"]);
+        assert_eq!(reported, vec![SUBMITTING_DETAIL, SUPERVISING_DETAIL]);
+    }
+}
+
+#[test]
+fn settlement_preserves_terminal_effect_evidence_without_fetching_artifacts() {
+    use slingshot_domain::operation::TerminalFailure;
+    for (kind, disposition) in [
+        (
+            TerminalFailureKind::ResultUnavailable,
+            TerminalFailureDisposition::AuthoritativeRemoteSuccess,
+        ),
+        (TerminalFailureKind::RemoteFailed, TerminalFailureDisposition::AuthoritativeRemoteFailure),
+        (
+            TerminalFailureKind::Rejected,
+            TerminalFailureDisposition::AuthoritativeNonExecution {
+                certainty: OperationExecutionCertainty::ConfirmedNotExecuted,
+            },
+        ),
+        (
+            TerminalFailureKind::RemoteStateLost,
+            TerminalFailureDisposition::FailClosedIndeterminate {
+                certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
+            },
+        ),
+    ] {
+        let failure = TerminalFailure { kind, disposition, metadata: None };
+        let ports = ScriptedPorts::answering(
+            HandoffDisposition::Accepted,
+            AgentSettlement::Terminal { failure: failure.clone() },
+        );
+        let (outcome, _) = executed(&ports);
+        assert_eq!(outcome, OperationExecutorOutcome::TerminalFailure { failure });
+        assert_eq!(*ports.asked.borrow(), vec!["submit", "settle"]);
+    }
+}
+
+#[test]
 fn a_throttled_handoff_carries_the_delay_it_was_given() {
     let ports = ScriptedPorts::answering(
         HandoffDisposition::RetryAfter { milliseconds: RETRY_DELAY },
@@ -250,7 +414,7 @@ fn a_throttled_handoff_carries_the_delay_it_was_given() {
     assert_eq!(
         recovery.evidence,
         RecoveryExecutionEvidence::ExecutionCertainty {
-            certainty: OperationExecutionCertainty::ConfirmedNotExecuted
+            certainty: OperationExecutionCertainty::SubmissionUnknown
         }
     );
 }
@@ -326,7 +490,16 @@ fn an_artifact_that_will_not_publish_never_retracts_the_success_it_belongs_to() 
         HandoffDisposition::Accepted,
         AgentSettlement::Succeeded { inline_result: None },
     );
-    ports.artifacts = Err(DownloadRefusal::DigestDrifted);
+    let expected = slingshot_domain::operation::RecoveryFact {
+        category: RecoveryCategory::ArtifactTransfer,
+        evidence: RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
+        attempt_count: 4,
+        detail: "artifact acquisition pending".to_owned(),
+        manual_resume_eligible: false,
+        retry_delay_milliseconds: 2345,
+        retry_observed_at_unix_milliseconds: 6789,
+    };
+    ports.artifacts = ArtifactCompletion::Recovery { recovery: expected.clone() };
     let (outcome, _) = executed(&ports);
     let OperationExecutorOutcome::RecoveryRequired { recovery } = outcome else {
         panic!("a retrieval that failed is outstanding work")
@@ -338,6 +511,51 @@ fn an_artifact_that_will_not_publish_never_retracts_the_success_it_belongs_to() 
         "the work succeeded, and a local retrieval failing does not un-succeed it"
     );
     assert!(recovery.category.admits(recovery.evidence));
+    assert_eq!(recovery, expected, "completion cannot reset durable recovery policy");
+}
+
+#[test]
+fn artifact_unavailability_preserves_success_and_discards_the_inline_result() {
+    let mut ports = ScriptedPorts::answering(
+        HandoffDisposition::Accepted,
+        AgentSettlement::Succeeded { inline_result: Some(INLINE_RESULT.to_owned()) },
+    );
+    ports.artifacts = ArtifactCompletion::Unavailable;
+    let (outcome, _) = executed(&ports);
+    assert_eq!(
+        outcome,
+        OperationExecutorOutcome::TerminalFailure {
+            failure: slingshot_domain::operation::TerminalFailure {
+                kind: TerminalFailureKind::ResultUnavailable,
+                disposition: TerminalFailureDisposition::AuthoritativeRemoteSuccess,
+                metadata: None,
+            },
+        }
+    );
+    assert_eq!(*ports.asked.borrow(), vec!["submit", "settle", "complete"]);
+    assert!(!outcome.publishes_a_result());
+}
+
+#[test]
+fn artifact_capacity_pause_is_not_replaced_with_an_automatic_transfer_retry() {
+    let recovery = slingshot_domain::operation::RecoveryFact {
+        category: RecoveryCategory::PersistentCapacityUnavailable,
+        evidence: RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
+        attempt_count: 6,
+        detail: "persistent capacity unavailable".to_owned(),
+        manual_resume_eligible: true,
+        retry_delay_milliseconds: 0,
+        retry_observed_at_unix_milliseconds: 123456,
+    };
+    let mut ports = ScriptedPorts::answering(
+        HandoffDisposition::ReconcileRetained,
+        AgentSettlement::Succeeded { inline_result: Some(INLINE_RESULT.to_owned()) },
+    );
+    ports.artifacts = ArtifactCompletion::Recovery { recovery: recovery.clone() };
+    let (outcome, _) = executed(&ports);
+    assert_eq!(outcome, OperationExecutorOutcome::RecoveryRequired { recovery });
+    assert!(!outcome.publishes_a_result());
+    assert_eq!(*ports.asked.borrow(), vec!["submit", "settle", "complete"]);
 }
 
 #[test]

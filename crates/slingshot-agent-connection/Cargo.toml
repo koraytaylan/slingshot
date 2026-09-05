@@ -7,6 +7,10 @@ publish.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# Explicit opt-in for cross-crate loopback conformance peers; never a runtime setting.
+test-support = []
+
 [dependencies]
 base64.workspace = true
 bytes.workspace = true
@@ -15,6 +19,7 @@ http-body-util.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
 jsonwebtoken.workspace = true
+jsonschema.workspace = true
 rustls.workspace = true
 rustls-pki-types.workspace = true
 secrecy.workspace = true

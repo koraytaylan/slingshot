@@ -37,13 +37,13 @@ use slingshot_domain::remote_job::{
 };
 
 /// The one route a logical operation is looked up on.
-pub const LOOKUP_ROUTE: &str = "/libs/slingshot/agent/operations";
+pub const LOOKUP_ROUTE: &str = "/bin/slingshot-agent/operations/lookup";
 
 /// The one route a physical Sling job is looked up on.
-pub const PHYSICAL_JOB_ROUTE: &str = "/libs/slingshot/agent/jobs";
+pub const PHYSICAL_JOB_ROUTE: &str = "/bin/slingshot-agent/jobs/snapshot";
 
 /// The one route a subscription's high-water position is captured on.
-pub const HIGH_WATER_ROUTE: &str = "/libs/slingshot/agent/subscriptions/high-water";
+pub const HIGH_WATER_ROUTE: &str = "/bin/slingshot-agent/events/high-water";
 
 /// The query member naming which logical operation is wanted.
 pub const OPERATION_QUERY_MEMBER: &str = "agent_operation_identifier";
@@ -78,8 +78,15 @@ pub struct SnapshotEcho {
 }
 
 /// What the agent says is true about one job right now.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct JobSnapshot {
+    /// Subscription position covered by this snapshot, not its job sequence.
+    pub subscription_watermark: crate::server_sent_event_decoder::EventStreamCursor,
+    /// Untrusted failure requiring closed command/refusal validation.
+    pub terminal_failure:
+        Option<slingshot_agent_protocol::terminal_failure::TerminalFailureDocument>,
+    /// Untrusted retained result, requiring command and artifact validation.
+    pub terminal_result: Option<slingshot_agent_protocol::terminal_result::TerminalResultDocument>,
     /// How many physical attempts have carried it.
     pub attempt: u64,
     /// What it says about which submission it is about.
@@ -94,6 +101,12 @@ pub struct JobSnapshot {
     pub progress: u64,
     /// Which of that job's own events this account covers.
     pub sequence: JobEventSequence,
+}
+
+impl core::fmt::Debug for JobSnapshot {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("JobSnapshot([redacted])")
+    }
 }
 
 impl JobSnapshot {
@@ -179,6 +192,9 @@ impl SnapshotExpectation {
 /// Why one answer cannot be reconciled against what is held.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ReconciliationRefusal {
+    /// The finite snapshot did not satisfy its closed, bounded wire schema.
+    #[error("the author snapshot is malformed or exceeds its bounds")]
+    MalformedSnapshot,
     /// The answer is about another partition.
     #[error("this answer names another target partition")]
     AnotherTarget,
@@ -227,6 +243,100 @@ pub enum ReconciliationRefusal {
         /// How many were named.
         actual: usize,
     },
+}
+
+/// Decodes a complete finite snapshot without synthesizing any missing echo.
+pub fn decode_snapshot(
+    body: &[u8],
+    expectation: &SnapshotExpectation,
+) -> Result<JobSnapshot, ReconciliationRefusal> {
+    use slingshot_domain::remote_job::AgentJobIdentifier;
+    let contract = AuthorAgentTransportContract::embedded();
+    if body.len() as u64 > contract.limit("maximum_agent_protocol_document_bytes") {
+        return Err(ReconciliationRefusal::MalformedSnapshot);
+    }
+    let wire: slingshot_agent_protocol::job_contract::JobSnapshot =
+        serde_json::from_slice(body).map_err(|_| ReconciliationRefusal::MalformedSnapshot)?;
+    crate::event_stream_reset::require_cursor(&wire.subscription_watermark)
+        .map_err(|_| ReconciliationRefusal::MalformedSnapshot)?;
+    let subscription_watermark = crate::server_sent_event_decoder::EventStreamCursor::new(
+        &wire.subscription_watermark,
+        crate::server_sent_event_decoder::DecoderBounds::embedded().identifier_bytes,
+    )
+    .map_err(|_| ReconciliationRefusal::MalformedSnapshot)?;
+    let digest = |value: &str| {
+        value.len() == 64 && value.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    };
+    if wire.agent_event_store_generation == 0
+        || !digest(&wire.agent_operation_identifier)
+        || !digest(&wire.author_target_identity_digest)
+        || !digest(&wire.selected_environment_revision)
+        || !digest(&wire.submitted_command_digest)
+        || wire.daemon_subscription_identifier.is_empty()
+        || wire.daemon_subscription_identifier.len() as u64
+            > contract.limit("maximum_daemon_subscription_identifier_bytes")
+        || wire.granted_retention_milliseconds == 0
+        || wire.granted_retention_milliseconds
+            > contract.limit("maximum_persisted_remaining_retention_milliseconds")
+        || wire.physical_sling_job_identifiers.is_empty()
+        || wire.physical_sling_job_identifiers.len() as u64
+            > contract.limit("maximum_physical_sling_job_matches")
+        || wire.physical_sling_job_identifiers.windows(2).any(|pair| pair[0] >= pair[1])
+        || wire
+            .physical_sling_job_identifiers
+            .iter()
+            .any(|name| AgentJobIdentifier::new(name).is_err())
+    {
+        return Err(ReconciliationRefusal::MalformedSnapshot);
+    }
+    let echo = SnapshotEcho {
+        agent_event_store_generation: wire.agent_event_store_generation,
+        agent_operation_identifier: wire.agent_operation_identifier,
+        author_target_identity_digest: wire.author_target_identity_digest,
+        daemon_subscription_identifier: wire.daemon_subscription_identifier,
+        provenance: wire.provenance,
+        selected_environment_revision: wire.selected_environment_revision,
+        submitted_command_digest: wire.submitted_command_digest,
+    };
+    expectation.require_echoed(&echo)?;
+    if let Some(result) = &wire.terminal_result {
+        if wire.kind != JobEventKind::Succeeded
+            || result.operation.agent_event_store_generation != echo.agent_event_store_generation
+            || result.operation.agent_operation_identifier != echo.agent_operation_identifier
+            || result.operation.author_target_identity_digest != echo.author_target_identity_digest
+            || result.operation.selected_environment_revision != echo.selected_environment_revision
+            || result.daemon_subscription_identifier != echo.daemon_subscription_identifier
+            || result.provenance != echo.provenance
+            || result.submitted_command_digest != echo.submitted_command_digest
+        {
+            return Err(ReconciliationRefusal::MalformedSnapshot);
+        }
+    }
+    if let Some(failure) = &wire.terminal_failure {
+        if wire.kind != JobEventKind::Failed
+            || failure.operation.agent_event_store_generation != echo.agent_event_store_generation
+            || failure.operation.agent_operation_identifier != echo.agent_operation_identifier
+            || failure.operation.author_target_identity_digest != echo.author_target_identity_digest
+            || failure.operation.selected_environment_revision != echo.selected_environment_revision
+            || failure.daemon_subscription_identifier != echo.daemon_subscription_identifier
+            || failure.provenance != echo.provenance
+            || failure.submitted_command_digest != echo.submitted_command_digest
+        {
+            return Err(ReconciliationRefusal::MalformedSnapshot);
+        }
+    }
+    Ok(JobSnapshot {
+        subscription_watermark,
+        terminal_failure: wire.terminal_failure,
+        terminal_result: wire.terminal_result,
+        attempt: wire.attempt,
+        echo,
+        granted_retention_milliseconds: wire.granted_retention_milliseconds,
+        kind: wire.kind,
+        physical_sling_job_identifiers: wire.physical_sling_job_identifiers,
+        progress: wire.progress,
+        sequence: JobEventSequence::of(wire.sequence),
+    })
 }
 
 /// What reconciling one answer concluded.

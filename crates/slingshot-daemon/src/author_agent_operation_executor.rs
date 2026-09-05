@@ -23,14 +23,18 @@
 //! daemon's own difficulty, which is the mistake the whole recovery vocabulary
 //! exists to make hard.
 
-use slingshot_agent_connection::artifact_download::DownloadRefusal;
+use slingshot_agent_connection::authentication::environment_provider::SelectedAuthorConnection;
+use slingshot_agent_connection::selected_author_transport::{
+    SelectedAuthorTransport, SelectedAuthorTransportFailure,
+};
 use slingshot_domain::command::catalog::Command;
 use slingshot_domain::operation::{
     OperationExecutionCertainty, RecoveryCategory, RecoveryExecutionEvidence, RecoveryFact,
     TerminalFailure, TerminalFailureDisposition, TerminalFailureKind,
 };
 use slingshot_domain::operation_executor::{
-    ExecutionIdentity, OperationExecutor, OperationExecutorOutcome, ProducedArtifact, ProgressPort,
+    ExecutionFuture, ExecutionIdentity, OperationExecutor, OperationExecutorOutcome,
+    ProducedArtifact, ProgressPort,
 };
 
 use crate::operation::remote_submission::HandoffDisposition;
@@ -64,11 +68,34 @@ pub enum AgentSettlement {
     },
     /// Nobody knows yet, and this says what is outstanding.
     Outstanding {
-        /// Which recovery category it is waiting in.
-        category: RecoveryCategory,
-        /// What is known about whether a command effect happened.
-        certainty: OperationExecutionCertainty,
+        /// The complete recovery decision, including post-success evidence,
+        /// attempt budget, pause and the original retry-time anchor.
+        recovery: RecoveryFact,
     },
+    /// A validated terminal decision whose effect disposition must not be
+    /// reconstructed from a category string by the executor.
+    Terminal {
+        /// The complete authoritative or fail-closed terminal decision.
+        failure: TerminalFailure,
+    },
+}
+
+/// The durable completion decision after remote success has been established.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArtifactCompletion {
+    /// All declared artifacts have been verified and published.
+    Published {
+        /// Published artifacts in slot order.
+        artifacts: Vec<ProducedArtifact>,
+    },
+    /// Acquisition remains pending under its saved recovery policy.
+    Recovery {
+        /// Complete recovery evidence, pause state and retry timing.
+        recovery: RecoveryFact,
+    },
+    /// Validated evidence establishes that the successful result cannot be
+    /// acquired. This never means that the remote command failed or did not run.
+    Unavailable,
 }
 
 /// The four things this executor needs an author for.
@@ -78,21 +105,130 @@ pub enum AgentSettlement {
 /// conclude, never a wire value.
 pub trait AuthorPorts: ::core::fmt::Debug {
     /// Derives and sends the submission for `identity`.
-    fn submit(&self, identity: &ExecutionIdentity, command: &Command) -> HandoffDisposition;
+    fn submit<'a>(
+        &'a self,
+        identity: &'a ExecutionIdentity,
+        command: &'a Command,
+    ) -> ExecutionFuture<'a, HandoffDisposition>;
 
     /// Waits for the agent to say what became of it.
-    fn settle(&self, identity: &ExecutionIdentity) -> AgentSettlement;
+    fn settle<'a>(
+        &'a self,
+        identity: &'a ExecutionIdentity,
+    ) -> ExecutionFuture<'a, AgentSettlement>;
 
     /// Fetches and publishes everything the result declared.
     ///
-    /// # Errors
-    ///
-    /// Returns [`DownloadRefusal`] when an artifact could not be published,
-    /// which leaves the execution outstanding rather than failed.
-    fn complete_artifacts(
-        &self,
-        identity: &ExecutionIdentity,
-    ) -> Result<Vec<ProducedArtifact>, DownloadRefusal>;
+    /// Preserves the completion owner's durable recovery or unavailability
+    /// decision instead of reducing every refusal to a new generic retry.
+    fn complete_artifacts<'a>(
+        &'a self,
+        identity: &'a ExecutionIdentity,
+    ) -> ExecutionFuture<'a, ArtifactCompletion>;
+}
+
+/// The protocol work a product author adapter performs after it has bound an
+/// operation to the selected author connection.
+///
+/// This is deliberately below [`ProductAuthorPorts`].  A protocol
+/// implementation receives neither a caller-selected endpoint nor loose
+/// target/revision strings: the only connection context it can receive is the
+/// direct immutable transport built from the author-only selection accepted at
+/// startup.
+pub trait AuthorAgentProtocol: ::core::fmt::Debug {
+    /// Derives and sends one bound submission.
+    fn submit<'a>(
+        &'a self,
+        transport: &'a SelectedAuthorTransport,
+        identity: &'a ExecutionIdentity,
+        command: &'a Command,
+    ) -> ExecutionFuture<'a, HandoffDisposition>;
+
+    /// Supervises and reconciles one bound operation.
+    fn settle<'a>(
+        &'a self,
+        transport: &'a SelectedAuthorTransport,
+        identity: &'a ExecutionIdentity,
+    ) -> ExecutionFuture<'a, AgentSettlement>;
+
+    /// Fetches and publishes the artifacts declared by one bound operation.
+    fn complete_artifacts<'a>(
+        &'a self,
+        transport: &'a SelectedAuthorTransport,
+        identity: &'a ExecutionIdentity,
+    ) -> ExecutionFuture<'a, ArtifactCompletion>;
+}
+
+/// The sole product implementation of the executor's author boundary.
+///
+/// It owns the selected connection rather than accepting endpoint or trust
+/// inputs per call.  This is the composition point where the validated
+/// configuration snapshot meets the protocol implementation; no publisher
+/// address, ambient proxy, or reloadable trust source can cross it.
+#[derive(Debug)]
+pub struct ProductAuthorPorts<'protocol> {
+    /// The frozen direct connector for the selected endpoint and trust policy.
+    transport: SelectedAuthorTransport,
+    /// The protocol codec operating only through `transport`.
+    protocol: &'protocol dyn AuthorAgentProtocol,
+}
+
+impl<'protocol> ProductAuthorPorts<'protocol> {
+    /// Returns the product author boundary over one selected connection.
+    #[must_use]
+    pub fn new(
+        connection: SelectedAuthorConnection,
+        protocol: &'protocol dyn AuthorAgentProtocol,
+    ) -> Result<Self, SelectedAuthorTransportFailure> {
+        Ok(Self { transport: SelectedAuthorTransport::new(connection)?, protocol })
+    }
+}
+
+impl AuthorPorts for ProductAuthorPorts<'_> {
+    fn submit<'a>(
+        &'a self,
+        identity: &'a ExecutionIdentity,
+        command: &'a Command,
+    ) -> ExecutionFuture<'a, HandoffDisposition> {
+        if self.transport.require_execution(identity).is_err() {
+            return Box::pin(async { HandoffDisposition::Conflict });
+        }
+        self.protocol.submit(&self.transport, identity, command)
+    }
+
+    fn settle<'a>(
+        &'a self,
+        identity: &'a ExecutionIdentity,
+    ) -> ExecutionFuture<'a, AgentSettlement> {
+        if self.transport.require_execution(identity).is_err() {
+            return Box::pin(async {
+                AgentSettlement::Outstanding {
+                    recovery: RecoveryFact {
+                        category: RecoveryCategory::OperationLookup,
+                        evidence: RecoveryExecutionEvidence::ExecutionCertainty {
+                            certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
+                        },
+                        attempt_count: 0,
+                        detail: String::new(),
+                        manual_resume_eligible: true,
+                        retry_delay_milliseconds: 0,
+                        retry_observed_at_unix_milliseconds: 0,
+                    },
+                }
+            });
+        }
+        self.protocol.settle(&self.transport, identity)
+    }
+
+    fn complete_artifacts<'a>(
+        &'a self,
+        identity: &'a ExecutionIdentity,
+    ) -> ExecutionFuture<'a, ArtifactCompletion> {
+        if self.transport.require_execution(identity).is_err() {
+            return Box::pin(async { awaiting_retrieval(RecoveryCategory::ArtifactTransfer) });
+        }
+        self.protocol.complete_artifacts(&self.transport, identity)
+    }
 }
 
 /// The executor a product build installs.
@@ -121,7 +257,9 @@ impl<'ports> AuthorAgentOperationExecutor<'ports> {
 #[must_use]
 pub fn outcome_of_handoff(disposition: &HandoffDisposition) -> Option<OperationExecutorOutcome> {
     match disposition {
-        HandoffDisposition::Accepted | HandoffDisposition::Duplicate => None,
+        HandoffDisposition::Accepted
+        | HandoffDisposition::Duplicate
+        | HandoffDisposition::ReconcileRetained => None,
         HandoffDisposition::NotExecuted => Some(refused("the agent recorded nothing")),
         HandoffDisposition::RecoveryWindowExpired => Some(failed_closed(
             TerminalFailureKind::RemoteStateLost,
@@ -133,7 +271,7 @@ pub fn outcome_of_handoff(disposition: &HandoffDisposition) -> Option<OperationE
         )),
         HandoffDisposition::RetryAfter { milliseconds } => Some(unresolved(
             RecoveryCategory::AmbiguousSubmission,
-            OperationExecutionCertainty::ConfirmedNotExecuted,
+            OperationExecutionCertainty::SubmissionUnknown,
             *milliseconds,
         )),
         HandoffDisposition::Unknown => Some(unresolved(
@@ -195,8 +333,8 @@ fn unresolved(
 }
 
 /// Returns the outcome work that provably succeeded but is not here produces.
-fn awaiting_retrieval(category: RecoveryCategory) -> OperationExecutorOutcome {
-    OperationExecutorOutcome::RecoveryRequired {
+fn awaiting_retrieval(category: RecoveryCategory) -> ArtifactCompletion {
+    ArtifactCompletion::Recovery {
         recovery: RecoveryFact {
             attempt_count: 0,
             category,
@@ -210,34 +348,39 @@ fn awaiting_retrieval(category: RecoveryCategory) -> OperationExecutorOutcome {
 }
 
 impl OperationExecutor for AuthorAgentOperationExecutor<'_> {
-    fn execute(
-        &self,
-        identity: &ExecutionIdentity,
-        command: &Command,
-        progress: &dyn ProgressPort,
-    ) -> OperationExecutorOutcome {
-        progress.report(SUBMITTING_DETAIL);
-        let handoff = self.ports.submit(identity, command);
-        if let Some(settled) = outcome_of_handoff(&handoff) {
-            return settled;
-        }
-        progress.report(SUPERVISING_DETAIL);
-        match self.ports.settle(identity) {
-            AgentSettlement::Outstanding { category, certainty } => {
-                unresolved(category, certainty, 0)
+    fn execute<'a>(
+        &'a self,
+        identity: &'a ExecutionIdentity,
+        command: &'a Command,
+        progress: &'a dyn ProgressPort,
+    ) -> ExecutionFuture<'a, OperationExecutorOutcome> {
+        Box::pin(async move {
+            progress.report(SUBMITTING_DETAIL);
+            let handoff = self.ports.submit(identity, command).await;
+            if let Some(settled) = outcome_of_handoff(&handoff) {
+                return settled;
             }
-            AgentSettlement::NotExecuted { category } => refused(&category),
-            AgentSettlement::Failed { category } => OperationExecutorOutcome::TerminalFailure {
-                failure: TerminalFailure {
-                    disposition: TerminalFailureDisposition::AuthoritativeRemoteFailure,
-                    kind: TerminalFailureKind::RemoteFailed,
-                    metadata: Some(category),
+            progress.report(SUPERVISING_DETAIL);
+            match self.ports.settle(identity).await {
+                AgentSettlement::Outstanding { recovery } => {
+                    OperationExecutorOutcome::RecoveryRequired { recovery }
+                }
+                AgentSettlement::Terminal { failure } => {
+                    OperationExecutorOutcome::TerminalFailure { failure }
+                }
+                AgentSettlement::NotExecuted { category } => refused(&category),
+                AgentSettlement::Failed { category } => OperationExecutorOutcome::TerminalFailure {
+                    failure: TerminalFailure {
+                        disposition: TerminalFailureDisposition::AuthoritativeRemoteFailure,
+                        kind: TerminalFailureKind::RemoteFailed,
+                        metadata: Some(category),
+                    },
                 },
-            },
-            AgentSettlement::Succeeded { inline_result } => {
-                self.publish(identity, inline_result, progress)
+                AgentSettlement::Succeeded { inline_result } => {
+                    self.publish(identity, inline_result, progress).await
+                }
             }
-        }
+        })
     }
 }
 
@@ -248,16 +391,27 @@ impl AuthorAgentOperationExecutor<'_> {
     /// a success this daemon already believes. Calling it a failure would
     /// retract a remote fact because of a local retrieval, which is the one
     /// direction the evidence never runs.
-    fn publish(
+    async fn publish(
         &self,
         identity: &ExecutionIdentity,
         inline_result: Option<String>,
         progress: &dyn ProgressPort,
     ) -> OperationExecutorOutcome {
         progress.report(COMPLETING_DETAIL);
-        match self.ports.complete_artifacts(identity) {
-            Ok(artifacts) => OperationExecutorOutcome::Succeeded { artifacts, inline_result },
-            Err(_) => awaiting_retrieval(RecoveryCategory::ArtifactTransfer),
+        match self.ports.complete_artifacts(identity).await {
+            ArtifactCompletion::Published { artifacts } => {
+                OperationExecutorOutcome::Succeeded { artifacts, inline_result }
+            }
+            ArtifactCompletion::Recovery { recovery } => {
+                OperationExecutorOutcome::RecoveryRequired { recovery }
+            }
+            ArtifactCompletion::Unavailable => OperationExecutorOutcome::TerminalFailure {
+                failure: TerminalFailure {
+                    kind: TerminalFailureKind::ResultUnavailable,
+                    disposition: TerminalFailureDisposition::AuthoritativeRemoteSuccess,
+                    metadata: None,
+                },
+            },
         }
     }
 }

@@ -51,6 +51,7 @@ fn identity(target: &str, operation: &str, attempt: u32) -> ExecutionIdentity {
     ExecutionIdentity {
         attempt,
         author_target_identity_digest: target.repeat(DIGEST_PAIRS),
+        selected_environment_revision: "environment-revision-one".to_owned(),
         operation_identifier: operation.to_owned(),
     }
 }

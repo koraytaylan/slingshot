@@ -142,6 +142,7 @@ fn the_helper_composition_admits_once_and_invokes_the_executor_once_per_attempt(
     let identity = ExecutionIdentity {
         attempt: 1,
         author_target_identity_digest: digest.clone(),
+        selected_environment_revision: REVISION.to_owned(),
         operation_identifier: "operation-1".to_owned(),
     };
     let produced = composition.execute(&identity, &DroppedProgress);
@@ -192,6 +193,7 @@ fn the_same_identifier_in_another_partition_is_another_operation_entirely() {
         let identity = ExecutionIdentity {
             attempt: 1,
             author_target_identity_digest: target.clone(),
+            selected_environment_revision: REVISION.to_owned(),
             operation_identifier: "operation-1".to_owned(),
         };
         composition.execute(&identity, &DroppedProgress);
@@ -229,6 +231,7 @@ fn settling_through_the_helper_records_exactly_what_the_script_produced() {
     let identity = ExecutionIdentity {
         attempt: 1,
         author_target_identity_digest: digest.clone(),
+        selected_environment_revision: REVISION.to_owned(),
         operation_identifier: "operation-1".to_owned(),
     };
     let produced = composition.execute(&identity, &DroppedProgress);

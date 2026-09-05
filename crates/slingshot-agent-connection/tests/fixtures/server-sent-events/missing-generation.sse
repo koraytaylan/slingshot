@@ -1,3 +1,3 @@
 event:job-event
-data:{"agent_operation_identifier":"operation-alpha","daemon_subscription_identifier":"daemon-subscription-one","kind":"accepted","sequence":1}
+data:{"agent_operation_identifier":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","daemon_subscription_identifier":"daemon-subscription-one","sling_job_identifier":"job-fixture","state":"queued","kind":"accepted","sequence":1}
 

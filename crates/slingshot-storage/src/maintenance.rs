@@ -66,7 +66,8 @@ pub struct ProposedAgentRemoval {
     pub agent_operation_identifier: String,
     /// Which submission it was.
     pub submitted_command_digest: String,
-    /// How it ended.
+    /// Remote terminal disposition, or the owning local expired-window/result-
+    /// unavailable outcome. The latter does not assert a remote job state.
     pub terminal_disposition: String,
 }
 
@@ -264,6 +265,7 @@ fn proposed_agent_removals(
         rusqlite::params![
             author_target_identity_digest,
             i64::try_from(before_unix_milliseconds).unwrap_or(i64::MAX),
+            i64::try_from(before_unix_milliseconds).unwrap_or(i64::MAX),
             i64::try_from(limit).unwrap_or(i64::MAX),
         ],
         |row| {
@@ -399,6 +401,23 @@ fn remove_and_record(
             reviewed: digest.to_owned(),
         });
     }
+    for removal in &reviewed.agent_removals {
+        let changed = transaction.execute(
+            statement_text("remove one ended agent submission"),
+            rusqlite::params![
+                reviewed.author_target_identity_digest,
+                removal.agent_operation_identifier,
+                removal.submitted_command_digest,
+                removal.terminal_disposition,
+            ],
+        )?;
+        if changed != 1 {
+            return Err(MaintenanceFailure::ManifestChanged {
+                current: current.digest(),
+                reviewed: digest.to_owned(),
+            });
+        }
+    }
     for removal in &reviewed.removals {
         let candidates = {
             let mut prepared = transaction
@@ -425,23 +444,6 @@ fn remove_and_record(
                 removal.operation_identifier,
                 i64::try_from(removal.operation_revision).unwrap_or(i64::MAX),
                 i64::try_from(removal.settled_at_unix_milliseconds).unwrap_or(i64::MAX),
-            ],
-        )?;
-        if changed != 1 {
-            return Err(MaintenanceFailure::ManifestChanged {
-                current: current.digest(),
-                reviewed: digest.to_owned(),
-            });
-        }
-    }
-    for removal in &reviewed.agent_removals {
-        let changed = transaction.execute(
-            statement_text("remove one ended agent submission"),
-            rusqlite::params![
-                reviewed.author_target_identity_digest,
-                removal.agent_operation_identifier,
-                removal.submitted_command_digest,
-                removal.terminal_disposition,
             ],
         )?;
         if changed != 1 {
@@ -596,7 +598,7 @@ pub fn release_if_unreferenced(
         rusqlite::Transaction::new_unchecked(connection, rusqlite::TransactionBehavior::Immediate)?;
     let references: i64 = transaction.query_row(
         statement_text("count what still references one artifact's content"),
-        rusqlite::params![content_digest, content_digest],
+        rusqlite::params![content_digest, content_digest, content_digest],
         |row| row.get(0),
     )?;
     if references > 0 {

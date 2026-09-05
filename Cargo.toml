@@ -61,6 +61,7 @@ secrecy = { version = "0.10.3", features = ["serde"] }
 security-framework = { version = "3.7.0" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151" }
+jsonschema = { version = "=0.30.0", default-features = false }
 serde_yaml_ng = { version = "0.10.0" }
 sha2 = { version = "0.11.0" }
 sqlparser = { version = "0.62.0" }

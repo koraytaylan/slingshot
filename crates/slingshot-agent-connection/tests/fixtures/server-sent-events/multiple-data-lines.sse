@@ -1,5 +1,5 @@
 event:job-event
 id:cursor-0002
-data:{"agent_event_store_generation":7,"agent_operation_identifier":"operation-alpha",
-data:"daemon_subscription_identifier":"daemon-subscription-one","kind":"started","sequence":2}
+data:{"agent_event_store_generation":7,"agent_operation_identifier":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+data:"daemon_subscription_identifier":"daemon-subscription-one","sling_job_identifier":"job-fixture","state":"running","kind":"started","sequence":2}
 

@@ -57,6 +57,74 @@ fn small_policy() -> PersistentCapacityPolicy {
     }
 }
 
+#[test]
+fn publication_holds_survive_restart_protect_content_and_bound_duplicate_producers() {
+    use slingshot_storage::artifact_store::{ArtifactStore, InstallationRequest};
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("publication.sqlite3");
+    let store = ArtifactStore::open(&root.path().join("artifacts")).unwrap();
+    let request = InstallationRequest {
+        artifact_slot: "structured_result".to_owned(),
+        author_target_identity_digest: partition(FIRST_PRINCIPAL),
+        descriptor: None,
+        installation_identifier: InstallationIdentifier::parse(&"a1".repeat(32)).unwrap(),
+        media_type: "application/json".to_owned(),
+        operation_identifier: "operation-one".to_owned(),
+    };
+    let digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    {
+        let database = OperationDatabase::open(&path, settings()).unwrap();
+        let account = account(&database, small_policy());
+        let reservation = account.reserve_artifact(Some(digest), 3).unwrap();
+        let stage = store.stage_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+        let external = rusqlite::Connection::open(&path).unwrap();
+        external.execute_batch("CREATE TRIGGER refuse_publication BEFORE INSERT ON artifact_publication BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+        assert!(account.retain_staged_publication(&stage, reservation, NOW).is_err());
+        assert_eq!(account.usage().unwrap().committed_artifact_bytes, 0);
+        assert_eq!(account.usage().unwrap().reserved_artifact_bytes, 0);
+        external.execute_batch("DROP TRIGGER refuse_publication;").unwrap();
+        let reservation = account.reserve_artifact(Some(digest), 3).unwrap();
+        let publication = account.retain_staged_publication(&stage, reservation, NOW).unwrap();
+        assert_eq!(
+            account.recover_publication(stage.metadata()).unwrap().unwrap().identifier(),
+            publication.identifier()
+        );
+        let mut changed = stage.metadata().clone();
+        changed.content_digest = "f".repeat(64);
+        assert!(account.recover_publication(&changed).is_err());
+        changed = stage.metadata().clone();
+        changed.byte_length += 1;
+        assert!(account.recover_publication(&changed).is_err());
+        assert!(!publication.identifier().is_empty());
+        assert_eq!(format!("{publication:?}"), "ArtifactPublication([redacted])");
+        assert_eq!(account.usage().unwrap().committed_artifact_bytes, 3);
+        assert_eq!(account.usage().unwrap().reserved_artifact_bytes, 0);
+        stage.publish().unwrap();
+        drop(publication);
+        assert!(
+            !slingshot_storage::maintenance::release_if_unreferenced(&database, digest).unwrap()
+        );
+    }
+    let database = OperationDatabase::open(&path, settings()).unwrap();
+    let account = account(&database, small_policy());
+    assert_eq!(account.usage().unwrap().committed_artifact_bytes, 3);
+    assert_eq!(account.usage().unwrap().reserved_artifact_bytes, 0);
+    assert!(!slingshot_storage::maintenance::release_if_unreferenced(&database, digest).unwrap());
+    for _ in 1..SMALL_OPERATION_ROWS * 2 {
+        let reservation = account.reserve_artifact(Some(digest), 3).unwrap();
+        assert!(reservation.is_none());
+        let stage = store.stage_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+        account.retain_staged_publication(&stage, reservation, NOW).unwrap();
+    }
+    let stage = store.stage_verified(&request, &mut b"abc".as_slice(), 3, digest).unwrap();
+    assert!(
+        account.recover_publication(stage.metadata()).is_err(),
+        "multiple producers must remain protected, not arbitrarily selected"
+    );
+    assert!(account.retain_staged_publication(&stage, None, NOW).is_err());
+    assert_eq!(account.usage().unwrap().committed_artifact_bytes, 3);
+}
+
 /// Returns one admission request for the fixture partition.
 fn admission(digest: &str, operation: &str) -> AdmissionRequest {
     let canonical = format!("{{\"paths\":[\"/{operation}\"]}}");
@@ -283,6 +351,13 @@ fn content_already_committed_reserves_no_second_allocation() {
         .reserve_artifact(Some(&digest), SMALL_INDIVIDUAL_BYTES)
         .expect("a duplicate is not a refusal");
     assert!(duplicate.is_none(), "identical content is already being counted, so nothing is held");
+    for different in [0, SMALL_INDIVIDUAL_BYTES - 1] {
+        assert!(matches!(
+            account.reserve_artifact(Some(&digest), different),
+            Err(AccountingFailure::ContentLengthConflict)
+        ));
+    }
+    assert_eq!(account.usage().unwrap().committed_artifact_bytes, SMALL_INDIVIDUAL_BYTES);
     assert_eq!(
         account.usage().expect("a usage").reserved_artifact_bytes,
         0,
@@ -302,7 +377,11 @@ fn reopening_reconstructs_every_count_and_no_reservation() {
         let fixture = rusqlite::Connection::open(&path).expect("a fixture connection");
         seed_operation_connection(&fixture, 0);
         seed_blob_connection(&fixture, &digest, SMALL_INDIVIDUAL_BYTES);
-        account.reserve_artifact(None, SMALL_INDIVIDUAL_BYTES).expect("a reservation in progress");
+        let reservation = account
+            .reserve_artifact(None, SMALL_INDIVIDUAL_BYTES)
+            .expect("a reservation in progress");
+        // Simulate process interruption without running the guard's destructor.
+        std::mem::forget(reservation);
     }
 
     let held = slingshot_storage::database::OperationDatabase::open(&path, settings())
@@ -363,8 +442,9 @@ fn contending_reservations_cannot_overcommit_the_aggregate() {
     let account = account(&held, small_policy());
     let each = SMALL_INDIVIDUAL_BYTES;
 
-    let taken: Vec<bool> =
-        (0..CONTENDERS).map(|_| account.reserve_artifact(None, each).is_ok()).collect();
+    let reservations: Vec<_> =
+        (0..CONTENDERS).map(|_| account.reserve_artifact(None, each)).collect();
+    let taken: Vec<bool> = reservations.iter().map(Result::is_ok).collect();
     let granted = taken.iter().filter(|won| **won).count();
     let allowed = usize::try_from(SMALL_ARTIFACT_BYTES / each).expect("a countable bound");
     assert_eq!(granted, allowed, "exactly as many succeeded as the aggregate has room for");
@@ -377,6 +457,101 @@ fn contending_reservations_cannot_overcommit_the_aggregate() {
         taken[allowed..].iter().all(|won| !*won),
         "every contender after the bound was refused rather than admitted and rolled back"
     );
+}
+
+#[test]
+fn simultaneous_database_connections_cannot_reserve_the_same_remaining_bytes() {
+    use std::sync::{Arc, Barrier};
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("reservations.sqlite3");
+    let databases: Vec<_> =
+        (0..CONTENDERS).map(|_| OperationDatabase::open(&path, settings()).unwrap()).collect();
+    let barrier = Arc::new(Barrier::new(CONTENDERS));
+    let threads: Vec<_> = databases
+        .into_iter()
+        .map(|database| {
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                let account = account(&database, small_policy());
+                barrier.wait();
+                let reservation = account.reserve_artifact(None, SMALL_INDIVIDUAL_BYTES);
+                let granted = match &reservation {
+                    Ok(Some(_)) => true,
+                    Err(AccountingFailure::Refused(CapacityRefusal::ArtifactBytes { .. })) => false,
+                    other => panic!("unexpected reservation outcome: {other:?}"),
+                };
+                barrier.wait();
+                drop(reservation);
+                granted
+            })
+        })
+        .collect();
+    let granted =
+        threads.into_iter().map(|thread| usize::from(thread.join().unwrap())).sum::<usize>();
+    assert_eq!(granted, (SMALL_ARTIFACT_BYTES / SMALL_INDIVIDUAL_BYTES) as usize);
+}
+
+#[test]
+fn opening_a_live_connection_preserves_reservations_and_never_initializes_a_database() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("live.sqlite3");
+    assert!(OperationDatabase::open_live(&path, settings()).is_err());
+    assert!(!path.exists(), "live opening must not create an uninitialized database");
+    let startup = OperationDatabase::open(&path, settings()).unwrap();
+    let startup_account = account(&startup, small_policy());
+    let reservation =
+        startup_account.reserve_artifact(None, SMALL_INDIVIDUAL_BYTES).unwrap().unwrap();
+    let live = OperationDatabase::open_live(&path, settings()).unwrap();
+    let live_account = account(&live, small_policy());
+    assert_eq!(live_account.usage().unwrap().reserved_artifact_bytes, SMALL_INDIVIDUAL_BYTES);
+    let second = live_account.reserve_artifact(None, SMALL_INDIVIDUAL_BYTES).unwrap().unwrap();
+    assert!(startup_account.reserve_artifact(None, 1).is_err());
+    drop(reservation);
+    assert_eq!(live_account.usage().unwrap().reserved_artifact_bytes, SMALL_INDIVIDUAL_BYTES);
+    drop(second);
+    assert_eq!(startup_account.usage().unwrap().reserved_artifact_bytes, 0);
+}
+
+#[test]
+fn live_open_refuses_an_old_schema_before_changing_database_bytes_or_journalling() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("old.sqlite3");
+    let fixture = rusqlite::Connection::open(&path).unwrap();
+    fixture.execute_batch("PRAGMA user_version = 1; CREATE TABLE sentinel (value TEXT); INSERT INTO sentinel VALUES ('preserve');").unwrap();
+    drop(fixture);
+    let before = std::fs::read(&path).unwrap();
+    assert!(OperationDatabase::open_live(&path, settings()).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert!(!directory.path().join("old.sqlite3-wal").exists());
+    assert!(!directory.path().join("old.sqlite3-shm").exists());
+    let fixture =
+        rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
+    let mode: String = fixture.query_row("PRAGMA journal_mode", [], |row| row.get(0)).unwrap();
+    assert_eq!(mode, "delete");
+    let version: i64 = fixture.query_row("PRAGMA user_version", [], |row| row.get(0)).unwrap();
+    assert_eq!(version, 1);
+}
+
+#[test]
+fn reservations_release_on_drop_and_always_use_their_own_database() {
+    let first = database();
+    let second = database();
+    let first_account = account(&first, small_policy());
+    let second_account = account(&second, small_policy());
+    let first_reservation = first_account.reserve_artifact(None, 100).unwrap().unwrap();
+    let second_reservation = second_account.reserve_artifact(None, 200).unwrap().unwrap();
+    assert_eq!(format!("{first_reservation:?}"), "ArtifactReservation([redacted])");
+    // Both databases may allocate ticket one; the argument owns which one ends.
+    second_account.release(first_reservation);
+    assert_eq!(first_account.usage().unwrap().reserved_artifact_bytes, 0);
+    assert_eq!(second_account.usage().unwrap().reserved_artifact_bytes, 200);
+    let replacement = first_account.reserve_artifact(None, 300).unwrap().unwrap();
+    drop(second_reservation);
+    assert_eq!(second_account.usage().unwrap().reserved_artifact_bytes, 0);
+    assert_eq!(first_account.usage().unwrap().reserved_artifact_bytes, 300);
+    drop(replacement);
+    assert_eq!(first_account.usage().unwrap().reserved_artifact_bytes, 0);
 }
 
 #[test]

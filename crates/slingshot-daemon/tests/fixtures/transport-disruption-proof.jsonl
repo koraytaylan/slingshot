@@ -6,6 +6,6 @@
 {"cut": "framing", "may_send_again": false, "name": "ambiguous-framing-after-the-post", "outcome": "unknown", "physical_records": 2, "seed": 16}
 {"cut": "trailing-bytes", "may_send_again": false, "name": "trailing-bytes-after-the-post", "outcome": "unknown", "physical_records": 1, "seed": 17}
 {"cut": "unvalidated-status", "may_send_again": false, "name": "unvalidated-status-after-the-post", "outcome": "unknown", "physical_records": 0, "seed": 18}
-{"cut": "throttled", "may_send_again": true, "name": "throttled-after-the-post", "outcome": "retry-after", "physical_records": 0, "seed": 19}
+{"cut": "throttled", "may_send_again": false, "name": "throttled-after-the-post", "outcome": "retry-after", "physical_records": 0, "seed": 19}
 {"cut": "conflict", "may_send_again": false, "name": "conflict-after-the-post", "outcome": "conflict", "physical_records": 1, "seed": 20}
 {"cut": "none", "may_send_again": false, "name": "requeued-three-times", "outcome": "accepted", "physical_records": 3, "seed": 21}

@@ -12,7 +12,7 @@
 //! the local operation and the target partition; the submitted digest from the
 //! transport contract, the five contract fields, the canonical byte contract,
 //! the complete canonical arguments, and the artifact manifest; the idempotency
-//! key is that digest. So a daemon that crashed between writing the request and
+//! key is the derived agent operation identifier. So a daemon that crashed between writing the request and
 //! recording the outcome arrives at the same names when it restarts, and asks
 //! about the submission by name instead of sending a second one and hoping.
 //!
@@ -24,6 +24,7 @@
 //! error, because after the request bytes are written a failed check is
 //! evidence about the response, not about the request.
 
+use serde::Deserialize;
 use slingshot_agent_protocol::identity::{DocumentProvenance, WireOperationIdentity};
 use slingshot_agent_protocol::wire_contract::{ExpectedProvenance, WireRefusal};
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
@@ -150,7 +151,8 @@ impl ExpectedArtifactManifest {
 /// Closed, and separate from every other refusal, because a capacity refusal is
 /// the one rejection proving nothing was reserved: without it a daemon hunts a
 /// partially created operation that cannot exist.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CapacityDiscriminator {
     /// No room for another artifact.
     Artifact,
@@ -169,7 +171,8 @@ pub enum CapacityDiscriminator {
 }
 
 /// Why an agent authoritatively did not execute a submission.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum NonExecution {
     /// One named capacity is full, and nothing was reserved.
     Capacity(CapacityDiscriminator),
@@ -309,7 +312,7 @@ pub const REJECTED_STATUSES: &[u16] = &[400, 403, 422];
 /// The single status that means this identifier already means something else.
 pub const CONFLICT_STATUS: u16 = 409;
 
-/// Statuses that settle nothing and permit the same submission again.
+/// Statuses that settle nothing and require lookup before any possible resend.
 pub const RETRYABLE_STATUSES: &[u16] = &[408, 429, 500, 502, 503, 504];
 
 /// Returns what `status` means, refusing to guess about anything else.
@@ -334,6 +337,14 @@ pub fn classify_status(status: u16) -> StatusClass {
 /// server choose this daemon's error codes and puts a remote string in a log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnknownCause {
+    /// The answer echoes another selected environment revision.
+    Revision,
+    /// The answer does not echo the selected versioned contract provenance.
+    Provenance,
+    /// A validated response could not be associated atomically with its child.
+    DurableAssociation,
+    /// A durable child exists, so only lookup may establish what was sent.
+    LookupRequired,
     /// The body could not be read as the answer it claims to be.
     Body,
     /// A phase deadline expired after request bytes were written.
@@ -420,7 +431,8 @@ pub enum SubmissionOutcome {
     },
     /// This identifier already means a different submission at the agent.
     Conflict,
-    /// Nothing is settled; the identical submission may go again after a wait.
+    /// Nothing is settled; wait before same-identifier lookup. This response
+    /// does not establish nonexecution or authorize another submission.
     RetryAfter {
         /// How long to wait, bounded whatever the server asked for.
         milliseconds: u64,
@@ -457,7 +469,7 @@ impl SubmissionOutcome {
     /// Returns whether this outcome must be settled by asking the agent.
     #[must_use]
     pub fn requires_reconciliation(&self) -> bool {
-        matches!(self, Self::SubmissionUnknown { .. })
+        matches!(self, Self::SubmissionUnknown { .. } | Self::RetryAfter { .. })
     }
 }
 
@@ -467,6 +479,12 @@ impl SubmissionOutcome {
 /// errors: an outcome after that point is a [`SubmissionOutcome`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SubmissionRefusal {
+    /// The selected author's acknowledgement did not match its closed schema.
+    #[error("the submission acknowledgement is malformed")]
+    AcknowledgementMalformed,
+    /// Retained canonical arguments are no longer one JSON value.
+    #[error("the retained canonical arguments are not one JSON value")]
+    ArgumentsMalformed,
     /// The canonical arguments are larger than a submission may be.
     #[error("a canonical submission holds at most {allowed} bytes, and this holds {actual}")]
     TooLarge {
@@ -591,8 +609,13 @@ pub struct RecoveryPreconditions {
 }
 
 /// What the agent said about a submission.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SubmissionAcknowledgement {
+    /// Exact format, transport, canonical-byte, and five-field command contracts.
+    pub provenance: DocumentProvenance,
+    /// The selected revision retained before the POST.
+    pub selected_environment_revision: String,
     /// Which generation the agent recorded it under.
     pub agent_event_store_generation: u64,
     /// Which operation the agent says it recorded.
@@ -613,6 +636,15 @@ pub struct SubmissionAcknowledgement {
     pub retired: bool,
     /// Which digest the agent says it recorded.
     pub submitted_command_digest: String,
+}
+
+/// Parses one bounded, policy-validated submission acknowledgement body.
+///
+/// The caller supplies bytes only after the selected-author finite-response
+/// gate has accepted its framing, coding, and size. Unknown fields are refused
+/// by [`SubmissionAcknowledgement`]'s schema rather than silently ignored.
+pub fn parse_acknowledgement(body: &[u8]) -> Result<SubmissionAcknowledgement, SubmissionRefusal> {
+    serde_json::from_slice(body).map_err(|_| SubmissionRefusal::AcknowledgementMalformed)
 }
 
 /// One whole exchange, as far as it got.
@@ -643,7 +675,7 @@ pub struct Exchange {
 }
 
 /// What one submission sends, all of it derived.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Submission {
     /// The canonical argument bytes, exactly as they are digested and sent.
     pub canonical_arguments: String,
@@ -657,6 +689,12 @@ pub struct Submission {
     pub provenance: DocumentProvenance,
     /// The digest binding contracts, arguments, and manifest together.
     pub submitted_command_digest: String,
+}
+
+impl core::fmt::Debug for Submission {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("Submission([redacted])")
+    }
 }
 
 impl Submission {
@@ -697,6 +735,43 @@ impl Submission {
         RetentionReservation::worst_case_for(self.manifest)
     }
 
+    /// Returns the JSON document this submission sends to the selected author.
+    ///
+    /// `canonical_arguments` travels as a JSON string, as the author servlet
+    /// requires. Decoding that string restores the exact retained UTF-8 bytes;
+    /// parsing and re-serializing its contents would change the submission digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SubmissionRefusal::ArgumentsMalformed`] when the retained
+    /// canonical argument bytes are no longer one JSON value.
+    pub fn wire_body(&self) -> Result<Vec<u8>, SubmissionRefusal> {
+        serde_json::from_str::<serde_json::Value>(&self.canonical_arguments)
+            .map_err(|_| SubmissionRefusal::ArgumentsMalformed)?;
+        let arguments =
+            serde_json::to_string(&self.canonical_arguments).expect("a string always serializes");
+        let subscription = serde_json::to_string(&self.daemon_subscription_identifier)
+            .expect("a string always serializes");
+        let operation =
+            serde_json::to_string(&self.operation).expect("an operation always serializes");
+        let provenance =
+            serde_json::to_string(&self.provenance).expect("provenance always serializes");
+        let digest = serde_json::to_string(&self.submitted_command_digest)
+            .expect("a digest string always serializes");
+        let manifest = format!(
+            "{{\"artifact_bytes\":{},\"artifact_rows\":{},\"kind\":{}}}",
+            self.manifest.artifact_bytes,
+            self.manifest.artifact_rows,
+            serde_json::to_string(self.manifest.kind.as_text())
+                .expect("a literal always serializes"),
+        );
+        Ok(format!(
+            "{{\"canonical_arguments\":{},\"daemon_subscription_identifier\":{},\"artifact_manifest\":{},\"operation\":{},\"provenance\":{},\"submitted_command_digest\":{}}}",
+            arguments, subscription, manifest, operation, provenance, digest,
+        )
+        .into_bytes())
+    }
+
     /// Returns the headers this submission is sent with.
     ///
     /// # Errors
@@ -718,7 +793,7 @@ impl Submission {
         let mut headers = vec![
             (CONTENT_TYPE_HEADER.to_owned(), SUBMISSION_MEDIA_TYPE.to_owned()),
             (REFERER_HEADER.to_owned(), format!("{origin}/")),
-            (IDEMPOTENCY_KEY_HEADER.to_owned(), self.submitted_command_digest.clone()),
+            (IDEMPOTENCY_KEY_HEADER.to_owned(), self.operation.agent_operation_identifier.clone()),
         ];
         if let Some((name, value)) =
             header_for(SUBMISSION_METHOD, held_token, origin, now_unix_milliseconds)?
@@ -770,19 +845,21 @@ impl Submission {
                     milliseconds: retry_delay_milliseconds(exchange.retry_after_milliseconds),
                 };
             }
-            StatusClass::Conflict => return SubmissionOutcome::Conflict,
             StatusClass::Unvalidated => {
                 return SubmissionOutcome::SubmissionUnknown {
                     cause: UnknownCause::UnvalidatedStatus,
                 };
             }
-            StatusClass::Answered | StatusClass::Rejected => {}
+            StatusClass::Answered | StatusClass::Rejected | StatusClass::Conflict => {}
         }
         let Some(acknowledgement) = &exchange.acknowledgement else {
             return SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Body };
         };
         if let Err(cause) = self.require_echoes(acknowledgement) {
             return SubmissionOutcome::SubmissionUnknown { cause };
+        }
+        if matches!(class, StatusClass::Conflict) {
+            return SubmissionOutcome::Conflict;
         }
         self.settle(class, acknowledgement, exchange.elapsed_milliseconds)
     }
@@ -804,6 +881,14 @@ impl Submission {
         &self,
         acknowledgement: &SubmissionAcknowledgement,
     ) -> Result<(), UnknownCause> {
+        if acknowledgement.provenance != self.provenance {
+            return Err(UnknownCause::Provenance);
+        }
+        if acknowledgement.selected_environment_revision
+            != self.operation.selected_environment_revision
+        {
+            return Err(UnknownCause::Revision);
+        }
         if acknowledgement.agent_operation_identifier != self.operation.agent_operation_identifier {
             return Err(UnknownCause::Identity);
         }
@@ -834,6 +919,12 @@ impl Submission {
         elapsed_milliseconds: u64,
     ) -> SubmissionOutcome {
         if let Some(non_execution) = acknowledgement.non_execution {
+            if acknowledgement.already_accepted
+                || acknowledgement.retired
+                || !acknowledgement.physical_sling_job_identifiers.is_empty()
+            {
+                return SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Body };
+            }
             return if matches!(class, StatusClass::Rejected) {
                 SubmissionOutcome::AuthoritativeNonExecution { non_execution }
             } else {
