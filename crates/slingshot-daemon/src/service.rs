@@ -63,6 +63,7 @@ impl ServiceOutcome {
 pub struct DaemonService {
     contract: FoundationContract,
     lifetime: ServiceLifetime,
+    diagnostics: Option<crate::diagnostics::DiagnosticSink>,
     reviewed_maintenance: std::sync::Mutex<
         std::collections::BTreeMap<
             String,
@@ -78,6 +79,7 @@ impl DaemonService {
         Self {
             contract,
             lifetime: ServiceLifetime::Control(ownership),
+            diagnostics: None,
             reviewed_maintenance: std::sync::Mutex::new(std::collections::BTreeMap::new()),
         }
     }
@@ -98,9 +100,11 @@ impl DaemonService {
             ],
         };
         runtime.ownership_mut().identify(identity);
+        let diagnostics = runtime.diagnostics().clone();
         Self {
             contract,
             lifetime: ServiceLifetime::Runtime(Box::new(std::sync::Mutex::new(runtime))),
+            diagnostics: Some(diagnostics),
             reviewed_maintenance: std::sync::Mutex::new(std::collections::BTreeMap::new()),
         }
     }
@@ -153,10 +157,17 @@ impl DaemonService {
         }
         match envelope::decode_request(&self.contract, payload) {
             Err(refused) => {
+                self.record_diagnostic(&format!("control request refused: {}", refused.error.message));
                 let identifier = refused.request_identifier.unwrap_or_default();
                 ServiceOutcome::Respond(self.render(&identifier, Err(refused.error)))
             }
             Ok(request) => self.dispatch(&request),
+        }
+    }
+
+    fn record_diagnostic(&self, message: &str) {
+        if let Some(sink) = &self.diagnostics {
+            let _ = sink.record(message);
         }
     }
 

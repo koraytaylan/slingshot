@@ -219,7 +219,7 @@ pub struct SinkHealth {
 }
 
 /// One daemon's diagnostic sink, rooted in its own directory.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiagnosticSink {
     /// The bounds this sink is held to.
     bounds: DiagnosticBounds,
