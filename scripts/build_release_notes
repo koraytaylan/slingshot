@@ -18,6 +18,7 @@ DESTINATION=${1:-}
 MANIFEST=support/repository-tools.toml
 CONFIGURATION=cliff.toml
 CHANGELOG_TOOL=git-cliff
+CHANGELOG_TOOL_NAME=git-cliff
 TAG_REFERENCE=tag
 CHANGELOG=CHANGELOG.md
 RELEASE_NOTES=RELEASE_NOTES.md
@@ -33,7 +34,7 @@ report_refusal() {
 
 reports_the_pinned_version() {
     "$CHANGELOG_TOOL" --version 2>/dev/null \
-        | grep -qF "$CHANGELOG_TOOL $CHANGELOG_TOOL_VERSION"
+        | grep -qF "$CHANGELOG_TOOL_NAME $CHANGELOG_TOOL_VERSION"
 }
 
 pinned_field() {
