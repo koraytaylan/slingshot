@@ -10,8 +10,8 @@ touches:
   - crates/slingshot-development/src/main.rs
   - crates/slingshot-development/tests/release_acceptance.rs
   - crates/slingshot-development/tests/fixtures/release-acceptance/decisions.jsonl
-status: planned
-merged_as: ""
+status: completed
+merged_as: "27e38f3"
 ---
 # The Decision, Inside The Boundary
 
