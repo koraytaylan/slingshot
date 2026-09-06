@@ -10,8 +10,8 @@ touches:
   - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/migrations/**
   - crates/slingshot-daemon/tests/operation_scheduler.rs
-status: planned
-merged_as: ""
+status: completed
+merged_as: "513b54c"
 ---
 # Schedulers Claim Before Execution
 
@@ -36,5 +36,7 @@ takes an expired or lower fence, and refuses after a checkpoint. Renewal is
 fence-bound and cannot revive a stale worker. A focused storage test proves
 claim/fence contention, stale renewal refusal, checkpoint persistence across
 lease expiry, and revision mismatch; migration/inventory tests pass. The
-runtime exposes this claim as a typed operation-bound API. Executor handoff,
-fenced settlement integration, and crash/restart scheduling loops remain.
+runtime exposes typed operation-bound claim APIs, including atomic select-plus-
+claim. Executor handoff crosses the durable no-return checkpoint, and success,
+terminal-failure, and recovery settlement all require that same fence; stale
+workers cannot mutate after lease transfer or restart.
