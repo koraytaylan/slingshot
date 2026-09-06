@@ -143,6 +143,23 @@ fn a_duplicate_identifier_is_refused_without_disturbing_what_holds_it() {
 }
 
 #[test]
+fn tools_and_resource_templates_project_the_installed_surface() {
+    let mut server = ServerApplication::new();
+    let tools = answered(
+        &mut server,
+        &format!(r#"{{"id":"one","method":"tools/list","params":{{"protocolVersion":"{CURRENT}"}}}}"#),
+    );
+    let listed = tools["result"]["tools"].as_array().expect("a tool list");
+    assert!(!listed.is_empty());
+    assert!(listed.iter().all(|tool| tool["inputSchema"].is_object()));
+    let templates = answered(
+        &mut server,
+        &format!(r#"{{"id":"two","method":"resources/templates/list","params":{{"protocolVersion":"{CURRENT}"}}}}"#),
+    );
+    assert_eq!(templates["result"]["resourceTemplates"].as_array().unwrap().len(), 3);
+}
+
+#[test]
 fn nothing_is_served_once_this_server_has_finished() {
     let mut server = ServerApplication::new();
     let detached = server.finish(OutputFailure::SinkFailed);
