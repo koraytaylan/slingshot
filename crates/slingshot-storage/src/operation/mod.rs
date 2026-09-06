@@ -6,3 +6,4 @@
 
 pub mod listing;
 pub mod remote_submission;
+pub mod scheduler_claim;

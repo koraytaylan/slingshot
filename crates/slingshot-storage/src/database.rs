@@ -47,6 +47,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (10, include_str!("../migrations/0010-artifact-publication.sql")),
     (11, include_str!("../migrations/0011-artifact-acquisition-anchor.sql")),
     (12, include_str!("../migrations/0012-maintenance-publication.sql")),
+    (13, include_str!("../migrations/0013-operation-scheduler-claim.sql")),
 ];
 
 /// The one temporary-storage mode the reviewed SQLite build may report.

@@ -25,3 +25,16 @@ The scheduler chooses eligible rows from a snapshot but commits no claim. If two
 4. Overlap ticks in threads and processes, crash after claim and remote send, expire/renew/transfer leases, cancel, and restart; assert at most one live executor and one accepted settlement fence.
 
 - **Done when:** concurrent schedulers can never execute or settle one logical operation under two live claims, and every crash/expiry/restart resumes from one durable fence without losing or inventing remote-effect evidence.
+
+## Implementation checkpoint
+
+The operation repository already fences remote agent submissions, but the local
+retained operation had no scheduler lease. Migration 0013 adds a local worker
+fence, lease expiry, and no-return checkpoint to each operation row. The
+inventoried claim transaction checks the expected lifecycle and revision, only
+takes an expired or lower fence, and refuses after a checkpoint. Renewal is
+fence-bound and cannot revive a stale worker. A focused storage test proves
+claim/fence contention, stale renewal refusal, checkpoint persistence across
+lease expiry, and revision mismatch; migration/inventory tests pass. The
+runtime exposes this claim as a typed operation-bound API. Executor handoff,
+fenced settlement integration, and crash/restart scheduling loops remain.
