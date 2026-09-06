@@ -94,7 +94,7 @@ STAGING=$(mktemp -d)
 trap 'rm -rf "$STAGING"' EXIT
 
 report_stage 'the complete supported archive set'
-EXPECTED_ROWS=$(sed -n 's/^triple = "\(.*\)"$/\1/p' "$PLATFORM_AUTHORITY")
+EXPECTED_ROWS=$(sed -n 's/^triple = "\(.*\)"$/\1/p' "$PLATFORM_AUTHORITY" | tr '\n' ' ')
 [ -n "$EXPECTED_ROWS" ] || report_refusal "$PLATFORM_AUTHORITY names no supported rows"
 for TRIPLE in $EXPECTED_ROWS; do
     ROW=$EVIDENCE_DIRECTORY/release-$TRIPLE
@@ -105,6 +105,9 @@ done
 for ROW in "$EVIDENCE_DIRECTORY"/release-*; do
     [ -d "$ROW" ] || continue
     TRIPLE=${ROW#"$EVIDENCE_DIRECTORY/release-"}
+    case "$TRIPLE" in
+        notes|acceptance) continue ;;
+    esac
     case " $EXPECTED_ROWS " in
         *" $TRIPLE "*) ;;
         *) report_refusal "$ROW is not a supported release row" ;;
