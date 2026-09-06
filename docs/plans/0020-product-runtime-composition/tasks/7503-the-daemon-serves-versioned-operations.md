@@ -9,8 +9,8 @@ touches:
   - crates/slingshot-daemon/src/service.rs
   - crates/slingshot-daemon/src/request_dispatch.rs
   - crates/slingshot-daemon/tests/request_dispatch.rs
-status: planned
-merged_as: ""
+status: completed
+merged_as: "1f9d579"
 ---
 # The Daemon Serves Versioned Operations
 
