@@ -977,6 +977,12 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
+    InventoriedStatement {
+        purpose: "select one queued operation for scheduler claim",
+        text: "SELECT operation_identifier, lifecycle_state, operation_revision FROM operation WHERE author_target_identity_digest = ? AND lifecycle_state = 'queued' AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds <= ?) ORDER BY enqueue_sequence ASC, operation_identifier ASC LIMIT 1",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
 ];
 
 /// Returns the text of the statement with `purpose`.

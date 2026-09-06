@@ -355,6 +355,25 @@ impl DurableRuntime {
         )
     }
 
+    /// Selects the oldest eligible queued operation and claims it atomically.
+    pub fn claim_next_scheduled_operation(
+        &self,
+        fence: u64,
+        lease_expires_at_unix_milliseconds: u64,
+        now_unix_milliseconds: u64,
+    ) -> Result<
+        Option<slingshot_storage::operation::scheduler_claim::SelectedClaim>,
+        slingshot_storage::operation_repository::RepositoryFailure,
+    > {
+        slingshot_storage::operation::scheduler_claim::claim_next_queued(
+            self.database(),
+            &self.context().target().author_target_identity_digest,
+            fence,
+            lease_expires_at_unix_milliseconds,
+            now_unix_milliseconds,
+        )
+    }
+
     /// Settles a locally executed operation only through the fence acquired
     /// by [`Self::claim_scheduled_operation`]. This keeps executor handoff and
     /// terminal publication on the same durable ownership boundary.
