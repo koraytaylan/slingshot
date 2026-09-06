@@ -9,8 +9,8 @@ touches:
   - crates/slingshot-development/tests/pinned_tool_installation.rs
   - crates/slingshot-development/tests/fixtures/pinned-tool-installation/manifests.jsonl
   - scripts/install_pinned_repository_tools
-status: planned
-merged_as: ""
+status: completed
+merged_as: "fb35645"
 ---
 # The Hosted Gate Is Given What It Verifies
 
