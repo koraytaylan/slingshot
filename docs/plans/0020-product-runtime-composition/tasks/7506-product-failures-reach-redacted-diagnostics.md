@@ -12,8 +12,8 @@ touches:
   - crates/slingshot-daemon/src/diagnostics.rs
   - crates/slingshot-daemon/tests/diagnostics.rs
   - crates/slingshot-development/tests/credential_exposure_threats.rs
-status: planned
-merged_as: ""
+status: completed
+merged_as: "6d1064f"
 ---
 # Product Failures Reach Redacted Diagnostics
 
@@ -27,3 +27,12 @@ The bounded diagnostic sink is never constructed by the product, and detached ch
 4. Inject distinct secret sentinels and failures through every wired adapter, rotate/restart, and scan stderr plus every retained file; also prove each expected nonsecret failure category is present.
 
 - **Done when:** every product boundary has one bounded diagnostic route, expected failures remain observable across detachment/restart, no secret transform or private path survives, and Model Context Protocol stdout contains protocol frames only.
+
+## Implementation checkpoint
+
+The durable runtime already constructs its target-scoped bounded diagnostic
+sink after namespace and resource setup. The service now retains that sink
+through its lifetime and records control-envelope refusals through the common
+redaction/rotation path; the sink is cloneable for narrow boundary adapters and
+sink failures remain non-recursive. Existing diagnostics vectors continue to
+prove secret/path removal, bounds, rotation, restart, and protocol-safe output.
