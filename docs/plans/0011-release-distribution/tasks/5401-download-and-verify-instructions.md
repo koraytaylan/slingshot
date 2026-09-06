@@ -8,8 +8,8 @@ gated: false
 touches:
   - README.md
   - crates/slingshot-development/tests/download_instructions.rs
-status: planned
-merged_as: ""
+status: completed
+merged_as: "bf7e3a4"
 ---
 # Download And Verify Instructions
 
