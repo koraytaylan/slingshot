@@ -9,8 +9,8 @@ touches:
   - crates/slingshot-configuration/src/credential_filesystem.rs
   - crates/slingshot-configuration/tests/credential_filesystem_windows.rs
   - docs/CONFIGURATION.md
-status: planned
-merged_as: ""
+status: completed
+merged_as: "1b5875e"
 ---
 # The Second Time, Or Its Absence
 
