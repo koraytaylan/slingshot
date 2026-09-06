@@ -149,6 +149,10 @@ acceptance record and one verified archive for each declared row. It stops at
 evidence; an operator runs `scripts/publish_release` only after its closed
 tag-and-evidence preflight succeeds.
 
+[docs/RELEASES.md](docs/RELEASES.md) explains what a downloaded release carries
+and gives the exact offline command for checking one archive against the
+committed trust root.
+
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together,
 [CONTRIBUTING.md](CONTRIBUTING.md) for the rules a change is held to, and
 [docs/AGENT_PROTOCOL.md](docs/AGENT_PROTOCOL.md) for the contract the daemon
