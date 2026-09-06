@@ -29,7 +29,13 @@ use slingshot_test_support::fake_operation_executor::{Script, ScriptedStep};
 const DIGEST_PAIRS: usize = 32;
 
 /// Binaries this workspace has, and the only ones a release accounts for.
-const INHERITED_BINARIES: &[&str] = &["slingshot", "slingshot-development"];
+const INHERITED_BINARIES: &[&str] = &[
+    "slingshot",
+    "slingshot-development",
+    // This binary is compiled only under the explicit runtime-test-host
+    // feature and is a harness, not a shipped product executable.
+    "slingshot-runtime-test-host",
+];
 
 /// Crates a product build is made of.
 const PRODUCT_CRATES: &[&str] = &[
