@@ -367,6 +367,35 @@ fn exactly_one_job_attests_and_it_does_so_over_named_files() {
 }
 
 #[test]
+fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
+    let document = workflow(".github/workflows/release.yml");
+    let named = jobs(&document);
+    let (_, job) = named
+        .iter()
+        .find(|(name, _)| name == ATTESTATION_JOB)
+        .expect("the attestation job");
+    let steps = steps(job);
+    let attest = steps
+        .iter()
+        .find(|step| step["uses"].as_str().is_some_and(|uses| uses.starts_with(ATTESTING_ACTION)))
+        .expect("the archive attestation step");
+    let subject = attest["with"]["subject-path"].as_str().expect("a subject path");
+    assert!(subject.contains("release/*.tar.gz"), "the attestation names only row archives");
+    let copy = steps
+        .iter()
+        .find(|step| step["run"].as_str().is_some_and(|run| run.contains("attestation.jsonl")))
+        .and_then(|step| step["run"].as_str())
+        .expect("the bundle is copied into the row");
+    assert!(copy.contains("$RUNNER_TEMP/release/attestation.jsonl"));
+    let upload = steps
+        .iter()
+        .find(|step| step["uses"].as_str().is_some_and(|uses| uses.starts_with("actions/upload-artifact@")))
+        .expect("the row is uploaded");
+    assert_eq!(upload["with"]["path"].as_str(), Some("${{ runner.temp }}/release"));
+    assert!(upload["with"]["name"].as_str().is_some_and(|name| name.contains("matrix.triple")));
+}
+
+#[test]
 fn the_release_reviews_the_advisory_pin_in_a_protected_environment_first() {
     let document = workflow(".github/workflows/release.yml");
     let named = jobs(&document);
