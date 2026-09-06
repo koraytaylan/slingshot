@@ -8,8 +8,8 @@ gated: false
 touches:
   - crates/slingshot-development/tests/release_workflow_evidence.rs
   - crates/slingshot-development/tests/fixtures/release-workflow-evidence/workflows.jsonl
-status: planned
-merged_as: ""
+status: completed
+merged_as: "b52e495"
 ---
 # An Attestation Travels With Its Archive
 
