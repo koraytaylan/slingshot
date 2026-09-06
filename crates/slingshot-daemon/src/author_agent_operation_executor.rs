@@ -182,7 +182,10 @@ enum ProductTransport<'runtime> {
 impl core::ops::Deref for ProductTransport<'_> {
     type Target = SelectedAuthorTransport;
     fn deref(&self) -> &Self::Target {
-        match self { Self::Owned(transport) => transport, Self::Runtime(transport) => transport }
+        match self {
+            Self::Owned(transport) => transport,
+            Self::Runtime(transport) => transport,
+        }
     }
 }
 
@@ -193,12 +196,18 @@ impl<'protocol> ProductAuthorPorts<'protocol> {
         connection: SelectedAuthorConnection,
         protocol: &'protocol dyn AuthorAgentProtocol,
     ) -> Result<Self, SelectedAuthorTransportFailure> {
-        Ok(Self { transport: ProductTransport::Owned(SelectedAuthorTransport::new(connection)?), protocol })
+        Ok(Self {
+            transport: ProductTransport::Owned(SelectedAuthorTransport::new(connection)?),
+            protocol,
+        })
     }
 
     /// Uses the runtime's already established immutable connector, without
     /// reconstructing trust configuration or introducing another client.
-    pub fn over_transport(transport: &'protocol SelectedAuthorTransport, protocol: &'protocol dyn AuthorAgentProtocol) -> Self {
+    pub fn over_transport(
+        transport: &'protocol SelectedAuthorTransport,
+        protocol: &'protocol dyn AuthorAgentProtocol,
+    ) -> Self {
         Self { transport: ProductTransport::Runtime(transport), protocol }
     }
 }

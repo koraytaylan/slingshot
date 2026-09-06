@@ -229,8 +229,15 @@ fn a_snapshot_behind_the_daemon_is_a_disagreement_rather_than_a_gap() {
     let serialized = serde_json::to_value(&ahead).unwrap();
     assert_eq!(format!("{ahead:?}"), "JobSnapshot([redacted])");
     assert_eq!(serialized["subscription_watermark"], "cursor-010");
-    let schema: serde_json::Value = serde_json::from_str(include_str!("../../../schemas/agent-protocol/job/snapshot.json")).unwrap();
-    assert!(schema["required"].as_array().unwrap().contains(&serde_json::json!("subscription_watermark")));
+    let schema: serde_json::Value =
+        serde_json::from_str(include_str!("../../../schemas/agent-protocol/job/snapshot.json"))
+            .unwrap();
+    assert!(
+        schema["required"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("subscription_watermark"))
+    );
     assert_eq!(schema["properties"]["subscription_watermark"]["minLength"], 1);
     assert_eq!(schema["properties"]["subscription_watermark"]["maxLength"], 96);
     let mut missing = serialized;

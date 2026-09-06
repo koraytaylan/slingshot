@@ -14,9 +14,9 @@
 //!
 //! # Two things this vocabulary deliberately keeps apart
 //!
-//! Bytes travel only in chunk responses. No status, list, wait, result, or
-//! maintenance response carries content, so a caller reading a hundred-megabyte
-//! package cannot do it by accident inside a status poll.
+//! Bulk artifact bytes travel only in chunk responses. A successful result may
+//! carry a bounded inline JSON value or describe the artifact holding it; no
+//! status/list poll or metadata response embeds a package's content.
 //!
 //! Maintenance results are keyed by target and identifier alone. Their requests
 //! carry no operation identifier, no artifact slot, no path, and no offset,
@@ -190,6 +190,9 @@ pub enum OperationRequest {
     },
     /// Report a bounded page of operations.
     ListOperations {
+        /// Restrict to one opaque caller identity, when supplied.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caller_identity: Option<String>,
         /// Opaque cursor from a previous page, when continuing one.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cursor: Option<String>,
@@ -198,9 +201,18 @@ pub enum OperationRequest {
         lifecycle_states: Vec<String>,
         /// Operations this page may carry.
         page_size: u32,
+        /// Restrict to terminal or nonterminal operations, when supplied.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<bool>,
+        /// Restrict to one workflow correlation identifier, when supplied.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workflow_correlation_identifier: Option<String>,
     },
     /// Report changes to one operation until it settles.
     Wait {
+        /// Last persisted revision seen by this observer; omission starts at zero.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        observed_revision: Option<u64>,
         /// Operation to watch.
         operation_identifier: String,
     },
@@ -263,6 +275,8 @@ pub enum OperationRequest {
     TerminalMaintenancePreview {
         /// Target to preview.
         author_target_identity_digest: String,
+        /// Explicit exclusive terminal-settlement cutoff in Unix milliseconds.
+        before_unix_milliseconds: u64,
         /// Operations the preview may cover.
         maximum_operations: u32,
     },
@@ -285,7 +299,7 @@ impl OperationRequest {
         match self {
             Self::Execute { operation_identifier, .. }
             | Self::OperationStatus { operation_identifier }
-            | Self::Wait { operation_identifier }
+            | Self::Wait { operation_identifier, .. }
             | Self::Result { operation_identifier }
             | Self::ResumeOperationRecovery { operation_identifier, .. }
             | Self::ArtifactRead { operation_identifier, .. } => Some(operation_identifier),
@@ -340,6 +354,26 @@ pub enum OperationResponse {
     },
     /// The daemon has no executor to run it.
     ExecutorUnavailable,
+    /// A successful result that fits the runtime's inline-result bound.
+    ResultInline {
+        /// Operation whose committed result this is.
+        operation_identifier: String,
+        /// The validated structured result, not encoded artifact bytes.
+        result: serde_json::Value,
+    },
+    /// A successful structured result retained as an artifact.
+    ResultArtifact {
+        /// Stable local artifact identifier.
+        artifact_identifier: String,
+        /// Exact verified byte length.
+        byte_length: u64,
+        /// Digest of the committed content.
+        content_digest: String,
+        /// Media type of the structured result.
+        media_type: String,
+        /// Operation whose committed result this is.
+        operation_identifier: String,
+    },
     /// One operation's current state.
     Status {
         /// Lifecycle state it is in.
@@ -465,6 +499,11 @@ pub enum OperationResponse {
         /// Result that application produced.
         maintenance_result_identifier: String,
     },
+    /// Local observer capacity is exhausted without affecting execution.
+    WaiterCapacityExhausted {
+        /// Bounded guidance; the operation itself is unaffected.
+        guidance: String,
+    },
     /// The scheduler has no room.
     SchedulerCapacityExhausted {
         /// Bounded guidance.
@@ -492,6 +531,11 @@ pub enum OperationResponse {
     IdentifierConflict {
         /// Identifier that conflicts.
         operation_identifier: String,
+    },
+    /// No maintenance result with that identifier exists in the target.
+    MissingMaintenanceResult {
+        /// Operation-free identifier absent from the addressed target.
+        maintenance_result_identifier: String,
     },
     /// No operation with that identifier exists.
     MissingOperation {
@@ -538,7 +582,7 @@ pub enum OperationResponse {
 }
 
 impl OperationResponse {
-    /// Returns whether this response carries content bytes.
+    /// Returns whether this response carries bulk artifact-transfer bytes.
     ///
     /// Exactly two do. Everything else describes, and a caller reading a large
     /// artifact does it deliberately rather than by polling a status.

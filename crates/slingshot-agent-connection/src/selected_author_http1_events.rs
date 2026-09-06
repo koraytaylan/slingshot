@@ -49,8 +49,16 @@ impl SelectedAuthorTransport {
             b"",
         )?;
         let stream = self.connect().await.map_err(|_| FiniteHttpFailure::Connect)?;
-        Self::events_http1_on_stream(stream, &request, subscription, generation,
-            committed_cursor, resolver, consume).await
+        Self::events_http1_on_stream(
+            stream,
+            &request,
+            subscription,
+            generation,
+            committed_cursor,
+            resolver,
+            consume,
+        )
+        .await
     }
 
     pub(crate) async fn events_http1_on_stream<R: TerminalExpectationResolver>(

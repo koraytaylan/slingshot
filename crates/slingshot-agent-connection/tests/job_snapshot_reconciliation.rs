@@ -209,13 +209,25 @@ fn network_snapshot_decoder_requires_all_echoes_and_a_bounded_ordered_job_set() 
     let mut missing_watermark = document.clone();
     missing_watermark.as_object_mut().unwrap().remove("subscription_watermark");
     assert!(decode(&missing_watermark).is_err());
-    for invalid in [serde_json::Value::Null, serde_json::json!(10), serde_json::json!(""),
-        serde_json::json!("x".repeat(97)), serde_json::json!("é".repeat(49)),
-        serde_json::json!("bad\r\ncursor"), serde_json::json!(" leading"), serde_json::json!("trailing ")] {
-        let mut changed = document.clone(); changed["subscription_watermark"] = invalid;
+    for invalid in [
+        serde_json::Value::Null,
+        serde_json::json!(10),
+        serde_json::json!(""),
+        serde_json::json!("x".repeat(97)),
+        serde_json::json!("é".repeat(49)),
+        serde_json::json!("bad\r\ncursor"),
+        serde_json::json!(" leading"),
+        serde_json::json!("trailing "),
+    ] {
+        let mut changed = document.clone();
+        changed["subscription_watermark"] = invalid;
         assert!(decode(&changed).is_err());
     }
-    let duplicated = serde_json::to_string(&document).unwrap().replacen('{', "{\"subscription_watermark\":\"cursor-010\",", 1);
+    let duplicated = serde_json::to_string(&document).unwrap().replacen(
+        '{',
+        "{\"subscription_watermark\":\"cursor-010\",",
+        1,
+    );
     assert!(decode_snapshot(duplicated.as_bytes(), &expected).is_err());
     let mut successful = document.clone();
     let mut failed = document.clone();
@@ -338,9 +350,11 @@ fn network_snapshot_decoder_requires_all_echoes_and_a_bounded_ordered_job_set() 
 /// Per-job sequence and subscription cursor are distinct ordering domains.
 #[test]
 fn reset_coverage_uses_subscription_watermark_not_job_sequence() {
-    use slingshot_agent_connection::selected_author_exchange::{CollectedFiniteResponse, validate_collected_finite_response};
-    use slingshot_agent_connection::subscription_high_water::decode_high_water;
+    use slingshot_agent_connection::selected_author_exchange::{
+        CollectedFiniteResponse, validate_collected_finite_response,
+    };
     use slingshot_agent_connection::server_sent_event_decoder::EventStreamCursor;
+    use slingshot_agent_connection::subscription_high_water::decode_high_water;
     let response = validate_collected_finite_response(CollectedFiniteResponse {
         response: http::Response::builder().status(200).version(http::Version::HTTP_2)
             .header("content-type", "application/json")
@@ -352,7 +366,8 @@ fn reset_coverage_uses_subscription_watermark_not_job_sequence() {
         framing_ambiguous: false, trailer_section_present: false, trailing_bytes: false,
     }).unwrap();
     let capture = decode_high_water(&response, SUBSCRIPTION, GENERATION).unwrap();
-    for (watermark, covered) in [("cursor-009", false), ("cursor-010", true), ("cursor-011", true)] {
+    for (watermark, covered) in [("cursor-009", false), ("cursor-010", true), ("cursor-011", true)]
+    {
         for sequence in [0, 1, u64::MAX] {
             let mut value = snapshot(JobEventKind::Progress, sequence, 1, 10);
             value.subscription_watermark = EventStreamCursor::new(watermark, 96).unwrap();
@@ -386,7 +401,12 @@ fn echo() -> SnapshotEcho {
 /// Returns one snapshot of `kind` at `sequence`.
 fn snapshot(kind: JobEventKind, sequence: u64, attempt: u64, progress: u64) -> JobSnapshot {
     JobSnapshot {
-        subscription_watermark: slingshot_agent_connection::server_sent_event_decoder::EventStreamCursor::new("cursor-010", 96).unwrap(),
+        subscription_watermark:
+            slingshot_agent_connection::server_sent_event_decoder::EventStreamCursor::new(
+                "cursor-010",
+                96,
+            )
+            .unwrap(),
         terminal_result: None,
         terminal_failure: None,
         attempt,

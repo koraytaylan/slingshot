@@ -449,7 +449,12 @@ fn a_snapshot_converges_the_work_the_stream_left_unfinished() {
         submitted_command_digest: submission.submitted_command_digest.clone(),
     };
     let snapshot = JobSnapshot {
-        subscription_watermark: slingshot_agent_connection::server_sent_event_decoder::EventStreamCursor::new("cursor-010", 96).unwrap(),
+        subscription_watermark:
+            slingshot_agent_connection::server_sent_event_decoder::EventStreamCursor::new(
+                "cursor-010",
+                96,
+            )
+            .unwrap(),
         terminal_result: None,
         terminal_failure: None,
         attempt: 1,

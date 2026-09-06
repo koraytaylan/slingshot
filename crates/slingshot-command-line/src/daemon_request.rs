@@ -25,9 +25,10 @@ use crate::commands::{
     platform_configuration, replication, replication_queue, resource_mapping, sling_job, workflow,
 };
 use crate::invocation::{
-    ARTIFACT_OPTION, CONTINUATION_TOKEN_OPTION, EXPECTED_CATEGORY_OPTION, EXPECTED_DIGEST_OPTION,
-    EXPECTED_REVISION_OPTION, Invocation, LIMIT_OPTION, OPERATION_IDENTIFIER_OPTION,
-    RESULT_IDENTIFIER_OPTION, REVIEWED_DIGEST_OPTION, TARGET_DIGEST_OPTION,
+    ARTIFACT_OPTION, BEFORE_OPTION, CONTINUATION_TOKEN_OPTION, EXPECTED_CATEGORY_OPTION,
+    EXPECTED_DIGEST_OPTION, EXPECTED_REVISION_OPTION, Invocation, LIMIT_OPTION,
+    OPERATION_IDENTIFIER_OPTION, RESULT_IDENTIFIER_OPTION, REVIEWED_DIGEST_OPTION,
+    TARGET_DIGEST_OPTION,
 };
 use crate::operation_maintenance::{MAXIMUM_PAGE_SIZE, MAXIMUM_PREVIEW_LIMIT};
 
@@ -128,7 +129,9 @@ pub fn observation_request(invocation: &Invocation) -> Result<OperationRequest, 
     let operation_identifier = required(invocation, OPERATION_IDENTIFIER_OPTION)?.to_owned();
     match invocation.verb.as_str() {
         "operation-status" => Ok(OperationRequest::OperationStatus { operation_identifier }),
-        "operation-wait" => Ok(OperationRequest::Wait { operation_identifier }),
+        "operation-wait" => {
+            Ok(OperationRequest::Wait { observed_revision: None, operation_identifier })
+        }
         "operation-result" => Ok(OperationRequest::Result { operation_identifier }),
         "operation-restart" => Ok(OperationRequest::ResumeOperationRecovery {
             expected_operation_revision: counted(invocation, EXPECTED_REVISION_OPTION, 0)?,
@@ -158,12 +161,22 @@ pub fn maintenance_request(
     let author_target_identity_digest = partition.to_owned();
     match invocation.verb.as_str() {
         "operation-list" => Ok(OperationRequest::ListOperations {
+            caller_identity: None,
             cursor: invocation.arguments.get(CONTINUATION_TOKEN_OPTION).cloned(),
             lifecycle_states: Vec::new(),
             page_size: paged(invocation, MAXIMUM_PAGE_SIZE)?,
+            terminal: None,
+            workflow_correlation_identifier: None,
         }),
         "maintenance-preview" => Ok(OperationRequest::TerminalMaintenancePreview {
             author_target_identity_digest,
+            before_unix_milliseconds: required(invocation, BEFORE_OPTION)?.parse::<u64>().map_err(
+                |_| {
+                    RunRefusal::Usage(
+                        "--before requires an unsigned Unix-millisecond cutoff".to_owned(),
+                    )
+                },
+            )?,
             maximum_operations: paged(invocation, MAXIMUM_PREVIEW_LIMIT)?,
         }),
         "maintenance-apply" => Ok(OperationRequest::TerminalMaintenanceApply {
@@ -225,4 +238,36 @@ pub fn preferred_chunk_bytes() -> u32 {
 /// cannot claim a version its contract does not describe.
 pub fn spoken_operation_version() -> u32 {
     u32::try_from(DAEMON_OPERATION_PROTOCOL_VERSION).unwrap_or(u32::MAX)
+}
+
+#[cfg(test)]
+mod maintenance_cutoff_tests {
+    use super::*;
+
+    #[test]
+    fn preview_requires_and_preserves_the_explicit_cutoff() {
+        let invocation = crate::invocation::parse(&["maintenance-preview".to_owned()]).unwrap();
+        assert!(matches!(maintenance_request(&invocation, "target"), Err(RunRefusal::Usage(_))));
+        for cutoff in ["0", "1", "18446744073709551615"] {
+            let invocation = crate::invocation::parse(&[
+                "maintenance-preview".to_owned(),
+                BEFORE_OPTION.to_owned(),
+                cutoff.to_owned(),
+            ])
+            .unwrap();
+            let OperationRequest::TerminalMaintenancePreview { before_unix_milliseconds, .. } =
+                maintenance_request(&invocation, "target").unwrap()
+            else {
+                panic!("preview")
+            };
+            assert_eq!(before_unix_milliseconds.to_string(), cutoff);
+        }
+        for cutoff in ["", "-1", "1.5", "18446744073709551616", "not-a-time-secret"] {
+            let mut invocation = invocation.clone();
+            invocation.arguments.insert(BEFORE_OPTION.to_owned(), cutoff.to_owned());
+            let error = maintenance_request(&invocation, "target").unwrap_err();
+            assert!(matches!(error, RunRefusal::Usage(_)));
+            assert!(!format!("{error:?}").contains("secret"));
+        }
+    }
 }

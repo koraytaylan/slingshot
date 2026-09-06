@@ -188,8 +188,11 @@ impl PhysicalRecoveryReport<'_> {
     > {
         use super::author_authentication::AuthorAuthentication;
         let policy = match self.authentication {
-            AuthorAuthentication::Fixed { protocol, .. } => AuthorAuthentication::Fixed { authentication, protocol },
-            policy @ (AuthorAuthentication::Provider { .. } | AuthorAuthentication::AsyncProvider { .. }) => policy,
+            AuthorAuthentication::Fixed { protocol, .. } => {
+                AuthorAuthentication::Fixed { authentication, protocol }
+            }
+            policy @ (AuthorAuthentication::Provider { .. }
+            | AuthorAuthentication::AsyncProvider { .. }) => policy,
         };
         self.reconcile_using(repository, transport, policy, now_unix_milliseconds, completion).await
     }
@@ -201,9 +204,14 @@ impl PhysicalRecoveryReport<'_> {
         repository: &slingshot_storage::agent_job_repository::AgentJobRepository,
         transport: &SelectedAuthorTransport,
         now: u64,
-        completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
-    ) -> Result<slingshot_agent_connection::selected_author_lookup::OperationLookupReceipt, PhysicalRecoveryRefusal> {
+        completion: Option<(
+            &slingshot_storage::artifact_store::ArtifactStore,
+            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+        )>,
+    ) -> Result<
+        slingshot_agent_connection::selected_author_lookup::OperationLookupReceipt,
+        PhysicalRecoveryRefusal,
+    > {
         let authentication = self.authentication;
         self.reconcile_using(repository, transport, authentication, now, completion).await
     }
@@ -214,9 +222,14 @@ impl PhysicalRecoveryReport<'_> {
         transport: &SelectedAuthorTransport,
         authentication: super::author_authentication::AuthorAuthentication<'_>,
         now_unix_milliseconds: u64,
-        completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
-    ) -> Result<slingshot_agent_connection::selected_author_lookup::OperationLookupReceipt, PhysicalRecoveryRefusal> {
+        completion: Option<(
+            &slingshot_storage::artifact_store::ArtifactStore,
+            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+        )>,
+    ) -> Result<
+        slingshot_agent_connection::selected_author_lookup::OperationLookupReceipt,
+        PhysicalRecoveryRefusal,
+    > {
         if self.status != PhysicalRecoveryStatus::Recovered {
             return Err(PhysicalRecoveryRefusal);
         }
@@ -269,8 +282,15 @@ pub async fn probe_generation_loss<'runtime>(
     authentication: &'runtime RequestAuthentication,
     protocol: ResetTransport,
 ) -> Result<PhysicalRecoveryReport<'runtime>, PhysicalRecoveryRefusal> {
-    probe_generation_loss_with_authentication(ledger, operations, transport, identity, reset,
-        super::author_authentication::AuthorAuthentication::Fixed { authentication, protocol }).await
+    probe_generation_loss_with_authentication(
+        ledger,
+        operations,
+        transport,
+        identity,
+        reset,
+        super::author_authentication::AuthorAuthentication::Fixed { authentication, protocol },
+    )
+    .await
 }
 
 /// Queries the complete retained physical set through one invocation policy.
@@ -335,8 +355,9 @@ pub async fn probe_generation_loss_with_authentication<'runtime>(
         if current != initial {
             return Err(PhysicalRecoveryRefusal);
         }
-        let result = authentication.physical_lookup(transport, identity, &submission,
-            identifier, reset.generation()).await;
+        let result = authentication
+            .physical_lookup(transport, identity, &submission, identifier, reset.generation())
+            .await;
         results.push(PhysicalProbeResult {
             identifier: identifier.clone(),
             result,

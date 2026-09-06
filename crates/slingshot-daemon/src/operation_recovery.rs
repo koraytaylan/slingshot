@@ -120,7 +120,8 @@ pub fn source_fingerprint(
 
 /// Resumes one paused operation, or says why it did not.
 ///
-/// The receipt is looked for first, so a repeat is answered from what was
+/// After checking the immutable environment binding, the receipt is looked for
+/// before mutable recovery preconditions, so a repeat is answered from what was
 /// committed rather than re-checked against a situation that has since moved
 /// on. That is the point of the receipt: an exact repeat after later progress,
 /// another recovery cycle, terminal settlement, or a restart still replays.
@@ -145,6 +146,11 @@ pub fn resume(
             identifier: request.operation_identifier.clone(),
         }));
     };
+    // A receipt is durable authority for exactly the environment it resumed.
+    // Later progress may change lifecycle/revision, but never this binding.
+    if summary.selected_environment_revision != request.selected_environment_revision {
+        return Ok(ResumeResponse::Refused(ResumeRefusal::RevisionMismatch));
+    }
     let source = source_fingerprint(
         &request.operation_identifier,
         summary.command_fingerprint.as_text(),

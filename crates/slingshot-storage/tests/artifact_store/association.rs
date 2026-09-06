@@ -130,6 +130,54 @@ fn an_association_never_names_content_the_store_has_no_record_of() {
 }
 
 #[test]
+fn identifier_lookup_is_partition_qualified_and_refuses_ambiguous_slots() {
+    let digest = partition(FIRST_PRINCIPAL);
+    let operations = tempfile::tempdir().unwrap();
+    let held = database(&operations, &digest, "operation-1");
+    let associations = ArtifactAssociations::new(&held);
+    let (_directory, store) = store();
+    let metadata = store
+        .install(
+            &request(&digest, "operation-1", "content_package"),
+            &mut content("one-octet").as_slice(),
+        )
+        .unwrap();
+    associations.associate(&digest, "operation-1", &metadata, NOW).unwrap();
+    assert_eq!(
+        associations
+            .read_identifier(&digest, "operation-1", &metadata.artifact_identifier)
+            .unwrap(),
+        associations.read(&digest, "operation-1", "content_package").unwrap(),
+    );
+    assert!(
+        associations
+            .read_identifier(
+                &partition(SECOND_PRINCIPAL),
+                "operation-1",
+                &metadata.artifact_identifier
+            )
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        associations
+            .read_identifier(&digest, "another-operation", &metadata.artifact_identifier)
+            .unwrap()
+            .is_none()
+    );
+    // Legacy association insertion does not derive the identifier. A damaged
+    // identity reused for another slot must not become an arbitrary read.
+    let mut ambiguous = metadata.clone();
+    ambiguous.artifact_slot = "another_slot".to_owned();
+    associations.associate(&digest, "operation-1", &ambiguous, NOW).unwrap();
+    assert!(
+        associations
+            .read_identifier(&digest, "operation-1", &metadata.artifact_identifier)
+            .is_err()
+    );
+}
+
+#[test]
 fn identical_content_from_two_operations_records_one_blob() {
     let digest = partition(FIRST_PRINCIPAL);
     let operations = tempfile::tempdir().expect("a directory");

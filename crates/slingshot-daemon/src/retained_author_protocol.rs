@@ -3,11 +3,12 @@
 use crate::{
     author_agent_operation_executor::{AgentSettlement, ArtifactCompletion, AuthorAgentProtocol},
     operation::{
+        author_authentication::AuthorAuthentication,
         durable_author_lookup::{
-            automatic_recovery_paused, lookup_retained_operation_with_authentication, retained_command,
+            automatic_recovery_paused, lookup_retained_operation_with_authentication,
+            retained_command,
         },
         durable_author_submission::submit_initial_with_authentication,
-        author_authentication::AuthorAuthentication,
         remote_submission::{HandoffDisposition, disposition_of},
         subscription_reset::ResetTransport,
     },
@@ -60,7 +61,9 @@ pub struct RetainedAuthorProtocolRefusal;
 
 impl<'runtime> RetainedAuthorProtocol<'runtime> {
     /// Typed command derived from the independently admitted retained bytes.
-    pub(crate) fn command(&self) -> &Command { &self.command }
+    pub(crate) fn command(&self) -> &Command {
+        &self.command
+    }
 
     /// Binds a validated submission to the independently admitted command.
     /// Uses negotiated transport, with preflight before every network phase.
@@ -75,8 +78,15 @@ impl<'runtime> RetainedAuthorProtocol<'runtime> {
         now: u64,
     ) -> Result<Self, RetainedAuthorProtocolRefusal> {
         Self::new_over(
-            operations, remote, store, capacity, authentication, identity,
-            submission, now, ResetTransport::Automatic,
+            operations,
+            remote,
+            store,
+            capacity,
+            authentication,
+            identity,
+            submission,
+            now,
+            ResetTransport::Automatic,
         )
     }
 
@@ -93,8 +103,16 @@ impl<'runtime> RetainedAuthorProtocol<'runtime> {
         now: u64,
         protocol: ResetTransport,
     ) -> Result<Self, RetainedAuthorProtocolRefusal> {
-        Self::new_with_authentication(operations, remote, store, capacity,
-            AuthorAuthentication::Fixed { authentication, protocol }, identity, submission, now)
+        Self::new_with_authentication(
+            operations,
+            remote,
+            store,
+            capacity,
+            AuthorAuthentication::Fixed { authentication, protocol },
+            identity,
+            submission,
+            now,
+        )
     }
 
     /// Binds one runtime authentication policy through admission, lookup and

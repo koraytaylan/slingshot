@@ -8,6 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64.workspace = true
 slingshot-agent-protocol.workspace = true
 bytes.workspace = true
 directories.workspace = true

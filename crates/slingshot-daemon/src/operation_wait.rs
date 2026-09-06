@@ -14,9 +14,9 @@
 //!
 //! Each waiter has its own bounded queue. Progress can be coalesced when it is
 //! superseded, because a note nobody read yet is worth less than the current
-//! one; a recovery, a resume, and a terminal fact never are, because those are
-//! the things a client is waiting to hear. So a queue under pressure loses
-//! detail rather than losing the answer.
+//! one. Recovery/resume transitions retain their latest state under pressure,
+//! and a terminal fact always survives. A bounded subscription is not a
+//! historical event log: it loses old detail rather than the current answer.
 //!
 //! Time detaches nobody. A wait has no read deadline once it is attached, and
 //! advancing a clock cannot turn pending work into failed work: an application
@@ -24,6 +24,8 @@
 //! that converted it into an operation failure would be inventing an outcome.
 
 use std::collections::VecDeque;
+
+pub mod runtime;
 
 use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
 
@@ -69,9 +71,9 @@ impl WaitUpdate {
     /// Returns whether a later update may replace this one in a full queue.
     ///
     /// Progress may: a note nobody has read is worth less than the current one.
-    /// Nothing else may, because a recovery, a resume, and an ending are what a
-    /// client is waiting to hear, and dropping one would answer a different
-    /// question than the one it asked.
+    /// A progress note cannot replace recovery, resume, or terminal state.
+    /// A newer critical transition can supersede older critical history when
+    /// the bounded queue contains no replaceable progress.
     #[must_use]
     pub fn is_supersedable(&self) -> bool {
         matches!(self, Self::Progress { .. })
@@ -280,10 +282,19 @@ impl WaiterRegistry {
 /// Queues one update for one waiter, within its bound.
 ///
 /// A full queue drops the oldest superseded progress note to make room. When
-/// nothing is superseded - every queued update is a recovery, a resume, or an
-/// ending - the new update is dropped instead, because those are the ones a
-/// client is waiting to hear and the oldest of them is not the least useful.
+/// no progress can be superseded, a new critical state replaces the oldest
+/// critical history. A progress-only update is dropped in that case, so it
+/// cannot displace the latest recovery/resume or terminal state.
 fn enqueue(waiter: &mut Waiter, update: WaitUpdate, allowed: usize) {
+    // Attachment can already have supplied a newer persisted observation than
+    // the registry's publisher has reached. Never enqueue behind either the
+    // delivered revision or that queued catch-up observation.
+    let newest = waiter.queued.back().map_or(waiter.delivered_revision, |queued| {
+        queued.revision().max(waiter.delivered_revision)
+    });
+    if update.revision() <= newest || allowed == 0 {
+        return;
+    }
     if waiter.queued.len() < allowed {
         waiter.queued.push_back(update);
         return;
@@ -294,7 +305,7 @@ fn enqueue(waiter: &mut Waiter, update: WaitUpdate, allowed: usize) {
             waiter.queued.remove(index);
             waiter.queued.push_back(update);
         }
-        None if update.ends_the_wait() => {
+        None if !update.is_supersedable() => {
             waiter.queued.pop_front();
             waiter.queued.push_back(update);
         }

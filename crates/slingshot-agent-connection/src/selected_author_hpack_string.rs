@@ -44,10 +44,14 @@ impl LiteralString {
     }
 
     /// True only when a length continuation proved the encoded usage bound exceeded.
-    pub(crate) fn encoded_limit_exceeded(&self) -> bool { self.length.limit_exceeded() }
+    pub(crate) fn encoded_limit_exceeded(&self) -> bool {
+        self.length.limit_exceeded()
+    }
 
     /// Remaining payload once the complete encoded length has been read.
-    pub(crate) fn remaining_encoded_bytes(&self) -> Option<u64> { self.remaining }
+    pub(crate) fn remaining_encoded_bytes(&self) -> Option<u64> {
+        self.remaining
+    }
 
     /// Consumes one length-continuation or string-data octet. Refusal prevents
     /// further decoding and finish; no caller can reinterpret it as raw text.

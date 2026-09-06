@@ -95,8 +95,11 @@ impl CapturedResetRecovery<'_> {
     ) -> Result<OperationLookupReceipt, SubscriptionResetRefusal> {
         use super::author_authentication::AuthorAuthentication;
         let policy = match self.authentication {
-            AuthorAuthentication::Fixed { protocol, .. } => AuthorAuthentication::Fixed { authentication, protocol },
-            policy @ (AuthorAuthentication::Provider { .. } | AuthorAuthentication::AsyncProvider { .. }) => policy,
+            AuthorAuthentication::Fixed { protocol, .. } => {
+                AuthorAuthentication::Fixed { authentication, protocol }
+            }
+            policy @ (AuthorAuthentication::Provider { .. }
+            | AuthorAuthentication::AsyncProvider { .. }) => policy,
         };
         self.reconcile_using(repository, transport, policy, completion).await
     }
@@ -107,8 +110,10 @@ impl CapturedResetRecovery<'_> {
         self,
         repository: &slingshot_storage::agent_job_repository::AgentJobRepository,
         transport: &SelectedAuthorTransport,
-        completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
+        completion: Option<(
+            &slingshot_storage::artifact_store::ArtifactStore,
+            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+        )>,
     ) -> Result<OperationLookupReceipt, SubscriptionResetRefusal> {
         let authentication = self.authentication;
         self.reconcile_using(repository, transport, authentication, completion).await
@@ -119,8 +124,10 @@ impl CapturedResetRecovery<'_> {
         repository: &slingshot_storage::agent_job_repository::AgentJobRepository,
         transport: &SelectedAuthorTransport,
         authentication: super::author_authentication::AuthorAuthentication<'_>,
-        completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
+        completion: Option<(
+            &slingshot_storage::artifact_store::ArtifactStore,
+            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+        )>,
     ) -> Result<OperationLookupReceipt, SubscriptionResetRefusal> {
         if let OperationLookupReceipt::Found(found) = &mut self.receipt {
             found.remaining_retention_milliseconds =
@@ -168,16 +175,20 @@ pub fn finish_generation_reset(
         return Err(SubscriptionResetRefusal);
     }
     transport.require_execution(selection).map_err(|_| SubscriptionResetRefusal)?;
-    let view = ledger.read_recovery_view(&selection.author_target_identity_digest, reset.subscription())
+    let view = ledger
+        .read_recovery_view(&selection.author_target_identity_digest, reset.subscription())
         .map_err(|_| SubscriptionResetRefusal)?;
     if !view.members().is_empty()
         || view.ledger().agent_event_store_generation != reset.requested_generation()
         || reset.generation() == reset.requested_generation()
-        || reset.requested_cursor().is_some_and(|cursor| view.ledger().cursor.as_deref() != Some(cursor))
+        || reset
+            .requested_cursor()
+            .is_some_and(|cursor| view.ledger().cursor.as_deref() != Some(cursor))
     {
         return Err(SubscriptionResetRefusal);
     }
-    ledger.install_empty_recovery(&view, reset.generation(), reset.captured_cursor().as_text())
+    ledger
+        .install_empty_recovery(&view, reset.generation(), reset.captured_cursor().as_text())
         .map_err(|_| SubscriptionResetRefusal)?;
     Ok(reset.captured_cursor().clone())
 }
@@ -281,9 +292,16 @@ pub async fn reset_active_subscription<'runtime>(
     protocol: ResetTransport,
     now_unix_milliseconds: u64,
 ) -> Result<SubscriptionResetOutcome<'runtime>, SubscriptionResetRefusal> {
-    reset_active_subscription_with_authentication(ledger, operations, transport, selection,
-        subscription, super::author_authentication::AuthorAuthentication::Fixed { authentication, protocol },
-        now_unix_milliseconds).await
+    reset_active_subscription_with_authentication(
+        ledger,
+        operations,
+        transport,
+        selection,
+        subscription,
+        super::author_authentication::AuthorAuthentication::Fixed { authentication, protocol },
+        now_unix_milliseconds,
+    )
+    .await
 }
 
 /// Captures and reconciles the complete subscription with one authentication
@@ -337,14 +355,20 @@ pub async fn reset_active_subscription_with_authentication<'runtime>(
         }
         members.push((identity, submission, local.record.revision));
     }
-    let capture = authentication.high_water(transport, selection, subscription, generation).await
-    .map_err(|_| SubscriptionResetRefusal)?;
+    let capture = authentication
+        .high_water(transport, selection, subscription, generation)
+        .await
+        .map_err(|_| SubscriptionResetRefusal)?;
     let capture = match capture {
         HighWaterOutcome::Captured(capture) => capture,
         HighWaterOutcome::Reset(reset) => {
             if members.is_empty() {
-                let cursor = finish_generation_reset(ledger, operations, transport, selection, &reset)?;
-                return Ok(SubscriptionResetOutcome::Installed { generation: reset.generation(), cursor });
+                let cursor =
+                    finish_generation_reset(ledger, operations, transport, selection, &reset)?;
+                return Ok(SubscriptionResetOutcome::Installed {
+                    generation: reset.generation(),
+                    cursor,
+                });
             }
             return Ok(SubscriptionResetOutcome::GenerationChanged(reset));
         }
@@ -367,8 +391,10 @@ pub async fn reset_active_subscription_with_authentication<'runtime>(
                 operation_identifier: identity.operation_identifier.clone(),
             });
         }
-        let lookup = authentication.lookup(transport, identity, submission).await
-        .map_err(|_| SubscriptionResetRefusal)?;
+        let lookup = authentication
+            .lookup(transport, identity, submission)
+            .await
+            .map_err(|_| SubscriptionResetRefusal)?;
         let received = std::time::Instant::now();
         let handoff = |receipt| {
             SubscriptionResetOutcome::CapturedOperationRecovery(CapturedResetRecovery {

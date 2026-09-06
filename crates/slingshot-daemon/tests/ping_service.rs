@@ -214,6 +214,30 @@ async fn concurrent_connections_receive_correctly_correlated_responses() {
 }
 
 #[tokio::test]
+async fn hello_without_an_established_runtime_is_typed_unavailable() {
+    let root = temporary_runtime_root("hello");
+    let daemon = start_daemon(&root, ENVIRONMENT).await;
+    let contract = FoundationContract::embedded();
+    let response = exchange(
+        &daemon.address,
+        &frame(
+            &contract,
+            "hello",
+            slingshot_local_protocol::control::HELLO_METHOD,
+            serde_json::json!({}),
+        ),
+    )
+    .await;
+    assert_eq!(response.request_identifier, "hello");
+    assert_eq!(
+        response.error.unwrap().code,
+        slingshot_local_protocol::control::RUNTIME_UNAVAILABLE_CODE
+    );
+    ping(&daemon.address, "still-owned").await;
+    finish(daemon).await;
+}
+
+#[tokio::test]
 async fn a_refused_request_leaves_the_server_available_for_the_next_ping() {
     let contract = FoundationContract::embedded();
     let root = temporary_runtime_root("f");

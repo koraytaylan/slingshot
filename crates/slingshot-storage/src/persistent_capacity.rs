@@ -165,6 +165,185 @@ pub struct ArtifactPublication {
     identifier: String,
 }
 
+/// Durable protection for one operation-free maintenance document.
+/// Dropping it does not release the persisted hold.
+#[derive(Debug, Clone)]
+pub struct MaintenancePublication {
+    publication: ArtifactPublication,
+}
+
+impl MaintenancePublication {
+    /// Identifies the exact retained producer; never a content-wide release key.
+    pub fn identifier(&self) -> &str {
+        self.publication.identifier()
+    }
+}
+
+struct PublicationMetadata<'a> {
+    artifact_identifier: &'a str,
+    content_digest: &'a str,
+    byte_length: u64,
+    maintenance: Option<&'a crate::artifact_store::maintenance_content::MaintenanceDocument>,
+}
+
+mod maintenance_recovery;
+pub use maintenance_recovery::{MaintenancePublicationRecovery, PendingMaintenancePublication};
+
+#[cfg(test)]
+mod maintenance_publication_tests {
+    use super::*;
+    use slingshot_domain::daemon_runtime_contract::{
+        DIGEST_OCTETS, DaemonRuntimeContract, MaintenanceResultKind,
+    };
+
+    #[test]
+    fn maintenance_hold_transfers_reserved_bytes_and_preserves_owner_across_reopen() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("publication.sqlite");
+        let limits = DaemonRuntimeContract::embedded();
+        let open = || {
+            OperationDatabase::open(
+                &path,
+                crate::database::RequiredSettings {
+                    page_bytes: limits.limit("sqlite_page_bytes"),
+                    database_pages: limits.limit("maximum_sqlite_database_pages"),
+                    busy_timeout_milliseconds: limits.limit("database_busy_timeout_milliseconds"),
+                },
+            )
+            .unwrap()
+        };
+        let database = open();
+        let account =
+            PersistentCapacityAccount::new(&database, PersistentCapacityPolicy::embedded());
+        let store = crate::artifact_store::ArtifactStore::open(root.path()).unwrap();
+        let target = "a".repeat(DIGEST_OCTETS * 2);
+        let source = "b".repeat(DIGEST_OCTETS * 2);
+        let reservation = account.reserve_artifact(None, 2).unwrap();
+        let stage = store
+            .stage_maintenance_document(&target, MaintenanceResultKind::Preview, &source, b"{}")
+            .unwrap();
+        assert!(account.retain_maintenance_publication(&stage, None, 1).is_err());
+        assert_eq!(account.pending_publications().unwrap(), 0);
+        let hold = account.retain_maintenance_publication(&stage, reservation, 1).unwrap();
+        assert_eq!(account.pending_publications().unwrap(), 1);
+        assert_eq!(account.usage().unwrap().reserved_artifact_bytes, 0);
+        assert!(account.retain_maintenance_publication(&stage, None, 2).is_err());
+        assert_eq!(account.pending_publications().unwrap(), 1);
+        let document = stage.publish().unwrap();
+        let identifier = hold.identifier().to_owned();
+        drop(hold);
+        drop(account);
+        drop(database);
+        let database = open();
+        let account =
+            PersistentCapacityAccount::new(&database, PersistentCapacityPolicy::embedded());
+        assert_eq!(account.pending_publications().unwrap(), 1);
+        let (operations, recovered) = account.reconstruct_target_publications(&target).unwrap();
+        assert!(operations.is_empty());
+        let recovered = recovered.unwrap();
+        assert_eq!(recovered.document(), &document);
+        assert_eq!(recovered.hold().identifier(), identifier);
+        assert_eq!(recovered.recorded_at_unix_milliseconds(), 1);
+        drop(recovered);
+        assert_eq!(account.pending_publications().unwrap(), 1);
+        let foreign = "c".repeat(DIGEST_OCTETS * 2);
+        let (unresolved, maintenance) = account.reconstruct_target_publications(&foreign).unwrap();
+        assert!(maintenance.is_none());
+        assert_eq!(unresolved.len(), 1);
+        assert_eq!(unresolved[0].publication_identifier, identifier);
+        assert!(account.reconstruct_target_publications(&target.to_uppercase()).is_err());
+        assert_eq!(account.pending_publications().unwrap(), 1);
+        let row: (String, String, String, i64, i64, String, String) = database
+            .connection()
+            .query_row(
+                statement("read one target's pending maintenance publication"),
+                [&target],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            row,
+            (
+                identifier,
+                document.identifier.as_text().to_owned(),
+                document.content_digest.clone(),
+                2,
+                1,
+                "preview".to_owned(),
+                source.clone()
+            )
+        );
+        let recovered = account.reconstruct_maintenance_publication(&target).unwrap().unwrap();
+        assert!(
+            account.complete_maintenance_publication(&store, &target, recovered.hold()).is_err()
+        );
+        assert_eq!(account.pending_publications().unwrap(), 1);
+        crate::maintenance_results::record_current_preview(
+            &database,
+            &account,
+            &target,
+            &source,
+            &document.content_digest,
+            document.byte_length,
+        )
+        .unwrap();
+        let absent_root = tempfile::tempdir().unwrap();
+        let absent_store = crate::artifact_store::ArtifactStore::open(absent_root.path()).unwrap();
+        assert!(
+            account
+                .complete_maintenance_publication(&absent_store, &target, recovered.hold())
+                .is_err()
+        );
+        assert!(
+            account.complete_maintenance_publication(&store, &foreign, recovered.hold()).is_err()
+        );
+        assert_eq!(account.pending_publications().unwrap(), 1);
+        account.complete_maintenance_publication(&store, &target, recovered.hold()).unwrap();
+        assert_eq!(account.pending_publications().unwrap(), 0);
+        assert!(account.reconstruct_maintenance_publication(&target).unwrap().is_none());
+        assert_eq!(account.usage().unwrap().committed_artifact_bytes, 2);
+        let stage = store
+            .stage_maintenance_document(&target, MaintenanceResultKind::Preview, &source, b"{}")
+            .unwrap();
+        let next = account.retain_maintenance_publication(&stage, None, 2).unwrap();
+        stage.publish().unwrap();
+        assert!(
+            account.complete_maintenance_publication(&store, &target, recovered.hold()).is_err()
+        );
+        assert_eq!(account.pending_publications().unwrap(), 1);
+        let unrelated = uuid::Uuid::new_v4().to_string();
+        database
+            .connection()
+            .execute(
+                statement("retain one artifact publication across restart"),
+                rusqlite::params![unrelated, foreign, document.content_digest, 2],
+            )
+            .unwrap();
+        account.complete_maintenance_publication(&store, &target, &next).unwrap();
+        assert_eq!(account.pending_publications().unwrap(), 1);
+        assert_eq!(
+            account.reconstruct_publications().unwrap()[0].publication_identifier,
+            unrelated
+        );
+        assert_eq!(account.usage().unwrap().committed_artifact_bytes, 2);
+        assert!(
+            crate::maintenance_results::read(&database, &target, &document.identifier)
+                .unwrap()
+                .is_some()
+        );
+    }
+}
+
 impl ArtifactPublication {
     /// Opaque identifier for the exact persisted publication attempt.
     pub fn identifier(&self) -> &str {
@@ -433,11 +612,56 @@ impl<'database> PersistentCapacityAccount<'database> {
     pub fn retain_staged_publication(
         &self,
         stage: &crate::artifact_store::StagedArtifact<'_>,
+        reservation: Option<ArtifactReservation<'_>>,
+        now_unix_milliseconds: u64,
+    ) -> Result<ArtifactPublication, AccountingFailure> {
+        let metadata = stage.metadata();
+        self.retain_publication(
+            PublicationMetadata {
+                artifact_identifier: metadata.artifact_identifier.as_text(),
+                content_digest: &metadata.content_digest,
+                byte_length: metadata.byte_length,
+                maintenance: None,
+            },
+            reservation,
+            now_unix_milliseconds,
+        )
+    }
+
+    /// Transfers a reservation to a durable operation-free publication hold.
+    /// The owner record and shared blob protection commit together, before the
+    /// caller may physically publish or acknowledge a result association.
+    ///
+    /// # Errors
+    /// Refuses capacity, an existing pending maintenance producer for the target,
+    /// mismatched/foreign reservations, or conflicting recorded content length.
+    pub fn retain_maintenance_publication(
+        &self,
+        stage: &crate::artifact_store::maintenance_content::StagedMaintenanceDocument<'_>,
+        reservation: Option<ArtifactReservation<'_>>,
+        now_unix_milliseconds: u64,
+    ) -> Result<MaintenancePublication, AccountingFailure> {
+        let document = stage.document();
+        let publication = self.retain_publication(
+            PublicationMetadata {
+                artifact_identifier: document.identifier.as_text(),
+                content_digest: &document.content_digest,
+                byte_length: document.byte_length,
+                maintenance: Some(document),
+            },
+            reservation,
+            now_unix_milliseconds,
+        )?;
+        Ok(MaintenancePublication { publication })
+    }
+
+    fn retain_publication(
+        &self,
+        metadata: PublicationMetadata<'_>,
         mut reservation: Option<ArtifactReservation<'_>>,
         now_unix_milliseconds: u64,
     ) -> Result<ArtifactPublication, AccountingFailure> {
         use rusqlite::OptionalExtension as _;
-        let metadata = stage.metadata();
         let invalid =
             || AccountingFailure::DatabaseRefused("the publication hold is not valid".to_owned());
         let length = i64::try_from(metadata.byte_length).map_err(|_| invalid())?;
@@ -491,12 +715,33 @@ impl<'database> PersistentCapacityAccount<'database> {
                 statement("retain one artifact publication across restart"),
                 rusqlite::params![
                     identifier,
-                    metadata.artifact_identifier.as_text(),
+                    metadata.artifact_identifier,
                     metadata.content_digest,
                     now
                 ],
             )
             .map_err(refused)?;
+        if let Some(document) = metadata.maintenance {
+            let kind = match document.kind {
+                slingshot_domain::daemon_runtime_contract::MaintenanceResultKind::Preview => {
+                    "preview"
+                }
+                slingshot_domain::daemon_runtime_contract::MaintenanceResultKind::Application => {
+                    "application"
+                }
+            };
+            transaction
+                .execute(
+                    statement("bind a maintenance publication to its operation-free owner"),
+                    rusqlite::params![
+                        identifier,
+                        document.target,
+                        kind,
+                        document.reviewed_source_digest
+                    ],
+                )
+                .map_err(refused)?;
+        }
         if let Some(hold) = &reservation {
             let ticket =
                 hold.ticket.and_then(|value| i64::try_from(value).ok()).ok_or_else(invalid)?;

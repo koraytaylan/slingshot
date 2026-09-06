@@ -228,9 +228,19 @@ pub fn unfinished_partitions(
     database.unfinished_partitions().map_err(|_| unavailable()).map(|partitions| {
         partitions
             .into_iter()
-            .map(|(author_target_identity_digest, selected_environment_revision, daemon_runtime_contract_digest)| {
-                UnfinishedPartition { author_target_identity_digest, selected_environment_revision, daemon_runtime_contract_digest }
-            })
+            .map(
+                |(
+                    author_target_identity_digest,
+                    selected_environment_revision,
+                    daemon_runtime_contract_digest,
+                )| {
+                    UnfinishedPartition {
+                        author_target_identity_digest,
+                        selected_environment_revision,
+                        daemon_runtime_contract_digest,
+                    }
+                },
+            )
             .collect()
     })
 }

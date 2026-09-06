@@ -14,7 +14,9 @@ pub struct TerminalFailureDecodeRefusal;
 
 /// A closed, request-correlated listing, inspection or resolution refusal.
 #[derive(Clone, PartialEq, Eq)]
-pub struct ValidatedReadFailure { category: String }
+pub struct ValidatedReadFailure {
+    category: String,
+}
 
 impl core::fmt::Debug for ValidatedReadFailure {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -25,28 +27,40 @@ impl core::fmt::Debug for ValidatedReadFailure {
 impl ValidatedReadFailure {
     /// The category admitted by both the typed refusal and selected registry row.
     #[must_use]
-    pub fn category(&self) -> &str { &self.category }
+    pub fn category(&self) -> &str {
+        &self.category
+    }
 }
 
 /// Validates listing and targeted inspection/resolution refusals without exposing private
 /// identifiers, addresses, partial results or remote-selected dispositions.
 pub fn decode_read_failure(
-    body: &[u8], expectation: &ResultExpectation,
+    body: &[u8],
+    expectation: &ResultExpectation,
     command: &slingshot_domain::command::catalog::Command,
 ) -> Result<ValidatedReadFailure, TerminalFailureDecodeRefusal> {
     use slingshot_domain::command::catalog::{Command, CommandCatalog};
     require_installed_command(expectation, command)?;
     let document = decode_terminal_failure(body, expectation)?;
     let category = failure_category(&document)?;
-    if !CommandCatalog::published().find(command.wire_name()).ok_or(TerminalFailureDecodeRefusal)?.failure_categories.contains(&category) {
+    if !CommandCatalog::published()
+        .find(command.wire_name())
+        .ok_or(TerminalFailureDecodeRefusal)?
+        .failure_categories
+        .contains(&category)
+    {
         return Err(TerminalFailureDecodeRefusal);
     }
     let window = match command {
-        Command::FindOpenServiceGatewayInitiativeConfigurations(command) => Some(&command.result_window),
+        Command::FindOpenServiceGatewayInitiativeConfigurations(command) => {
+            Some(&command.result_window)
+        }
         Command::FindSlingJobs(command) => Some(&command.result_window),
         Command::FindWorkflowInstances(command) => Some(&command.result_window),
         Command::ListOpenServiceGatewayInitiativeBundles(command) => Some(&command.result_window),
-        Command::ListOpenServiceGatewayInitiativeComponents(command) => Some(&command.result_window),
+        Command::ListOpenServiceGatewayInitiativeComponents(command) => {
+            Some(&command.result_window)
+        }
         Command::ListReplicationAgents(command) => Some(&command.result_window),
         Command::ListResourceMappings(command) => Some(&command.result_window),
         Command::ListSlingJobQueues(command) => Some(&command.result_window),
@@ -58,15 +72,31 @@ pub fn decode_read_failure(
         _ => None,
     };
     if let Some(window) = window {
-        let value: serde_json::Value = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
+        let value: serde_json::Value = serde_json::from_str(&document.canonical_failure)
+            .map_err(|_| TerminalFailureDecodeRefusal)?;
         let members = value.as_object().ok_or(TerminalFailureDecodeRefusal)?;
         if category == "discovery_budget_exceeded" {
-            if members.len() != 2 { return Err(TerminalFailureDecodeRefusal); }
-            let _: slingshot_domain::command::discovery_budget::DiscoveryBudget = serde_json::from_value(value["budget"].clone()).map_err(|_| TerminalFailureDecodeRefusal)?;
+            if members.len() != 2 {
+                return Err(TerminalFailureDecodeRefusal);
+            }
+            let _: slingshot_domain::command::discovery_budget::DiscoveryBudget =
+                serde_json::from_value(value["budget"].clone())
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
             return Ok(ValidatedReadFailure { category });
         }
-        if slingshot_domain::command::result_window::CONTINUATION_FAILURE_PRECEDENCE.contains(&category.as_str()) {
-            if members.len() != 1 || !matches!(window, Some(slingshot_domain::command::result_window::ResultWindow::Continuation { .. })) { return Err(TerminalFailureDecodeRefusal); }
+        if slingshot_domain::command::result_window::CONTINUATION_FAILURE_PRECEDENCE
+            .contains(&category.as_str())
+        {
+            if members.len() != 1
+                || !matches!(
+                    window,
+                    Some(
+                        slingshot_domain::command::result_window::ResultWindow::Continuation { .. }
+                    )
+                )
+            {
+                return Err(TerminalFailureDecodeRefusal);
+            }
             return Ok(ValidatedReadFailure { category });
         }
     }
@@ -75,21 +105,39 @@ pub fn decode_read_failure(
             let refusal: slingshot_domain::command::read_content_fragment::ReadContentFragmentRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.require_answers(command).map_err(|_| TerminalFailureDecodeRefusal)?;
         }
-        Command::FindOpenServiceGatewayInitiativeConfigurations(_) | Command::FindSlingJobs(_) | Command::FindWorkflowInstances(_) | Command::ListOpenServiceGatewayInitiativeBundles(_) | Command::ListOpenServiceGatewayInitiativeComponents(_) | Command::ListReplicationAgents(_) | Command::ListResourceMappings(_) | Command::ListSlingJobQueues(_) | Command::ListWorkflowModels(_) => {
-            let refusal: slingshot_domain::command::operational_listing::InventoryRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
+        Command::FindOpenServiceGatewayInitiativeConfigurations(_)
+        | Command::FindSlingJobs(_)
+        | Command::FindWorkflowInstances(_)
+        | Command::ListOpenServiceGatewayInitiativeBundles(_)
+        | Command::ListOpenServiceGatewayInitiativeComponents(_)
+        | Command::ListReplicationAgents(_)
+        | Command::ListResourceMappings(_)
+        | Command::ListSlingJobQueues(_)
+        | Command::ListWorkflowModels(_) => {
+            let refusal: slingshot_domain::command::operational_listing::InventoryRefusal =
+                serde_json::from_str(&document.canonical_failure)
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
             // Internally tagged unit variants require an explicit shape check:
             // serde can otherwise ignore extra members despite deny_unknown_fields.
-            let received: serde_json::Value = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
-            if serde_json::to_value(refusal).map_err(|_| TerminalFailureDecodeRefusal)? != received {
+            let received: serde_json::Value = serde_json::from_str(&document.canonical_failure)
+                .map_err(|_| TerminalFailureDecodeRefusal)?;
+            if serde_json::to_value(refusal).map_err(|_| TerminalFailureDecodeRefusal)? != received
+            {
                 return Err(TerminalFailureDecodeRefusal);
             }
         }
         Command::ListChildPages(command) => {
-            let refusal: slingshot_domain::command::query_paths::AnchorRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
-            if refusal.root_path() != &command.root_path { return Err(TerminalFailureDecodeRefusal); }
+            let refusal: slingshot_domain::command::query_paths::AnchorRefusal =
+                serde_json::from_str(&document.canonical_failure)
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
+            if refusal.root_path() != &command.root_path {
+                return Err(TerminalFailureDecodeRefusal);
+            }
         }
         Command::ListGroupMembers(command) => {
-            let refusal: slingshot_domain::command::list_group_members::ListGroupMembersRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
+            let refusal: slingshot_domain::command::list_group_members::ListGroupMembersRefusal =
+                serde_json::from_str(&document.canonical_failure)
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.require_answers(command).map_err(|_| TerminalFailureDecodeRefusal)?;
         }
         Command::ListAssetRenditions(command) => {
@@ -101,7 +149,9 @@ pub fn decode_read_failure(
             refusal.require_answers(command).map_err(|_| TerminalFailureDecodeRefusal)?;
         }
         Command::InspectSlingJob(command) => {
-            let refusal: slingshot_domain::command::inspect_sling_job::InspectSlingJobRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
+            let refusal: slingshot_domain::command::inspect_sling_job::InspectSlingJobRefusal =
+                serde_json::from_str(&document.canonical_failure)
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.require_answers(command).map_err(|_| TerminalFailureDecodeRefusal)?;
         }
         Command::InspectWorkflowInstance(command) => {
@@ -109,16 +159,28 @@ pub fn decode_read_failure(
             refusal.require_answers(command).map_err(|_| TerminalFailureDecodeRefusal)?;
         }
         Command::InspectReplicationAgent(command) => {
-            let refusal: slingshot_domain::command::replication_agent::ReplicationAgentRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
-            if refusal.agent_identifier != command.agent_identifier { return Err(TerminalFailureDecodeRefusal); }
+            let refusal: slingshot_domain::command::replication_agent::ReplicationAgentRefusal =
+                serde_json::from_str(&document.canonical_failure)
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
+            if refusal.agent_identifier != command.agent_identifier {
+                return Err(TerminalFailureDecodeRefusal);
+            }
         }
         Command::ResolveResourcePath(command) => {
-            let refusal: slingshot_domain::command::resource_resolution::ResourceResolutionRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
-            if refusal.subject != command.request_address.as_text() { return Err(TerminalFailureDecodeRefusal); }
+            let refusal: slingshot_domain::command::resource_resolution::ResourceResolutionRefusal =
+                serde_json::from_str(&document.canonical_failure)
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
+            if refusal.subject != command.request_address.as_text() {
+                return Err(TerminalFailureDecodeRefusal);
+            }
         }
         Command::MapResourcePath(command) => {
-            let refusal: slingshot_domain::command::resource_resolution::ResourceResolutionRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
-            if refusal.subject != command.repository_path.as_text() { return Err(TerminalFailureDecodeRefusal); }
+            let refusal: slingshot_domain::command::resource_resolution::ResourceResolutionRefusal =
+                serde_json::from_str(&document.canonical_failure)
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
+            if refusal.subject != command.repository_path.as_text() {
+                return Err(TerminalFailureDecodeRefusal);
+            }
         }
         _ => return Err(TerminalFailureDecodeRefusal),
     }
@@ -142,16 +204,21 @@ impl core::fmt::Debug for ValidatedMutationFailure {
 impl ValidatedMutationFailure {
     /// The category admitted by the installed command-specific refusal type.
     #[must_use]
-    pub fn category(&self) -> &str { &self.category }
+    pub fn category(&self) -> &str {
+        &self.category
+    }
     /// False preserves mutation uncertainty and does not authorize replay.
     #[must_use]
-    pub fn proves_no_effect(&self) -> bool { self.proves_no_effect }
+    pub fn proves_no_effect(&self) -> bool {
+        self.proves_no_effect
+    }
 }
 
 /// Validates authoring, identity and operational mutations against their typed
 /// request, including reference-policy, ordering and queue-expectation constraints.
 pub fn decode_mutation_failure(
-    body: &[u8], expectation: &ResultExpectation,
+    body: &[u8],
+    expectation: &ResultExpectation,
     command: &slingshot_domain::command::catalog::Command,
 ) -> Result<ValidatedMutationFailure, TerminalFailureDecodeRefusal> {
     use slingshot_domain::command::catalog::Command;
@@ -159,12 +226,14 @@ pub fn decode_mutation_failure(
     let document = decode_terminal_failure(body, expectation)?;
     macro_rules! decode {
         ($group:expr, $member:expr, $refusal:ty) => {{
-            let refusal: $refusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
+            let refusal: $refusal = serde_json::from_str(&document.canonical_failure)
+                .map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.require_answers($group, $member).map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.proves_no_effect()
         }};
         ($command:expr, $refusal:ty) => {{
-            let refusal: $refusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
+            let refusal: $refusal = serde_json::from_str(&document.canonical_failure)
+                .map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.require_answers($command).map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.proves_no_effect()
         }};
@@ -235,34 +304,53 @@ impl core::fmt::Debug for ValidatedReplicationFailure {
 impl ValidatedReplicationFailure {
     /// The category admitted by the installed replication refusal types.
     #[must_use]
-    pub fn category(&self) -> &str { &self.category }
+    pub fn category(&self) -> &str {
+        &self.category
+    }
     /// The command-derived admission evidence, not publisher delivery evidence.
     #[must_use]
-    pub fn effect(&self) -> ReplicationFailureEffect { self.effect }
+    pub fn effect(&self) -> ReplicationFailureEffect {
+        self.effect
+    }
 }
 
 /// Validates replication preflight or bounded admission failure evidence.
 pub fn decode_replication_failure(
-    body: &[u8], expectation: &ResultExpectation,
+    body: &[u8],
+    expectation: &ResultExpectation,
     command: &slingshot_domain::command::catalog::Command,
 ) -> Result<ValidatedReplicationFailure, TerminalFailureDecodeRefusal> {
-    use slingshot_domain::command::{catalog::Command, replicate_content::{PreflightRefusal, AdmissionRefusal, AdmissionOutcome}};
+    use slingshot_domain::command::{
+        catalog::Command,
+        replicate_content::{AdmissionOutcome, AdmissionRefusal, PreflightRefusal},
+    };
     require_installed_command(expectation, command)?;
-    let Command::ReplicateContent(command) = command else { return Err(TerminalFailureDecodeRefusal); };
+    let Command::ReplicateContent(command) = command else {
+        return Err(TerminalFailureDecodeRefusal);
+    };
     let document = decode_terminal_failure(body, expectation)?;
     let category = failure_category(&document)?;
     let effect = match category.as_str() {
-        "source_not_found" | "source_access_denied" | "candidate_limit_exceeded" | "traversal_budget_exceeded" => {
-            let refusal: PreflightRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
+        "source_not_found"
+        | "source_access_denied"
+        | "candidate_limit_exceeded"
+        | "traversal_budget_exceeded" => {
+            let refusal: PreflightRefusal = serde_json::from_str(&document.canonical_failure)
+                .map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.require_answers(command).map_err(|_| TerminalFailureDecodeRefusal)?;
             ReplicationFailureEffect::NoAdmission
         }
         _ => {
-            let refusal: AdmissionRefusal = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
+            let refusal: AdmissionRefusal = serde_json::from_str(&document.canonical_failure)
+                .map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.require_answers(command).map_err(|_| TerminalFailureDecodeRefusal)?;
-            if refusal.failure == AdmissionOutcome::AdmissionOutcomeUnknown { ReplicationFailureEffect::Unknown }
-            else if refusal.accepted_item_count == 0 { ReplicationFailureEffect::NoAdmission }
-            else { ReplicationFailureEffect::PartialAdmission }
+            if refusal.failure == AdmissionOutcome::AdmissionOutcomeUnknown {
+                ReplicationFailureEffect::Unknown
+            } else if refusal.accepted_item_count == 0 {
+                ReplicationFailureEffect::NoAdmission
+            } else {
+                ReplicationFailureEffect::PartialAdmission
+            }
         }
     };
     Ok(ValidatedReplicationFailure { category, effect })
@@ -283,7 +371,9 @@ impl core::fmt::Debug for ValidatedDiscoveryFailure {
 impl ValidatedDiscoveryFailure {
     /// The category admitted by this discovery contract.
     #[must_use]
-    pub fn category(&self) -> &str { &self.category }
+    pub fn category(&self) -> &str {
+        &self.category
+    }
 }
 
 /// Validates discovery anchors, bounded budget names and continuation failures.
@@ -299,31 +389,50 @@ pub fn decode_discovery_failure(
     let (root, window) = match command {
         Command::QueryPaths(command) => (Some(&command.root_path), &command.result_window),
         Command::FindPagesByTemplate(command) => (Some(&command.root_path), &command.result_window),
-        Command::FindPagesContainingPhrase(command) => (Some(&command.root_path), &command.result_window),
-        Command::FindPagesUsingComponents(command) => (Some(&command.root_path), &command.result_window),
-        Command::FindAssetsByMetadata(command) => (Some(&command.root_path), &command.result_window),
+        Command::FindPagesContainingPhrase(command) => {
+            (Some(&command.root_path), &command.result_window)
+        }
+        Command::FindPagesUsingComponents(command) => {
+            (Some(&command.root_path), &command.result_window)
+        }
+        Command::FindAssetsByMetadata(command) => {
+            (Some(&command.root_path), &command.result_window)
+        }
         Command::FindAssetsReferencedByPage(command) => (None, &command.result_window),
         _ => return Err(TerminalFailureDecodeRefusal),
     };
     let document = decode_terminal_failure(body, expectation)?;
-    let value: serde_json::Value = serde_json::from_str(&document.canonical_failure).map_err(|_| TerminalFailureDecodeRefusal)?;
+    let value: serde_json::Value = serde_json::from_str(&document.canonical_failure)
+        .map_err(|_| TerminalFailureDecodeRefusal)?;
     let members = value.as_object().ok_or(TerminalFailureDecodeRefusal)?;
     let category = failure_category(&document)?;
     match category.as_str() {
         "root_not_found" | "root_access_denied" => {
-            let refusal: slingshot_domain::command::query_paths::AnchorRefusal = serde_json::from_value(value.clone()).map_err(|_| TerminalFailureDecodeRefusal)?;
-            if root != Some(refusal.root_path()) { return Err(TerminalFailureDecodeRefusal); }
+            let refusal: slingshot_domain::command::query_paths::AnchorRefusal =
+                serde_json::from_value(value.clone()).map_err(|_| TerminalFailureDecodeRefusal)?;
+            if root != Some(refusal.root_path()) {
+                return Err(TerminalFailureDecodeRefusal);
+            }
         }
         "page_not_found" | "page_access_denied" | "page_invalid" => {
-            let Command::FindAssetsReferencedByPage(command) = command else { return Err(TerminalFailureDecodeRefusal); };
+            let Command::FindAssetsReferencedByPage(command) = command else {
+                return Err(TerminalFailureDecodeRefusal);
+            };
             let refusal: slingshot_domain::command::find_assets_referenced_by_page::PageAnchorRefusal = serde_json::from_value(value.clone()).map_err(|_| TerminalFailureDecodeRefusal)?;
             refusal.require_answers(command).map_err(|_| TerminalFailureDecodeRefusal)?;
         }
         "discovery_budget_exceeded" => {
-            if members.len() != 2 { return Err(TerminalFailureDecodeRefusal); }
-            let _: slingshot_domain::command::discovery_budget::DiscoveryBudget = serde_json::from_value(value["budget"].clone()).map_err(|_| TerminalFailureDecodeRefusal)?;
+            if members.len() != 2 {
+                return Err(TerminalFailureDecodeRefusal);
+            }
+            let _: slingshot_domain::command::discovery_budget::DiscoveryBudget =
+                serde_json::from_value(value["budget"].clone())
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
         }
-        category if slingshot_domain::command::result_window::CONTINUATION_FAILURE_PRECEDENCE.contains(&category) => {
+        category
+            if slingshot_domain::command::result_window::CONTINUATION_FAILURE_PRECEDENCE
+                .contains(&category) =>
+        {
             if members.len() != 1 || !matches!(window, Some(ResultWindow::Continuation { .. })) {
                 return Err(TerminalFailureDecodeRefusal);
             }
@@ -440,7 +549,9 @@ fn require_installed_command(
     Ok(())
 }
 
-fn failure_category(document: &TerminalFailureDocument) -> Result<String, TerminalFailureDecodeRefusal> {
+fn failure_category(
+    document: &TerminalFailureDocument,
+) -> Result<String, TerminalFailureDecodeRefusal> {
     let value: serde_json::Value = serde_json::from_str(&document.canonical_failure)
         .map_err(|_| TerminalFailureDecodeRefusal)?;
     Ok(value["failure"].as_str().ok_or(TerminalFailureDecodeRefusal)?.to_owned())
@@ -471,7 +582,8 @@ pub fn decode_package_failure(
     command: &slingshot_domain::command::catalog::Command,
 ) -> Result<ValidatedPackageFailure, TerminalFailureDecodeRefusal> {
     require_installed_command(expectation, command)?;
-    let slingshot_domain::command::catalog::Command::DownloadContentPackage(command) = command else {
+    let slingshot_domain::command::catalog::Command::DownloadContentPackage(command) = command
+    else {
         return Err(TerminalFailureDecodeRefusal);
     };
     let document = decode_terminal_failure(body, expectation)?;

@@ -7,8 +7,8 @@ use crate::author_hypertext_transfer_protocol_policy::HeadBounds;
 use crate::selected_author_hpack_integer::PrefixedInteger;
 use crate::selected_author_hpack_string::{LiteralString, StringRefusal};
 use crate::selected_author_hpack_table::{HeaderTable, MAXIMUM_DYNAMIC_TABLE_BYTES};
-use crate::selected_author_http2_headers::{DecodedHeadReader, DecodedResponseHead};
 use crate::selected_author_http2_headers::DecodedHeadRefusal;
+use crate::selected_author_http2_headers::{DecodedHeadReader, DecodedResponseHead};
 
 /// Incremental destination for decoded HPACK fields, before capture/table storage.
 /// A route supplies its own accounting and status policy without replacing HPACK.
@@ -30,12 +30,24 @@ pub trait DecodedHeaderSink {
 }
 impl DecodedHeaderSink for DecodedHeadReader {
     type Output = DecodedResponseHead;
-    fn begin_field(&mut self) -> Result<(), DecodedHeadRefusal> { self.begin_field() }
-    fn name_byte(&mut self, byte: u8) -> Result<(), DecodedHeadRefusal> { self.name_byte(byte) }
-    fn begin_value(&mut self) -> Result<(), DecodedHeadRefusal> { self.begin_value() }
-    fn value_byte(&mut self, byte: u8) -> Result<(), DecodedHeadRefusal> { self.value_byte(byte) }
-    fn end_field(&mut self) -> Result<(), DecodedHeadRefusal> { self.end_field() }
-    fn finish(self) -> Result<Self::Output, DecodedHeadRefusal> { self.finish() }
+    fn begin_field(&mut self) -> Result<(), DecodedHeadRefusal> {
+        self.begin_field()
+    }
+    fn name_byte(&mut self, byte: u8) -> Result<(), DecodedHeadRefusal> {
+        self.name_byte(byte)
+    }
+    fn begin_value(&mut self) -> Result<(), DecodedHeadRefusal> {
+        self.begin_value()
+    }
+    fn value_byte(&mut self, byte: u8) -> Result<(), DecodedHeadRefusal> {
+        self.value_byte(byte)
+    }
+    fn end_field(&mut self) -> Result<(), DecodedHeadRefusal> {
+        self.end_field()
+    }
+    fn finish(self) -> Result<Self::Output, DecodedHeadRefusal> {
+        self.finish()
+    }
 }
 
 /// A malformed, oversized or policy-refused block, with no private wire text.
@@ -113,10 +125,14 @@ impl<Reader: DecodedHeaderSink> ResponseBlock<Reader> {
     }
 
     /// The route's gate, for retrieving its redacted refusal classification.
-    pub fn reader(&self) -> &Reader { &self.headers }
+    pub fn reader(&self) -> &Reader {
+        &self.headers
+    }
 
     /// Distinguishes a compressed-bound refusal from malformed HPACK syntax.
-    pub fn encoded_limit_exceeded(&self) -> bool { self.encoded_limit_exceeded }
+    pub fn encoded_limit_exceeded(&self) -> bool {
+        self.encoded_limit_exceeded
+    }
 
     /// Feeds an arbitrary fragment, including a fragment ending inside an
     /// integer, literal length, Huffman code, or dynamic-table instruction.
@@ -126,9 +142,16 @@ impl<Reader: DecodedHeaderSink> ResponseBlock<Reader> {
         }
         for byte in bytes {
             let state = core::mem::replace(&mut self.state, State::Poisoned);
-            self.encoded_bytes = match self.encoded_bytes.checked_add(1).filter(|n| *n <= self.maximum_encoded_bytes) {
+            self.encoded_bytes = match self
+                .encoded_bytes
+                .checked_add(1)
+                .filter(|n| *n <= self.maximum_encoded_bytes)
+            {
                 Some(bytes) => bytes,
-                None => { self.encoded_limit_exceeded = true; return Err(BlockRefusal); }
+                None => {
+                    self.encoded_limit_exceeded = true;
+                    return Err(BlockRefusal);
+                }
             };
             self.state = self.step(state, *byte)?;
         }
@@ -173,7 +196,10 @@ impl<Reader: DecodedHeaderSink> ResponseBlock<Reader> {
             State::NameStart { indexing } => {
                 let string =
                     LiteralString::start(byte, self.maximum_encoded_bytes - self.encoded_bytes)
-                        .map_err(|_| { self.encoded_limit_exceeded = true; BlockRefusal })?;
+                        .map_err(|_| {
+                            self.encoded_limit_exceeded = true;
+                            BlockRefusal
+                        })?;
                 if string.is_complete() {
                     return Err(BlockRefusal);
                 }
@@ -182,7 +208,10 @@ impl<Reader: DecodedHeaderSink> ResponseBlock<Reader> {
             State::ValueStart { indexing } => {
                 let string =
                     LiteralString::start(byte, self.maximum_encoded_bytes - self.encoded_bytes)
-                        .map_err(|_| { self.encoded_limit_exceeded = true; BlockRefusal })?;
+                        .map_err(|_| {
+                            self.encoded_limit_exceeded = true;
+                            BlockRefusal
+                        })?;
                 if string.is_complete() {
                     string.finish().map_err(|_| BlockRefusal)?;
                     self.end_field(indexing)
@@ -193,7 +222,10 @@ impl<Reader: DecodedHeaderSink> ResponseBlock<Reader> {
             State::Name(mut string, indexing) => {
                 string
                     .push(byte, |symbol| emit(&mut self.headers, &mut self.capture, symbol, true))
-                    .map_err(|_| { self.encoded_limit_exceeded |= string.encoded_limit_exceeded(); BlockRefusal })?;
+                    .map_err(|_| {
+                        self.encoded_limit_exceeded |= string.encoded_limit_exceeded();
+                        BlockRefusal
+                    })?;
                 self.require_remaining_literal_budget(&string)?;
                 if string.is_complete() {
                     string.finish().map_err(|_| BlockRefusal)?;
@@ -206,7 +238,10 @@ impl<Reader: DecodedHeaderSink> ResponseBlock<Reader> {
             State::Value(mut string, indexing) => {
                 string
                     .push(byte, |symbol| emit(&mut self.headers, &mut self.capture, symbol, false))
-                    .map_err(|_| { self.encoded_limit_exceeded |= string.encoded_limit_exceeded(); BlockRefusal })?;
+                    .map_err(|_| {
+                        self.encoded_limit_exceeded |= string.encoded_limit_exceeded();
+                        BlockRefusal
+                    })?;
                 self.require_remaining_literal_budget(&string)?;
                 if string.is_complete() {
                     string.finish().map_err(|_| BlockRefusal)?;
@@ -219,9 +254,13 @@ impl<Reader: DecodedHeaderSink> ResponseBlock<Reader> {
         }
     }
 
-    fn require_remaining_literal_budget(&mut self, string: &LiteralString) -> Result<(), BlockRefusal> {
-        if string.remaining_encoded_bytes().is_some_and(|remaining|
-            remaining > self.maximum_encoded_bytes - self.encoded_bytes)
+    fn require_remaining_literal_budget(
+        &mut self,
+        string: &LiteralString,
+    ) -> Result<(), BlockRefusal> {
+        if string
+            .remaining_encoded_bytes()
+            .is_some_and(|remaining| remaining > self.maximum_encoded_bytes - self.encoded_bytes)
         {
             self.encoded_limit_exceeded = true;
             return Err(BlockRefusal);
@@ -292,9 +331,13 @@ impl<Reader: DecodedHeaderSink> ResponseBlock<Reader> {
     /// for the next bounded section. This grants no permission to accept trailers
     /// or another response: the route must still enforce those checkpoints.
     pub fn finish_with_next_reader<Next: DecodedHeaderSink>(
-        self, reader: Next, maximum_encoded_bytes: u64,
+        self,
+        reader: Next,
+        maximum_encoded_bytes: u64,
     ) -> Result<(Reader::Output, ResponseBlock<Next>), BlockRefusal> {
-        if !matches!(self.state, State::Instruction) { return Err(BlockRefusal); }
+        if !matches!(self.state, State::Instruction) {
+            return Err(BlockRefusal);
+        }
         let output = self.headers.finish().map_err(|_| BlockRefusal)?;
         let mut next = ResponseBlock::with_reader(reader, maximum_encoded_bytes);
         next.table = self.table;

@@ -16,6 +16,9 @@
 //! identifier already verified is an integrity conflict that preserves the
 //! original rather than replacing it.
 
+/// Structural guard for the streamed canonical result document.
+const STRUCTURED_RESULT_NESTING_DEPTH: usize = 128;
+
 use slingshot_agent_connection::artifact_download::{
     ArtifactTransfer, DownloadRefusal, ExpectedArtifact, TransferEnd,
 };
@@ -37,6 +40,8 @@ mod completion_age_tests {
     use super::age_success_snapshot;
     use std::time::Duration;
 
+    const SNAPSHOT_RECORDED_AT: u64 = 100;
+
     #[test]
     fn elapsed_completion_time_rounds_up_without_refreshing_retention() {
         let snapshot = slingshot_storage::agent_job_repository::SuccessfulAgentSnapshot {
@@ -45,14 +50,15 @@ mod completion_age_tests {
             remaining_retention_milliseconds: 2,
         };
         for (elapsed, remaining, now) in [
-            (Duration::ZERO, 2, 100),
+            (Duration::ZERO, 2, SNAPSHOT_RECORDED_AT),
             (Duration::from_nanos(1), 1, 101),
             (Duration::from_millis(1), 1, 101),
             (Duration::from_nanos(1_000_001), 0, 102),
             (Duration::from_secs(1), 0, 1100),
             (Duration::from_secs(u64::MAX), 0, u64::MAX),
         ] {
-            let (aged, recorded_at) = age_success_snapshot(&snapshot, 100, elapsed);
+            let (aged, recorded_at) =
+                age_success_snapshot(&snapshot, SNAPSHOT_RECORDED_AT, elapsed);
             assert_eq!(aged.remaining_retention_milliseconds, remaining);
             assert_eq!(recorded_at, now);
             assert_eq!(aged.observation, snapshot.observation);
@@ -113,7 +119,8 @@ pub async fn stage_remote_artifact<'store>(
         identity,
         submission,
         super::author_authentication::AuthorAuthentication::Fixed {
-            authentication, protocol: super::subscription_reset::ResetTransport::Http1,
+            authentication,
+            protocol: super::subscription_reset::ResetTransport::Http1,
         },
         expected,
         request,
@@ -138,11 +145,25 @@ pub async fn stage_remote_artifact_over<'store>(
     capacity: &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
     now: u64,
     protocol: super::subscription_reset::ResetTransport,
-) -> Result<(slingshot_storage::artifact_store::StagedArtifact<'store>,
-    slingshot_storage::persistent_capacity::ArtifactPublication), RemoteStageRefusal> {
-    stage_remote_artifact_with_authentication(transport, identity, submission,
+) -> Result<
+    (
+        slingshot_storage::artifact_store::StagedArtifact<'store>,
+        slingshot_storage::persistent_capacity::ArtifactPublication,
+    ),
+    RemoteStageRefusal,
+> {
+    stage_remote_artifact_with_authentication(
+        transport,
+        identity,
+        submission,
         super::author_authentication::AuthorAuthentication::Fixed { authentication, protocol },
-        expected, request, store, capacity, now).await
+        expected,
+        request,
+        store,
+        capacity,
+        now,
+    )
+    .await
 }
 
 /// Stages through the runtime authentication policy without bypassing capacity,
@@ -157,10 +178,26 @@ pub async fn stage_remote_artifact_with_authentication<'store>(
     store: &'store slingshot_storage::artifact_store::ArtifactStore,
     capacity: &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
     now: u64,
-) -> Result<(slingshot_storage::artifact_store::StagedArtifact<'store>,
-    slingshot_storage::persistent_capacity::ArtifactPublication), RemoteStageRefusal> {
-    stage_remote_artifact_started(transport, identity, submission, authentication,
-        expected, request, store, capacity, now, || Ok(())).await
+) -> Result<
+    (
+        slingshot_storage::artifact_store::StagedArtifact<'store>,
+        slingshot_storage::persistent_capacity::ArtifactPublication,
+    ),
+    RemoteStageRefusal,
+> {
+    stage_remote_artifact_started(
+        transport,
+        identity,
+        submission,
+        authentication,
+        expected,
+        request,
+        store,
+        capacity,
+        now,
+        || Ok(()),
+    )
+    .await
 }
 
 async fn stage_remote_artifact_started<'store>(
@@ -220,11 +257,14 @@ async fn stage_remote_artifact_started<'store>(
         &request.artifact_slot,
     );
     let consume = |bytes: &[u8]| writer.write_chunk(bytes).map_err(|_| FiniteHttpFailure::Body);
-    let outcome = authentication.artifact(transport, identity, submission, expected,
-        artifact_identifier.as_text(), consume).await
+    let outcome = authentication
+        .artifact(transport, identity, submission, expected, artifact_identifier.as_text(), consume)
+        .await
         .map_err(|_| RemoteStageRefusal::Verification)?;
     let receipt = match outcome {
-        slingshot_agent_connection::selected_author_http::ArtifactHttpOutcome::Unauthorized => return Err(RemoteStageRefusal::Verification),
+        slingshot_agent_connection::selected_author_http::ArtifactHttpOutcome::Unauthorized => {
+            return Err(RemoteStageRefusal::Verification);
+        }
         slingshot_agent_connection::selected_author_http::ArtifactHttpOutcome::Transferred(
             receipt,
         ) => receipt,
@@ -247,7 +287,7 @@ async fn stage_remote_artifact_started<'store>(
                 bytes: expected.byte_length,
                 token_bytes: usize::try_from(maximum)
                     .map_err(|_| RemoteStageRefusal::Verification)?,
-                depth: 128,
+                depth: STRUCTURED_RESULT_NESTING_DEPTH,
             },
         )
         .map_err(|_| RemoteStageRefusal::Verification)?;
@@ -488,9 +528,22 @@ pub async fn complete_retained_snapshot_result(
     Option<slingshot_storage::operation_repository::OperationSummary>,
     slingshot_agent_connection::structured_job_result::TerminalResultDecodeRefusal,
 > {
-    complete_retained_snapshot_result_over(operations, retained, expected_revision,
-        identity, submission, body, now, snapshot, store, capacity, transport, authentication,
-        super::subscription_reset::ResetTransport::Http1).await
+    complete_retained_snapshot_result_over(
+        operations,
+        retained,
+        expected_revision,
+        identity,
+        submission,
+        body,
+        now,
+        snapshot,
+        store,
+        capacity,
+        transport,
+        authentication,
+        super::subscription_reset::ResetTransport::Http1,
+    )
+    .await
 }
 
 /// Completes a retained result using one explicit artifact transport mode.
@@ -509,11 +562,25 @@ pub async fn complete_retained_snapshot_result_over(
     transport: &slingshot_agent_connection::selected_author_transport::SelectedAuthorTransport,
     authentication: &slingshot_agent_connection::authentication::environment_provider::RequestAuthentication,
     protocol: super::subscription_reset::ResetTransport,
-) -> Result<Option<slingshot_storage::operation_repository::OperationSummary>,
-    slingshot_agent_connection::structured_job_result::TerminalResultDecodeRefusal> {
-    complete_retained_snapshot_result_with_authentication(operations, retained, expected_revision,
-        identity, submission, body, now, snapshot, store, capacity, transport,
-        super::author_authentication::AuthorAuthentication::Fixed { authentication, protocol }).await
+) -> Result<
+    Option<slingshot_storage::operation_repository::OperationSummary>,
+    slingshot_agent_connection::structured_job_result::TerminalResultDecodeRefusal,
+> {
+    complete_retained_snapshot_result_with_authentication(
+        operations,
+        retained,
+        expected_revision,
+        identity,
+        submission,
+        body,
+        now,
+        snapshot,
+        store,
+        capacity,
+        transport,
+        super::author_authentication::AuthorAuthentication::Fixed { authentication, protocol },
+    )
+    .await
 }
 
 /// Completes one retained result through the same invocation authentication
@@ -532,8 +599,10 @@ pub async fn complete_retained_snapshot_result_with_authentication(
     capacity: &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
     transport: &slingshot_agent_connection::selected_author_transport::SelectedAuthorTransport,
     authentication: super::author_authentication::AuthorAuthentication<'_>,
-) -> Result<Option<slingshot_storage::operation_repository::OperationSummary>,
-    slingshot_agent_connection::structured_job_result::TerminalResultDecodeRefusal> {
+) -> Result<
+    Option<slingshot_storage::operation_repository::OperationSummary>,
+    slingshot_agent_connection::structured_job_result::TerminalResultDecodeRefusal,
+> {
     use sha2::Digest as _;
     let started = std::time::Instant::now();
     use slingshot_agent_connection::structured_job_result::{

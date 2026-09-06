@@ -1,5 +1,11 @@
 //! Actual result bytes cannot select an artifact from another local identity.
 
+const DIGEST_HEX_CHARACTERS: usize = 64;
+const RECOVERY_OBSERVED_AT: u64 = 2000;
+const COMPLETE_PROGRESS_PERCENT: u64 = 100;
+const PEER_READ_BUFFER_BYTES: usize = 4096;
+const DECLARED_ARTIFACT_BYTES: u64 = 4096;
+
 use slingshot_agent_connection::structured_job_result::{
     ArtifactEcho, ResultExpectation, TerminalResultDocument,
 };
@@ -30,9 +36,13 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
             OperationDatabase::open(
                 &path,
                 RequiredSettings {
-                    page_bytes: 4096,
+                    page_bytes:
+                        slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                            .limit("sqlite_page_bytes"),
                     database_pages: 262144,
-                    busy_timeout_milliseconds: 5000,
+                    busy_timeout_milliseconds:
+                        slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                            .limit("database_busy_timeout_milliseconds"),
                 },
             )
             .unwrap(),
@@ -41,8 +51,8 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
     let operations = open();
     let identity = ExecutionIdentity {
         attempt: 1,
-        author_target_identity_digest: "2".repeat(64),
-        selected_environment_revision: "3".repeat(64),
+        author_target_identity_digest: "2".repeat(DIGEST_HEX_CHARACTERS),
+        selected_environment_revision: "3".repeat(DIGEST_HEX_CHARACTERS),
         operation_identifier: "query-operation".to_owned(),
     };
     let provenance = ExpectedProvenance {
@@ -82,7 +92,8 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
             slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded_digest()
                 .as_text()
                 .to_owned(),
-        installation_identifier: InstallationIdentifier::parse(&"1".repeat(64)).unwrap(),
+        installation_identifier: InstallationIdentifier::parse(&"1".repeat(DIGEST_HEX_CHARACTERS))
+            .unwrap(),
         operation_identifier: identity.operation_identifier.clone(),
         selected_environment_revision: identity.selected_environment_revision.clone(),
         workflow_correlation_identifier: None,
@@ -138,9 +149,13 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
         OperationDatabase::open(
             &path,
             RequiredSettings {
-                page_bytes: 4096,
+                page_bytes:
+                    slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                        .limit("sqlite_page_bytes"),
                 database_pages: 262144,
-                busy_timeout_milliseconds: 5000,
+                busy_timeout_milliseconds:
+                    slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                        .limit("database_busy_timeout_milliseconds"),
             },
         )
         .unwrap(),
@@ -158,7 +173,7 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
         inline_result: Some(document.canonical_result.clone()),
         expected_lifecycle_state: OperationLifecycleState::Queued,
         expected_revision: 1,
-        settled_at_unix_milliseconds: 2000,
+        settled_at_unix_milliseconds: RECOVERY_OBSERVED_AT,
     };
     let mut stale_owner = settlement.clone();
     stale_owner.expected_revision = 2;
@@ -190,7 +205,7 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
             &identity,
             &submission,
             &body,
-            2000
+            RECOVERY_OBSERVED_AT
         )
         .is_err(),
         "a valid payload alone is not persisted remote-success evidence"
@@ -208,10 +223,10 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
                     evidence: RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
                     manual_resume_eligible: false,
                     retry_delay_milliseconds: 0,
-                    retry_observed_at_unix_milliseconds: 2000,
+                    retry_observed_at_unix_milliseconds: RECOVERY_OBSERVED_AT,
                 },
             },
-            2000,
+            RECOVERY_OBSERVED_AT,
         )
         .unwrap();
     let recovering = operations
@@ -295,9 +310,13 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
     let artifact_database = OperationDatabase::open_live(
         &path,
         RequiredSettings {
-            page_bytes: 4096,
+            page_bytes: slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded(
+            )
+            .limit("sqlite_page_bytes"),
             database_pages: 262144,
-            busy_timeout_milliseconds: 5000,
+            busy_timeout_milliseconds:
+                slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                    .limit("database_busy_timeout_milliseconds"),
         },
     )
     .unwrap();
@@ -315,7 +334,7 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
                 current.snapshot_watermark.value() + 1,
             ),
             attempt: 1,
-            progress: 100,
+            progress: COMPLETE_PROGRESS_PERCENT,
         },
         physical_sling_job_identifiers: vec!["job-one".to_owned()],
         remaining_retention_milliseconds: 120000,
@@ -368,9 +387,13 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
     let artifact_database = OperationDatabase::open_live(
         &path,
         RequiredSettings {
-            page_bytes: 4096,
+            page_bytes: slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded(
+            )
+            .limit("sqlite_page_bytes"),
             database_pages: 262144,
-            busy_timeout_milliseconds: 5000,
+            busy_timeout_milliseconds:
+                slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                    .limit("database_busy_timeout_milliseconds"),
         },
     )
     .unwrap();
@@ -417,7 +440,7 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
     assert_eq!(artifact.byte_length, large.canonical_result.len() as u64);
     let mut reader = store.open_verified(&artifact).unwrap();
     let mut received = Vec::new();
-    let mut buffer = [0_u8; 4096];
+    let mut buffer = [0_u8; PEER_READ_BUFFER_BYTES];
     loop {
         let count = reader.read_into(&mut buffer).unwrap();
         if count == 0 {
@@ -456,11 +479,11 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
 
 #[test]
 fn artifact_identity_is_derived_from_local_context_not_trusted_from_the_result() {
-    let installation = InstallationIdentifier::parse(&"1".repeat(64)).unwrap();
+    let installation = InstallationIdentifier::parse(&"1".repeat(DIGEST_HEX_CHARACTERS)).unwrap();
     let identity = ExecutionIdentity {
         attempt: 1,
-        author_target_identity_digest: "2".repeat(64),
-        selected_environment_revision: "3".repeat(64),
+        author_target_identity_digest: "2".repeat(DIGEST_HEX_CHARACTERS),
+        selected_environment_revision: "3".repeat(DIGEST_HEX_CHARACTERS),
         operation_identifier: "retained-operation".to_owned(),
     };
     let expected = ResultExpectation {
@@ -479,7 +502,7 @@ fn artifact_identity_is_derived_from_local_context_not_trusted_from_the_result()
             )
             .unwrap(),
         },
-        submitted_command_digest: "4".repeat(64),
+        submitted_command_digest: "4".repeat(DIGEST_HEX_CHARACTERS),
         wire_name: "download_content_package".to_owned(),
     };
     let command: Command = serde_json::from_value(serde_json::json!({
@@ -494,14 +517,14 @@ fn artifact_identity_is_derived_from_local_context_not_trusted_from_the_result()
     );
     let payload = serde_json::json!({"artifact":{
         "identifier":artifact_identifier.as_text(), "slot":"content_package", "media_type":"application/zip",
-        "byte_length":4096, "digest":"5".repeat(64), "suggested_file_name":"example.zip"
+        "byte_length":DECLARED_ARTIFACT_BYTES, "digest":"5".repeat(DIGEST_HEX_CHARACTERS), "suggested_file_name":"example.zip"
     }});
     let document = TerminalResultDocument {
         operation: expected.operation.clone(),
         daemon_subscription_identifier: expected.daemon_subscription_identifier.clone(),
         canonical_result: write_canonical(&payload).unwrap(),
         declared_artifacts: vec![ArtifactEcho {
-            byte_length: 4096,
+            byte_length: DECLARED_ARTIFACT_BYTES,
             media_type: "application/zip".to_owned(),
             slot: "content_package".to_owned(),
             suggested_name: "example.zip".to_owned(),
@@ -516,14 +539,15 @@ fn artifact_identity_is_derived_from_local_context_not_trusted_from_the_result()
         checked.remote_artifact.unwrap().identifier.as_text(),
         artifact_identifier.as_text()
     );
-    let other_installation = InstallationIdentifier::parse(&"6".repeat(64)).unwrap();
+    let other_installation =
+        InstallationIdentifier::parse(&"6".repeat(DIGEST_HEX_CHARACTERS)).unwrap();
     assert!(
         decode_bound_result(&body, &expected, &command, &other_installation, &identity).is_err()
     );
     for change_target in [true, false] {
         let mut moved = identity.clone();
         if change_target {
-            moved.author_target_identity_digest = "7".repeat(64);
+            moved.author_target_identity_digest = "7".repeat(DIGEST_HEX_CHARACTERS);
         } else {
             moved.operation_identifier = "another-operation".to_owned();
         }

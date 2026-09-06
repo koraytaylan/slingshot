@@ -111,7 +111,9 @@ impl core::fmt::Debug for DecodedResponse {
     }
 }
 impl Drop for DecodedResponse {
-    fn drop(&mut self) { let _secret = SecretValue::from_bytes(std::mem::take(&mut self.body)); }
+    fn drop(&mut self) {
+        let _secret = SecretValue::from_bytes(std::mem::take(&mut self.body));
+    }
 }
 
 /// Carries one exchange request and returns what came back.

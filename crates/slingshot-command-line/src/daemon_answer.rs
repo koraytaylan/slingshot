@@ -112,7 +112,26 @@ pub fn observed(
     response: &OperationResponse,
     context: &AccessContext,
 ) -> Result<Completion, RunRefusal> {
+    // A result may only describe the operation this caller addressed. In
+    // particular, never build a local artifact URI around a foreign result.
+    if let OperationResponse::ResultInline { operation_identifier, .. }
+    | OperationResponse::ResultArtifact { operation_identifier, .. } = response
+        && operation_identifier != &context.operation_identifier
+    {
+        return shared(response);
+    }
     let envelope = match response {
+        OperationResponse::ResultInline { result, .. } => {
+            let maximum =
+                slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                    .limit("maximum_inline_machine_result_bytes");
+            if slingshot_domain::command::canonical_json::write_canonical(result)
+                .map_or(true, |text| text.len() as u64 > maximum)
+            {
+                return shared(response);
+            }
+            MachineOutcomeEnvelope::OperationResult { result: result.clone() }
+        }
         OperationResponse::Status { lifecycle_state, operation_revision, .. } => {
             MachineOutcomeEnvelope::OperationStatus {
                 revision: *operation_revision,
@@ -142,6 +161,13 @@ pub fn observed(
             byte_length,
             content_digest,
             media_type,
+        }
+        | OperationResponse::ResultArtifact {
+            artifact_identifier,
+            byte_length,
+            content_digest,
+            media_type,
+            ..
         } => MachineOutcomeEnvelope::StructuredResultArtifactAccess {
             artifact: ArtifactAccess {
                 artifact_identifier: artifact_identifier.clone(),
@@ -326,7 +352,8 @@ fn classify_ending(disposition: TerminalFailureDisposition) -> TerminalDispositi
 fn unavailable_reason(response: &OperationResponse) -> Option<String> {
     match response {
         OperationResponse::ExecutorUnavailable => Some(NO_EXECUTOR.to_owned()),
-        OperationResponse::SchedulerCapacityExhausted { guidance }
+        OperationResponse::WaiterCapacityExhausted { guidance }
+        | OperationResponse::SchedulerCapacityExhausted { guidance }
         | OperationResponse::PersistentCapacityExhausted { guidance, .. }
         | OperationResponse::PersistentStorageBackpressure { guidance, .. } => {
             Some(guidance.clone())
@@ -340,6 +367,9 @@ fn unavailable_reason(response: &OperationResponse) -> Option<String> {
 /// Returns why a daemon refused this caller's identity, when that is the answer.
 fn identity_reason(response: &OperationResponse) -> Option<String> {
     match response {
+        OperationResponse::MissingMaintenanceResult { maintenance_result_identifier } => Some(
+            format!("no maintenance result named {maintenance_result_identifier} is held here"),
+        ),
         OperationResponse::MissingOperation { operation_identifier } => {
             Some(format!("no operation named {operation_identifier} is held here"))
         }
@@ -356,5 +386,73 @@ fn identity_reason(response: &OperationResponse) -> Option<String> {
             Some(SERVES_SOMETHING_ELSE.to_owned())
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod result_tests {
+    use super::*;
+    use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
+
+    fn context() -> AccessContext {
+        AccessContext {
+            author_target_identity_digest: "target".to_owned(),
+            environment: "environment".to_owned(),
+            operation_identifier: "operation".to_owned(),
+            profile: "profile".to_owned(),
+        }
+    }
+
+    #[test]
+    fn explicit_inline_results_are_bounded_and_match_the_addressed_operation() {
+        let maximum =
+            DaemonRuntimeContract::embedded().limit("maximum_inline_machine_result_bytes") as usize;
+        for extra in [0, 1] {
+            let result = serde_json::Value::String("x".repeat(maximum - 2 + extra));
+            let response = OperationResponse::ResultInline {
+                operation_identifier: "operation".to_owned(),
+                result: result.clone(),
+            };
+            let answer = observed(&response, &context());
+            if extra == 0 {
+                let Answer::Envelope(envelope) = answer.unwrap().answer else {
+                    panic!("result envelope")
+                };
+                assert_eq!(*envelope, MachineOutcomeEnvelope::OperationResult { result });
+            } else {
+                assert!(answer.is_err());
+            }
+        }
+        assert!(
+            observed(
+                &OperationResponse::ResultInline {
+                    operation_identifier: "foreign".to_owned(),
+                    result: serde_json::json!({}),
+                },
+                &context()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn artifact_results_cannot_be_relabelled_as_another_operations_artifact() {
+        let mut response = OperationResponse::ResultArtifact {
+            operation_identifier: "operation".to_owned(),
+            artifact_identifier: "artifact".to_owned(),
+            byte_length: 1,
+            content_digest: "digest".to_owned(),
+            media_type: "application/json".to_owned(),
+        };
+        let Answer::Envelope(envelope) = observed(&response, &context()).unwrap().answer else {
+            panic!("artifact envelope")
+        };
+        assert!(
+            matches!(*envelope, MachineOutcomeEnvelope::StructuredResultArtifactAccess { artifact } if artifact.operation_identifier == "operation")
+        );
+        if let OperationResponse::ResultArtifact { operation_identifier, .. } = &mut response {
+            *operation_identifier = "foreign".to_owned();
+        }
+        assert!(observed(&response, &context()).is_err());
     }
 }

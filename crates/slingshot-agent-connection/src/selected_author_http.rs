@@ -120,7 +120,9 @@ impl SelectedAuthorTransport {
             .await?
         {
             ArtifactHttpOutcome::Transferred(receipt) => Ok(receipt),
-            ArtifactHttpOutcome::Unavailable { .. } | ArtifactHttpOutcome::Unauthorized => Err(FiniteHttpFailure::Head),
+            ArtifactHttpOutcome::Unavailable { .. } | ArtifactHttpOutcome::Unauthorized => {
+                Err(FiniteHttpFailure::Head)
+            }
         }
     }
 
@@ -191,8 +193,16 @@ impl SelectedAuthorTransport {
         )?;
         let started = Instant::now();
         let stream = self.connect().await.map_err(|_| FiniteHttpFailure::Connect)?;
-        Self::artifact_http1_on_stream(stream, &request, started, submission, expected,
-            artifact_identifier, sink).await
+        Self::artifact_http1_on_stream(
+            stream,
+            &request,
+            started,
+            submission,
+            expected,
+            artifact_identifier,
+            sink,
+        )
+        .await
     }
 
     pub(crate) async fn artifact_http1_on_stream(
@@ -257,7 +267,9 @@ impl SelectedAuthorTransport {
             )
             .await
             .map_err(|_| FiniteHttpFailure::Body)??;
-            if status == 401 { return Ok(ArtifactHttpOutcome::Unauthorized); }
+            if status == 401 {
+                return Ok(ArtifactHttpOutcome::Unauthorized);
+            }
             let evidence = crate::artifact_download::decode_artifact_unavailable(
                 status,
                 &body,
@@ -404,25 +416,34 @@ impl SelectedAuthorTransport {
         fields: &HeaderMap,
         body: &[u8],
     ) -> Result<FiniteHttpReceipt, FiniteHttpFailure> {
-        let http1 = encode_request(self, method.clone(), segments, query, authentication, fields, body);
-        let http2 = self.encode_http2_request_head(method, segments, query, authentication, fields, body);
+        let http1 =
+            encode_request(self, method.clone(), segments, query, authentication, fields, body);
+        let http2 =
+            self.encode_http2_request_head(method, segments, query, authentication, fields, body);
         if http1.is_err() && http2.is_err() {
             return Err(FiniteHttpFailure::Request);
         }
         let started = Instant::now();
-        let (protocol, mut stream) = self.connect_negotiated().await
-            .map_err(|_| FiniteHttpFailure::Connect)?.into_parts();
+        let (protocol, mut stream) =
+            self.connect_negotiated().await.map_err(|_| FiniteHttpFailure::Connect)?.into_parts();
         if protocol == crate::selected_author_transport::SelectedHttpProtocol::Http1 {
             return Self::finite_http1_on_stream(stream, &http1?, started).await;
         }
         let http2 = http2?;
         let deadlines = ExchangeDeadlines::embedded();
         let negotiated = crate::selected_author_http2_handshake::negotiate(
-            &mut stream, Duration::from_millis(deadlines.response_header_milliseconds),
-        ).await?;
+            &mut stream,
+            Duration::from_millis(deadlines.response_header_milliseconds),
+        )
+        .await?;
         let response = crate::selected_author_http2::drive(
-            stream, negotiated, http2.frames(), body, deadlines,
-        ).await?;
+            stream,
+            negotiated,
+            http2.frames(),
+            body,
+            deadlines,
+        )
+        .await?;
         Ok(FiniteHttpReceipt {
             response,
             elapsed_milliseconds: u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000))
@@ -937,10 +958,12 @@ async fn read_field_line(
             in_value = true;
         } else if in_value && matches!(byte, b' ' | b'\t') {
             if value_started {
-                pending_whitespace = pending_whitespace.checked_add(1).ok_or(FiniteHttpFailure::Head)?;
+                pending_whitespace =
+                    pending_whitespace.checked_add(1).ok_or(FiniteHttpFailure::Head)?;
             }
         } else {
-            decoded = decoded.checked_add(pending_whitespace)
+            decoded = decoded
+                .checked_add(pending_whitespace)
                 .and_then(|count| count.checked_add(1))
                 .filter(|count| *count <= bounds.field_bytes)
                 .ok_or(FiniteHttpFailure::Head)?;
@@ -989,9 +1012,13 @@ mod response_field_tests {
                 let socket = tokio::net::TcpStream::connect(address).await.unwrap();
                 let mut stream = SelectedAuthorStream::Cleartext(socket);
                 let mut charged = 0;
-                let result = read_field_line(&mut stream, HeadBounds {
-                    field_bytes: 8, field_count: 2, head_bytes: raw_limit,
-                }, fields, &mut charged).await;
+                let result = read_field_line(
+                    &mut stream,
+                    HeadBounds { field_bytes: 8, field_count: 2, head_bytes: raw_limit },
+                    fields,
+                    &mut charged,
+                )
+                .await;
                 match expected {
                     Some(line) => assert_eq!(result.unwrap(), line.as_bytes(), "{wire:?}"),
                     None => assert!(matches!(result, Err(FiniteHttpFailure::Head)), "{wire:?}"),

@@ -367,7 +367,9 @@ impl LoadedProfiles {
         reference: &ConfigurationReference,
         role: crate::configuration_generation::SourceRole,
     ) -> Option<&slingshot_domain::secret_value::SensitiveConfigurationDocument> {
-        self.material.iter().find(|source| &source.reference == reference && source.role == role)
+        self.material
+            .iter()
+            .find(|source| &source.reference == reference && source.role == role)
             .map(|source| &source.document)
     }
     /// Returns the profiles, ordered by the name each declared.
@@ -462,9 +464,16 @@ pub fn load_profiles<Authority: ConfigurationFilesystemAuthority>(
     if !duplicates.is_empty() {
         return Err(summarize(duplicates));
     }
-    let material = generation.sources.into_iter().filter(|source| matches!(source.role,
+    let material =
+        generation
+            .sources
+            .into_iter()
+            .filter(|source| {
+                matches!(source.role,
         crate::configuration_generation::SourceRole::ServiceCredentials |
-        crate::configuration_generation::SourceRole::AdditionalCertificateAuthority)).collect();
+        crate::configuration_generation::SourceRole::AdditionalCertificateAuthority)
+            })
+            .collect();
     Ok(LoadedProfiles { profiles, sources, selection: generation.inspection.selection, material })
 }
 

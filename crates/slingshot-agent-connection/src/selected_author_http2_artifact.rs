@@ -31,7 +31,16 @@ impl SelectedAuthorTransport {
         authentication: &RequestAuthentication,
         sink: impl FnMut(&[u8]) -> Result<(), FiniteHttpFailure>,
     ) -> Result<ArtifactHttpOutcome, FiniteHttpFailure> {
-        self.artifact_over(identity, submission, expected, artifact_identifier, authentication, sink, false).await
+        self.artifact_over(
+            identity,
+            submission,
+            expected,
+            artifact_identifier,
+            authentication,
+            sink,
+            false,
+        )
+        .await
     }
 
     /// Streams a manifest-bound artifact on the original negotiated socket.
@@ -46,7 +55,16 @@ impl SelectedAuthorTransport {
         authentication: &RequestAuthentication,
         sink: impl FnMut(&[u8]) -> Result<(), FiniteHttpFailure>,
     ) -> Result<ArtifactHttpOutcome, FiniteHttpFailure> {
-        self.artifact_over(identity, submission, expected, artifact_identifier, authentication, sink, true).await
+        self.artifact_over(
+            identity,
+            submission,
+            expected,
+            artifact_identifier,
+            authentication,
+            sink,
+            true,
+        )
+        .await
     }
 
     /// Streams with provider authentication, refreshing once only after a fully
@@ -65,27 +83,50 @@ impl SelectedAuthorTransport {
         self.require_artifact_request(identity, submission, expected, artifact_identifier)?;
         self.require_provider(provider).map_err(|_| FiniteHttpFailure::Request)?;
         let started = Instant::now();
-        let (authentication, lease) = provider.authenticate(
-            &self.endpoint(&["bin", "slingshot-agent", "operations"]), reading, source,
-        ).map_err(|_| FiniteHttpFailure::Request)?;
-        let mut outcome = self.artifact_negotiated(identity, submission, expected,
-            artifact_identifier, &authentication, &mut sink).await?;
+        let (authentication, lease) = provider
+            .authenticate(
+                &self.endpoint(&["bin", "slingshot-agent", "operations"]),
+                reading,
+                source,
+            )
+            .map_err(|_| FiniteHttpFailure::Request)?;
+        let mut outcome = self
+            .artifact_negotiated(
+                identity,
+                submission,
+                expected,
+                artifact_identifier,
+                &authentication,
+                &mut sink,
+            )
+            .await?;
         drop(authentication);
         if matches!(outcome, ArtifactHttpOutcome::Unauthorized) {
             if let Some(lease) = lease {
-                let (authentication, _) = provider.refresh_after_unauthorized(lease, source)
+                let (authentication, _) = provider
+                    .refresh_after_unauthorized(lease, source)
                     .map_err(|_| FiniteHttpFailure::Head)?;
-                outcome = self.artifact_negotiated(identity, submission, expected,
-                    artifact_identifier, &authentication, &mut sink).await?;
+                outcome = self
+                    .artifact_negotiated(
+                        identity,
+                        submission,
+                        expected,
+                        artifact_identifier,
+                        &authentication,
+                        &mut sink,
+                    )
+                    .await?;
             }
         }
-        let elapsed = u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+        let elapsed =
+            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
         match outcome {
             ArtifactHttpOutcome::Transferred(receipt) => Ok(ArtifactHttpOutcome::Transferred(
-                ArtifactHttpReceipt::verified(receipt.byte_length(), elapsed))),
-            ArtifactHttpOutcome::Unavailable { evidence, .. } => Ok(ArtifactHttpOutcome::Unavailable {
-                evidence, elapsed_milliseconds: elapsed,
-            }),
+                ArtifactHttpReceipt::verified(receipt.byte_length(), elapsed),
+            )),
+            ArtifactHttpOutcome::Unavailable { evidence, .. } => {
+                Ok(ArtifactHttpOutcome::Unavailable { evidence, elapsed_milliseconds: elapsed })
+            }
             ArtifactHttpOutcome::Unauthorized => Err(FiniteHttpFailure::Head),
         }
     }
@@ -110,27 +151,48 @@ impl SelectedAuthorTransport {
         self.require_artifact_request(identity, submission, expected, artifact_identifier)?;
         self.require_provider(provider).map_err(|_| FiniteHttpFailure::Request)?;
         let started = Instant::now();
-        let (authentication, lease) = provider.authenticate(
-            &self.endpoint(&["bin", "slingshot-agent", "operations"]), clock, utc,
-        ).await.map_err(|_| FiniteHttpFailure::Request)?;
-        let mut outcome = self.artifact_negotiated(identity, submission, expected,
-            artifact_identifier, &authentication, &mut sink).await?;
+        let (authentication, lease) = provider
+            .authenticate(&self.endpoint(&["bin", "slingshot-agent", "operations"]), clock, utc)
+            .await
+            .map_err(|_| FiniteHttpFailure::Request)?;
+        let mut outcome = self
+            .artifact_negotiated(
+                identity,
+                submission,
+                expected,
+                artifact_identifier,
+                &authentication,
+                &mut sink,
+            )
+            .await?;
         drop(authentication);
         if matches!(outcome, ArtifactHttpOutcome::Unauthorized) {
             if let Some(lease) = lease {
-                let (authentication, _) = provider.refresh_after_unauthorized(lease, clock, utc).await
+                let (authentication, _) = provider
+                    .refresh_after_unauthorized(lease, clock, utc)
+                    .await
                     .map_err(|_| FiniteHttpFailure::Head)?;
-                outcome = self.artifact_negotiated(identity, submission, expected,
-                    artifact_identifier, &authentication, &mut sink).await?;
+                outcome = self
+                    .artifact_negotiated(
+                        identity,
+                        submission,
+                        expected,
+                        artifact_identifier,
+                        &authentication,
+                        &mut sink,
+                    )
+                    .await?;
             }
         }
-        let elapsed = u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+        let elapsed =
+            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
         match outcome {
             ArtifactHttpOutcome::Transferred(receipt) => Ok(ArtifactHttpOutcome::Transferred(
-                ArtifactHttpReceipt::verified(receipt.byte_length(), elapsed))),
-            ArtifactHttpOutcome::Unavailable { evidence, .. } => Ok(ArtifactHttpOutcome::Unavailable {
-                evidence, elapsed_milliseconds: elapsed,
-            }),
+                ArtifactHttpReceipt::verified(receipt.byte_length(), elapsed),
+            )),
+            ArtifactHttpOutcome::Unavailable { evidence, .. } => {
+                Ok(ArtifactHttpOutcome::Unavailable { evidence, elapsed_milliseconds: elapsed })
+            }
             ArtifactHttpOutcome::Unauthorized => Err(FiniteHttpFailure::Head),
         }
     }
@@ -190,27 +252,51 @@ impl SelectedAuthorTransport {
             b"",
         );
         let http1 = if automatic {
-            Some(crate::selected_author_http::encode_request(self, Method::GET, &segments,
-                &[], authentication, &HeaderMap::new(), b""))
-        } else { None };
+            Some(crate::selected_author_http::encode_request(
+                self,
+                Method::GET,
+                &segments,
+                &[],
+                authentication,
+                &HeaderMap::new(),
+                b"",
+            ))
+        } else {
+            None
+        };
         if head.is_err() && http1.as_ref().is_none_or(Result::is_err) {
             return Err(FiniteHttpFailure::Request);
         }
         let started = Instant::now();
         let mut stream = if automatic {
-            let (protocol, stream) = self.connect_negotiated().await
-                .map_err(|_| FiniteHttpFailure::Connect)?.into_parts();
+            let (protocol, stream) = self
+                .connect_negotiated()
+                .await
+                .map_err(|_| FiniteHttpFailure::Connect)?
+                .into_parts();
             if protocol == crate::selected_author_transport::SelectedHttpProtocol::Http1 {
-                return Self::artifact_http1_on_stream(stream, &http1.ok_or(FiniteHttpFailure::Request)??,
-                    started, submission, expected, Some(artifact_identifier), sink).await;
+                return Self::artifact_http1_on_stream(
+                    stream,
+                    &http1.ok_or(FiniteHttpFailure::Request)??,
+                    started,
+                    submission,
+                    expected,
+                    Some(artifact_identifier),
+                    sink,
+                )
+                .await;
             }
             stream
-        } else { self.connect_http2().await.map_err(|_| FiniteHttpFailure::Connect)? };
+        } else {
+            self.connect_http2().await.map_err(|_| FiniteHttpFailure::Connect)?
+        };
         let head = head?;
         let deadlines = ExchangeDeadlines::embedded();
         let negotiated = crate::selected_author_http2_handshake::negotiate(
-            &mut stream, tokio::time::Duration::from_millis(deadlines.response_header_milliseconds),
-        ).await?;
+            &mut stream,
+            tokio::time::Duration::from_millis(deadlines.response_header_milliseconds),
+        )
+        .await?;
         let output = drive_response(
             stream,
             negotiated,
@@ -227,7 +313,9 @@ impl SelectedAuthorTransport {
                 ArtifactHttpReceipt::verified(byte_length, elapsed_milliseconds),
             )),
             ArtifactBody::Unavailable(response) => {
-                if response.status == 401 { return Ok(ArtifactHttpOutcome::Unauthorized); }
+                if response.status == 401 {
+                    return Ok(ArtifactHttpOutcome::Unauthorized);
+                }
                 let evidence = crate::artifact_download::decode_artifact_unavailable(
                     response.status,
                     &response.body,

@@ -4,6 +4,8 @@
 //! conversion. Durable installation, audit and recovery must establish the
 //! later ready stage before the product may expose an operation endpoint.
 
+const INSTALLATION_RANDOM_BYTES: usize = 32;
+
 use std::path::{Path, PathBuf};
 
 use crate::diagnostics::{DiagnosticBounds, DiagnosticSink};
@@ -119,6 +121,7 @@ pub struct DurableRuntime {
     operations: OperationRepository,
     remote: AgentJobRepository,
     subscriptions: AgentSubscriptionLedger,
+    waiters: crate::operation_wait::runtime::RuntimeWaiters,
     artifacts: ArtifactStore,
     diagnostics: DiagnosticSink,
     cancellation: CancellationToken,
@@ -126,6 +129,8 @@ pub struct DurableRuntime {
     recovered_operations: Vec<RecoveredOperation>,
     recovered_stages: u64,
     pending_publications: Vec<RecoveredPublication>,
+    maintenance_publication_recovery:
+        Option<slingshot_storage::persistent_capacity::MaintenancePublicationRecovery>,
     installation: InstallationIdentifier,
     paths: PersistentTargetPaths,
     // Database and its resources close before namespace ownership is released.
@@ -159,6 +164,12 @@ impl DurableRuntime {
     /// Complete pending producer evidence, preserved for owner-bound result recovery.
     pub fn pending_publications(&self) -> &[RecoveredPublication] {
         &self.pending_publications
+    }
+    /// Startup producer reconciliation; this never grants maintenance approval.
+    pub fn maintenance_publication_recovery(
+        &self,
+    ) -> Option<slingshot_storage::persistent_capacity::MaintenancePublicationRecovery> {
+        self.maintenance_publication_recovery
     }
     /// Private abandoned stages removed before any artifact producer could run.
     pub fn recovered_stages(&self) -> u64 {
@@ -251,6 +262,10 @@ impl DurableRuntime {
     pub fn subscriptions(&self) -> &AgentSubscriptionLedger {
         &self.subscriptions
     }
+    /// Bounded local observers sharing this runtime's shutdown scope.
+    pub fn waiters(&self) -> &crate::operation_wait::runtime::RuntimeWaiters {
+        &self.waiters
+    }
     /// Artifact store rooted in the validated private content directory.
     pub fn artifacts(&self) -> &ArtifactStore {
         &self.artifacts
@@ -307,7 +322,7 @@ impl RuntimeBuilder {
         let mut record = match transaction.read() {
             Ok(record) => record,
             Err(InstallationStateFailure::Absent) if !transaction.state_root_occupied() => {
-                let bytes: [u8; 32] = rand::rng().random();
+                let bytes: [u8; INSTALLATION_RANDOM_BYTES] = rand::rng().random();
                 InstallationRecord::new(
                     InstallationIdentifier::parse(&hex::encode(bytes))
                         .map_err(|_| RuntimeBuildRefusal::Installation)?,
@@ -382,11 +397,17 @@ impl RuntimeBuilder {
         PersistentCapacityAccount::new(&database, PersistentCapacityPolicy::embedded())
             .usage()
             .map_err(|_| RuntimeBuildRefusal::Resources)?;
-        let pending_publications =
+        let (pending_publications, pending_maintenance_publication) =
             PersistentCapacityAccount::new(&database, PersistentCapacityPolicy::embedded())
-                .reconstruct_publications()
+                .reconstruct_target_publications(&self.target.author_target_identity_digest)
                 .map_err(|_| RuntimeBuildRefusal::Resources)?;
         let maintenance_recovery = slingshot_storage::maintenance::recover_pending_cleanup(
+            &database,
+            &artifacts,
+            &self.target.author_target_identity_digest,
+        )
+        .map_err(|_| RuntimeBuildRefusal::Resources)?;
+        slingshot_storage::maintenance_results::cleanup_superseded_preview(
             &database,
             &artifacts,
             &self.target.author_target_identity_digest,
@@ -454,17 +475,37 @@ impl RuntimeBuilder {
             pending_publications,
         )
         .map_err(|_| RuntimeBuildRefusal::Resources)?;
+        let cancellation = CancellationToken::new();
+        let maintenance_publication_recovery = pending_maintenance_publication
+            .as_ref()
+            .map(|pending| {
+                PersistentCapacityAccount::new(
+                    operations.database(),
+                    PersistentCapacityPolicy::embedded(),
+                )
+                .reconcile_maintenance_publication(
+                    &artifacts,
+                    &self.target.author_target_identity_digest,
+                    pending.hold(),
+                )
+                .map_err(|_| RuntimeBuildRefusal::Resources)
+            })
+            .transpose()?;
         Ok(DurableRuntime {
             operations,
             remote,
             subscriptions: AgentSubscriptionLedger::new(subscription_database),
+            waiters: crate::operation_wait::runtime::RuntimeWaiters::new(
+                cancellation.child_token(),
+            ),
             artifacts,
             diagnostics,
-            cancellation: CancellationToken::new(),
+            cancellation,
             maintenance_recovery,
             recovered_operations,
             recovered_stages,
             pending_publications,
+            maintenance_publication_recovery,
             installation,
             paths,
             builder: self,

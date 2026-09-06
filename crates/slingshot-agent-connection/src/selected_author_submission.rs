@@ -67,8 +67,14 @@ impl SelectedAuthorTransport {
         before_post: impl FnOnce() -> Result<(), SubmissionSendRefusal>,
     ) -> Result<SubmissionOutcome, SubmissionSendRefusal> {
         self.send_submission_with_fresh_token_over(
-            identity, submission, authentication, now_unix_milliseconds, before_post, Some(false),
-        ).await
+            identity,
+            submission,
+            authentication,
+            now_unix_milliseconds,
+            before_post,
+            Some(false),
+        )
+        .await
     }
 
     /// Acquires a fresh token and sends once over HTTP/2, without fallback.
@@ -83,8 +89,14 @@ impl SelectedAuthorTransport {
         before_post: impl FnOnce() -> Result<(), SubmissionSendRefusal>,
     ) -> Result<SubmissionOutcome, SubmissionSendRefusal> {
         self.send_submission_with_fresh_token_over(
-            identity, submission, authentication, now_unix_milliseconds, before_post, Some(true),
-        ).await
+            identity,
+            submission,
+            authentication,
+            now_unix_milliseconds,
+            before_post,
+            Some(true),
+        )
+        .await
     }
 
     /// Acquires a token and sends at most once using each connection's ALPN
@@ -99,8 +111,14 @@ impl SelectedAuthorTransport {
         before_post: impl FnOnce() -> Result<(), SubmissionSendRefusal>,
     ) -> Result<SubmissionOutcome, SubmissionSendRefusal> {
         self.send_submission_with_fresh_token_over(
-            identity, submission, authentication, now_unix_milliseconds, before_post, None,
-        ).await
+            identity,
+            submission,
+            authentication,
+            now_unix_milliseconds,
+            before_post,
+            None,
+        )
+        .await
     }
 
     /// Authenticates token acquisition and sends the retained job at most once.
@@ -119,29 +137,45 @@ impl SelectedAuthorTransport {
     ) -> Result<SubmissionOutcome, SubmissionSendRefusal> {
         self.require_submission(identity, submission)?;
         let started = tokio::time::Instant::now();
-        let receipt = self.authenticated_finite_get(
-            provider, source, reading, &["libs", "granite", "csrf", "token.json"],
-            &[], &HeaderMap::new(),
-        ).await.map_err(|_| SubmissionSendRefusal::Request)?;
+        let receipt = self
+            .authenticated_finite_get(
+                provider,
+                source,
+                reading,
+                &["libs", "granite", "csrf", "token.json"],
+                &[],
+                &HeaderMap::new(),
+            )
+            .await
+            .map_err(|_| SubmissionSendRefusal::Request)?;
         let token = self.decode_fresh_token(&receipt)?;
-        let elapsed = u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000))
-            .unwrap_or(u64::MAX);
-        let (authentication, lease) = provider.authenticate(
-            &self.endpoint(&["bin", "slingshot-agent", "jobs"]),
-            reading.saturating_add(elapsed), source,
-        ).map_err(|_| SubmissionSendRefusal::Request)?;
+        let elapsed =
+            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+        let (authentication, lease) = provider
+            .authenticate(
+                &self.endpoint(&["bin", "slingshot-agent", "jobs"]),
+                reading.saturating_add(elapsed),
+                source,
+            )
+            .map_err(|_| SubmissionSendRefusal::Request)?;
         before_post()?;
         self.require_submission(identity, submission)?;
-        let elapsed = u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000))
-            .unwrap_or(u64::MAX);
+        let elapsed =
+            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
         self.exchange_submission(
-            submission, &authentication, &token,
-            now_unix_milliseconds.saturating_add(elapsed), None,
-            || async { if let Some(lease) = lease {
-                // Refresh cannot turn post-byte uncertainty into pre-send refusal.
-                let _ = provider.refresh_after_unauthorized(lease, source);
-            } },
-        ).await
+            submission,
+            &authentication,
+            &token,
+            now_unix_milliseconds.saturating_add(elapsed),
+            None,
+            || async {
+                if let Some(lease) = lease {
+                    // Refresh cannot turn post-byte uncertainty into pre-send refusal.
+                    let _ = provider.refresh_after_unauthorized(lease, source);
+                }
+            },
+        )
+        .await
     }
 
     /// Awaits selected runtime authentication and sends the retained POST once.
@@ -163,25 +197,39 @@ impl SelectedAuthorTransport {
     {
         self.require_submission(identity, submission)?;
         let started = tokio::time::Instant::now();
-        let receipt = self.authenticated_finite_get_async(
-            provider, clock, utc, &["libs", "granite", "csrf", "token.json"],
-            &[], &HeaderMap::new(),
-        ).await.map_err(|_| SubmissionSendRefusal::Request)?;
+        let receipt = self
+            .authenticated_finite_get_async(
+                provider,
+                clock,
+                utc,
+                &["libs", "granite", "csrf", "token.json"],
+                &[],
+                &HeaderMap::new(),
+            )
+            .await
+            .map_err(|_| SubmissionSendRefusal::Request)?;
         let token = self.decode_fresh_token(&receipt)?;
-        let (authentication, lease) = provider.authenticate(
-            &self.endpoint(&["bin", "slingshot-agent", "jobs"]), clock, utc,
-        ).await.map_err(|_| SubmissionSendRefusal::Request)?;
+        let (authentication, lease) = provider
+            .authenticate(&self.endpoint(&["bin", "slingshot-agent", "jobs"]), clock, utc)
+            .await
+            .map_err(|_| SubmissionSendRefusal::Request)?;
         before_post()?;
         self.require_submission(identity, submission)?;
-        let elapsed = u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000))
-            .unwrap_or(u64::MAX);
+        let elapsed =
+            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
         self.exchange_submission(
-            submission, &authentication, &token,
-            now_unix_milliseconds.saturating_add(elapsed), None,
-            || async { if let Some(lease) = lease {
-                let _ = provider.refresh_after_unauthorized(lease, clock, utc).await;
-            } },
-        ).await
+            submission,
+            &authentication,
+            &token,
+            now_unix_milliseconds.saturating_add(elapsed),
+            None,
+            || async {
+                if let Some(lease) = lease {
+                    let _ = provider.refresh_after_unauthorized(lease, clock, utc).await;
+                }
+            },
+        )
+        .await
     }
 
     async fn send_submission_with_fresh_token_over(
@@ -196,14 +244,24 @@ impl SelectedAuthorTransport {
         self.require_submission(identity, submission)?;
         let receipt = if http2.is_none() {
             self.finite_negotiated_query(
-                Method::GET, &["libs", "granite", "csrf", "token.json"],
-                &[], authentication, &HeaderMap::new(), b"",
-            ).await
+                Method::GET,
+                &["libs", "granite", "csrf", "token.json"],
+                &[],
+                authentication,
+                &HeaderMap::new(),
+                b"",
+            )
+            .await
         } else if http2 == Some(true) {
             self.finite_http2_query(
-                Method::GET, &["libs", "granite", "csrf", "token.json"],
-                &[], authentication, &HeaderMap::new(), b"",
-            ).await
+                Method::GET,
+                &["libs", "granite", "csrf", "token.json"],
+                &[],
+                authentication,
+                &HeaderMap::new(),
+                b"",
+            )
+            .await
         } else {
             self.finite_http1(
                 Method::GET,
@@ -213,7 +271,8 @@ impl SelectedAuthorTransport {
                 b"",
             )
             .await
-        }.map_err(|_| SubmissionSendRefusal::Request)?;
+        }
+        .map_err(|_| SubmissionSendRefusal::Request)?;
         let token = self.decode_fresh_token(&receipt)?;
         before_post()?;
         self.require_submission(identity, submission)?;
@@ -284,7 +343,15 @@ impl SelectedAuthorTransport {
         now_unix_milliseconds: u64,
     ) -> Result<SubmissionOutcome, SubmissionSendRefusal> {
         self.require_submission(identity, submission)?;
-        self.exchange_submission(submission, authentication, token, now_unix_milliseconds, Some(false), || async {}).await
+        self.exchange_submission(
+            submission,
+            authentication,
+            token,
+            now_unix_milliseconds,
+            Some(false),
+            || async {},
+        )
+        .await
     }
 
     async fn exchange_submission<AfterUnauthorized: std::future::Future<Output = ()>>(
@@ -311,14 +378,24 @@ impl SelectedAuthorTransport {
         }
         let exchange = if http2.is_none() {
             self.finite_negotiated_query(
-                Method::POST, &["bin", "slingshot-agent", "jobs"],
-                &[], authentication, &fields, &body,
-            ).await
+                Method::POST,
+                &["bin", "slingshot-agent", "jobs"],
+                &[],
+                authentication,
+                &fields,
+                &body,
+            )
+            .await
         } else if http2 == Some(true) {
             self.finite_http2_query(
-                Method::POST, &["bin", "slingshot-agent", "jobs"],
-                &[], authentication, &fields, &body,
-            ).await
+                Method::POST,
+                &["bin", "slingshot-agent", "jobs"],
+                &[],
+                authentication,
+                &fields,
+                &body,
+            )
+            .await
         } else {
             self.finite_http1(
                 Method::POST,
@@ -337,7 +414,9 @@ impl SelectedAuthorTransport {
                     FiniteHttpFailure::Connect => Checkpoint::TransportConnect,
                     FiniteHttpFailure::Write => Checkpoint::RequestHead,
                     FiniteHttpFailure::Head => Checkpoint::ResponseHead,
-                    FiniteHttpFailure::Body | FiniteHttpFailure::EventHeartbeat => Checkpoint::ResponseBody,
+                    FiniteHttpFailure::Body | FiniteHttpFailure::EventHeartbeat => {
+                        Checkpoint::ResponseBody
+                    }
                     FiniteHttpFailure::Request => {
                         unreachable!("handled before phase classification")
                     }
@@ -347,7 +426,9 @@ impl SelectedAuthorTransport {
         let response = receipt.response;
         if response.status == 401 {
             after_unauthorized().await;
-            return Ok(SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::LookupRequired });
+            return Ok(SubmissionOutcome::SubmissionUnknown {
+                cause: UnknownCause::LookupRequired,
+            });
         }
         let acknowledgement = if json_media_type(response.content_type.as_deref().unwrap_or("")) {
             match parse_acknowledgement(&response.body) {
