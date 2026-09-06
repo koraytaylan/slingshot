@@ -56,6 +56,18 @@ fn statement(purpose: &str) -> &'static str {
 /// Reason a repository call could not do what it was asked.
 #[derive(Debug, thiserror::Error)]
 pub enum RepositoryFailure {
+    /// A new row would exceed the scheduler's waiting-work bound.
+    #[error(
+        "the pending operation capacity is exhausted ({held} of {limit}, per caller: {per_caller})"
+    )]
+    PendingCapacity {
+        /// Whether this is the requesting caller's bound rather than the target's.
+        per_caller: bool,
+        /// Waiting rows observed inside the admission transaction.
+        held: u64,
+        /// The applicable limit supplied by the owning runtime contract.
+        limit: u64,
+    },
     /// Remote evidence changed or disappeared before local mutation.
     #[error("the retained remote observation changed")]
     RemoteObservationMoved,
@@ -203,6 +215,19 @@ fn require_revision(
         expected: expected_revision,
         stored: stored.record.revision,
     })
+}
+
+/// Current execution slots and pending bounds supplied by the namespace owner.
+/// These facts are never taken from an operation wire request. The owner keeps
+/// its scheduling lock held through admission so the active set cannot change.
+#[derive(Debug, Clone, Copy)]
+pub struct PendingAdmissionCapacity<'owner> {
+    /// Operation identifiers currently holding an execution slot in this target.
+    pub active_operations: &'owner std::collections::BTreeSet<String>,
+    /// Maximum waiting operations across this target.
+    pub global_pending: u64,
+    /// Maximum waiting operations belonging to the requesting caller.
+    pub pending_per_caller: u64,
 }
 
 /// One request to admit an operation.
@@ -464,6 +489,31 @@ impl OperationRepository {
         request: &AdmissionRequest,
         now_unix_milliseconds: u64,
     ) -> Result<AdmissionOutcome, RepositoryFailure> {
+        self.admit_checked(request, now_unix_milliseconds, None)
+    }
+
+    /// Admits under pending-work bounds in the same transaction as the insert.
+    /// Replays and conflicts are resolved before capacity is consulted.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryFailure::PendingCapacity`] without inserting a row,
+    /// or the same persistent/storage refusals as [`Self::admit`].
+    pub fn admit_with_pending_capacity(
+        &self,
+        request: &AdmissionRequest,
+        now_unix_milliseconds: u64,
+        capacity: PendingAdmissionCapacity<'_>,
+    ) -> Result<AdmissionOutcome, RepositoryFailure> {
+        self.admit_checked(request, now_unix_milliseconds, Some(capacity))
+    }
+
+    fn admit_checked(
+        &self,
+        request: &AdmissionRequest,
+        now_unix_milliseconds: u64,
+        pending_capacity: Option<PendingAdmissionCapacity<'_>>,
+    ) -> Result<AdmissionOutcome, RepositoryFailure> {
         if let Some(workflow) = request.workflow_correlation_identifier.as_deref() {
             require_within(
                 "workflow_correlation_identifier",
@@ -479,6 +529,9 @@ impl OperationRepository {
         )? {
             Some(stored) => Self::classify_stored(request, stored),
             None => {
+                if let Some(capacity) = pending_capacity {
+                    Self::require_pending_room(&transaction, request, capacity)?;
+                }
                 self.require_room()?;
                 self.insert(&transaction, request, now_unix_milliseconds)?;
                 let admitted = self.read_required(
@@ -491,6 +544,37 @@ impl OperationRepository {
         };
         transaction.commit()?;
         Ok(outcome)
+    }
+
+    fn require_pending_room(
+        transaction: &rusqlite::Transaction<'_>,
+        request: &AdmissionRequest,
+        capacity: PendingAdmissionCapacity<'_>,
+    ) -> Result<(), RepositoryFailure> {
+        let mut query =
+            transaction.prepare(statement("count waiting operations during admission"))?;
+        let mut rows = query.query(rusqlite::params![request.author_target_identity_digest])?;
+        let mut global = 0_u64;
+        let mut caller = 0_u64;
+        while let Some(row) = rows.next()? {
+            let identifier: String = row.get(0)?;
+            if capacity.active_operations.contains(&identifier) {
+                continue;
+            }
+            global = global.saturating_add(1);
+            let identity: Option<String> = row.get(1)?;
+            if identity == request.caller_identity {
+                caller = caller.saturating_add(1);
+            }
+        }
+        for (held, limit, per_caller) in
+            [(global, capacity.global_pending, false), (caller, capacity.pending_per_caller, true)]
+        {
+            if held >= limit {
+                return Err(RepositoryFailure::PendingCapacity { held, limit, per_caller });
+            }
+        }
+        Ok(())
     }
 
     /// Requires this namespace to have room for one more operation row.
@@ -816,28 +900,43 @@ impl OperationRepository {
         if !self.database.shares_database_with(ledger.database()) || now > i64::MAX as u64 {
             return Err(refuse());
         }
-        let member = expected.members().iter().find(|member| {
-            member.identity.agent_operation_identifier == agent_operation_identifier
-        }).ok_or_else(refuse)?;
-        if now < member.recorded_at_unix_milliseconds { return Err(refuse()); }
+        let member = expected
+            .members()
+            .iter()
+            .find(|member| member.identity.agent_operation_identifier == agent_operation_identifier)
+            .ok_or_else(refuse)?;
+        if now < member.recorded_at_unix_milliseconds {
+            return Err(refuse());
+        }
         let fact = OperationFact::Recovery { recovery: recovery.clone() };
         Self::require_bounded(&fact)?;
         let transaction = write_transaction(self.database.connection())?;
         ledger.require_recovery_current(&transaction, expected).map_err(|_| refuse())?;
         let identity = &member.identity;
-        let stored = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        let stored = self.read_required(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )?;
         require_revision(&stored, expected_revision)?;
         let previous = stored.record.outstanding_recovery.as_ref();
         if stored.record.lifecycle_state.is_terminal()
             || stored.selected_environment_revision != identity.selected_environment_revision
             || previous.is_some_and(|held| held.evidence != recovery.evidence)
-            || recovery.attempt_count != previous.map_or(Some(1), |held| held.attempt_count.checked_add(1)).ok_or_else(refuse)?
+            || recovery.attempt_count
+                != previous
+                    .map_or(Some(1), |held| held.attempt_count.checked_add(1))
+                    .ok_or_else(refuse)?
         {
             return Err(refuse());
         }
         let folded = stored.record.fold(&fact)?;
         self.write_folded(&transaction, &stored, &folded, Self::settlement(&stored, &folded, now))?;
-        let result = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        let result = self.read_required(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )?;
         transaction.commit()?;
         Ok(result)
     }
@@ -856,8 +955,10 @@ impl OperationRepository {
         expected_revision: u64,
         now: u64,
     ) -> Result<OperationSummary, RepositoryFailure> {
-        use slingshot_domain::operation::{OperationExecutionCertainty, RecoveryExecutionEvidence,
-            TerminalFailure, TerminalFailureDisposition, TerminalFailureKind};
+        use slingshot_domain::operation::{
+            OperationExecutionCertainty, RecoveryExecutionEvidence, TerminalFailure,
+            TerminalFailureDisposition, TerminalFailureKind,
+        };
         let refuse = || RepositoryFailure::RemoteObservationMoved;
         if !self.database.shares_database_with(ledger.database())
             || current_generation == 0
@@ -866,9 +967,11 @@ impl OperationRepository {
         {
             return Err(refuse());
         }
-        let member = expected.members().iter().find(|member| {
-            member.identity.agent_operation_identifier == agent_operation_identifier
-        }).ok_or_else(refuse)?;
+        let member = expected
+            .members()
+            .iter()
+            .find(|member| member.identity.agent_operation_identifier == agent_operation_identifier)
+            .ok_or_else(refuse)?;
         if member.identity.agent_event_store_generation == current_generation
             || now < member.recorded_at_unix_milliseconds
             || member.observation.state.is_terminal()
@@ -879,35 +982,53 @@ impl OperationRepository {
         let transaction = write_transaction(self.database.connection())?;
         ledger.require_recovery_current(&transaction, expected).map_err(|_| refuse())?;
         let identity = &member.identity;
-        let stored = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        let stored = self.read_required(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )?;
         require_revision(&stored, expected_revision)?;
         if stored.record.lifecycle_state.is_terminal()
             || stored.selected_environment_revision != identity.selected_environment_revision
             || stored.record.outstanding_recovery.as_ref().is_some_and(|recovery| {
-                matches!(recovery.evidence,
+                matches!(
+                    recovery.evidence,
                     RecoveryExecutionEvidence::AuthoritativeRemoteSuccess
-                    | RecoveryExecutionEvidence::ExecutionCertainty {
-                        certainty: OperationExecutionCertainty::ConfirmedNotExecuted
-                    })
+                        | RecoveryExecutionEvidence::ExecutionCertainty {
+                            certainty: OperationExecutionCertainty::ConfirmedNotExecuted
+                        }
+                )
             })
         {
             return Err(refuse());
         }
-        let certainty = stored.record.outstanding_recovery.as_ref().and_then(|recovery| {
-            match recovery.evidence {
+        let certainty = stored
+            .record
+            .outstanding_recovery
+            .as_ref()
+            .and_then(|recovery| match recovery.evidence {
                 RecoveryExecutionEvidence::ExecutionCertainty { certainty }
-                    if certainty != OperationExecutionCertainty::ConfirmedNotExecuted => Some(certainty),
+                    if certainty != OperationExecutionCertainty::ConfirmedNotExecuted =>
+                {
+                    Some(certainty)
+                }
                 _ => None,
-            }
-        }).unwrap_or(OperationExecutionCertainty::RemoteOutcomeUnknown);
-        let fact = OperationFact::Terminal { failure: TerminalFailure {
-            kind: TerminalFailureKind::RemoteStateLost,
-            disposition: TerminalFailureDisposition::FailClosedIndeterminate { certainty },
-            metadata: None,
-        }};
+            })
+            .unwrap_or(OperationExecutionCertainty::RemoteOutcomeUnknown);
+        let fact = OperationFact::Terminal {
+            failure: TerminalFailure {
+                kind: TerminalFailureKind::RemoteStateLost,
+                disposition: TerminalFailureDisposition::FailClosedIndeterminate { certainty },
+                metadata: None,
+            },
+        };
         let folded = stored.record.fold(&fact)?;
         self.write_folded(&transaction, &stored, &folded, Some(now))?;
-        let result = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        let result = self.read_required(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )?;
         transaction.commit()?;
         Ok(result)
     }
@@ -923,7 +1044,14 @@ impl OperationRepository {
         diagnosis: Option<crate::agent_job_repository::RejectedAgentDiagnosis>,
         now: u64,
     ) -> Result<OperationSummary, RepositoryFailure> {
-        self.settle_failed_agent_snapshot(expected, expected_revision, snapshot, diagnosis, false, now)
+        self.settle_failed_agent_snapshot(
+            expected,
+            expected_revision,
+            snapshot,
+            diagnosis,
+            false,
+            now,
+        )
     }
 
     /// Atomically settles a command-validated positive replication admission
@@ -947,33 +1075,69 @@ impl OperationRepository {
         partial_admission: bool,
         now: u64,
     ) -> Result<OperationSummary, RepositoryFailure> {
-        use slingshot_domain::operation::{RecoveryExecutionEvidence, TerminalFailure, TerminalFailureDisposition, TerminalFailureKind, OperationExecutionCertainty};
+        use slingshot_domain::operation::{
+            OperationExecutionCertainty, RecoveryExecutionEvidence, TerminalFailure,
+            TerminalFailureDisposition, TerminalFailureKind,
+        };
         let refuse = || RepositoryFailure::RemoteObservationMoved;
         let transaction = write_transaction(self.database.connection())?;
         let identity = &expected.identity;
         let current = crate::agent_job_repository::read_submission(
-            &transaction, &identity.author_target_identity_digest, &identity.agent_operation_identifier,
-        ).map_err(|_| refuse())?;
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.agent_operation_identifier,
+        )
+        .map_err(|_| refuse())?;
         if current.as_ref() != Some(expected) || expected.terminal_disposition.is_some() {
             return Err(refuse());
         }
-        let stored = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        let stored = self.read_required(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )?;
         require_revision(&stored, expected_revision)?;
         if stored.selected_environment_revision != identity.selected_environment_revision
             || stored.record.lifecycle_state.is_terminal()
-            || stored.record.outstanding_recovery.as_ref().is_some_and(|fact| fact.evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess)
-        { return Err(refuse()); }
-        let fact = OperationFact::Terminal { failure: TerminalFailure {
-            kind: if partial_admission { TerminalFailureKind::RemoteFailed } else { TerminalFailureKind::Rejected },
-            disposition: if partial_admission { TerminalFailureDisposition::AuthoritativeRemoteFailure } else { TerminalFailureDisposition::AuthoritativeNonExecution { certainty: OperationExecutionCertainty::ConfirmedNotExecuted } },
-            metadata: diagnosis.map(|diagnosis| diagnosis.as_text().to_owned()),
-        } };
+            || stored.record.outstanding_recovery.as_ref().is_some_and(|fact| {
+                fact.evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess
+            })
+        {
+            return Err(refuse());
+        }
+        let fact = OperationFact::Terminal {
+            failure: TerminalFailure {
+                kind: if partial_admission {
+                    TerminalFailureKind::RemoteFailed
+                } else {
+                    TerminalFailureKind::Rejected
+                },
+                disposition: if partial_admission {
+                    TerminalFailureDisposition::AuthoritativeRemoteFailure
+                } else {
+                    TerminalFailureDisposition::AuthoritativeNonExecution {
+                        certainty: OperationExecutionCertainty::ConfirmedNotExecuted,
+                    }
+                },
+                metadata: diagnosis.map(|diagnosis| diagnosis.as_text().to_owned()),
+            },
+        };
         Self::require_bounded(&fact)?;
         let folded = stored.record.fold(&fact)?;
         self.write_folded(&transaction, &stored, &folded, Some(now))?;
-        crate::agent_job_repository::write_failed_snapshot(&transaction, expected, snapshot, partial_admission, now)
-            .map_err(|_| refuse())?;
-        let result = self.read_required(&transaction, &identity.author_target_identity_digest, &identity.operation_identifier)?;
+        crate::agent_job_repository::write_failed_snapshot(
+            &transaction,
+            expected,
+            snapshot,
+            partial_admission,
+            now,
+        )
+        .map_err(|_| refuse())?;
+        let result = self.read_required(
+            &transaction,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+        )?;
         transaction.commit()?;
         Ok(result)
     }
@@ -1477,6 +1641,9 @@ impl OperationRepository {
             operation_identifier,
             source_fingerprint,
         )? {
+            if held.selected_environment_revision != selected_environment_revision {
+                return Ok(ResumeOutcome::Refused(ResumeEligibilityRefusal::EnvironmentRevision));
+            }
             transaction.commit()?;
             return Ok(ResumeOutcome::Replayed(Box::new(held)));
         }
@@ -1531,6 +1698,9 @@ impl OperationRepository {
             operation_identifier,
             source_fingerprint,
         )? {
+            if held.selected_environment_revision != selected_environment_revision {
+                return Ok(ResumeOutcome::Refused(ResumeEligibilityRefusal::EnvironmentRevision));
+            }
             transaction.commit()?;
             return Ok(ResumeOutcome::Replayed(Box::new(held)));
         }

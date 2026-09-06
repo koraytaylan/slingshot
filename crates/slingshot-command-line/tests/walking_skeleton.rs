@@ -5,6 +5,8 @@
 //! detached child, and every deadline comes from the foundation contract and is
 //! waited for against the monotonic clock rather than slept through.
 
+const DIGEST_HEX_CHARACTERS: usize = 64;
+
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
@@ -196,6 +198,60 @@ fn compiled_startup_publishes_selected_durable_identity() {
         panic!("compiled startup failed: {}", String::from_utf8_lossy(&output.stderr));
     }
     let record = readiness::read(target.runtime_root(), target.digest()).unwrap().unwrap();
+    let address =
+        endpoint::endpoint_address(&FoundationContract::embedded(), root.path(), target.digest())
+            .unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    for arguments in [
+        serde_json::json!({}),
+        serde_json::json!({"unexpected":"not-to-be-echoed"}),
+        serde_json::Value::Null,
+    ] {
+        let valid = arguments == serde_json::json!({});
+        let response = runtime
+            .block_on(slingshot_command_line::daemon_connection::exchange(
+                &FoundationContract::embedded(),
+                &address,
+                &slingshot_local_protocol::envelope::ControlRequest {
+                    control_version: FoundationContract::embedded().control.version,
+                    request_identifier: "startup-hello".into(),
+                    method: slingshot_local_protocol::control::HELLO_METHOD.into(),
+                    arguments,
+                },
+            ))
+            .unwrap();
+        assert_eq!(response.request_identifier, "startup-hello");
+        if valid {
+            let hello: slingshot_local_protocol::control::HelloResult =
+                serde_json::from_value(response.result.unwrap()).unwrap();
+            let published = record.identity.as_ref().unwrap();
+            assert_eq!(
+                hello.author_target_identity_digest,
+                published.author_target_identity_digest
+            );
+            assert_eq!(
+                hello.selected_environment_revision,
+                published.selected_environment_revision
+            );
+            assert_eq!(
+                hello.daemon_runtime_contract_digest,
+                published.daemon_runtime_contract_digest
+            );
+            assert_eq!(hello.readiness_nonce, record.readiness_nonce);
+            assert_eq!(hello.runtime_namespace, target.display());
+            assert_eq!(
+                hello.supported_operation_protocol_versions,
+                vec![
+                    slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                        .operation_protocol_version as u32
+                ]
+            );
+        } else {
+            let error = response.error.unwrap();
+            assert_eq!(error.code, slingshot_local_protocol::envelope::MALFORMED_REQUEST_CODE);
+            assert!(!error.message.contains("not-to-be-echoed"));
+        }
+    }
     cooperatively_stop(&root, ENVIRONMENT);
     assert!(child.wait().unwrap().success());
     let identity = record.identity.unwrap();
@@ -276,8 +332,10 @@ fn compiled_startup_refusals_leave_no_readiness_or_owner() {
             "installation" => {
                 let mut record = ledger.read().unwrap();
                 record.installation_identifier =
-                    slingshot_domain::installation::InstallationIdentifier::parse(&"f".repeat(64))
-                        .unwrap();
+                    slingshot_domain::installation::InstallationIdentifier::parse(
+                        &"f".repeat(DIGEST_HEX_CHARACTERS),
+                    )
+                    .unwrap();
                 ledger.replace(&record).unwrap();
             }
             "database" => std::fs::remove_file(paths.database_path()).unwrap(),
@@ -312,7 +370,7 @@ fn compiled_startup_refusals_leave_no_readiness_or_owner() {
                 let operations =
                     slingshot_storage::operation_repository::OperationRepository::new(database);
                 let canonical = "{\"root_path\":\"/retained\"}";
-                let revision = "a".repeat(64);
+                let revision = "a".repeat(DIGEST_HEX_CHARACTERS);
                 let fingerprint = CommandFingerprint::derive(&FingerprintInput {
                     author_target_identity_digest: identity.author_target_identity_digest.clone(),
                     canonical_command: canonical.into(),

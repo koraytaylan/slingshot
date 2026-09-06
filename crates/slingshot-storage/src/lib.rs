@@ -11,6 +11,7 @@ pub mod artifact_store;
 pub mod database;
 pub mod installation_state;
 pub mod maintenance;
+pub mod maintenance_results;
 pub mod operation;
 pub mod operation_repository;
 pub mod persistent_capacity;

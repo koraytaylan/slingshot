@@ -61,13 +61,16 @@ impl core::fmt::Debug for ResponseFrame {
 
 impl Drop for ResponseFrame {
     fn drop(&mut self) {
-        let _secret = slingshot_domain::secret_value::SecretValue::from_bytes(std::mem::take(&mut self.payload));
+        let _secret = slingshot_domain::secret_value::SecretValue::from_bytes(std::mem::take(
+            &mut self.payload,
+        ));
     }
 }
 struct SensitivePayload(Vec<u8>);
 impl Drop for SensitivePayload {
     fn drop(&mut self) {
-        let _secret = slingshot_domain::secret_value::SecretValue::from_bytes(std::mem::take(&mut self.0));
+        let _secret =
+            slingshot_domain::secret_value::SecretValue::from_bytes(std::mem::take(&mut self.0));
     }
 }
 
@@ -120,7 +123,9 @@ impl ResponseFrameReader {
     }
 
     /// Whether the first refusal was an encoded-section bound, before allocation.
-    pub fn header_limit_exceeded(&self) -> bool { self.header_limit_exceeded }
+    pub fn header_limit_exceeded(&self) -> bool {
+        self.header_limit_exceeded
+    }
 
     /// Reads one frame under the caller's enclosing transport deadline.
     /// Frame and encoded-header bounds are checked before payload allocation.
@@ -187,8 +192,11 @@ impl ResponseFrameReader {
             0 if stream_identifier != 1 || !self.head_started || self.stream_ended => {
                 return Err(ResponseFrameRefusal);
             }
-            1 if stream_identifier != 1 || self.stream_ended || self.head_started
-                && (!self.allow_trailer_section || self.trailer_started || flags & 1 == 0) => {
+            1 if stream_identifier != 1
+                || self.stream_ended
+                || self.head_started
+                    && (!self.allow_trailer_section || self.trailer_started || flags & 1 == 0) =>
+            {
                 return Err(ResponseFrameRefusal);
             }
             2 if stream_identifier != 1 || length != 5 => return Err(ResponseFrameRefusal),
@@ -228,10 +236,16 @@ impl ResponseFrameReader {
             remaining = remaining.checked_sub(padding).ok_or(ResponseFrameRefusal)?;
         }
         if matches!(kind, 1 | 9) {
-            self.encoded_header_bytes = match self.encoded_header_bytes.checked_add(remaining as u64)
-                .filter(|bytes| *bytes <= self.maximum_header_bytes) {
+            self.encoded_header_bytes = match self
+                .encoded_header_bytes
+                .checked_add(remaining as u64)
+                .filter(|bytes| *bytes <= self.maximum_header_bytes)
+            {
                 Some(bytes) => bytes,
-                None => { self.header_limit_exceeded = true; return Err(ResponseFrameRefusal); }
+                None => {
+                    self.header_limit_exceeded = true;
+                    return Err(ResponseFrameRefusal);
+                }
             };
             self.continuation = flags & 4 == 0;
         }
@@ -250,7 +264,12 @@ impl ResponseFrameReader {
             self.stream_ended = true;
             self.stream_reset = true;
         }
-        Ok(Some(ResponseFrame { kind, flags, stream_identifier, payload: std::mem::take(&mut payload.0) }))
+        Ok(Some(ResponseFrame {
+            kind,
+            flags,
+            stream_identifier,
+            payload: std::mem::take(&mut payload.0),
+        }))
     }
 }
 

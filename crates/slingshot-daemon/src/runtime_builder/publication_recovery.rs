@@ -1,5 +1,8 @@
 //! Associates publication evidence with selected retained operation slots.
 
+#[cfg(test)]
+const DIGEST_HEX_CHARACTERS: usize = 64;
+
 use slingshot_domain::{command::catalog::CommandCatalog, installation::InstallationIdentifier};
 use slingshot_storage::{
     artifact_store::{ArtifactIdentifier, STRUCTURED_RESULT_SLOT},
@@ -84,7 +87,7 @@ mod tests {
                 "operation",
                 slot,
             ),
-            content_digest: "a".repeat(64),
+            content_digest: "a".repeat(DIGEST_HEX_CHARACTERS),
             byte_length: 2,
             recorded_at_unix_milliseconds: 7,
         }
@@ -92,7 +95,8 @@ mod tests {
 
     #[test]
     fn publication_owner_binding_is_exact_and_preserves_ambiguous_producers() {
-        let installation = InstallationIdentifier::parse(&"a".repeat(64)).unwrap();
+        let installation =
+            InstallationIdentifier::parse(&"a".repeat(DIGEST_HEX_CHARACTERS)).unwrap();
         let first = pending(&installation, "target", STRUCTURED_RESULT_SLOT);
         let mut second = first.clone();
         second.publication_identifier = "second".into();
@@ -148,7 +152,8 @@ mod tests {
             )
             .is_err()
         );
-        let foreign_installation = InstallationIdentifier::parse(&"b".repeat(64)).unwrap();
+        let foreign_installation =
+            InstallationIdentifier::parse(&"b".repeat(DIGEST_HEX_CHARACTERS)).unwrap();
         assert!(
             bind_publications(
                 &foreign_installation,

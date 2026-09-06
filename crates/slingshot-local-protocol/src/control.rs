@@ -50,6 +50,9 @@ pub const INCOMPATIBLE_OPERATION_PROTOCOL_CODE: &str = "incompatible_operation_p
 /// Error code returned when the daemon-runtime contract digests differ.
 pub const INCOMPATIBLE_RUNTIME_CONTRACT_CODE: &str = "incompatible_daemon_runtime_contract";
 
+/// The owner has no established runtime from which to answer a greeting.
+pub const RUNTIME_UNAVAILABLE_CODE: &str = "runtime_unavailable";
+
 /// Characters a rendered digest occupies.
 const DIGEST_CHARACTERS: usize = 64;
 

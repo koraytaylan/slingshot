@@ -3,6 +3,7 @@
 use super::*;
 use crate::artifact_store::{ArtifactStore, CONTENT_DIRECTORY};
 use crate::database::RequiredSettings;
+use rusqlite::OptionalExtension as _;
 
 fn seed(database: &OperationDatabase, target: &str, digest: &str) {
     database
@@ -21,7 +22,10 @@ fn seed(database: &OperationDatabase, target: &str, digest: &str) {
         .unwrap();
     database
         .connection()
-        .execute("INSERT INTO artifact_blob VALUES (5, ?, 123)", [digest])
+        .execute(
+            statement_text("record one artifact's content, once per digest"),
+            rusqlite::params![5, digest, 123],
+        )
         .unwrap();
 }
 
@@ -66,8 +70,8 @@ fn recovery_deletes_only_approved_unreferenced_files_and_is_restart_safe() {
             database
                 .connection()
                 .execute(
-                    "INSERT INTO artifact_publication VALUES ('producer', 'artifact', ?, 123)",
-                    [&digest],
+                    statement_text("retain one artifact publication across restart"),
+                    rusqlite::params!["producer", "artifact", &digest, 123],
                 )
                 .unwrap();
         }
@@ -88,8 +92,8 @@ fn recovery_deletes_only_approved_unreferenced_files_and_is_restart_safe() {
             database
                 .connection()
                 .execute(
-                    "DELETE FROM artifact_publication WHERE publication_identifier = 'producer'",
-                    [],
+                    statement_text("consume one completed artifact publication"),
+                    rusqlite::params!["producer", "artifact", &digest],
                 )
                 .unwrap();
         } else {
@@ -105,15 +109,16 @@ fn recovery_deletes_only_approved_unreferenced_files_and_is_restart_safe() {
             receipt(&database, "foreign", "receipt").unwrap().unwrap().stage,
             ReceiptStage::DatabaseApplied
         );
-        let rows: i64 = database
+        let length: Option<i64> = database
             .connection()
             .query_row(
-                "SELECT COUNT(*) FROM artifact_blob WHERE content_digest = ?",
+                statement_text("read one artifact blob's recorded length"),
                 [&digest],
                 |row| row.get(0),
             )
+            .optional()
             .unwrap();
-        assert_eq!(rows, 0);
+        assert_eq!(length, None);
     }
 }
 

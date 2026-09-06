@@ -10,4 +10,5 @@ pub mod envelope;
 pub mod foundation_contract;
 pub mod framing;
 pub mod message;
+pub mod operation_decode;
 pub mod ping;

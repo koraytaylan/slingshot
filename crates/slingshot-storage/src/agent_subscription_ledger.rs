@@ -128,7 +128,9 @@ impl core::fmt::Debug for CompletedEventView<'_> {
 }
 impl CompletedEventView<'_> {
     /// Exact retained submission, including its terminal observation and contracts.
-    pub fn member(&self) -> &AgentSubmission { &self.member }
+    pub fn member(&self) -> &AgentSubmission {
+        &self.member
+    }
 }
 
 /// One already wire-validated active snapshot staged for whole-subscription reset.
@@ -186,7 +188,10 @@ impl AgentSubscriptionLedger {
     /// # Errors
     /// Refuses missing subscriptions or database read failures.
     pub fn read_completed_event(
-        &self, target: &str, subscription: &str, operation: &str,
+        &self,
+        target: &str,
+        subscription: &str,
+        operation: &str,
     ) -> Result<Option<CompletedEventView<'_>>, AgentRepositoryFailure> {
         let transaction = self.database.connection().unchecked_transaction()?;
         let result = self.read_completed_within(&transaction, target, subscription, operation)?;
@@ -195,20 +200,48 @@ impl AgentSubscriptionLedger {
     }
 
     fn read_completed_within(
-        &self, transaction: &rusqlite::Transaction<'_>, target: &str, subscription: &str, operation: &str,
+        &self,
+        transaction: &rusqlite::Transaction<'_>,
+        target: &str,
+        subscription: &str,
+        operation: &str,
     ) -> Result<Option<CompletedEventView<'_>>, AgentRepositoryFailure> {
-        let ledger = read_subscription(transaction, target, subscription)?.ok_or(AgentRepositoryFailure::SubscriptionMoved)?;
-        let Some(member) = crate::agent_job_repository::read_submission(transaction,target,operation)? else { return Ok(None) };
+        let ledger = read_subscription(transaction, target, subscription)?
+            .ok_or(AgentRepositoryFailure::SubscriptionMoved)?;
+        let Some(member) =
+            crate::agent_job_repository::read_submission(transaction, target, operation)?
+        else {
+            return Ok(None);
+        };
         if member.identity.daemon_subscription_identifier != subscription
-            || !member.observation.state.is_terminal() || member.terminal_disposition.is_none() {
+            || !member.observation.state.is_terminal()
+            || member.terminal_disposition.is_none()
+        {
             return Ok(None);
         }
-        let Some(local) = crate::operation_repository::OperationRepository::read_within(transaction,target,&member.identity.operation_identifier)? else { return Ok(None) };
-        if !local.record.lifecycle_state.is_terminal() || local.selected_environment_revision != member.identity.selected_environment_revision {
+        let Some(local) = crate::operation_repository::OperationRepository::read_within(
+            transaction,
+            target,
+            &member.identity.operation_identifier,
+        )?
+        else {
+            return Ok(None);
+        };
+        if !local.record.lifecycle_state.is_terminal()
+            || local.selected_environment_revision != member.identity.selected_environment_revision
+        {
             return Ok(None);
         }
-        let physical = crate::agent_job_repository::physical_jobs(transaction,target,operation)?;
-        Ok(Some(CompletedEventView {owner:&self.database,target:target.into(),subscription:subscription.into(),ledger,member,local,physical}))
+        let physical = crate::agent_job_repository::physical_jobs(transaction, target, operation)?;
+        Ok(Some(CompletedEventView {
+            owner: &self.database,
+            target: target.into(),
+            subscription: subscription.into(),
+            ledger,
+            member,
+            local,
+            physical,
+        }))
     }
 
     /// Advances only the cursor for a validated replay of already completed work.
@@ -218,28 +251,59 @@ impl AgentSubscriptionLedger {
     /// # Errors
     /// Refuses stale views, uncovered sequences/identities or invalid event facts.
     pub fn record_completed_event_cursor(
-        &self, expected: &CompletedEventView<'_>, fact: &EventFact, physical: &str, now: u64,
+        &self,
+        expected: &CompletedEventView<'_>,
+        fact: &EventFact,
+        physical: &str,
+        now: u64,
     ) -> Result<LedgerOutcome, AgentRepositoryFailure> {
         require_cursor_bound(&fact.cursor)?;
-        if !core::ptr::eq(expected.owner,&self.database)
+        if !core::ptr::eq(expected.owner, &self.database)
             || expected.ledger.unresolved_incident.is_some()
-            || fact.agent_event_store_generation != expected.member.identity.agent_event_store_generation
+            || fact.agent_event_store_generation
+                != expected.member.identity.agent_event_store_generation
             || fact.agent_event_store_generation != expected.ledger.agent_event_store_generation
-            || fact.agent_operation_identifier.as_deref() != Some(expected.member.identity.agent_operation_identifier.as_str())
-            || fact.job_sequence.is_none_or(|sequence| sequence > expected.member.observation.applied_sequence.value() || sequence > i64::MAX as u64)
+            || fact.agent_operation_identifier.as_deref()
+                != Some(expected.member.identity.agent_operation_identifier.as_str())
+            || fact.job_sequence.is_none_or(|sequence| {
+                sequence > expected.member.observation.applied_sequence.value()
+                    || sequence > i64::MAX as u64
+            })
             || !expected.physical.iter().any(|name| name == physical)
-            || now < expected.member.recorded_at_unix_milliseconds || now > i64::MAX as u64
-            || fact.event_bytes > i64::MAX as u64 || fact.canonical_digest.len() != 64
-            || !fact.canonical_digest.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            || now < expected.member.recorded_at_unix_milliseconds
+            || now > i64::MAX as u64
+            || fact.event_bytes > i64::MAX as u64
+            || fact.canonical_digest.len() != 64
+            || !fact
+                .canonical_digest
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
             return Err(AgentRepositoryFailure::Conflicted);
         }
         let transaction = write_transaction(self.database.connection())?;
-        let current = self.read_completed_within(&transaction,&expected.target,&expected.subscription,&expected.member.identity.agent_operation_identifier)?
+        let current = self
+            .read_completed_within(
+                &transaction,
+                &expected.target,
+                &expected.subscription,
+                &expected.member.identity.agent_operation_identifier,
+            )?
             .ok_or(AgentRepositoryFailure::SubscriptionMoved)?;
-        if current.ledger != expected.ledger || current.member != expected.member || current.local != expected.local || current.physical != expected.physical {
+        if current.ledger != expected.ledger
+            || current.member != expected.member
+            || current.local != expected.local
+            || current.physical != expected.physical
+        {
             return Err(AgentRepositoryFailure::SubscriptionMoved);
         }
-        let outcome = self.record_event_within(&transaction,&expected.target,&expected.subscription,fact,now)?;
+        let outcome = self.record_event_within(
+            &transaction,
+            &expected.target,
+            &expected.subscription,
+            fact,
+            now,
+        )?;
         transaction.commit()?;
         Ok(outcome)
     }
@@ -254,7 +318,8 @@ impl AgentSubscriptionLedger {
         if !core::ptr::eq(expected.owner, &self.database) {
             return Err(AgentRepositoryFailure::SubscriptionMoved);
         }
-        let current = self.read_recovery_within(transaction, &expected.target, &expected.subscription)?;
+        let current =
+            self.read_recovery_within(transaction, &expected.target, &expected.subscription)?;
         if current.ledger != expected.ledger
             || current.members != expected.members
             || current.local_owners != expected.local_owners
@@ -574,8 +639,12 @@ impl AgentSubscriptionLedger {
         require_cursor_bound(cursor)?;
         let transaction = write_transaction(self.database.connection())?;
         self.require_recovery_current(&transaction, expected)?;
-        Self::require_reconciled(&transaction, &expected.target, &expected.subscription,
-            &expected.ledger)?;
+        Self::require_reconciled(
+            &transaction,
+            &expected.target,
+            &expected.subscription,
+            &expected.ledger,
+        )?;
         transaction.execute(
             statement("record one unresolved integrity incident on a subscription"),
             (cursor, &expected.target, &expected.subscription),
@@ -602,26 +671,40 @@ impl AgentSubscriptionLedger {
             || now > i64::MAX as u64
             || fact.event_bytes > i64::MAX as u64
             || fact.canonical_digest.len() != 64
-            || !fact.canonical_digest.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-        { return Err(AgentRepositoryFailure::Conflicted); }
+            || !fact
+                .canonical_digest
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(AgentRepositoryFailure::Conflicted);
+        }
         match (&fact.agent_operation_identifier, fact.job_sequence) {
-            (None, None) => {},
+            (None, None) => {}
             (Some(identifier), Some(sequence)) => {
-                let member = expected.members.iter().find(|member|
-                    &member.identity.agent_operation_identifier == identifier)
+                let member = expected
+                    .members
+                    .iter()
+                    .find(|member| &member.identity.agent_operation_identifier == identifier)
                     .ok_or(AgentRepositoryFailure::Conflicted)?;
                 if member.identity.agent_event_store_generation != fact.agent_event_store_generation
                     || sequence > member.observation.applied_sequence.value()
                     || sequence > i64::MAX as u64
                     || now < member.recorded_at_unix_milliseconds
-                { return Err(AgentRepositoryFailure::Conflicted); }
+                {
+                    return Err(AgentRepositoryFailure::Conflicted);
+                }
             }
             _ => return Err(AgentRepositoryFailure::Conflicted),
         }
         let transaction = write_transaction(self.database.connection())?;
         self.require_recovery_current(&transaction, expected)?;
-        let outcome = self.record_event_within(&transaction, &expected.target,
-            &expected.subscription, fact, now)?;
+        let outcome = self.record_event_within(
+            &transaction,
+            &expected.target,
+            &expected.subscription,
+            fact,
+            now,
+        )?;
         transaction.commit()?;
         Ok(outcome)
     }
@@ -647,13 +730,17 @@ impl AgentSubscriptionLedger {
     ) -> Result<LedgerOutcome, AgentRepositoryFailure> {
         use slingshot_domain::remote_job::AgentJobIdentifier;
         require_cursor_bound(&fact.cursor)?;
-        let index = expected.members.iter().position(|member| {
-            fact.agent_operation_identifier.as_deref()
-                == Some(member.identity.agent_operation_identifier.as_str())
-        }).ok_or(AgentRepositoryFailure::Conflicted)?;
-        let member = &expected.members[index];
-        let local = expected.local_owners[index].as_ref()
+        let index = expected
+            .members
+            .iter()
+            .position(|member| {
+                fact.agent_operation_identifier.as_deref()
+                    == Some(member.identity.agent_operation_identifier.as_str())
+            })
             .ok_or(AgentRepositoryFailure::Conflicted)?;
+        let member = &expected.members[index];
+        let local =
+            expected.local_owners[index].as_ref().ok_or(AgentRepositoryFailure::Conflicted)?;
         if expected.ledger.unresolved_incident.is_some()
             || member.identity.agent_event_store_generation != fact.agent_event_store_generation
             || expected.ledger.agent_event_store_generation != fact.agent_event_store_generation
@@ -679,32 +766,53 @@ impl AgentSubscriptionLedger {
         }
         let transaction = write_transaction(self.database.connection())?;
         self.require_recovery_current(&transaction, expected)?;
-        let outcome = self.record_event_within(&transaction, &expected.target,
-            &expected.subscription, fact, now)?;
+        let outcome = self.record_event_within(
+            &transaction,
+            &expected.target,
+            &expected.subscription,
+            fact,
+            now,
+        )?;
         if outcome == LedgerOutcome::Advanced {
             let physical = &expected.physical_jobs[index];
             if !physical.iter().any(|name| name == sling_job_identifier) {
                 if physical.len() as u64 >= self.bounds.physical_job_rows {
                     return Err(AgentRepositoryFailure::Exhausted {
-                        allowed: self.bounds.physical_job_rows, subject: "physical Sling jobs",
+                        allowed: self.bounds.physical_job_rows,
+                        subject: "physical Sling jobs",
                     });
                 }
                 let changed = transaction.execute(
                     statement("record one physical Sling job for one agent submission"),
-                    (&member.identity.agent_operation_identifier, &expected.target,
-                        stored(now), sling_job_identifier),
+                    (
+                        &member.identity.agent_operation_identifier,
+                        &expected.target,
+                        stored(now),
+                        sling_job_identifier,
+                    ),
                 )?;
-                if changed != ONE_ROW { return Err(AgentRepositoryFailure::Conflicted); }
+                if changed != ONE_ROW {
+                    return Err(AgentRepositoryFailure::Conflicted);
+                }
             }
             let changed = transaction.execute(
                 statement("fold one believed event into one agent submission"),
-                (stored(observation.applied_sequence.value()), stored(observation.attempt),
-                    observation.state.to_string(), stored(observation.progress), &expected.target,
+                (
+                    stored(observation.applied_sequence.value()),
+                    stored(observation.attempt),
+                    observation.state.to_string(),
+                    stored(observation.progress),
+                    &expected.target,
                     &member.identity.agent_operation_identifier,
                     stored(member.observation.applied_sequence.value()),
-                    observation.state.to_string(), stored(observation.attempt), stored(observation.progress)),
+                    observation.state.to_string(),
+                    stored(observation.attempt),
+                    stored(observation.progress),
+                ),
             )?;
-            if changed != ONE_ROW { return Err(AgentRepositoryFailure::Conflicted); }
+            if changed != ONE_ROW {
+                return Err(AgentRepositoryFailure::Conflicted);
+            }
         }
         transaction.commit()?;
         Ok(outcome)

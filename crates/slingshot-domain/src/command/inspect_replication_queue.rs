@@ -54,9 +54,15 @@ pub struct InspectReplicationQueueRefusal {
 
 impl InspectReplicationQueueRefusal {
     /// Requires the exact anchor named by the retained command.
-    pub fn require_answers(&self, command: &InspectReplicationQueueCommand) -> Result<(), crate::command::query_paths::DiscoveryResultFailure> {
-        if self.agent_identifier == command.agent_identifier { Ok(()) }
-        else { Err(crate::command::query_paths::DiscoveryResultFailure::NotThisRequest) }
+    pub fn require_answers(
+        &self,
+        command: &InspectReplicationQueueCommand,
+    ) -> Result<(), crate::command::query_paths::DiscoveryResultFailure> {
+        if self.agent_identifier == command.agent_identifier {
+            Ok(())
+        } else {
+            Err(crate::command::query_paths::DiscoveryResultFailure::NotThisRequest)
+        }
     }
 }
 

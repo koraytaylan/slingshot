@@ -60,8 +60,16 @@ pub async fn attach_selected_events<'runtime>(
     protocol: ResetTransport,
     now: u64,
 ) -> Result<SelectedEventAttachmentOutcome<'runtime>, DurableEventRefusal> {
-    attach_selected_events_with_authentication(ledger, operations, transport, selection, subscription,
-        super::author_authentication::AuthorAuthentication::Fixed { authentication, protocol }, now).await
+    attach_selected_events_with_authentication(
+        ledger,
+        operations,
+        transport,
+        selection,
+        subscription,
+        super::author_authentication::AuthorAuthentication::Fixed { authentication, protocol },
+        now,
+    )
+    .await
 }
 
 /// Attaches using the invocation provider policy and retains it in terminal
@@ -201,8 +209,9 @@ pub async fn attach_selected_events_with_authentication<'runtime>(
         });
         Err(FiniteHttpFailure::Body)
     };
-    let result = authentication.events(transport, selection, subscription,
-        generation, cursor.as_ref(), resolver, consume).await;
+    let result = authentication
+        .events(transport, selection, subscription, generation, cursor.as_ref(), resolver, consume)
+        .await;
     if let Some(recovery) = recovery {
         return Ok(recovery);
     }

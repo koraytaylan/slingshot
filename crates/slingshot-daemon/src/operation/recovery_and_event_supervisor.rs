@@ -382,7 +382,9 @@ impl RecoveryAndEventSupervisor {
     /// After detachment, late completions cannot reopen this scheduling queue;
     /// their durable recovery facts remain available to the next runtime.
     pub fn hold(&mut self, work: DueWork) {
-        if self.shutting_down { return; }
+        if self.shutting_down {
+            return;
+        }
         if let Some(held) = self.work.iter_mut().find(|held| {
             held.agent_operation_identifier == work.agent_operation_identifier
                 && held.category == work.category
@@ -417,7 +419,9 @@ impl RecoveryAndEventSupervisor {
     /// jump ahead of another operation in its category. Another attempt must be
     /// explicitly held again after its durable outcome has been recorded.
     pub fn next_due(&mut self, now_unix_milliseconds: u64) -> Option<DueWork> {
-        if self.shutting_down { return None; }
+        if self.shutting_down {
+            return None;
+        }
         let index = self
             .work
             .iter()
@@ -438,7 +442,9 @@ impl RecoveryAndEventSupervisor {
         // category is tied there. Rebase before incrementing instead of letting
         // saturated counts permanently reduce fairness to deadline ordering.
         if self.served.get(&chosen.category) == Some(&u64::MAX) {
-            for count in self.served.values_mut() { *count = 0; }
+            for count in self.served.values_mut() {
+                *count = 0;
+            }
         }
         let served = self.served.entry(chosen.category).or_default();
         *served += 1;
@@ -524,8 +530,12 @@ mod queue_tests {
         let mut supervisor = RecoveryAndEventSupervisor::over("target");
         for category in [RetryCategory::EventReconnect, RetryCategory::SnapshotPoll] {
             supervisor.served.insert(category, u64::MAX);
-            supervisor.hold(DueWork { agent_operation_identifier: format!("{category:?}"),
-                category, eligible_at_unix_milliseconds: 0, paused: false });
+            supervisor.hold(DueWork {
+                agent_operation_identifier: format!("{category:?}"),
+                category,
+                eligible_at_unix_milliseconds: 0,
+                paused: false,
+            });
         }
         let first = supervisor.next_due(0).unwrap();
         assert_eq!(supervisor.served()[&first.category], 1);

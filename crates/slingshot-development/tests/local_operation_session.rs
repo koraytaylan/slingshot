@@ -27,9 +27,7 @@ use slingshot_domain::installation::InstallationIdentifier;
 use slingshot_domain::operation::{OperationFact, OperationLifecycleState, RecoveryCategory};
 use slingshot_storage::database::{OperationDatabase, RequiredSettings};
 use slingshot_storage::maintenance::ApplyOutcome;
-use slingshot_storage::operation_repository::{
-    AdmissionRequest, OperationRepository,
-};
+use slingshot_storage::operation_repository::{AdmissionRequest, OperationRepository};
 
 /// The product session this test replays.
 const PRODUCT: &str = include_str!("fixtures/local-operation-session/product.jsonl");
@@ -347,7 +345,8 @@ fn the_helper_session_matches_the_committed_bytes() {
         }));
     }
 
-    summary = repository.read(&digest, OPERATION).expect("a resumed operation").expect("the row remains");
+    summary =
+        repository.read(&digest, OPERATION).expect("a resumed operation").expect("the row remains");
     summary = repository
         .settle_success(
             &digest,
@@ -367,7 +366,10 @@ fn the_helper_session_matches_the_committed_bytes() {
         "step": "advance",
         "to": "succeeded",
     }));
-    assert_eq!(summary.result_disposition, Some(slingshot_storage::operation_repository::ResultDisposition::Inline));
+    assert_eq!(
+        summary.result_disposition,
+        Some(slingshot_storage::operation_repository::ResultDisposition::Inline)
+    );
     assert_eq!(summary.result_inline_bytes.as_deref(), Some(r#"{"matches":[]}"#));
     produced.push(json!({
         "disposition": "inline",

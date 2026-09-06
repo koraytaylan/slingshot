@@ -46,6 +46,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (9, include_str!("../migrations/0009-maintenance-cleanup-work.sql")),
     (10, include_str!("../migrations/0010-artifact-publication.sql")),
     (11, include_str!("../migrations/0011-artifact-acquisition-anchor.sql")),
+    (12, include_str!("../migrations/0012-maintenance-publication.sql")),
 ];
 
 /// The one temporary-storage mode the reviewed SQLite build may report.
@@ -840,23 +841,38 @@ fn audit_existing_binding(
             "the database does not belong to the selected installation".to_owned(),
         ));
     }
-    let foreign_installations: i64 = connection.query_row(
-        crate::sqlite_statement_inventory::statement_text("count unfinished operations from another installation"),
-        [binding.installation.as_text()], |row| row.get(0),
-    ).map_err(refused)?;
+    let foreign_installations: i64 = connection
+        .query_row(
+            crate::sqlite_statement_inventory::statement_text(
+                "count unfinished operations from another installation",
+            ),
+            [binding.installation.as_text()],
+            |row| row.get(0),
+        )
+        .map_err(refused)?;
     if foreign_installations != 0 {
-        return Err(DatabaseFailure::Refused("unfinished work belongs to another installation".to_owned()));
+        return Err(DatabaseFailure::Refused(
+            "unfinished work belongs to another installation".to_owned(),
+        ));
     }
-    let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0)).map_err(refused)?;
+    let version: i64 =
+        connection.query_row("PRAGMA user_version", [], |row| row.get(0)).map_err(refused)?;
     // Version one predates the outbox; its normal migration creates the empty
     // table. Never query a table that this supported historical schema lacks.
     if version >= 2 {
-        let foreign_children: i64 = connection.query_row(
-            crate::sqlite_statement_inventory::statement_text("count unfinished author submissions without the selected local owner"),
-            rusqlite::params![binding.target, binding.revision], |row| row.get(0),
-        ).map_err(refused)?;
+        let foreign_children: i64 = connection
+            .query_row(
+                crate::sqlite_statement_inventory::statement_text(
+                    "count unfinished author submissions without the selected local owner",
+                ),
+                rusqlite::params![binding.target, binding.revision],
+                |row| row.get(0),
+            )
+            .map_err(refused)?;
         if foreign_children != 0 {
-            return Err(DatabaseFailure::Refused("unfinished author work has no selected local owner".to_owned()));
+            return Err(DatabaseFailure::Refused(
+                "unfinished author work has no selected local owner".to_owned(),
+            ));
         }
     }
     let mut statement = connection
@@ -950,6 +966,8 @@ mod tests {
 
     #[test]
     fn bound_startup_refuses_each_foreign_partition_before_changes() {
+        use crate::operation_repository::{AdmissionRequest, OperationRepository};
+        use slingshot_domain::command_fingerprint::{CommandFingerprint, FingerprintInput};
         for dimension in 0..4 {
             let root = tempfile::tempdir().unwrap();
             let path = root.path().join("operations.sqlite3");
@@ -957,17 +975,42 @@ mod tests {
             let database = OperationDatabase::open(&path, settings()).unwrap();
             database.record_installation_identifier(&identity, 123).unwrap();
             let mut partition = ["target", "revision", "contract"];
-            if dimension < 3 { partition[dimension] = "foreign"; }
-            let retained_installation = if dimension == 3 { "b".repeat(64) } else { identity.as_text().to_owned() };
-            database.connection.execute(
-                "INSERT INTO operation (author_target_identity, author_target_identity_digest, \
-                 canonical_command, command_fingerprint, command_wire_name, daemon_runtime_contract_digest, \
-                 enqueue_sequence, installation_identifier, lifecycle_state, operation_identifier, \
-                 operation_revision, recorded_at_unix_milliseconds, selected_environment_revision) \
-                 VALUES ('identity', ?1, '{}', 'fingerprint', 'command', ?3, 1, ?4, 'queued', 'operation', 1, 123, ?2)",
-                rusqlite::params![partition[0], partition[1], partition[2], retained_installation],
-            ).unwrap();
-            drop(database);
+            if dimension < 3 {
+                partition[dimension] = "foreign";
+            }
+            let retained_installation =
+                if dimension == 3 { "b".repeat(64) } else { identity.as_text().to_owned() };
+            let repository = OperationRepository::new(database);
+            let canonical_command = r#"{"root_path":"/content/example"}"#.to_owned();
+            repository
+                .admit(
+                    &AdmissionRequest {
+                        author_target_identity: "identity".to_owned(),
+                        author_target_identity_digest: partition[0].to_owned(),
+                        caller_identity: None,
+                        command_fingerprint: CommandFingerprint::derive(&FingerprintInput {
+                            author_target_identity_digest: partition[0].to_owned(),
+                            canonical_command: canonical_command.clone(),
+                            command_wire_name: "query_paths".to_owned(),
+                            command_semantic_contract_version: "1.0.0".to_owned(),
+                            selected_environment_revision: partition[1].to_owned(),
+                        })
+                        .unwrap(),
+                        canonical_command,
+                        command_wire_name: "query_paths".to_owned(),
+                        daemon_runtime_contract_digest: partition[2].to_owned(),
+                        installation_identifier: InstallationIdentifier::parse(
+                            &retained_installation,
+                        )
+                        .unwrap(),
+                        operation_identifier: "operation".to_owned(),
+                        selected_environment_revision: partition[1].to_owned(),
+                        workflow_correlation_identifier: None,
+                    },
+                    123,
+                )
+                .unwrap();
+            drop(repository);
             let before = std::fs::read(&path).unwrap();
             let binding = StartupDatabaseBinding {
                 installation: &identity,
@@ -982,11 +1025,22 @@ mod tests {
                 database.unfinished_partitions().unwrap(),
                 vec![(partition[0].to_owned(), partition[1].to_owned(), partition[2].to_owned(),)]
             );
-            database
-                .connection
-                .execute("UPDATE operation SET lifecycle_state = 'succeeded'", [])
+            let repository = OperationRepository::new(database);
+            repository
+                .settle_success(
+                    partition[0],
+                    "operation",
+                    &slingshot_domain::operation::SuccessfulSettlement {
+                        artifacts: Vec::new(),
+                        inline_result: Some("{}".to_owned()),
+                        expected_lifecycle_state:
+                            slingshot_domain::operation::OperationLifecycleState::Queued,
+                        expected_revision: 1,
+                        settled_at_unix_milliseconds: 124,
+                    },
+                )
                 .unwrap();
-            drop(database);
+            drop(repository);
             assert!(OperationDatabase::reopen_bound(&path, settings(), binding).is_ok());
         }
     }

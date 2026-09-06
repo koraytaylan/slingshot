@@ -9,6 +9,7 @@ pub mod author_agent_operation_executor;
 pub mod diagnostics;
 pub mod local_server;
 pub mod operation;
+pub mod operation_dispatch;
 pub mod operation_maintenance;
 pub mod operation_queries;
 pub mod operation_recovery;

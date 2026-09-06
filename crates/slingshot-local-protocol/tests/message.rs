@@ -1,7 +1,7 @@
 //! The versioned vocabulary, and the two separations it exists to keep.
 //!
-//! Bytes travel only in chunk responses. The test walks every response variant
-//! and asserts that exactly two carry content, so a caller reading a large
+//! Bulk artifact bytes travel only in chunk responses. The test walks response
+//! variants and asserts that exactly two carry transfer content, so a caller reading a large
 //! artifact does it deliberately rather than by polling a status.
 //!
 //! Maintenance results are keyed by target and identifier alone. Their requests
@@ -37,6 +37,98 @@ const TERMINALS: &str = include_str!("fixtures/messages/terminals.jsonl");
 
 /// Characters a rendered digest occupies.
 const DIGEST_CHARACTERS: usize = 64;
+
+#[test]
+fn missing_maintenance_result_is_operation_free_and_distinct_from_missing_operation() {
+    let document =
+        r#"{"response":"missing_maintenance_result","maintenance_result_identifier":"result"}"#;
+    let response: OperationResponse = serde_json::from_str(document).unwrap();
+    assert!(matches!(response, OperationResponse::MissingMaintenanceResult { .. }));
+    assert_eq!(serde_json::to_string(&response).unwrap(), document);
+    let mut invalid: Value = serde_json::from_str(document).unwrap();
+    invalid["operation_identifier"] = "must-not-be-needed".into();
+    assert!(serde_json::from_value::<OperationResponse>(invalid).is_err());
+}
+
+#[test]
+fn maintenance_preview_requires_an_explicit_unsigned_cutoff() {
+    let mut request = serde_json::json!({"request":"terminal_maintenance_preview", "author_target_identity_digest":"a".repeat(DIGEST_CHARACTERS), "maximum_operations":1});
+    assert!(serde_json::from_value::<OperationRequest>(request.clone()).is_err());
+    for cutoff in [serde_json::json!(0), serde_json::json!(u64::MAX)] {
+        request["before_unix_milliseconds"] = cutoff.clone();
+        let typed: OperationRequest = serde_json::from_value(request.clone()).unwrap();
+        assert_eq!(serde_json::to_value(typed).unwrap()["before_unix_milliseconds"], cutoff);
+    }
+    for invalid in [
+        serde_json::Value::Null,
+        serde_json::json!(-1),
+        serde_json::json!("1"),
+        serde_json::json!(1.5),
+    ] {
+        request["before_unix_milliseconds"] = invalid;
+        assert!(serde_json::from_value::<OperationRequest>(request.clone()).is_err());
+    }
+}
+
+#[test]
+fn observer_capacity_has_its_own_refusal_without_execution_capacity_claims() {
+    let document = r#"{"response":"waiter_capacity_exhausted","guidance":"retry observation; work continues"}"#;
+    let response: OperationResponse = serde_json::from_str(document).unwrap();
+    assert!(matches!(response, OperationResponse::WaiterCapacityExhausted { .. }));
+    assert_eq!(serde_json::to_string(&response).unwrap(), document);
+    assert!(!response.carries_bytes());
+}
+
+#[test]
+fn wait_can_quote_an_observed_revision_without_changing_legacy_requests() {
+    for document in [
+        r#"{"request":"wait","operation_identifier":"operation"}"#,
+        r#"{"request":"wait","observed_revision":0,"operation_identifier":"operation"}"#,
+        r#"{"request":"wait","observed_revision":7,"operation_identifier":"operation"}"#,
+    ] {
+        let request: OperationRequest = serde_json::from_str(document).unwrap();
+        assert_eq!(serde_json::to_string(&request).unwrap(), document);
+    }
+    for invalid in [serde_json::json!(-1), serde_json::json!("7"), serde_json::json!(1.5)] {
+        assert!(
+            serde_json::from_value::<OperationRequest>(serde_json::json!({
+                "request":"wait", "observed_revision":invalid, "operation_identifier":"operation",
+            }))
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn successful_results_have_explicit_inline_and_artifact_wire_shapes() {
+    for document in [
+        r#"{"response":"result_inline","operation_identifier":"operation","result":{"paths":[]}}"#,
+        r#"{"response":"result_artifact","artifact_identifier":"artifact","byte_length":3,"content_digest":"digest","media_type":"application/json","operation_identifier":"operation"}"#,
+    ] {
+        let response: OperationResponse = serde_json::from_str(document).unwrap();
+        assert_eq!(serde_json::to_string(&response).unwrap(), document);
+        assert!(!response.carries_bytes());
+        let mut value: Value = serde_json::from_str(document).unwrap();
+        value.as_object_mut().unwrap().remove("operation_identifier");
+        assert!(serde_json::from_value::<OperationResponse>(value).is_err());
+    }
+}
+
+#[test]
+fn complete_listing_filters_round_trip_without_changing_omitted_fields() {
+    let document = r#"{"request":"list_operations","caller_identity":"caller-one","lifecycle_states":["succeeded"],"page_size":2,"terminal":true,"workflow_correlation_identifier":"run-one"}"#;
+    let request: OperationRequest = serde_json::from_str(document).unwrap();
+    assert_eq!(serde_json::to_string(&request).unwrap(), document);
+    for (field, invalid) in [
+        ("terminal", serde_json::json!("true")),
+        ("caller_identity", serde_json::json!([])),
+        ("workflow_correlation_identifier", serde_json::json!(false)),
+    ] {
+        let mut value: Value = serde_json::from_str(document).unwrap();
+        value[field] = invalid;
+        assert!(serde_json::from_value::<OperationRequest>(value).is_err());
+    }
+}
 
 /// Reads one row's string member.
 fn text<'row>(row: &'row Value, member: &str) -> &'row str {
@@ -290,7 +382,10 @@ fn identical_typed_messages_always_write_identical_bytes() {
         let again = write_payload(&envelope.clone()).expect("it writes");
         assert_eq!(once, again, "{}: two writes of one message differ", text(row, "note"));
     }
-    let request = OperationRequest::Wait { operation_identifier: "operation-1".to_owned() };
+    let request = OperationRequest::Wait {
+        observed_revision: None,
+        operation_identifier: "operation-1".to_owned(),
+    };
     assert_eq!(
         write_payload(&request).expect("it writes"),
         write_payload(&request.clone()).expect("it writes")

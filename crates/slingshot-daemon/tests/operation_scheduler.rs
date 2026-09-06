@@ -5,6 +5,8 @@
 //! Two of them are about clocks moving the wrong way, which is the case a
 //! scheduler is most likely to get wrong and least likely to be told about.
 
+const DIGEST_HEX_CHARACTERS: usize = 64;
+
 use serde_json::Value;
 use slingshot_daemon::operation_scheduler::{
     AdmissionRefusal, OperationScheduler, ScheduledOperation, SchedulerBounds, SchedulerObservation,
@@ -109,7 +111,7 @@ fn scheduler() -> OperationScheduler {
 #[test]
 fn paused_recovery_does_not_consume_a_slot_when_its_delay_expires() {
     let paused = ScheduledOperation {
-        author_target_identity_digest: "a".repeat(64),
+        author_target_identity_digest: "a".repeat(DIGEST_HEX_CHARACTERS),
         caller_identity: Some("caller".to_owned()),
         enqueue_sequence: 1,
         operation_identifier: "paused".to_owned(),

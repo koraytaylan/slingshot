@@ -248,15 +248,23 @@ impl AdmissionRefusal {
     /// Requires the reported stopping point and counts to be possible for this
     /// request. This does not reconstruct or authenticate the agent's private
     /// manifest; [`Self::require_consistent`] additionally checks that manifest.
-    pub fn require_answers(&self, command: &ReplicateContentCommand) -> Result<(), ReplicationFailure> {
-        let total = self.accepted_item_count.checked_add(self.remaining_item_count)
+    pub fn require_answers(
+        &self,
+        command: &ReplicateContentCommand,
+    ) -> Result<(), ReplicationFailure> {
+        let total = self
+            .accepted_item_count
+            .checked_add(self.remaining_item_count)
             .ok_or(ReplicationFailure::CountsDoNotSum)?;
-        if self.remaining_item_count == 0 || total > maximum_replication_candidate_paths()
-            || (!command.recursive && (total != 1 || self.accepted_item_count != 0)) {
+        if self.remaining_item_count == 0
+            || total > maximum_replication_candidate_paths()
+            || (!command.recursive && (total != 1 || self.accepted_item_count != 0))
+        {
             return Err(ReplicationFailure::CountsDoNotSum);
         }
         if !crate::command::query_paths::anchor_contains(&command.path, &self.current_path)
-            || ((self.accepted_item_count == 0) != (self.current_path == command.path)) {
+            || ((self.accepted_item_count == 0) != (self.current_path == command.path))
+        {
             return Err(ReplicationFailure::NotThisRequest);
         }
         Ok(())

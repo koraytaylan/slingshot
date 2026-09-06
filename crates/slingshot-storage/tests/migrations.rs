@@ -32,7 +32,7 @@ const ABSENT: &str = include_str!("fixtures/migrations/absent-columns.jsonl");
 const CONSTRAINTS: &str = include_str!("fixtures/migrations/constraints.jsonl");
 
 /// The schema version this binary migrates to.
-const CURRENT_SCHEMA_VERSION: u32 = 11;
+const CURRENT_SCHEMA_VERSION: u32 = 12;
 
 /// A schema version no binary in this workspace applies.
 const NEWER_SCHEMA_VERSION: u32 = 99;
@@ -270,7 +270,8 @@ fn no_spill_canary_leaves_no_temporary_database_files() {
 
 #[test]
 fn artifact_acquisition_anchor_is_an_all_or_nothing_validated_tuple() {
-    let _initialized = OperationDatabase::open_in_memory(settings()).expect("product SQLite initialization precedes raw fixtures");
+    let _initialized = OperationDatabase::open_in_memory(settings())
+        .expect("product SQLite initialization precedes raw fixtures");
     let database = rusqlite::Connection::open_in_memory().unwrap();
     // Exercise the actual additive migration against a pre-existing child row.
     database.execute_batch("CREATE TABLE agent_operation (id INTEGER PRIMARY KEY) STRICT; INSERT INTO agent_operation VALUES (1);").unwrap();
@@ -318,7 +319,8 @@ fn artifact_acquisition_anchor_is_an_all_or_nothing_validated_tuple() {
 
 #[test]
 fn every_constraint_refuses_what_the_fixture_says_it_refuses() {
-    let _initialized = OperationDatabase::open_in_memory(settings()).expect("product SQLite initialization precedes raw fixtures");
+    let _initialized = OperationDatabase::open_in_memory(settings())
+        .expect("product SQLite initialization precedes raw fixtures");
     for row in &rows(CONSTRAINTS) {
         let database = rusqlite::Connection::open_in_memory().expect("a fixture database");
         for (_, migration) in MIGRATIONS {

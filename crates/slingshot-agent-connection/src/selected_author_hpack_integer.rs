@@ -35,11 +35,20 @@ impl PrefixedInteger {
         if value > maximum {
             return Err(IntegerRefusal);
         }
-        Ok(Self { maximum, value, shift: 0, complete: value < u64::from(mask), poisoned: false, limit_exceeded: false })
+        Ok(Self {
+            maximum,
+            value,
+            shift: 0,
+            complete: value < u64::from(mask),
+            poisoned: false,
+            limit_exceeded: false,
+        })
     }
 
     /// Distinguishes a declared value above its usage bound from malformed syntax.
-    pub(crate) fn limit_exceeded(&self) -> bool { self.limit_exceeded }
+    pub(crate) fn limit_exceeded(&self) -> bool {
+        self.limit_exceeded
+    }
 
     /// Returns a complete value only, never a prefix interpreted as a length.
     pub fn value(&self) -> Option<u64> {
