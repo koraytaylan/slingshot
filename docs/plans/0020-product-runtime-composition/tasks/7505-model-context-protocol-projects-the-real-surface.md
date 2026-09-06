@@ -13,8 +13,8 @@ touches:
   - crates/slingshot-command-line/src/model_context_protocol/resource_catalog.rs
   - crates/slingshot-command-line/tests/model_context_protocol_application.rs
   - crates/slingshot-test-support/fixtures/model-context-protocol/**
-status: planned
-merged_as: ""
+status: completed
+merged_as: "136a8e9"
 ---
 # Model Context Protocol Projects The Real Surface
 
@@ -28,3 +28,14 @@ The shipped protocol server answers tool and resource methods with empty arrays 
 4. Replace empty golden listings with exact registry equality and run process-level list, valid call, schema refusal, daemon/domain refusal, progress/cancel, result/artifact read, unknown resource, reconnect, and legacy-session cases.
 
 - **Done when:** both protocol revisions discover exactly the installed command/resource surface and every call/read reaches the same daemon result or typed refusal as the CLI, with no empty stub or alternate execution path.
+
+## Implementation checkpoint
+
+The application now derives its tool inventory from the installed command
+registry and control catalog, projects canonical input/output schemas and
+tool annotations, and publishes target-qualified operation, artifact, and
+operation-free maintenance resource templates. Tool calls pass through the
+same canonical argument/provenance validator as the command surface, while
+resource reads parse and validate the closed address grammar before dispatch.
+Both stateless and initialized sessions use the same projection, and the
+application tests assert a non-empty exact surface rather than an empty stub.
