@@ -9,8 +9,8 @@ touches:
   - crates/slingshot-development/tests/release_notes_assembly.rs
   - crates/slingshot-development/tests/fixtures/release-notes/history.jsonl
   - cliff.toml
-status: planned
-merged_as: ""
+status: completed
+merged_as: "8de010e"
 ---
 # Release Notes Assembly
 
