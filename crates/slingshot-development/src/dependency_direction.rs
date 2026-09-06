@@ -76,6 +76,8 @@ const PERMITTED_PRODUCT_DEPENDENCIES: &[(&str, &[&str])] = &[
             "slingshot-local-protocol",
             "slingshot-configuration",
             "slingshot-daemon",
+            "slingshot-agent-connection",
+            "slingshot-storage",
         ],
     ),
 ];
