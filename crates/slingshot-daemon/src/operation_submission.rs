@@ -221,6 +221,51 @@ pub fn settle(
     }
 }
 
+/// Settles a locally scheduled execution through its durable scheduler fence.
+/// Every outcome uses the same no-return checkpoint guard, so a stale worker
+/// cannot publish success, terminal failure, or recovery after ownership moved.
+pub fn settle_with_scheduler_fence(
+    repository: &OperationRepository,
+    summary: &OperationSummary,
+    outcome: &OperationExecutorOutcome,
+    now_unix_milliseconds: u64,
+    scheduler_fence: u64,
+) -> Result<OperationSummary, RepositoryFailure> {
+    let digest = &summary.author_target_identity_digest;
+    let identifier = &summary.operation_identifier;
+    match outcome {
+        OperationExecutorOutcome::Succeeded { artifacts, inline_result } => repository
+            .settle_success_with_scheduler_fence(
+                digest,
+                identifier,
+                &SuccessfulSettlement {
+                    artifacts: artifacts.clone(),
+                    inline_result: inline_result.clone(),
+                    expected_lifecycle_state: summary.record.lifecycle_state,
+                    expected_revision: summary.record.revision,
+                    settled_at_unix_milliseconds: now_unix_milliseconds,
+                },
+                scheduler_fence,
+            ),
+        OperationExecutorOutcome::TerminalFailure { failure } => repository.apply_with_scheduler_fence(
+            digest,
+            identifier,
+            summary.record.revision,
+            &OperationFact::Terminal { failure: failure.clone() },
+            now_unix_milliseconds,
+            scheduler_fence,
+        ),
+        OperationExecutorOutcome::RecoveryRequired { recovery } => repository.apply_with_scheduler_fence(
+            digest,
+            identifier,
+            summary.record.revision,
+            &OperationFact::Recovery { recovery: recovery.clone() },
+            now_unix_milliseconds,
+            scheduler_fence,
+        ),
+    }
+}
+
 /// Returns the recovery fact a result that cannot be stored produces.
 ///
 /// Spelled out here because getting it wrong is easy and consequential. The

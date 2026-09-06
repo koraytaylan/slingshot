@@ -84,13 +84,14 @@ mod tests {
         let path = root.path().join("claims.sqlite");
         let settings = RequiredSettings { page_bytes: 4096, database_pages: 262_144, busy_timeout_milliseconds: 5000 };
         let database = OperationDatabase::open(&path, settings).unwrap();
+        let contender = OperationDatabase::open(&path, settings).unwrap();
         let value = "a".repeat(64);
         database.connection().execute(
             statement("admit one operation"),
             rusqlite::params!["identity", value, Option::<String>::None, "{}", value, "query_paths", value, 1, value, "queued", "operation", 1, 1, value, Option::<String>::None],
         ).unwrap();
         assert_eq!(claim(&database, &value, "operation", "queued", 1, 1, 10, 1).unwrap(), ClaimOutcome::Claimed);
-        assert_eq!(claim(&database, &value, "operation", "queued", 1, 2, 10, 2).unwrap(), ClaimOutcome::Fenced);
+        assert_eq!(claim(&contender, &value, "operation", "queued", 1, 2, 10, 2).unwrap(), ClaimOutcome::Fenced);
         assert!(renew(&database, &value, "operation", 2, 20, 2).unwrap() == false);
         assert!(checkpoint(&database, &value, "operation", 1, "sent").unwrap());
         assert_eq!(claim(&database, &value, "operation", "queued", 1, 2, 30, 11).unwrap(), ClaimOutcome::AlreadyStarted);

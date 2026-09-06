@@ -852,6 +852,34 @@ impl OperationRepository {
                 Ok((folded.revision != stored.record.revision)
                     .then(|| (stored.clone(), folded, settled)))
             },
+            None,
+        )
+    }
+
+    /// Applies a local execution fact only while the claimed scheduler fence
+    /// has crossed its no-return checkpoint.
+    pub fn apply_with_scheduler_fence(
+        &self,
+        author_target_identity_digest: &str,
+        operation_identifier: &str,
+        expected_revision: u64,
+        fact: &OperationFact,
+        now_unix_milliseconds: u64,
+        scheduler_fence: u64,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        Self::require_bounded(fact)?;
+        self.mutate(
+            author_target_identity_digest,
+            operation_identifier,
+            expected_revision,
+            None,
+            |stored| {
+                let folded = stored.record.fold(fact)?;
+                let settled = Self::settlement(stored, &folded, now_unix_milliseconds);
+                Ok((folded.revision != stored.record.revision)
+                    .then(|| (stored.clone(), folded, settled)))
+            },
+            Some(scheduler_fence),
         )
     }
 
@@ -881,6 +909,7 @@ impl OperationRepository {
                 Ok((folded.revision != stored.record.revision)
                     .then(|| (stored.clone(), folded, settled)))
             },
+            None,
         )
     }
 
@@ -1231,6 +1260,29 @@ impl OperationRepository {
             None,
             None,
             &[],
+            None,
+        )
+    }
+
+    /// Commits a local successful result only while the scheduler fence that
+    /// crossed the executor's no-return checkpoint is still the current one.
+    /// A worker that lost before execution, or a stale worker after a later
+    /// claim, cannot settle the retained operation.
+    pub fn settle_success_with_scheduler_fence(
+        &self,
+        author_target_identity_digest: &str,
+        operation_identifier: &str,
+        settlement: &SuccessfulSettlement,
+        scheduler_fence: u64,
+    ) -> Result<OperationSummary, RepositoryFailure> {
+        self.settle_success_guarded(
+            author_target_identity_digest,
+            operation_identifier,
+            settlement,
+            None,
+            None,
+            &[],
+            Some(scheduler_fence),
         )
     }
 
@@ -1249,6 +1301,7 @@ impl OperationRepository {
             Some(expected),
             None,
             &[],
+            None,
         )
     }
 
@@ -1267,6 +1320,7 @@ impl OperationRepository {
             Some(expected),
             Some(snapshot),
             &[],
+            None,
         )
     }
 
@@ -1289,6 +1343,7 @@ impl OperationRepository {
             Some(expected),
             Some(snapshot),
             publications,
+            None,
         )
     }
 
@@ -1300,6 +1355,7 @@ impl OperationRepository {
         remote: Option<&crate::agent_job_repository::AgentSubmission>,
         snapshot: Option<&crate::agent_job_repository::SuccessfulAgentSnapshot>,
         publications: &[crate::persistent_capacity::ArtifactPublication],
+        scheduler_fence: Option<u64>,
     ) -> Result<OperationSummary, RepositoryFailure> {
         let disposition = settlement.disposition()?;
         if let Some(inline) = &settlement.inline_result {
@@ -1323,6 +1379,23 @@ impl OperationRepository {
             stored.selected_environment_revision != expected.identity.selected_environment_revision
         }) {
             return Err(RepositoryFailure::RemoteObservationMoved);
+        }
+        if let Some(expected_fence) = scheduler_fence {
+            let (current_fence, checkpoint): (Option<i64>, Option<String>) = transaction
+                .query_row(
+                    statement("read one retained operation execution fence"),
+                    rusqlite::params![author_target_identity_digest, operation_identifier],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()?
+                .ok_or_else(|| RepositoryFailure::NoSuchOperation {
+                    identifier: operation_identifier.to_owned(),
+                })?;
+            if current_fence != Some(i64::try_from(expected_fence).unwrap_or(i64::MAX))
+                || checkpoint.is_none()
+            {
+                return Err(RepositoryFailure::RemoteObservationMoved);
+            }
         }
         require_revision(&stored, settlement.expected_revision)?;
         if stored.record.lifecycle_state != settlement.expected_lifecycle_state {
@@ -1448,6 +1521,7 @@ impl OperationRepository {
         expected_revision: u64,
         remote: Option<&crate::agent_job_repository::AgentSubmission>,
         change: impl FnOnce(&OperationSummary) -> Result<Change, RepositoryFailure>,
+        scheduler_fence: Option<u64>,
     ) -> Result<OperationSummary, RepositoryFailure> {
         let transaction = write_transaction(self.database.connection())?;
         if let Some(expected) = remote {
@@ -1463,6 +1537,23 @@ impl OperationRepository {
         }
         let stored =
             self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
+        if let Some(expected_fence) = scheduler_fence {
+            let (current_fence, checkpoint): (Option<i64>, Option<String>) = transaction
+                .query_row(
+                    statement("read one retained operation execution fence"),
+                    rusqlite::params![author_target_identity_digest, operation_identifier],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()?
+                .ok_or_else(|| RepositoryFailure::NoSuchOperation {
+                    identifier: operation_identifier.to_owned(),
+                })?;
+            if current_fence != Some(i64::try_from(expected_fence).unwrap_or(i64::MAX))
+                || checkpoint.is_none()
+            {
+                return Err(RepositoryFailure::RemoteObservationMoved);
+            }
+        }
         require_revision(&stored, expected_revision)?;
         if let Some((carried, folded, settled)) = change(&stored)? {
             self.write_folded(&transaction, &carried, &folded, settled)?;

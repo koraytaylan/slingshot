@@ -971,6 +971,12 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
+    InventoriedStatement {
+        purpose: "read one retained operation execution fence",
+        text: "SELECT scheduler_fence, scheduler_checkpoint FROM operation WHERE author_target_identity_digest = ? AND operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
 ];
 
 /// Returns the text of the statement with `purpose`.
