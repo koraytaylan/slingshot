@@ -94,7 +94,7 @@ pub const MAXIMUM_BYTE_LENGTH_CHARACTERS: usize = 20;
 pub const MAXIMUM_ARTIFACT_ACCESS_BYTES: usize = 4096;
 
 /// Directory below the store root that holds addressed content.
-const CONTENT_DIRECTORY: &str = "content";
+pub const CONTENT_DIRECTORY: &str = "content";
 
 /// Suffix a partially installed artifact carries until it is complete.
 ///
@@ -687,6 +687,56 @@ impl StagedArtifact<'_> {
 }
 
 impl ArtifactStore {
+    /// Removes abandoned private stages under exclusive namespace ownership,
+    /// before any producer is running. Addressed content and publication holds
+    /// are untouched: missing staged bytes must be reverified during recovery.
+    /// Invalid staging names or unsafe objects refuse rather than being deleted.
+    pub fn recover_abandoned_stages(&self) -> Result<u64, ArtifactFailure> {
+        let mut removed = 0_u64;
+        for entry in std::fs::read_dir(&self.content).map_err(refused)? {
+            let entry = entry.map_err(refused)?;
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue; };
+            let Some(identifier) = name.strip_suffix(STAGING_SUFFIX) else { continue; };
+            let parsed = uuid::Uuid::parse_str(identifier).map_err(|_| ArtifactFailure::NotPrivate)?;
+            if parsed.to_string() != identifier { return Err(ArtifactFailure::NotPrivate); }
+            let metadata = std::fs::symlink_metadata(entry.path()).map_err(refused)?;
+            require_current_user_only(&metadata)?;
+            #[cfg(unix)] {
+                use std::os::unix::fs::MetadataExt as _;
+                if metadata.nlink() != 1 { return Err(ArtifactFailure::NotPrivate); }
+            }
+            std::fs::remove_file(entry.path()).map_err(refused)?;
+            removed = removed.saturating_add(1);
+        }
+        if removed != 0 {
+            std::fs::File::open(&self.content).and_then(|directory| directory.sync_all()).map_err(refused)?;
+        }
+        Ok(removed)
+    }
+
+    /// Removes only one canonical, private content file during journaled
+    /// maintenance. The caller must hold the database write transaction and
+    /// prove there are no retained references. Missing content is an idempotent
+    /// retry after deletion; the directory is synchronized before acknowledgement.
+    pub(crate) fn remove_unreferenced_content(&self, digest: &str) -> Result<(), ArtifactFailure> {
+        if !is_canonical_digest(digest) { return Err(ArtifactFailure::DigestNotCanonical); }
+        let path = self.content.join(digest);
+        match std::fs::symlink_metadata(&path) {
+            Ok(metadata) => {
+                require_current_user_only(&metadata)?;
+                #[cfg(unix)] {
+                    use std::os::unix::fs::MetadataExt as _;
+                    if metadata.nlink() != 1 { return Err(ArtifactFailure::NotPrivate); }
+                }
+                std::fs::remove_file(&path).map_err(refused)?;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+            Err(error) => return Err(refused(error)),
+        }
+        std::fs::File::open(&self.content).and_then(|directory| directory.sync_all()).map_err(refused)
+    }
+
     /// Returns a store rooted at `root`, creating what it needs.
     ///
     /// # Errors

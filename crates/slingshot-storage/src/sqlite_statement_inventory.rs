@@ -143,10 +143,10 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         // serves is something to keep and answer questions about, while
         // unfinished work under another identity is something no daemon may
         // quietly adopt.
-        text: "SELECT DISTINCT author_target_identity_digest, selected_environment_revision \
+        text: "SELECT DISTINCT author_target_identity_digest, selected_environment_revision, daemon_runtime_contract_digest \
                FROM operation \
                WHERE lifecycle_state NOT IN ('succeeded', 'failed') \
-               ORDER BY author_target_identity_digest, selected_environment_revision",
+               ORDER BY author_target_identity_digest, selected_environment_revision, daemon_runtime_contract_digest",
         parameters: 0,
         maximum_rows: LISTING_ROWS,
     },
@@ -302,6 +302,16 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
+        purpose: "reconstruct bounded pending artifact publications",
+        text: "SELECT p.publication_identifier, p.artifact_identifier, p.content_digest, \
+                      b.byte_length, p.recorded_at_unix_milliseconds \
+               FROM artifact_publication p LEFT JOIN artifact_blob b ON b.content_digest = p.content_digest \
+               WHERE (? IS NULL OR p.publication_identifier > ?) \
+               ORDER BY p.publication_identifier LIMIT 256",
+        parameters: 2,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
         purpose: "count this namespace's pending artifact publications",
         text: "SELECT COUNT(*) FROM artifact_publication",
         parameters: 0,
@@ -378,6 +388,14 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                  AND lifecycle_state IN ('succeeded', 'failed')",
         parameters: 4,
         maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "list one target's unfinished maintenance receipts",
+        text: "SELECT application_receipt_identifier FROM maintenance_application_receipt \
+               WHERE author_target_identity_digest = ? AND stage = 'database_applied' \
+               ORDER BY application_receipt_identifier LIMIT ?",
+        parameters: 2,
+        maximum_rows: LISTING_ROWS,
     },
     InventoriedStatement {
         purpose: "list one receipt's pending artifact cleanup work",
@@ -484,6 +502,31 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         parameters: 23,
         maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "count unfinished author submissions without the selected local owner",
+        text: "SELECT COUNT(*) FROM agent_operation a LEFT JOIN operation o \
+               ON o.author_target_identity_digest = a.author_target_identity_digest \
+               AND o.operation_identifier = a.operation_identifier \
+               WHERE (o.operation_identifier IS NULL AND a.job_state IN ('queued', 'running')) \
+               OR (o.lifecycle_state NOT IN ('succeeded', 'failed') \
+                   AND (a.author_target_identity_digest != ? OR a.selected_environment_revision != ?))",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "count unfinished operations from another installation",
+        text: "SELECT COUNT(*) FROM operation WHERE lifecycle_state NOT IN ('succeeded', 'failed') \
+               AND installation_identifier != ?",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "find one local operation's retained author submission",
+        text: "SELECT agent_operation_identifier FROM agent_operation \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
         purpose: "read one agent submission inside its target partition",

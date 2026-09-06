@@ -59,6 +59,9 @@ impl core::fmt::Debug for RetainedAuthorProtocol<'_> {
 pub struct RetainedAuthorProtocolRefusal;
 
 impl<'runtime> RetainedAuthorProtocol<'runtime> {
+    /// Typed command derived from the independently admitted retained bytes.
+    pub(crate) fn command(&self) -> &Command { &self.command }
+
     /// Binds a validated submission to the independently admitted command.
     /// Uses negotiated transport, with preflight before every network phase.
     pub fn new(

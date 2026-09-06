@@ -7,9 +7,29 @@ publish.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+runtime-test-host = []
+
 [[bin]]
 name = "slingshot"
 path = "src/main.rs"
+
+[[bin]]
+name = "slingshot-runtime-test-host"
+path = "tests/support/runtime_test_host.rs"
+required-features = ["runtime-test-host"]
+
+[[test]]
+name = "walking_skeleton"
+required-features = ["runtime-test-host"]
+
+[[test]]
+name = "explicit_daemon_start"
+required-features = ["runtime-test-host"]
+
+[[test]]
+name = "command_golden_sessions"
+required-features = ["runtime-test-host"]
 
 [dependencies]
 bytes.workspace = true
@@ -21,10 +41,12 @@ schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+slingshot-agent-connection.workspace = true
 slingshot-configuration.workspace = true
 slingshot-daemon.workspace = true
 slingshot-domain.workspace = true
 slingshot-local-protocol.workspace = true
+slingshot-storage.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

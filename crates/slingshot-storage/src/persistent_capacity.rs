@@ -61,6 +61,57 @@ fn refused(failure: rusqlite::Error) -> AccountingFailure {
     AccountingFailure::DatabaseRefused(failure.to_string())
 }
 
+#[cfg(test)]
+mod publication_reconstruction_tests {
+    use super::*;
+
+    #[test]
+    fn reconstruction_crosses_page_boundary_and_refuses_corrupt_metadata() {
+        let database = OperationDatabase::open_in_memory(crate::database::RequiredSettings {
+            page_bytes: 4096,
+            database_pages: 262144,
+            busy_timeout_milliseconds: 5000,
+        })
+        .unwrap();
+        let digest = "a".repeat(64);
+        database
+            .connection()
+            .execute(
+                statement("record one artifact's content, once per digest"),
+                rusqlite::params![1, digest, 1],
+            )
+            .unwrap();
+        for _ in 0..257 {
+            database
+                .connection()
+                .execute(
+                    statement("retain one artifact publication across restart"),
+                    rusqlite::params![uuid::Uuid::new_v4().to_string(), digest, digest, 1],
+                )
+                .unwrap();
+        }
+        let account =
+            PersistentCapacityAccount::new(&database, PersistentCapacityPolicy::embedded());
+        let records = account.reconstruct_publications().unwrap();
+        assert_eq!(records.len(), 257);
+        assert!(
+            records
+                .windows(2)
+                .all(|pair| pair[0].publication_identifier < pair[1].publication_identifier)
+        );
+        database
+            .connection()
+            .execute(
+                statement("retain one artifact publication across restart"),
+                rusqlite::params!["invalid-producer", digest, digest, 1],
+            )
+            .unwrap();
+        assert!(account.reconstruct_publications().is_err());
+        assert_eq!(account.pending_publications().unwrap(), 258);
+        assert_eq!(account.usage().unwrap().committed_artifact_bytes, 1);
+    }
+}
+
 /// One artifact's bytes, held against the bound until its association commits.
 /// Dropping the guard releases only this reservation on its owning connection.
 ///
@@ -124,6 +175,28 @@ impl ArtifactPublication {
 impl core::fmt::Debug for ArtifactPublication {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("ArtifactPublication([redacted])")
+    }
+}
+
+/// Retained publication evidence reconstructed at startup. This is not proof
+/// of file presence and grants no authority to settle an operation or release bytes.
+#[derive(Clone, PartialEq, Eq)]
+pub struct PendingArtifactPublication {
+    /// Exact producer identity; shared content must not merge producer records.
+    pub publication_identifier: String,
+    /// Stable operation/slot-derived artifact identity.
+    pub artifact_identifier: crate::artifact_store::ArtifactIdentifier,
+    /// Content protected by this producer.
+    pub content_digest: String,
+    /// Charged length of that content.
+    pub byte_length: u64,
+    /// Original publication timestamp, never renewed on restart.
+    pub recorded_at_unix_milliseconds: u64,
+}
+
+impl core::fmt::Debug for PendingArtifactPublication {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("PendingArtifactPublication([redacted])")
     }
 }
 
@@ -445,6 +518,70 @@ impl<'database> PersistentCapacityAccount<'database> {
     /// Number of durable publication holds awaiting completion or reconciliation.
     pub fn pending_publications(&self) -> Result<u64, AccountingFailure> {
         self.count("count this namespace's pending artifact publications", &[])
+    }
+
+    /// Reads the complete bounded publication inventory without releasing holds
+    /// or collapsing ambiguous producers. A left join makes missing accounting
+    /// visible as a refusal rather than silently omitting its publication.
+    pub fn reconstruct_publications(
+        &self,
+    ) -> Result<Vec<PendingArtifactPublication>, AccountingFailure> {
+        let invalid = || {
+            AccountingFailure::DatabaseRefused(
+                "the retained publication inventory is invalid".to_owned(),
+            )
+        };
+        let maximum = self.policy.retained_operation_rows.checked_mul(2).ok_or_else(invalid)?;
+        let transaction = self.database.connection().unchecked_transaction().map_err(refused)?;
+        let mut statement = transaction
+            .prepare(statement("reconstruct bounded pending artifact publications"))
+            .map_err(refused)?;
+        let mut retained = Vec::new();
+        let mut cursor: Option<String> = None;
+        loop {
+            let mut page = 0;
+            let mut rows = statement.query(rusqlite::params![cursor, cursor]).map_err(refused)?;
+            while let Some(row) = rows.next().map_err(refused)? {
+                page += 1;
+                if retained.len() as u64 >= maximum {
+                    return Err(invalid());
+                }
+                let publication_identifier: String = row.get(0).map_err(refused)?;
+                let artifact: String = row.get(1).map_err(refused)?;
+                let content_digest: String = row.get(2).map_err(refused)?;
+                let length: i64 = row.get(3).map_err(refused)?;
+                let timestamp: i64 = row.get(4).map_err(refused)?;
+                let identifier =
+                    uuid::Uuid::parse_str(&publication_identifier).map_err(|_| invalid())?;
+                if identifier.to_string() != publication_identifier {
+                    return Err(invalid());
+                }
+                cursor = Some(publication_identifier.clone());
+                let artifact_identifier =
+                    crate::artifact_store::ArtifactIdentifier::parse(&artifact)
+                        .map_err(|_| invalid())?;
+                crate::artifact_store::ArtifactIdentifier::parse(&content_digest)
+                    .map_err(|_| invalid())?;
+                let byte_length = u64::try_from(length).map_err(|_| invalid())?;
+                if byte_length > self.policy.individual_artifact_bytes {
+                    return Err(invalid());
+                }
+                retained.push(PendingArtifactPublication {
+                    publication_identifier,
+                    artifact_identifier,
+                    content_digest,
+                    byte_length,
+                    recorded_at_unix_milliseconds: u64::try_from(timestamp)
+                        .map_err(|_| invalid())?,
+                });
+            }
+            if page < 256 {
+                break;
+            }
+        }
+        drop(statement);
+        transaction.commit().map_err(refused)?;
+        Ok(retained)
     }
 
     /// Recovers a sole pending producer for exactly the expected artifact and

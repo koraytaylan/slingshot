@@ -1,7 +1,7 @@
 //! The walking proof: real processes, one daemon, and nothing left behind.
 //!
 //! Every claim here is made with independent operating-system processes. The
-//! product executable is run as a real command, the daemon it creates is a real
+//! product dispatcher is run in an explicit test host, the daemon it creates is a real
 //! detached child, and every deadline comes from the foundation contract and is
 //! waited for against the monotonic clock rather than slept through.
 
@@ -43,8 +43,18 @@ const SECOND_ENVIRONMENT: &str = "publish";
 
 /// Returns the product executable this proof drives.
 fn product_executable() -> ExecutablePath {
-    ExecutablePath::new(PathBuf::from(env!("CARGO_BIN_EXE_slingshot")))
+    ExecutablePath::new(PathBuf::from(env!("CARGO_BIN_EXE_slingshot-runtime-test-host")))
         .expect("the product executable was built")
+}
+
+/// A real private, digest-inventoried configuration; no account files change.
+#[path = "support/runtime_fixture.rs"]
+mod runtime_fixture;
+
+fn configured_runtime_root(name: &str) -> TemporaryRuntimeRoot {
+    let root = TemporaryRuntimeRoot::create(name).unwrap();
+    runtime_fixture::prepare(root.path(), PROFILE, &[ENVIRONMENT, SECOND_ENVIRONMENT]);
+    root
 }
 
 /// Reads one hand-authored normalized output.
@@ -153,9 +163,269 @@ fn cooperatively_stop(root: &TemporaryRuntimeRoot, environment: &str) {
 }
 
 #[test]
+fn compiled_startup_publishes_selected_durable_identity() {
+    let root = configured_runtime_root("identity");
+    let target = namespace(&root, ENVIRONMENT);
+    let mut child = std::process::Command::new(product_executable().path())
+        .env(
+            "SSL_CERT_FILE",
+            root.path().join("fixture-home/.config/slingshot/profiles/local.toml"),
+        )
+        .env("SSL_CERT_DIR", root.path().join("fixture-home/.config/slingshot/profiles"))
+        .args([
+            "--runtime-root",
+            root.path().to_str().unwrap(),
+            "--profile",
+            PROFILE,
+            "--environment",
+            ENVIRONMENT,
+            "daemon",
+            DAEMON_SERVE_COMMAND,
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let reached = wait_until(FoundationContract::embedded().startup.explicit_start_total(), || {
+        target.readiness_path().is_file() || child.try_wait().unwrap().is_some()
+    });
+    if !reached || !target.readiness_path().is_file() {
+        let _ = child.kill();
+        let output = child.wait_with_output().unwrap();
+        panic!("compiled startup failed: {}", String::from_utf8_lossy(&output.stderr));
+    }
+    let record = readiness::read(target.runtime_root(), target.digest()).unwrap().unwrap();
+    cooperatively_stop(&root, ENVIRONMENT);
+    assert!(child.wait().unwrap().success());
+    let identity = record.identity.unwrap();
+    assert_eq!(identity.retained_control_version, FoundationContract::embedded().control.version);
+    assert_eq!(
+        identity.daemon_runtime_contract_digest,
+        slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded_digest()
+            .as_text()
+    );
+    assert!(identity.supported_operation_versions.is_empty());
+    let ledger =
+        slingshot_storage::installation_state::InstallationState::at(&root.path().join("state"))
+            .read()
+            .unwrap();
+    assert_eq!(
+        ledger.registration(&target.key()),
+        Some(slingshot_domain::installation::TargetRegistration::Registered)
+    );
+    let path = target.beneath(&root.path().join("state")).database_path();
+    let database =
+        slingshot_storage::database::OperationDatabase::open_live(&path, database_settings())
+            .unwrap();
+    assert_eq!(database.installation_identifier().unwrap(), Some(ledger.installation_identifier));
+    drop(database);
+    let restarted = run_product(&root, ENVIRONMENT, "start");
+    assert!(restarted.status.success(), "{restarted:?}");
+    let again = readiness::read(target.runtime_root(), target.digest()).unwrap().unwrap();
+    cooperatively_stop(&root, ENVIRONMENT);
+    assert_eq!(
+        again.identity,
+        Some(identity),
+        "ambient certificate selectors changed the selected revision"
+    );
+    assert_ne!(again.readiness_nonce, record.readiness_nonce);
+}
+
+fn database_settings() -> slingshot_storage::database::RequiredSettings {
+    let limits = slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded();
+    slingshot_storage::database::RequiredSettings {
+        page_bytes: limits.limit("sqlite_page_bytes"),
+        database_pages: limits.limit("maximum_sqlite_database_pages"),
+        busy_timeout_milliseconds: limits.limit("database_busy_timeout_milliseconds"),
+    }
+}
+
+#[test]
+fn compiled_startup_refusals_leave_no_readiness_or_owner() {
+    for (index, defect) in [
+        "configuration",
+        "installation",
+        "database",
+        "diagnostics",
+        "stage",
+        "endpoint",
+        "foreign-revision",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let root = configured_runtime_root(&format!("fail{index}"));
+        let target = namespace(&root, ENVIRONMENT);
+        let started = run_product(&root, ENVIRONMENT, "start");
+        assert!(started.status.success(), "{defect}: {started:?}");
+        let identity = readiness::read(target.runtime_root(), target.digest())
+            .unwrap()
+            .unwrap()
+            .identity
+            .unwrap();
+        cooperatively_stop(&root, ENVIRONMENT);
+        let state_root = root.path().join("state");
+        let paths = target.beneath(&state_root);
+        let ledger = slingshot_storage::installation_state::InstallationState::at(&state_root);
+        match defect {
+            "configuration" => std::fs::remove_file(
+                root.path().join("fixture-home/.config/slingshot/configuration-snapshot.toml"),
+            )
+            .unwrap(),
+            "installation" => {
+                let mut record = ledger.read().unwrap();
+                record.installation_identifier =
+                    slingshot_domain::installation::InstallationIdentifier::parse(&"f".repeat(64))
+                        .unwrap();
+                ledger.replace(&record).unwrap();
+            }
+            "database" => std::fs::remove_file(paths.database_path()).unwrap(),
+            "diagnostics" => {
+                std::fs::remove_dir(paths.diagnostic_root()).unwrap();
+                std::fs::write(paths.diagnostic_root(), b"preserved obstacle").unwrap();
+            }
+            "stage" => {
+                let path = paths
+                    .artifact_root()
+                    .join(slingshot_storage::artifact_store::CONTENT_DIRECTORY)
+                    .join("not-a-uuid.partial");
+                std::fs::write(path, b"preserved partial bytes").unwrap();
+            }
+            "endpoint" => {
+                let endpoint::EndpointAddress::UnixDomainSocket(path) = endpoint::endpoint_address(
+                    &FoundationContract::embedded(),
+                    root.path(),
+                    target.digest(),
+                )
+                .unwrap();
+                std::fs::write(path, b"preserved endpoint obstacle").unwrap();
+            }
+            "foreign-revision" => {
+                use slingshot_domain::command_fingerprint::{CommandFingerprint, FingerprintInput};
+                let database = slingshot_storage::database::OperationDatabase::open_live(
+                    &paths.database_path(),
+                    database_settings(),
+                )
+                .unwrap();
+                let installation = database.installation_identifier().unwrap().unwrap();
+                let operations =
+                    slingshot_storage::operation_repository::OperationRepository::new(database);
+                let canonical = "{\"root_path\":\"/retained\"}";
+                let revision = "a".repeat(64);
+                let fingerprint = CommandFingerprint::derive(&FingerprintInput {
+                    author_target_identity_digest: identity.author_target_identity_digest.clone(),
+                    canonical_command: canonical.into(),
+                    command_wire_name: "query_paths".into(),
+                    command_semantic_contract_version: "1".into(),
+                    selected_environment_revision: revision.clone(),
+                })
+                .unwrap();
+                operations
+                    .admit(
+                        &slingshot_storage::operation_repository::AdmissionRequest {
+                            author_target_identity: "fixture".into(),
+                            author_target_identity_digest: identity.author_target_identity_digest,
+                            caller_identity: Some("fixture".into()),
+                            canonical_command: canonical.into(),
+                            command_fingerprint: fingerprint,
+                            command_wire_name: "query_paths".into(),
+                            daemon_runtime_contract_digest: identity.daemon_runtime_contract_digest,
+                            installation_identifier: installation,
+                            operation_identifier: "retained-foreign".into(),
+                            selected_environment_revision: revision,
+                            workflow_correlation_identifier: None,
+                        },
+                        1000,
+                    )
+                    .unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let database_before = std::fs::read(paths.database_path()).ok();
+        let ledger_before = std::fs::read(ledger.record_path()).unwrap();
+        let refused = run_product(&root, ENVIRONMENT, DAEMON_SERVE_COMMAND);
+        assert_eq!(
+            refused.status.code(),
+            Some(i32::from(slingshot_command_line::command_line::EXIT_RUNTIME_UNUSABLE)),
+            "{defect}: {refused:?}"
+        );
+        assert!(refused.standard_output.is_empty());
+        assert!(!target.readiness_path().exists(), "{defect} published readiness");
+        assert!(owner_is_absent(&target), "{defect} retained ownership");
+        let endpoint::EndpointAddress::UnixDomainSocket(endpoint_path) =
+            endpoint::endpoint_address(
+                &FoundationContract::embedded(),
+                root.path(),
+                target.digest(),
+            )
+            .unwrap();
+        if defect == "endpoint" {
+            assert_eq!(std::fs::read(endpoint_path).unwrap(), b"preserved endpoint obstacle");
+        } else {
+            assert!(!endpoint_path.exists(), "{defect} left an endpoint");
+        }
+        assert_eq!(
+            std::fs::read(paths.database_path()).ok(),
+            database_before,
+            "{defect} changed the database"
+        );
+        assert_eq!(
+            std::fs::read(ledger.record_path()).unwrap(),
+            ledger_before,
+            "{defect} changed the ledger"
+        );
+    }
+}
+
+#[tokio::test]
+async fn readiness_publication_failure_and_cancelled_startup_unwind_the_endpoint() {
+    use slingshot_command_line::daemon_entry::{
+        DaemonEntryArguments, DaemonEntryOutcome, run_daemon_entry_for_test,
+    };
+    use slingshot_configuration::configuration_root::{
+        AccountResolver as _, ConfigurationRoot, OperatingSystemAccountResolver,
+    };
+    for cancelled in [false, true] {
+        let root = configured_runtime_root(if cancelled { "cancel" } else { "publish" });
+        let target = namespace(&root, ENVIRONMENT);
+        let account = OperatingSystemAccountResolver.resolve().unwrap();
+        let configuration =
+            ConfigurationRoot::at_explicit_home(account.identity, root.path().join("fixture-home"));
+        let mut contract = FoundationContract::embedded();
+        contract.namespace.readiness_record_bytes = 1;
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        if cancelled {
+            cancellation.cancel();
+        }
+        let result = run_daemon_entry_for_test(
+            &contract,
+            &DaemonEntryArguments::new(root.path(), PROFILE, ENVIRONMENT),
+            cancellation,
+            configuration,
+            root.path().join("state"),
+        )
+        .await;
+        if cancelled {
+            assert_eq!(result.unwrap(), DaemonEntryOutcome::Served);
+        } else {
+            assert!(matches!(
+                result.unwrap_err(),
+                slingshot_command_line::daemon_entry::DaemonEntryFailure::Runtime(_)
+            ));
+        }
+        assert!(!target.readiness_path().exists());
+        let endpoint::EndpointAddress::UnixDomainSocket(path) =
+            endpoint::endpoint_address(&contract, root.path(), target.digest()).unwrap();
+        assert!(!path.exists());
+        assert!(owner_is_absent(&target));
+    }
+}
+
+#[test]
 fn twenty_barrier_released_clients_converge_on_one_daemon() {
     let contract = FoundationContract::embedded();
-    let root = TemporaryRuntimeRoot::create("w").expect("the temporary root is created");
+    let root = configured_runtime_root("w");
     let target = namespace(&root, ENVIRONMENT);
 
     let absent = run_product(&root, ENVIRONMENT, "ping");
@@ -243,7 +513,7 @@ fn twenty_barrier_released_clients_converge_on_one_daemon() {
 #[test]
 fn a_supervised_daemon_is_ended_through_its_own_handle_and_leaves_nothing_behind() {
     let contract = FoundationContract::embedded();
-    let root = TemporaryRuntimeRoot::create("v").expect("the temporary root is created");
+    let root = configured_runtime_root("v");
     let target = namespace(&root, ENVIRONMENT);
     let child = std::process::Command::new(product_executable().path())
         .args(["--runtime-root", root.path().to_str().expect("the root is text")])
@@ -294,7 +564,7 @@ fn a_supervised_daemon_is_ended_through_its_own_handle_and_leaves_nothing_behind
 
 #[test]
 fn an_abandoned_election_never_blocks_the_cohort_that_follows_it() {
-    let root = TemporaryRuntimeRoot::create("u").expect("the temporary root is created");
+    let root = configured_runtime_root("u");
     let target = namespace(&root, ENVIRONMENT);
     let held = StartupElectionLock::acquire(root.path(), target.digest())
         .expect("the lock file opens")
@@ -309,7 +579,7 @@ fn an_abandoned_election_never_blocks_the_cohort_that_follows_it() {
 
 #[test]
 fn a_refused_invocation_writes_one_diagnostic_and_no_result() {
-    let root = TemporaryRuntimeRoot::create("q").expect("the temporary root is created");
+    let root = configured_runtime_root("q");
     let harness = ProcessHarness::new();
     let request = ProcessRequest::new(&[
         "--runtime-root",

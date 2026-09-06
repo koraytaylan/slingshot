@@ -15,6 +15,284 @@ use slingshot_domain::selected_environment_revision::*;
 struct Store(Vec<ProviderRecord>);
 
 #[tokio::test]
+async fn runtime_concrete_executor_preserves_paused_recovery_and_shutdown() {
+    use slingshot_daemon::{ownership::{Acquisition,DaemonOwnership}, runtime_builder::{RuntimeBuilder,RuntimeExecutionRefusal}, runtime_namespace::RuntimeNamespace};
+    use slingshot_domain::{operation::{OperationFact,RecoveryFact,RecoveryCategory,RecoveryExecutionEvidence,OperationExecutionCertainty}, operation_executor::{ExecutionIdentity,OperationExecutorOutcome,ProgressPort}};
+    use slingshot_local_protocol::foundation_contract::FoundationContract;
+    use slingshot_agent_protocol::{identity::WireOperationIdentity,wire_contract::ExpectedProvenance};
+    use slingshot_agent_connection::command_submission::{Submission,ExpectedArtifactManifest};
+    struct Progress;
+    impl ProgressPort for Progress { fn report(&self, _: &str) {} }
+    let root = tempfile::tempdir().unwrap();
+    let contract = FoundationContract::embedded();
+    let namespace = RuntimeNamespace::name(&contract,&root.path().join("runtime"),"remote-site","staging").unwrap();
+    namespace.create_runtime_directory().unwrap();
+    let Acquisition::Owned(owner) = DaemonOwnership::acquire(&contract,namespace.clone()).unwrap() else {panic!("fresh namespace")};
+    let runtime = RuntimeBuilder::new(selected_snapshot("http://127.0.0.1:9"),*owner,root.path().join("state"),slingshot_storage::database::RequiredSettings {
+        page_bytes:4096,database_pages:262144,busy_timeout_milliseconds:5000,
+    }).unwrap().establish_durable().unwrap();
+    let target = runtime.context().target();
+    let identity = ExecutionIdentity {attempt:1,author_target_identity_digest:target.author_target_identity_digest.clone(),selected_environment_revision:target.selected_environment_revision.clone(),operation_identifier:"paused".into()};
+    let expected = ExpectedProvenance {
+        command_contract:slingshot_domain::selected_command_contract_identity::SelectedCommandContractIdentity::installed("query_paths").unwrap(),
+        canonical_json_contract_digest:slingshot_domain::command::schema::canonical_contract_digest(),
+        transport_contract_digest:slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded_digest(),
+    };
+    let canonical = "{\"root_path\":\"/retained\"}";
+    let submission = Submission::build(&expected,WireOperationIdentity::of(&identity.author_target_identity_digest,&identity.selected_environment_revision,&identity.operation_identifier,slingshot_domain::agent_identity::AgentEventStoreGeneration::of(7)),"subscription",canonical,ExpectedArtifactManifest::empty()).unwrap();
+    let fingerprint = slingshot_domain::command_fingerprint::CommandFingerprint::derive(&slingshot_domain::command_fingerprint::FingerprintInput {
+        author_target_identity_digest:identity.author_target_identity_digest.clone(),canonical_command:canonical.into(),command_wire_name:"query_paths".into(),command_semantic_contract_version:expected.command_contract.command_semantic_contract_version.clone(),selected_environment_revision:identity.selected_environment_revision.clone(),
+    }).unwrap();
+    runtime.operations().admit(&slingshot_storage::operation_repository::AdmissionRequest {
+        author_target_identity:"retained-identity".into(),author_target_identity_digest:identity.author_target_identity_digest.clone(),caller_identity:None,canonical_command:canonical.into(),command_fingerprint:fingerprint,command_wire_name:"query_paths".into(),daemon_runtime_contract_digest:target.daemon_runtime_contract_digest.clone(),installation_identifier:runtime.installation().clone(),operation_identifier:identity.operation_identifier.clone(),selected_environment_revision:identity.selected_environment_revision.clone(),workflow_correlation_identifier:None,
+    },1).unwrap();
+    let recovery = RecoveryFact {
+        attempt_count:slingshot_daemon::operation::recovery_and_event_supervisor::automatic_attempt_cap() as u32,
+        category:RecoveryCategory::OperationLookup,detail:"persisted pause".into(),evidence:RecoveryExecutionEvidence::ExecutionCertainty {certainty:OperationExecutionCertainty::RemoteOutcomeUnknown},manual_resume_eligible:true,retry_delay_milliseconds:42,retry_observed_at_unix_milliseconds:1,
+    };
+    runtime.operations().apply(&identity.author_target_identity_digest,&identity.operation_identifier,1,&OperationFact::Recovery {recovery:recovery.clone()},1).unwrap();
+    let before = runtime.operations().read(&identity.author_target_identity_digest,&identity.operation_identifier).unwrap();
+    assert_eq!(runtime.execute_retained(&identity,submission.clone(),&Progress).await.unwrap(),OperationExecutorOutcome::RecoveryRequired {recovery});
+    assert_eq!(runtime.operations().read(&identity.author_target_identity_digest,&identity.operation_identifier).unwrap(),before);
+    assert!(runtime.remote().read_for_local_operation(&identity.author_target_identity_digest,&identity.operation_identifier).unwrap().is_none());
+    let mut foreign = identity.clone(); foreign.selected_environment_revision = "foreign".into();
+    assert_eq!(runtime.execute_retained(&foreign,submission.clone(),&Progress).await.unwrap_err(),RuntimeExecutionRefusal::Binding);
+    runtime.request_shutdown();
+    assert_eq!(runtime.execute_retained(&identity,submission,&Progress).await.unwrap_err(),RuntimeExecutionRefusal::Cancelled);
+    assert!(!namespace.readiness_path().exists());
+}
+
+#[test]
+fn runtime_builder_never_invents_identity_beside_unregistered_state() {
+    use slingshot_daemon::{ownership::{Acquisition, DaemonOwnership}, runtime_builder::{RuntimeBuilder, RuntimeBuildRefusal}, runtime_namespace::RuntimeNamespace};
+    use slingshot_local_protocol::foundation_contract::FoundationContract;
+    use slingshot_storage::{database::RequiredSettings, installation_state::InstallationState};
+    let directory = tempfile::tempdir().unwrap();
+    let state_root = directory.path().join("state");
+    let contract = FoundationContract::embedded();
+    let namespace = RuntimeNamespace::name(&contract, &directory.path().join("runtime"), "remote-site", "staging").unwrap();
+    namespace.create_runtime_directory().unwrap();
+    let paths = namespace.beneath(&state_root);
+    paths.create().unwrap();
+    let marker = paths.artifact_root().join("retained-evidence");
+    std::fs::write(&marker, b"must not be adopted or removed").unwrap();
+    let Acquisition::Owned(owner) = DaemonOwnership::acquire(&contract, namespace.clone()).unwrap() else { panic!("fresh namespace") };
+    let builder = RuntimeBuilder::new(selected_snapshot("http://127.0.0.1:9"), *owner, state_root.clone(), RequiredSettings {
+        page_bytes:4096, database_pages:262144, busy_timeout_milliseconds:5000,
+    }).unwrap();
+    assert_eq!(builder.establish_durable().unwrap_err(), RuntimeBuildRefusal::Installation);
+    assert!(!InstallationState::at(&state_root).record_path().exists());
+    assert!(!paths.database_path().exists());
+    assert_eq!(std::fs::read(marker).unwrap(), b"must not be adopted or removed");
+    assert!(!namespace.readiness_path().exists());
+    assert!(matches!(DaemonOwnership::acquire(&contract, namespace).unwrap(), Acquisition::Owned(_)));
+}
+
+#[test]
+fn runtime_builder_establishes_and_reopens_only_ledger_bound_state() {
+    use slingshot_daemon::{ownership::{Acquisition, DaemonOwnership}, runtime_builder::{RuntimeBuilder, RuntimeBuildRefusal}, runtime_namespace::RuntimeNamespace};
+    use slingshot_domain::installation::{InstallationIdentifier, InstallationRecord, TargetRegistration};
+    use slingshot_local_protocol::foundation_contract::FoundationContract;
+    use slingshot_storage::{database::RequiredSettings, installation_state::InstallationState};
+    for defect in ["none", "missing-ledger", "missing-database", "foreign-identity", "unregistered", "staged-existing", "staged-absent", "corrupt-ledger", "artifact-content-blocked", "diagnostic-root-blocked", "abandoned-stage"] {
+        let directory = tempfile::tempdir().unwrap();
+        let state_root = directory.path().join("state");
+        let contract = FoundationContract::embedded();
+        let namespace = RuntimeNamespace::name(&contract, &directory.path().join("runtime"), "remote-site", "staging").unwrap();
+        namespace.create_runtime_directory().unwrap();
+        let build = || {
+            let Acquisition::Owned(owner) = DaemonOwnership::acquire(&contract, namespace.clone()).unwrap() else { panic!("namespace must be released") };
+            RuntimeBuilder::new(selected_snapshot("http://127.0.0.1:9"), *owner, state_root.clone(), RequiredSettings {
+                page_bytes: 4096, database_pages: 262144, busy_timeout_milliseconds: 5000,
+            }).unwrap()
+        };
+        let durable = build().establish_durable().unwrap();
+        let identity = durable.installation().clone();
+        assert_eq!(durable.database().installation_identifier().unwrap(), Some(identity.clone()));
+        assert!(durable.database().shares_database_with(durable.remote().database()));
+        assert!(durable.database().shares_database_with(durable.subscriptions().database()));
+        assert!(durable.capacity().belongs_to(durable.operations().database()));
+        assert_eq!(durable.capacity().usage().unwrap().operation_rows, 0);
+        assert_eq!(durable.diagnostics().health().unwrap().total_bytes, 0);
+        let cancellation = durable.cancellation_scope();
+        let separate_cancellation = durable.cancellation_scope();
+        cancellation.cancel();
+        assert!(!separate_cancellation.is_cancelled(), "a child cancelled the runtime");
+        if defect == "none" {
+            let target = &durable.context().target().author_target_identity_digest;
+            let approved = slingshot_storage::maintenance::preview(durable.database(), target, 1000, 1).unwrap();
+            slingshot_storage::maintenance::apply(durable.database(), &approved, 1000).unwrap();
+            let canonical = "{\"root_path\":\"/retained\"}";
+            let revision = &durable.context().target().selected_environment_revision;
+            let fingerprint = slingshot_domain::command_fingerprint::CommandFingerprint::derive(&slingshot_domain::command_fingerprint::FingerprintInput {
+                author_target_identity_digest:target.clone(), canonical_command:canonical.into(), command_wire_name:"query_paths".into(),
+                command_semantic_contract_version:"1".into(), selected_environment_revision:revision.clone(),
+            }).unwrap();
+            durable.operations().admit(&slingshot_storage::operation_repository::AdmissionRequest {
+                author_target_identity: "retained-test-identity".into(), author_target_identity_digest:target.clone(), caller_identity:Some("caller".into()),
+                canonical_command:canonical.into(), command_fingerprint:fingerprint, command_wire_name:"query_paths".into(),
+                daemon_runtime_contract_digest:durable.context().target().daemon_runtime_contract_digest.clone(), installation_identifier:identity.clone(),
+                operation_identifier:"retained-local".into(), selected_environment_revision:revision.clone(), workflow_correlation_identifier:None,
+            }, 1000).unwrap();
+            let bytes = b"{\"matches\":[]}";
+            let digest = hex::encode(Sha256::digest(bytes));
+            let request = slingshot_storage::artifact_store::InstallationRequest {
+                artifact_slot:slingshot_storage::artifact_store::STRUCTURED_RESULT_SLOT.into(), author_target_identity_digest:target.clone(), descriptor:None,
+                installation_identifier:identity.clone(),media_type:"application/json".into(),operation_identifier:"retained-local".into(),
+            };
+            let capacity = durable.capacity();
+            let reservation = capacity.reserve_artifact(Some(&digest),bytes.len() as u64).unwrap();
+            let stage = durable.artifacts().stage_verified(&request,&mut &bytes[..],bytes.len() as u64,&digest).unwrap();
+            capacity.retain_staged_publication(&stage,reservation,123).unwrap();
+            drop(stage);
+        }
+        assert_eq!(format!("{durable:?}"), "DurableRuntime([redacted])");
+        assert_eq!(durable.context().namespace().digest(), namespace.digest());
+        let paths = durable.paths().clone();
+        let ledger = InstallationState::at(&state_root);
+        assert_eq!(paths.installation_record_path(), ledger.record_path());
+        assert_eq!(ledger.read().unwrap().registration(&namespace.key()), Some(TargetRegistration::Registered));
+        assert!(!namespace.readiness_path().exists());
+        assert!(matches!(DaemonOwnership::acquire(&contract, namespace.clone()).unwrap(), Acquisition::AlreadyOwned(_)));
+        drop(durable);
+        assert!(separate_cancellation.is_cancelled(), "runtime drop did not cancel its children");
+        let mut record = ledger.read().unwrap();
+        match defect {
+            "missing-ledger" => std::fs::remove_file(ledger.record_path()).unwrap(),
+            "missing-database" => std::fs::remove_file(paths.database_path()).unwrap(),
+            "foreign-identity" => {
+                record.installation_identifier = InstallationIdentifier::parse(&"f".repeat(64)).unwrap();
+                ledger.replace(&record).unwrap();
+            }
+            "unregistered" => ledger.replace(&InstallationRecord::new(identity.clone())).unwrap(),
+            "staged-existing" | "staged-absent" => {
+                record.targets.insert(namespace.key(), TargetRegistration::Initializing);
+                ledger.replace(&record).unwrap();
+                if defect == "staged-absent" { std::fs::remove_file(paths.database_path()).unwrap(); }
+            }
+            "corrupt-ledger" => std::fs::write(ledger.record_path(), b"not-json").unwrap(),
+            "abandoned-stage" => {
+                use slingshot_storage::artifact_store::{CONTENT_DIRECTORY,STAGING_SUFFIX};
+                let path = paths.artifact_root().join(CONTENT_DIRECTORY).join(format!("6ca0aa08-3d39-4b18-bfbe-f2bd859947a0{STAGING_SUFFIX}"));
+                let mut options = std::fs::OpenOptions::new();
+                options.write(true).create_new(true);
+                #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt as _; options.mode(0o600); }
+                use std::io::Write as _;
+                options.open(path).unwrap().write_all(b"abandoned partial bytes").unwrap();
+            }
+            "artifact-content-blocked" => {
+                let content = paths.artifact_root().join(slingshot_storage::artifact_store::CONTENT_DIRECTORY);
+                std::fs::remove_dir(&content).unwrap();
+                std::fs::write(content, b"not a directory").unwrap();
+            }
+            "diagnostic-root-blocked" => {
+                std::fs::remove_dir(paths.diagnostic_root()).unwrap();
+                std::fs::write(paths.diagnostic_root(), b"not a directory").unwrap();
+            }
+            _ => {},
+        }
+        let ledger_before = std::fs::read(ledger.record_path()).ok();
+        let database_before = std::fs::read(paths.database_path()).ok();
+        let result = build().establish_durable();
+        if matches!(defect, "none" | "staged-existing" | "staged-absent" | "abandoned-stage") {
+            let resumed = result.unwrap();
+            assert_eq!(resumed.recovered_stages(), if defect == "abandoned-stage" {1} else {0});
+            if defect == "none" {
+                assert_eq!(resumed.maintenance_recovery().len(), 1);
+                assert_eq!(resumed.maintenance_recovery()[0].stage, slingshot_storage::maintenance::ReceiptStage::Completed);
+                assert_eq!(resumed.recovered_operations().len(), 1);
+                let recovered = &resumed.recovered_operations()[0];
+                assert_eq!(recovered.input.summary.operation_identifier, "retained-local");
+                assert_eq!(recovered.input.canonical_command, "{\"root_path\":\"/retained\"}");
+                assert_eq!(recovered.input.summary.record.revision, 1);
+                assert_eq!(recovered.input.summary.record.lifecycle_state, slingshot_domain::operation::OperationLifecycleState::Queued);
+                assert!(recovered.remote.is_none());
+                assert_eq!(resumed.pending_publications().len(),1);
+                let publication = &resumed.pending_publications()[0];
+                assert_eq!(publication.operation_identifier,"retained-local");
+                assert_eq!(publication.artifact_slot,slingshot_storage::artifact_store::STRUCTURED_RESULT_SLOT);
+                assert_eq!(publication.publication.recorded_at_unix_milliseconds,123);
+                assert_eq!(resumed.capacity().pending_publications().unwrap(),1);
+            }
+            assert_eq!(resumed.installation(), &identity);
+            assert_eq!(resumed.database().installation_identifier().unwrap(), Some(identity));
+            assert_eq!(ledger.read().unwrap().registration(&namespace.key()), Some(TargetRegistration::Registered));
+            let cancellation = resumed.cancellation_scope();
+            let selected = resumed.context().target().clone();
+            let mut service = slingshot_daemon::service::DaemonService::from_runtime(contract.clone(), resumed);
+            let published = service.ownership_mut().identity().unwrap();
+            assert_eq!(published.author_target_identity_digest, selected.author_target_identity_digest);
+            assert_eq!(published.selected_environment_revision, selected.selected_environment_revision);
+            assert_eq!(published.daemon_runtime_contract_digest, selected.daemon_runtime_contract_digest);
+            assert_eq!(published.retained_control_version, contract.control.version);
+            assert!(published.supported_operation_versions.is_empty());
+            let service = std::sync::Arc::new(service);
+            let connection = std::sync::Arc::clone(&service);
+            let nonce = service.readiness_nonce();
+            drop(service);
+            assert!(!cancellation.is_cancelled(), "service creator released a live connection's runtime");
+            assert!(matches!(DaemonOwnership::acquire(&contract, namespace.clone()).unwrap(), Acquisition::AlreadyOwned(_)));
+            assert!(!namespace.readiness_path().exists(), "service conversion published readiness");
+            std::thread::spawn(move || {
+                assert_eq!(connection.readiness_nonce(), nonce);
+                drop(connection);
+            }).join().unwrap();
+            assert!(cancellation.is_cancelled(), "last service owner did not cancel the runtime");
+        } else {
+            assert!(matches!(result.unwrap_err(), RuntimeBuildRefusal::Installation | RuntimeBuildRefusal::Database | RuntimeBuildRefusal::Resources));
+            assert_eq!(std::fs::read(ledger.record_path()).ok(), ledger_before);
+            assert_eq!(std::fs::read(paths.database_path()).ok(), database_before);
+        }
+        assert!(!namespace.readiness_path().exists());
+        assert!(matches!(DaemonOwnership::acquire(&contract, namespace.clone()).unwrap(), Acquisition::Owned(_)));
+    }
+}
+
+#[tokio::test]
+async fn runtime_builder_binds_snapshot_names_and_holds_ownership_without_readiness() {
+    use slingshot_daemon::{ownership::{Acquisition,DaemonOwnership}, runtime_builder::{RuntimeBuilder,RuntimeBuildRefusal}, runtime_namespace::RuntimeNamespace};
+    use slingshot_local_protocol::foundation_contract::FoundationContract;
+    use slingshot_storage::database::RequiredSettings;
+    use tokio::time::{timeout,Duration};
+    for (profile,environment,accepted) in [("remote-site","staging",true),("other-site","staging",false),("remote-site","production",false)] {
+        let directory = tempfile::tempdir().unwrap();
+        let runtime_root = directory.path().join("runtime");
+        let state_root = directory.path().join("state");
+        let contract = FoundationContract::embedded();
+        let namespace = RuntimeNamespace::name(&contract,&runtime_root,profile,environment).unwrap();
+        namespace.create_runtime_directory().unwrap();
+        let Acquisition::Owned(owner) = DaemonOwnership::acquire(&contract,namespace.clone()).unwrap() else {panic!("fresh namespace owned")};
+        let author = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let snapshot = selected_snapshot(&format!("http://{}",author.local_addr().unwrap()));
+        assert_eq!(snapshot.profile_name().as_text(),"remote-site");
+        assert_eq!(snapshot.environment_name().as_text(),"staging");
+        let target = snapshot.target().to_string();
+        let revision = snapshot.revision().to_string();
+        let builder = RuntimeBuilder::new(snapshot,*owner,state_root.clone(),RequiredSettings {
+            page_bytes:4096,database_pages:262144,busy_timeout_milliseconds:5000,
+        });
+        if accepted {
+            let builder = builder.unwrap();
+            assert_eq!(builder.target().author_target_identity_digest,target);
+            assert_eq!(builder.target().selected_environment_revision,revision);
+            assert_eq!(builder.target().daemon_runtime_contract_digest,slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded_digest().as_text());
+            assert_eq!(builder.authentication().snapshot().target().to_string(),target);
+            assert_eq!(builder.namespace().digest(),namespace.digest());
+            assert_eq!(builder.state_root(),state_root);
+            assert_eq!(format!("{builder:?}"),"RuntimeBuilder([redacted])");
+            assert!(matches!(DaemonOwnership::acquire(&contract,namespace.clone()).unwrap(),Acquisition::AlreadyOwned(_)));
+            drop(builder);
+        } else {
+            assert_eq!(builder.unwrap_err(),RuntimeBuildRefusal::OwnershipMismatch);
+        }
+        assert!(!state_root.exists(),"initial context created durable state");
+        assert!(!namespace.readiness_path().exists(),"initial context published readiness");
+        assert!(timeout(Duration::from_millis(10),author.accept()).await.is_err());
+        assert!(matches!(DaemonOwnership::acquire(&contract,namespace).unwrap(),Acquisition::Owned(_)),"ownership did not unwind");
+    }
+}
+
+#[tokio::test]
 async fn selected_live_events_commit_only_the_believed_prefix() {
     use slingshot_daemon::operation::{selected_event_attachment::{attach_selected_events_with_authentication as attach_selected_events, SelectedEventAttachmentOutcome}, subscription_reset::ResetTransport};
     use slingshot_agent_connection::{command_submission::{ExpectedArtifactManifest, Submission}, selected_author_transport::SelectedAuthorTransport,

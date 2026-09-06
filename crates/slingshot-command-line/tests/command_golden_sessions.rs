@@ -28,6 +28,9 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+#[path = "support/runtime_fixture.rs"]
+mod runtime_fixture;
+
 use slingshot_command_line::exit_classification::LOCAL_FAILURE;
 use slingshot_command_line::exit_classification::{
     EVERY_EXIT, INTERRUPTED, SUCCESS, UNAVAILABLE, USAGE,
@@ -57,7 +60,7 @@ const REVIEW_VARIABLE: &str = "SLINGSHOT_REVIEW_COMMAND_GOLDEN_SESSIONS";
 
 /// The command a reviewer runs to rewrite a fixture.
 const REVIEW_COMMAND: &str = "SLINGSHOT_REVIEW_COMMAND_GOLDEN_SESSIONS=1 \
-     cargo test -p slingshot-command-line --test command_golden_sessions";
+     cargo test -p slingshot-command-line --features runtime-test-host --test command_golden_sessions";
 
 /// Profile every session names.
 const PROFILE: &str = "local";
@@ -91,7 +94,7 @@ const REACHED_EXITS: &[i32] = &[SUCCESS, USAGE, UNAVAILABLE, INTERRUPTED];
 
 /// Returns the product executable these sessions drive.
 fn product_executable() -> ExecutablePath {
-    ExecutablePath::new(PathBuf::from(env!("CARGO_BIN_EXE_slingshot")))
+    ExecutablePath::new(PathBuf::from(env!("CARGO_BIN_EXE_slingshot-runtime-test-host")))
         .expect("the product executable was built")
 }
 
@@ -168,11 +171,16 @@ fn normalized(root: &Path, stream: &str) -> String {
     while let Some(position) = scanning.find(INVENTED_IDENTIFIER_PREFIX) {
         let (before, after) = scanning.split_at(position);
         written.push_str(before);
-        written.push_str(NORMALIZED_IDENTIFIER);
-        let digits = after[INVENTED_IDENTIFIER_PREFIX.len()..]
-            .find(|character: char| !character.is_ascii_digit())
-            .unwrap_or(after.len() - INVENTED_IDENTIFIER_PREFIX.len());
-        scanning = &after[INVENTED_IDENTIFIER_PREFIX.len() + digits..];
+        let suffix = &after[INVENTED_IDENTIFIER_PREFIX.len()..];
+        if let Some(identifier) = suffix.get(..36)
+            && uuid::Uuid::parse_str(identifier).is_ok_and(|value| value.hyphenated().to_string() == identifier)
+        {
+            written.push_str(NORMALIZED_IDENTIFIER);
+            scanning = &suffix[36..];
+        } else {
+            written.push_str(INVENTED_IDENTIFIER_PREFIX);
+            scanning = suffix;
+        }
     }
     written.push_str(scanning);
     written
@@ -343,6 +351,7 @@ fn stop_quoting(address: &EndpointAddress, nonce: &str) -> bool {
 #[test]
 fn the_owned_sessions_run_in_order_against_one_real_daemon() {
     let root = TemporaryRuntimeRoot::create("o").expect("the temporary root is created");
+    runtime_fixture::prepare(root.path(), PROFILE, &[ENVIRONMENT]);
     let namespace = namespace_of(root.path(), ENVIRONMENT);
     for session in declared_sessions().iter().filter(|row| row.kind == AGAINST_A_DAEMON) {
         let produced = run(root.path(), &session.arguments);
@@ -361,6 +370,7 @@ fn the_owned_sessions_run_in_order_against_one_real_daemon() {
 fn a_stale_nonce_never_stops_the_replacement_that_followed_it() {
     let contract = FoundationContract::embedded();
     let root = TemporaryRuntimeRoot::create("s").expect("the temporary root is created");
+    runtime_fixture::prepare(root.path(), PROFILE, &[ENVIRONMENT]);
     let namespace = namespace_of(root.path(), ENVIRONMENT);
     let address = endpoint::endpoint_address(&contract, root.path(), namespace.digest())
         .expect("the endpoint is named");
@@ -406,6 +416,7 @@ fn published_nonce(root: &Path, namespace: &RuntimeNamespace) -> Option<String> 
 #[test]
 fn an_unresponsive_owned_child_ends_through_its_retained_handle() {
     let root = TemporaryRuntimeRoot::create("c").expect("the temporary root is created");
+    runtime_fixture::prepare(root.path(), PROFILE, &[ENVIRONMENT]);
     let namespace = namespace_of(root.path(), ENVIRONMENT);
     let harness = ProcessHarness::new();
     let words = [

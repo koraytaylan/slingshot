@@ -307,6 +307,12 @@ pub fn maximum_removals() -> u64 {
 /// Reason a maintenance run could not be applied.
 #[derive(Debug, thiserror::Error)]
 pub enum MaintenanceFailure {
+    /// Journaled content deletion could not be durably completed.
+    #[error(transparent)]
+    Artifact(#[from] crate::artifact_store::ArtifactFailure),
+    /// Retained unfinished receipts exceed this build's bounded recovery scan.
+    #[error("unfinished maintenance receipts exceed the retained receipt bound")]
+    ReceiptRecoveryBound,
     /// SQLite refused the transactional maintenance operation.
     #[error("the database refused: {0}")]
     Statement(#[from] rusqlite::Error),
@@ -539,48 +545,98 @@ fn receipt_with(
     Ok(found)
 }
 
-/// Processes one receipt's durable cleanup journal until every safe candidate is gone.
-///
-/// A newly referenced candidate is deliberately retained for a later retry.
-pub fn complete_cleanup(
+/// Resumes already-approved maintenance only, without selecting any new removal.
+/// The caller retains namespace ownership; referenced content remains journaled.
+pub fn recover_pending_cleanup(
     database: &OperationDatabase,
-    author_target_identity_digest: &str,
-    receipt_identifier: &str,
-) -> Result<ApplicationReceipt, RepositoryFailure> {
-    let mut prepared = database
+    store: &crate::artifact_store::ArtifactStore,
+    target: &str,
+) -> Result<Vec<ApplicationReceipt>, MaintenanceFailure> {
+    let limit = slingshot_domain::persistent_capacity::PersistentCapacityPolicy::embedded()
+        .maintenance_application_receipts_per_target;
+    let mut statement = database
         .connection()
-        .prepare(statement_text("list one receipt's pending artifact cleanup work"))?;
-    let candidates = prepared
-        .query_map(rusqlite::params![author_target_identity_digest, receipt_identifier], |row| {
-            row.get::<_, String>(0)
-        })?
-        .collect::<Result<Vec<String>, _>>()?;
-    drop(prepared);
-    for candidate in candidates {
-        if release_if_unreferenced(database, &candidate)? {
-            database.connection().execute(
-                statement_text("remove one completed maintenance artifact cleanup item"),
-                rusqlite::params![author_target_identity_digest, receipt_identifier, candidate],
-            )?;
-        }
+        .prepare(statement_text("list one target's unfinished maintenance receipts"))?;
+    let identifiers = statement
+        .query_map(
+            rusqlite::params![target, i64::try_from(limit.saturating_add(1)).unwrap_or(i64::MAX)],
+            |row| row.get::<_, String>(0),
+        )?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(statement);
+    if identifiers.len() as u64 > limit {
+        return Err(MaintenanceFailure::ReceiptRecoveryBound);
     }
-    let pending: i64 = database.connection().query_row(
+    identifiers
+        .into_iter()
+        .map(|identifier| complete_cleanup_with_store(database, store, target, &identifier))
+        .collect()
+}
+
+/// Deletes journaled unreferenced content before clearing its durable accounting.
+/// A filesystem or commit failure retains retryable intent. A crash after unlink
+/// retries the absent file idempotently. References cannot be added during deletion.
+pub fn complete_cleanup_with_store(
+    database: &OperationDatabase,
+    store: &crate::artifact_store::ArtifactStore,
+    target: &str,
+    identifier: &str,
+) -> Result<ApplicationReceipt, MaintenanceFailure> {
+    let transaction = rusqlite::Transaction::new_unchecked(
+        database.connection(),
+        rusqlite::TransactionBehavior::Immediate,
+    )?;
+    let held = receipt_with(&transaction, target, identifier)?
+        .ok_or_else(|| RepositoryFailure::NoSuchOperation { identifier: identifier.to_owned() })?;
+    if held.stage == ReceiptStage::Completed {
+        return Ok(held);
+    }
+    let candidates = {
+        let mut statement = transaction
+            .prepare(statement_text("list one receipt's pending artifact cleanup work"))?;
+        statement
+            .query_map(rusqlite::params![target, identifier], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    for digest in candidates {
+        let references: i64 = transaction.query_row(
+            statement_text("count what still references one artifact's content"),
+            rusqlite::params![digest, digest, digest],
+            |row| row.get(0),
+        )?;
+        if references != 0 {
+            continue;
+        }
+        store.remove_unreferenced_content(&digest)?;
+        transaction.execute(
+            statement_text("remove one artifact's content, once nothing references it"),
+            [&digest],
+        )?;
+        transaction.execute(
+            statement_text("remove one completed maintenance artifact cleanup item"),
+            rusqlite::params![target, identifier, digest],
+        )?;
+    }
+    let pending: i64 = transaction.query_row(
         statement_text("count one receipt's pending artifact cleanup work"),
-        rusqlite::params![author_target_identity_digest, receipt_identifier],
+        rusqlite::params![target, identifier],
         |row| row.get(0),
     )?;
     if pending == 0 {
-        database.connection().execute(
+        transaction.execute(
             statement_text("mark one maintenance receipt completed"),
-            rusqlite::params![author_target_identity_digest, receipt_identifier],
+            rusqlite::params![target, identifier],
         )?;
     }
-    receipt(database, author_target_identity_digest, receipt_identifier)?.ok_or_else(|| {
-        RepositoryFailure::NoSuchOperation { identifier: receipt_identifier.to_owned() }
-    })
+    let receipt = receipt_with(&transaction, target, identifier)?
+        .ok_or_else(|| RepositoryFailure::NoSuchOperation { identifier: identifier.to_owned() })?;
+    transaction.commit()?;
+    Ok(receipt)
 }
 
-/// Removes one artifact's content, but only if nothing references it.
+/// Releases one unreferenced database content row, not its filesystem bytes.
+/// This accounting primitive must not acknowledge a maintenance cleanup receipt;
+/// product maintenance uses `complete_cleanup_with_store` for that handoff.
 ///
 /// The check happens here rather than in the manifest, because a reference may
 /// have appeared since the preview was taken. Content that is still referenced
@@ -612,3 +668,6 @@ pub fn release_if_unreferenced(
     transaction.commit()?;
     Ok(true)
 }
+
+#[cfg(test)]
+mod recovery_tests;

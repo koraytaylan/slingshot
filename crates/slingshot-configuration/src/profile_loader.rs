@@ -349,6 +349,8 @@ impl ProfileDocumentInspector {
 /// Every profile one complete generation yielded, with what selected them.
 #[derive(Debug)]
 pub struct LoadedProfiles {
+    /// Credential and certificate documents retained from this verified generation.
+    material: Vec<crate::configuration_generation::RoleTaggedSource>,
     /// Profiles by the name each declared, which no two may share.
     profiles: BTreeMap<ProfileName, Profile>,
     /// The reference each profile was read from.
@@ -358,6 +360,16 @@ pub struct LoadedProfiles {
 }
 
 impl LoadedProfiles {
+    /// Borrows credential/certificate material already verified with these profiles.
+    /// This never reopens a source or crosses a configuration generation.
+    pub fn retained_source(
+        &self,
+        reference: &ConfigurationReference,
+        role: crate::configuration_generation::SourceRole,
+    ) -> Option<&slingshot_domain::secret_value::SensitiveConfigurationDocument> {
+        self.material.iter().find(|source| &source.reference == reference && source.role == role)
+            .map(|source| &source.document)
+    }
     /// Returns the profiles, ordered by the name each declared.
     #[must_use]
     pub fn profiles(&self) -> &BTreeMap<ProfileName, Profile> {
@@ -450,7 +462,10 @@ pub fn load_profiles<Authority: ConfigurationFilesystemAuthority>(
     if !duplicates.is_empty() {
         return Err(summarize(duplicates));
     }
-    Ok(LoadedProfiles { profiles, sources, selection: generation.inspection.selection })
+    let material = generation.sources.into_iter().filter(|source| matches!(source.role,
+        crate::configuration_generation::SourceRole::ServiceCredentials |
+        crate::configuration_generation::SourceRole::AdditionalCertificateAuthority)).collect();
+    Ok(LoadedProfiles { profiles, sources, selection: generation.inspection.selection, material })
 }
 
 /// Returns the stage one generation failure belongs to.
