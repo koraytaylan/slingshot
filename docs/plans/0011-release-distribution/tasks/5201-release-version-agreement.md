@@ -8,8 +8,8 @@ gated: false
 touches:
   - crates/slingshot-development/tests/release_version_agreement.rs
   - crates/slingshot-development/tests/fixtures/release-version/runs.jsonl
-status: planned
-merged_as: ""
+status: completed
+merged_as: "73539b9"
 ---
 # Release Version Agreement
 
