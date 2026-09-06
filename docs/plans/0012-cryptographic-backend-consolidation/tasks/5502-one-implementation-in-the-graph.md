@@ -8,8 +8,8 @@ gated: false
 touches:
   - crates/slingshot-development/tests/cryptographic_backend_inventory.rs
   - crates/slingshot-development/tests/fixtures/cryptographic-backend-inventory/graphs.jsonl
-status: planned
-merged_as: ""
+status: completed
+merged_as: "1b5875e"
 ---
 # One Cryptographic Implementation In The Graph
 
