@@ -941,6 +941,36 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
+    InventoriedStatement {
+        purpose: "read one scheduler claim candidate",
+        text: "SELECT lifecycle_state, operation_revision, scheduler_checkpoint FROM operation WHERE author_target_identity_digest = ? AND operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "claim one retained operation for execution",
+        text: "UPDATE operation SET scheduler_fence = ?, scheduler_lease_expires_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND lifecycle_state = ? AND operation_revision = ? AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds <= ?) AND (scheduler_fence IS NULL OR scheduler_fence < ?)",
+        parameters: 8,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "checkpoint one retained operation execution",
+        text: "UPDATE operation SET scheduler_checkpoint = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND scheduler_fence = ? AND scheduler_checkpoint IS NULL",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "renew one retained operation execution lease",
+        text: "UPDATE operation SET scheduler_lease_expires_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND scheduler_fence = ? AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds >= ?)",
+        parameters: 5,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read one retained operation scheduler claim",
+        text: "SELECT scheduler_fence, scheduler_lease_expires_at_unix_milliseconds, scheduler_checkpoint FROM operation WHERE author_target_identity_digest = ? AND operation_identifier = ?",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
 ];
 
 /// Returns the text of the statement with `purpose`.
