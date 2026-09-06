@@ -10,8 +10,8 @@ touches:
   - crates/slingshot-agent-connection/Cargo.toml
   - Cargo.toml
   - policy/workspace-capabilities.toml
-status: planned
-merged_as: ""
+status: completed
+merged_as: "1b5875e"
 ---
 # One Signing Backend
 

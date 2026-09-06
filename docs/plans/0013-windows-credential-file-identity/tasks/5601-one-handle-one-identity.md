@@ -8,8 +8,8 @@ gated: false
 touches:
   - crates/slingshot-configuration/src/credential_filesystem.rs
   - crates/slingshot-configuration/tests/credential_filesystem_windows.rs
-status: planned
-merged_as: ""
+status: completed
+merged_as: "1b5875e"
 ---
 # One Handle, One Identity
 
