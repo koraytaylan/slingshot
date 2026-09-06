@@ -34,6 +34,64 @@ pub struct ClaimFacts {
     pub checkpoint: Option<String>,
 }
 
+/// The durable identity and compare-and-set facts selected for one tick.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectedClaim {
+    /// The operation selected in the same transaction that claims it.
+    pub operation_identifier: String,
+    /// The revision the scheduler claimed.
+    pub expected_revision: u64,
+}
+
+/// Selects and claims the oldest queued operation atomically.
+///
+/// This is the scheduler's process-safe handoff: two ticks may select at the
+/// same time, but only one transaction can update the eligible row and receive
+/// a `SelectedClaim`.
+pub fn claim_next_queued(
+    database: &OperationDatabase,
+    target: &str,
+    fence: u64,
+    lease_expires_at_unix_milliseconds: u64,
+    now_unix_milliseconds: u64,
+) -> Result<Option<SelectedClaim>, RepositoryFailure> {
+    let now = i64::try_from(now_unix_milliseconds).unwrap_or(i64::MAX);
+    let transaction = rusqlite::Transaction::new_unchecked(
+        database.connection(),
+        rusqlite::TransactionBehavior::Immediate,
+    )?;
+    let candidate: Option<(String, String, i64)> = transaction
+        .query_row(
+            statement("select one queued operation for scheduler claim"),
+            rusqlite::params![target, now],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    let Some((operation_identifier, lifecycle, revision)) = candidate else {
+        transaction.commit()?;
+        return Ok(None);
+    };
+    let outcome = claim_in_transaction(
+        &transaction,
+        target,
+        &operation_identifier,
+        &lifecycle,
+        revision,
+        fence,
+        lease_expires_at_unix_milliseconds,
+        now_unix_milliseconds,
+    )?;
+    if outcome != ClaimOutcome::Claimed {
+        transaction.commit()?;
+        return Ok(None);
+    }
+    transaction.commit()?;
+    Ok(Some(SelectedClaim {
+        operation_identifier,
+        expected_revision: u64::try_from(revision).unwrap_or_default(),
+    }))
+}
+
 /// Claims one operation only if lifecycle and revision are unchanged.
 pub fn claim(
     database: &OperationDatabase, target: &str, operation: &str,
@@ -42,17 +100,35 @@ pub fn claim(
 ) -> Result<ClaimOutcome, RepositoryFailure> {
     let expected_revision = i64::try_from(expected_revision).map_err(|_| RepositoryFailure::RevisionMoved { expected: expected_revision, stored: i64::MAX as u64 })?;
     let fence = i64::try_from(fence).map_err(|_| RepositoryFailure::RevisionMoved { expected: fence, stored: i64::MAX as u64 })?;
-    let expiry = i64::try_from(lease_expires_at_unix_milliseconds).map_err(|_| RepositoryFailure::RevisionMoved { expected: lease_expires_at_unix_milliseconds, stored: i64::MAX as u64 })?;
-    let now = i64::try_from(now_unix_milliseconds).unwrap_or(i64::MAX);
     let transaction = rusqlite::Transaction::new_unchecked(database.connection(), rusqlite::TransactionBehavior::Immediate)?;
     let current: Option<(String, i64, Option<String>)> = transaction.query_row(statement("read one scheduler claim candidate"), rusqlite::params![target, operation], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).optional()?;
     let Some((lifecycle, revision, checkpoint)) = current else { return Err(RepositoryFailure::NoSuchOperation { identifier: operation.to_owned() }); };
     if revision != expected_revision || lifecycle != expected_lifecycle { return Ok(ClaimOutcome::RevisionMoved); }
     if checkpoint.is_some() { return Ok(ClaimOutcome::AlreadyStarted); }
-    let changed = transaction.execute(statement("claim one retained operation for execution"), rusqlite::params![fence, expiry, target, operation, expected_lifecycle, expected_revision, now, fence])?;
-    if changed != 1 { return Ok(ClaimOutcome::Fenced); }
+    let outcome = claim_in_transaction(&transaction, target, operation, expected_lifecycle, expected_revision, fence as u64, lease_expires_at_unix_milliseconds, now_unix_milliseconds)?;
+    if outcome != ClaimOutcome::Claimed { return Ok(outcome); }
     transaction.commit()?;
     Ok(ClaimOutcome::Claimed)
+}
+
+fn claim_in_transaction(
+    transaction: &rusqlite::Transaction<'_>,
+    target: &str,
+    operation: &str,
+    expected_lifecycle: &str,
+    expected_revision: i64,
+    fence: u64,
+    lease_expires_at_unix_milliseconds: u64,
+    now_unix_milliseconds: u64,
+) -> Result<ClaimOutcome, RepositoryFailure> {
+    let fence = i64::try_from(fence).unwrap_or(i64::MAX);
+    let expiry = i64::try_from(lease_expires_at_unix_milliseconds).unwrap_or(i64::MAX);
+    let now = i64::try_from(now_unix_milliseconds).unwrap_or(i64::MAX);
+    let changed = transaction.execute(
+        statement("claim one retained operation for execution"),
+        rusqlite::params![fence, expiry, target, operation, expected_lifecycle, expected_revision, now, fence],
+    )?;
+    Ok(if changed == 1 { ClaimOutcome::Claimed } else { ClaimOutcome::Fenced })
 }
 
 /// Records the no-return point only for the current fence.
@@ -99,5 +175,12 @@ mod tests {
         assert_eq!(facts.scheduler_fence, Some(1));
         assert_eq!(facts.checkpoint.as_deref(), Some("sent"));
         assert_eq!(claim(&database, &value, "operation", "running", 1, 3, 30, 11).unwrap(), ClaimOutcome::RevisionMoved);
+
+        let second = "b".repeat(64);
+        database.connection().execute(
+            statement("admit one operation"),
+            rusqlite::params!["identity", second, Option::<String>::None, "{}", second, "query_paths", second, 2, second, "queued", "operation-2", 1, 1, second, Option::<String>::None],
+        ).unwrap();
+        assert_eq!(claim_next_queued(&contender, &second, 4, 20, 2).unwrap(), Some(SelectedClaim { operation_identifier: "operation-2".to_owned(), expected_revision: 1 }));
     }
 }
