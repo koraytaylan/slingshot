@@ -10,6 +10,10 @@ mod operating_system_account_database;
 mod platform_directories;
 #[cfg(target_os = "linux")]
 mod posix_access_control_lists;
+#[cfg(target_os = "windows")]
+mod windows_file_identity;
+#[cfg(target_os = "windows")]
+mod windows_security_identifiers;
 mod secret_buffers;
 mod temporary_files;
 mod toml_documents;

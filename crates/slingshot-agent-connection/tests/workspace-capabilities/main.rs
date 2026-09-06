@@ -8,10 +8,13 @@ mod hypertext_transfer_protocol_body;
 mod hypertext_transfer_protocol_engine;
 mod hypertext_transfer_protocol_types;
 mod hypertext_transfer_protocol_utilities;
+mod json_schema_validation;
 #[cfg(target_os = "macos")]
 mod platform_trust_decisions_macos;
 #[cfg(target_os = "linux")]
 mod platform_trust_store_locations;
+#[cfg(target_os = "windows")]
+mod platform_trust_decisions_windows;
 mod secure_hash_digests;
 mod signed_assertions;
 mod transport_layer_security;

@@ -282,7 +282,11 @@ fn expected_edges(
             for name in wanted {
                 let Some(row) = rows.get(name.as_str()) else { continue };
                 let selection = EdgeSelection {
-                    requirement: format!("^{}", row.version),
+                    requirement: if row.version.starts_with('=') {
+                        row.version.clone()
+                    } else {
+                        format!("^{}", row.version)
+                    },
                     default_features: row.default_features,
                     features: row.features.clone(),
                 };
