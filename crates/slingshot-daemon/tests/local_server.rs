@@ -15,6 +15,95 @@ use slingshot_local_protocol::foundation_contract::FoundationContract;
 /// Connections this daemon serves at once, from the foundation contract.
 const CONNECTION_CAPACITY: u32 = 64;
 
+#[tokio::test]
+#[cfg(unix)]
+async fn listener_drop_removes_only_its_own_socket_and_bind_preserves_other_objects() {
+    use slingshot_daemon::{
+        local_server::LocalListener, platform_runtime::endpoint::EndpointAddress,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("endpoint");
+    let address = EndpointAddress::UnixDomainSocket(path.clone());
+    std::fs::write(&path, b"retained file").unwrap();
+    assert!(LocalListener::bind(&address).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), b"retained file");
+    std::fs::remove_file(&path).unwrap();
+    let old = LocalListener::bind(&address).unwrap();
+    old.remove();
+    let replacement = LocalListener::bind(&address).unwrap();
+    drop(old);
+    assert!(path.exists(), "old listener removed its replacement");
+    drop(replacement);
+    assert!(!path.exists(), "drop did not unwind endpoint bind");
+    let linked = root.path().join("linked");
+    std::fs::write(&linked, b"keep").unwrap();
+    std::os::unix::fs::symlink(&linked, &path).unwrap();
+    assert!(LocalListener::bind(&address).is_err());
+    assert!(std::fs::symlink_metadata(&path).unwrap().file_type().is_symlink());
+    assert_eq!(std::fs::read(&linked).unwrap(), b"keep");
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn shutdown_joins_idle_connections_before_releasing_namespace_ownership() {
+    use slingshot_daemon::{
+        local_server::{LocalListener, serve},
+        ownership::{Acquisition, DaemonOwnership},
+        platform_runtime::endpoint::EndpointAddress,
+        runtime_namespace::RuntimeNamespace,
+        service::DaemonService,
+    };
+    use std::sync::Arc;
+    use tokio::time::{Duration, timeout};
+    for connected in [1, CONNECTION_CAPACITY as usize] {
+        let root = tempfile::tempdir().unwrap();
+        let contract = FoundationContract::embedded();
+        let namespace =
+            RuntimeNamespace::name(&contract, &root.path().join("runtime"), "test", "test")
+                .unwrap();
+        namespace.create_runtime_directory().unwrap();
+        let Acquisition::Owned(owner) =
+            DaemonOwnership::acquire(&contract, namespace.clone()).unwrap()
+        else {
+            panic!("fresh namespace")
+        };
+        let address = namespace.endpoint(&contract).unwrap();
+        let EndpointAddress::UnixDomainSocket(path) = &address;
+        let mut listener = LocalListener::bind(&address).unwrap();
+        let service = Arc::new(DaemonService::new(contract.clone(), *owner));
+        let observed = Arc::downgrade(&service);
+        let shutdown = tokio_util::sync::CancellationToken::new();
+        let stop = shutdown.clone();
+        let server = tokio::spawn(async move { serve(service, &mut listener, shutdown).await });
+        let mut sockets = Vec::new();
+        for _ in 0..connected {
+            sockets.push(tokio::net::UnixStream::connect(path).await.unwrap());
+        }
+        timeout(Duration::from_secs(2), async {
+            loop {
+                if observed.strong_count() >= connected + 1 {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        stop.cancel();
+        timeout(Duration::from_secs(2), server).await.unwrap().unwrap().unwrap();
+        assert!(
+            observed.upgrade().is_none(),
+            "idle connection retained the service after shutdown"
+        );
+        assert!(!path.exists());
+        assert!(matches!(
+            DaemonOwnership::acquire(&contract, namespace).unwrap(),
+            Acquisition::Owned(_)
+        ));
+        drop(sockets);
+    }
+}
+
 /// Returns a daemon that has completed every stage up to `stage`.
 fn progressed_to(stage: &str) -> ReadinessProgress {
     let mut progress = ReadinessProgress::started();

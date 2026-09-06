@@ -29,6 +29,93 @@ const LEDGER: &str = include_str!("fixtures/installation-state/ledger.jsonl");
 /// Characters an identifier is rendered with.
 const IDENTIFIER_CHARACTERS: usize = 64;
 
+#[test]
+fn transaction_holds_the_lock_across_read_staging_and_registration() {
+    use fs4::FileExt;
+    let root = tempfile::tempdir().unwrap();
+    let state = InstallationState::at(root.path());
+    let mut transaction = state.transaction().unwrap();
+    assert!(!transaction.state_root_occupied());
+    assert!(matches!(transaction.read(), Err(InstallationStateFailure::Absent)));
+    let contender =
+        std::fs::OpenOptions::new().read(true).write(true).open(state.lock_path()).unwrap();
+    assert!(FileExt::try_lock(&contender).is_err());
+    let record = InstallationRecord::new(InstallationIdentifier::parse(&"a".repeat(64)).unwrap());
+    transaction.replace(&record).unwrap();
+    let staged = transaction.read().unwrap().stage("target-one").unwrap();
+    transaction.replace(&staged).unwrap();
+    assert_eq!(
+        transaction.read().unwrap().registration("target-one"),
+        Some(TargetRegistration::Initializing)
+    );
+    assert!(FileExt::try_lock(&contender).is_err());
+    transaction.replace(&staged.register("target-one").unwrap()).unwrap();
+    assert!(transaction.state_root_occupied());
+    assert_eq!(format!("{transaction:?}"), "InstallationTransaction([redacted])");
+    drop(transaction);
+    FileExt::try_lock(&contender).unwrap();
+    FileExt::unlock(&contender).unwrap();
+    assert_eq!(
+        state.read().unwrap().registration("target-one"),
+        Some(TargetRegistration::Registered)
+    );
+}
+
+#[test]
+fn simultaneous_target_registrations_do_not_overwrite_each_other() {
+    let root = tempfile::tempdir().unwrap();
+    let state = InstallationState::at(root.path());
+    state
+        .replace(&InstallationRecord::new(InstallationIdentifier::parse(&"b".repeat(64)).unwrap()))
+        .unwrap();
+    let ready = std::sync::Barrier::new(8);
+    std::thread::scope(|scope| {
+        for index in 0..8 {
+            let state = &state;
+            let ready = &ready;
+            scope.spawn(move || {
+                ready.wait();
+                let mut transaction = state.transaction().unwrap();
+                let name = format!("target-{index}");
+                let staged = transaction.read().unwrap().stage(&name).unwrap();
+                transaction.replace(&staged).unwrap();
+                transaction.replace(&staged.register(&name).unwrap()).unwrap();
+            });
+        }
+    });
+    let record = state.read().unwrap();
+    assert_eq!(record.targets.len(), 8);
+    for index in 0..8 {
+        assert_eq!(
+            record.registration(&format!("target-{index}")),
+            Some(TargetRegistration::Registered)
+        );
+    }
+}
+
+#[test]
+fn dropping_after_staging_preserves_recoverable_intent_and_releases_ownership() {
+    let root = tempfile::tempdir().unwrap();
+    let state = InstallationState::at(root.path());
+    {
+        let mut transaction = state.transaction().unwrap();
+        let staged =
+            InstallationRecord::new(InstallationIdentifier::parse(&"c".repeat(64)).unwrap())
+                .stage("target-one")
+                .unwrap();
+        transaction.replace(&staged).unwrap();
+    }
+    let mut resumed = state.transaction().unwrap();
+    let staged = resumed.read().unwrap();
+    assert_eq!(staged.registration("target-one"), Some(TargetRegistration::Initializing));
+    resumed.replace(&staged.register("target-one").unwrap()).unwrap();
+    drop(resumed);
+    assert_eq!(
+        state.read().unwrap().registration("target-one"),
+        Some(TargetRegistration::Registered)
+    );
+}
+
 /// Reads one row's string member.
 fn text<'row>(row: &'row Value, member: &str) -> &'row str {
     row[member].as_str().unwrap_or_else(|| panic!("{member} is a string in {row}"))

@@ -58,8 +58,11 @@ struct RunningDaemon {
 /// foundation contract records that bound, and the namespace digest takes most
 /// of it. A runtime root that leaves no room is a real defect.
 fn temporary_runtime_root(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("s{}{name}", std::process::id()));
-    std::fs::remove_dir_all(&root).ok();
+    let root = tempfile::Builder::new()
+        .prefix(&format!("s{name}"))
+        .tempdir()
+        .expect("a unique short runtime root is created")
+        .keep();
     current_user::create_owner_only_directory(&root).expect("the runtime root is created");
     root
 }
@@ -199,7 +202,7 @@ async fn concurrent_connections_receive_correctly_correlated_responses() {
     let mut seen = Vec::new();
     for handle in pending {
         let (identifier, nonce, process_identifier) = handle.await.expect("the client finishes");
-        assert_eq!(nonce, daemon.service.ownership().readiness_nonce());
+        assert_eq!(nonce, daemon.service.readiness_nonce());
         assert_eq!(process_identifier, std::process::id());
         seen.push(identifier);
     }
@@ -311,7 +314,7 @@ async fn post_response_idle_peers_release_general_capacity_at_the_declared_lease
     tokio::time::advance(contract.server.quiescent_connection_lease()).await;
     tokio::task::yield_now().await;
     let recovered = ping(&daemon.address, "after-idle-lease").await;
-    assert_eq!(recovered.readiness_nonce, daemon.service.ownership().readiness_nonce());
+    assert_eq!(recovered.readiness_nonce, daemon.service.readiness_nonce());
     drop(idle);
     finish(daemon).await;
 }
@@ -371,7 +374,7 @@ async fn every_incomplete_peer_closes_at_its_declared_deadline_and_releases_capa
     }
 
     let recovered = ping(&daemon.address, "after-stalled").await;
-    assert_eq!(recovered.readiness_nonce, daemon.service.ownership().readiness_nonce());
+    assert_eq!(recovered.readiness_nonce, daemon.service.readiness_nonce());
     finish(daemon).await;
 }
 

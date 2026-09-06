@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
+#[path = "support/runtime_fixture.rs"]
+mod runtime_fixture;
+
 use slingshot_command_line::command_line::{EXIT_SUCCESS, EXIT_TARGET_UNUSABLE};
 use slingshot_command_line::daemon_connection;
 use slingshot_command_line::explicit_daemon_start::{
@@ -34,7 +37,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Returns the product executable this assertion drives.
 fn product_executable() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_slingshot"))
+    PathBuf::from(env!("CARGO_BIN_EXE_slingshot-runtime-test-host"))
 }
 
 /// Creates an injected temporary runtime root that no other assertion shares.
@@ -120,6 +123,7 @@ async fn start(target: &TargetRuntime, identifier: &str) -> StartReport {
 #[tokio::test(flavor = "multi_thread")]
 async fn an_already_responsive_daemon_is_joined_by_start_and_reported_by_ping() {
     let root = temporary_runtime_root("a");
+    runtime_fixture::prepare(&root, PROFILE, &[ENVIRONMENT]);
     let addressed = target(&root, ENVIRONMENT);
     let created = start(&addressed, "first").await;
     assert_eq!(created.disposition, StartDisposition::Started);
@@ -147,6 +151,7 @@ async fn an_already_responsive_daemon_is_joined_by_start_and_reported_by_ping() 
 #[tokio::test(flavor = "multi_thread")]
 async fn concurrent_starts_against_absence_create_one_daemon_and_share_one_nonce() {
     let root = temporary_runtime_root("c");
+    runtime_fixture::prepare(&root, PROFILE, &[ENVIRONMENT]);
     let addressed = target(&root, ENVIRONMENT);
     let mut pending = Vec::new();
     for index in 0..CONVERGING_CLIENT_COUNT {
@@ -194,6 +199,7 @@ async fn a_probe_against_absence_creates_nothing_and_takes_no_election_lock() {
 async fn a_successor_starts_one_daemon_once_an_abandoned_election_is_released() {
     let contract = FoundationContract::embedded();
     let root = temporary_runtime_root("e");
+    runtime_fixture::prepare(&root, PROFILE, &[ENVIRONMENT]);
     std::fs::create_dir_all(&root).expect("the runtime root is created");
     let addressed = target(&root, ENVIRONMENT);
     let namespace =

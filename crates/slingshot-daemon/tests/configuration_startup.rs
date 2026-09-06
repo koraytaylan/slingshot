@@ -103,6 +103,17 @@ fn establish(directory: &tempfile::TempDir) -> Result<EstablishedDaemon, Startup
 /// writes - including the lifecycle order a row has to pass through to reach
 /// the state it is in.
 fn seed(path: &std::path::Path, target: &str, revision: &str, state: &str, index: usize) {
+    seed_with_contract(path, target, revision, state, index, &"c".repeat(DIGEST_CHARACTERS));
+}
+
+fn seed_with_contract(
+    path: &std::path::Path,
+    target: &str,
+    revision: &str,
+    state: &str,
+    index: usize,
+    contract: &str,
+) {
     let repository =
         OperationRepository::new(OperationDatabase::open(path, settings()).expect("a database"));
     let identifier = format!("operation-{index}");
@@ -121,7 +132,7 @@ fn seed(path: &std::path::Path, target: &str, revision: &str, state: &str, index
         })
         .expect("a derivable fingerprint"),
         command_wire_name: "query_paths".to_owned(),
-        daemon_runtime_contract_digest: "c".repeat(DIGEST_CHARACTERS),
+        daemon_runtime_contract_digest: contract.to_owned(),
         installation_identifier: InstallationIdentifier::parse(&"a1".repeat(DIGEST_PAIRS))
             .expect("a legal identifier"),
         operation_identifier: identifier.clone(),
@@ -193,6 +204,82 @@ fn a_first_startup_establishes_everything_and_leaves_it_where_a_second_finds_it(
 
     let again = establish(&directory).expect("a second startup over the same state");
     assert_eq!(again.paths.database_path(), path, "which finds what the first left");
+}
+
+#[test]
+fn runtime_contract_drift_blocks_only_unfinished_work_without_rewriting_it() {
+    for state in ["queued", "submitting", "accepted", "running", "succeeded", "failed"] {
+        let directory = tempfile::tempdir().unwrap();
+        let established = establish(&directory).unwrap();
+        let path = established.paths.database_path();
+        drop(established);
+        let selected = selected();
+        let foreign_contract = "d".repeat(DIGEST_CHARACTERS);
+        seed_with_contract(
+            &path,
+            &selected.author_target_identity_digest,
+            &selected.selected_environment_revision,
+            state,
+            0,
+            &foreign_contract,
+        );
+        let operations =
+            OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        let before =
+            operations.read(&selected.author_target_identity_digest, "operation-0").unwrap();
+        match establish(&directory) {
+            Ok(_) => assert!(matches!(state, "succeeded" | "failed")),
+            Err(StartupRefusal::ForeignWorkOutstanding { count, partitions }) => {
+                assert!(!matches!(state, "succeeded" | "failed"));
+                assert_eq!(count, 1);
+                assert_eq!(
+                    partitions[0].author_target_identity_digest,
+                    selected.author_target_identity_digest
+                );
+                assert_eq!(
+                    partitions[0].selected_environment_revision,
+                    selected.selected_environment_revision
+                );
+                assert_eq!(partitions[0].daemon_runtime_contract_digest, foreign_contract);
+            }
+            Err(other) => panic!("unexpected startup refusal: {other}"),
+        }
+        assert_eq!(
+            operations.read(&selected.author_target_identity_digest, "operation-0").unwrap(),
+            before
+        );
+    }
+}
+
+#[test]
+fn runtime_contracts_are_distinct_audit_partitions_even_under_the_same_selection() {
+    let directory = tempfile::tempdir().unwrap();
+    let established = establish(&directory).unwrap();
+    let selected = selected();
+    for (index, contract) in ["c", "d", "e"].into_iter().enumerate() {
+        seed_with_contract(
+            &established.paths.database_path(),
+            &selected.author_target_identity_digest,
+            &selected.selected_environment_revision,
+            "queued",
+            index,
+            &contract.repeat(DIGEST_CHARACTERS),
+        );
+    }
+    let partitions = startup::unfinished_partitions(&established.database).unwrap();
+    assert_eq!(partitions.len(), 3);
+    let Err(StartupRefusal::ForeignWorkOutstanding { count, partitions }) = establish(&directory)
+    else {
+        panic!("different runtime contracts were adopted");
+    };
+    assert_eq!(count, 2);
+    assert_eq!(
+        partitions
+            .iter()
+            .map(|partition| partition.daemon_runtime_contract_digest.as_str())
+            .collect::<Vec<_>>(),
+        [&"d".repeat(DIGEST_CHARACTERS), &"e".repeat(DIGEST_CHARACTERS)]
+    );
 }
 
 #[test]

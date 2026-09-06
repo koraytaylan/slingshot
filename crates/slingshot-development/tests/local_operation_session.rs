@@ -28,7 +28,7 @@ use slingshot_domain::operation::{OperationFact, OperationLifecycleState, Recove
 use slingshot_storage::database::{OperationDatabase, RequiredSettings};
 use slingshot_storage::maintenance::ApplyOutcome;
 use slingshot_storage::operation_repository::{
-    AdmissionRequest, OperationRepository, ResultDisposition,
+    AdmissionRequest, OperationRepository,
 };
 
 /// The product session this test replays.
@@ -347,13 +347,18 @@ fn the_helper_session_matches_the_committed_bytes() {
         }));
     }
 
+    summary = repository.read(&digest, OPERATION).expect("a resumed operation").expect("the row remains");
     summary = repository
-        .apply(
+        .settle_success(
             &digest,
             OPERATION,
-            summary.record.revision,
-            &OperationFact::Lifecycle { lifecycle_state: OperationLifecycleState::Succeeded },
-            NOW,
+            &slingshot_domain::operation::SuccessfulSettlement {
+                artifacts: Vec::new(),
+                inline_result: Some(r#"{"matches":[]}"#.to_owned()),
+                expected_lifecycle_state: summary.record.lifecycle_state,
+                expected_revision: summary.record.revision,
+                settled_at_unix_milliseconds: NOW,
+            },
         )
         .expect("the local half finishes");
     produced.push(json!({
@@ -362,14 +367,8 @@ fn the_helper_session_matches_the_committed_bytes() {
         "step": "advance",
         "to": "succeeded",
     }));
-    repository
-        .record_result_disposition(
-            &digest,
-            OPERATION,
-            summary.record.revision,
-            ResultDisposition::Inline,
-        )
-        .expect("a disposition");
+    assert_eq!(summary.result_disposition, Some(slingshot_storage::operation_repository::ResultDisposition::Inline));
+    assert_eq!(summary.result_inline_bytes.as_deref(), Some(r#"{"matches":[]}"#));
     produced.push(json!({
         "disposition": "inline",
         "note": note(&expected, produced.len()),

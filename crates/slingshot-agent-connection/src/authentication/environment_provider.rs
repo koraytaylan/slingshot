@@ -91,6 +91,9 @@ pub enum SnapshotAuthentication {
 /// The immutable material one startup accepted.
 #[derive(Debug)]
 pub struct SelectedEnvironmentSnapshot {
+    /// Names resolved with this snapshot, used only for runtime ownership binding.
+    profile: slingshot_domain::profile::ProfileName,
+    environment: slingshot_domain::profile::EnvironmentName,
     /// The only address this snapshot authenticates to.
     author: TierBaseAddress,
     /// The publisher address, retained as metadata.
@@ -251,6 +254,8 @@ impl SelectedEnvironmentSnapshot {
     #[must_use]
     pub fn assemble(selection: &ProfileSelection, material: SnapshotMaterial) -> Self {
         Self {
+            profile: selection.profile_name().clone(),
+            environment: selection.environment_name().clone(),
             author: material.author,
             publisher: material.publisher,
             deployment: material.deployment,
@@ -262,6 +267,18 @@ impl SelectedEnvironmentSnapshot {
             identity_management_trust: material.identity_management_trust,
             author_trust: material.author_trust,
         }
+    }
+
+    /// Returns the profile resolved with this immutable snapshot.
+    #[must_use]
+    pub fn profile_name(&self) -> &slingshot_domain::profile::ProfileName {
+        &self.profile
+    }
+
+    /// Returns the environment resolved with this immutable snapshot.
+    #[must_use]
+    pub fn environment_name(&self) -> &slingshot_domain::profile::EnvironmentName {
+        &self.environment
     }
 
     /// Returns the only address this snapshot authenticates to.

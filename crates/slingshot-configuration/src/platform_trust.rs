@@ -170,22 +170,116 @@ pub struct OperatingSystemTrustSource;
 #[cfg(target_os = "linux")]
 impl PlatformTrustSource for OperatingSystemTrustSource {
     fn records(&self) -> Result<Vec<ProviderRecord>, ConfigurationDiagnostic> {
-        use crate::additional_certificate_authority::AdditionalAuthorCertificates;
-
-        let locations = openssl_probe::probe();
-        let mut candidates: Vec<std::path::PathBuf> = locations.cert_file.into_iter().collect();
-        candidates.extend(locations.cert_dir);
-        let mut records = Vec::new();
+        // Only provider locations, never SSL_CERT_FILE/SSL_CERT_DIR supplied by
+        // the process that launched this daemon.
+        let mut candidates: Vec<std::path::PathBuf> =
+            openssl_probe::candidate_cert_dirs().map(std::path::Path::to_path_buf).collect();
+        candidates.extend(
+            [
+                "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+                "/etc/ssl/ca-bundle.pem",
+                "/etc/pki/tls/cacert.pem",
+                "/etc/ssl/cert.pem",
+            ]
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.exists()),
+        );
+        let mut roots = std::collections::BTreeSet::new();
+        let limits = &ProfileAuthenticationContract::embedded().limits;
+        let mut aggregate = 0_u64;
         for path in candidates {
-            for source in read_bundle(&path) {
-                let parsed = AdditionalAuthorCertificates::parse(&source).map_err(|_| refusal())?;
-                records.extend(parsed.certificates().iter().map(|der| ProviderRecord {
-                    der: der.clone(),
-                    decision: ProviderDecision::UnconditionallyTrustedForServerAuthentication,
-                }));
-            }
+            read_bundle(&path, |source| {
+                for der in parse_platform_bundle(source)? {
+                    if roots.insert(der.clone()) {
+                        aggregate = aggregate.checked_add(der.len() as u64).ok_or_else(refusal)?;
+                        if roots.len() as u64 > limits.maximum_platform_trust_authorities
+                            || aggregate > limits.maximum_identity_management_trust_canonical_bytes
+                        {
+                            return Err(refusal());
+                        }
+                    }
+                }
+                Ok(())
+            })?;
         }
-        Ok(records)
+        Ok(roots
+            .into_iter()
+            .map(|der| ProviderRecord {
+                der,
+                decision: ProviderDecision::UnconditionallyTrustedForServerAuthentication,
+            })
+            .collect())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn parse_platform_bundle(source: &[u8]) -> Result<Vec<Vec<u8>>, ConfigurationDiagnostic> {
+    let limits = &ProfileAuthenticationContract::embedded().limits;
+    if source.len() as u64
+        > limits.maximum_identity_management_trust_canonical_bytes.saturating_mul(2)
+    {
+        return Err(refusal());
+    }
+    let text = core::str::from_utf8(source).map_err(|_| refusal())?;
+    let roots = crate::additional_certificate_authority::read_blocks(
+        text,
+        limits.maximum_platform_trust_authorities,
+        limits.maximum_platform_trust_authority_der_bytes,
+    )
+    .map_err(|_| refusal())?;
+    if roots.is_empty() || roots.len() as u64 > limits.maximum_platform_trust_authorities {
+        return Err(refusal());
+    }
+    for der in &roots {
+        if der.len() as u64 > limits.maximum_platform_trust_authority_der_bytes {
+            return Err(refusal());
+        }
+        require_eligible_anchor(der)?;
+    }
+    Ok(roots)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_bundle_tests {
+    use super::*;
+
+    const AUTHORITY: &str = include_str!(
+        "../../slingshot-test-support/fixtures/additional-certificate-authority/one-authority.pem"
+    );
+
+    #[test]
+    fn platform_bundles_use_platform_bounds_and_retain_strict_validation() {
+        let count = ProfileAuthenticationContract::embedded()
+            .limits
+            .maximum_additional_certificate_authorities as usize
+            + 1;
+        let bundle = AUTHORITY.repeat(count);
+        assert_eq!(parse_platform_bundle(bundle.as_bytes()).unwrap().len(), count);
+        assert!(
+            crate::additional_certificate_authority::AdditionalAuthorCertificates::parse(
+                bundle.as_bytes()
+            )
+            .is_err()
+        );
+        for source in [
+            "",
+            "not a certificate",
+            include_str!(
+                "../../slingshot-test-support/fixtures/additional-certificate-authority/with-private-key.pem"
+            ),
+            include_str!(
+                "../../slingshot-test-support/fixtures/additional-certificate-authority/end-entity.pem"
+            ),
+        ] {
+            assert!(parse_platform_bundle(source.as_bytes()).is_err());
+        }
+        let too_many = AUTHORITY.repeat(
+            ProfileAuthenticationContract::embedded().limits.maximum_platform_trust_authorities
+                as usize
+                + 1,
+        );
+        assert!(parse_platform_bundle(too_many.as_bytes()).is_err());
     }
 }
 
@@ -194,18 +288,52 @@ impl PlatformTrustSource for OperatingSystemTrustSource {
 /// This row expresses its decisions by which certificates are in the bundle at
 /// all, so a record's presence is its unconditional decision.
 #[cfg(target_os = "linux")]
-fn read_bundle(path: &std::path::Path) -> Vec<Vec<u8>> {
-    if path.is_file() {
-        return std::fs::read(path).into_iter().collect();
-    }
-    let Ok(entries) = std::fs::read_dir(path) else {
-        return Vec::new();
+fn read_bundle(
+    path: &std::path::Path,
+    mut consume: impl FnMut(&[u8]) -> Result<(), ConfigurationDiagnostic>,
+) -> Result<(), ConfigurationDiagnostic> {
+    use std::io::Read as _;
+    let limits = &ProfileAuthenticationContract::embedded().limits;
+    let maximum = limits.maximum_identity_management_trust_canonical_bytes.saturating_mul(2);
+    let read = |path: &std::path::Path| {
+        let file = std::fs::File::open(path).map_err(|_| refusal())?;
+        let mut bytes = Vec::new();
+        file.take(maximum + 1).read_to_end(&mut bytes).map_err(|_| refusal())?;
+        if bytes.len() as u64 > maximum {
+            return Err(refusal());
+        }
+        Ok(bytes)
     };
-    entries
-        .filter_map(Result::ok)
-        .filter(|entry| entry.path().is_file())
-        .filter_map(|entry| std::fs::read(entry.path()).ok())
-        .collect()
+    if path.is_file() {
+        return consume(&read(path)?);
+    }
+    let entries = std::fs::read_dir(path).map_err(|_| refusal())?;
+    let mut bytes = 0_u64;
+    for (index, entry) in entries.enumerate() {
+        if index as u64 >= limits.maximum_platform_trust_authorities.saturating_mul(4) {
+            return Err(refusal());
+        }
+        let entry = entry.map_err(|_| refusal())?;
+        let metadata = entry.metadata().map_err(|_| refusal())?;
+        let metadata = if metadata.is_symlink() {
+            std::fs::metadata(entry.path()).map_err(|_| refusal())?
+        } else {
+            metadata
+        };
+        if metadata.is_dir() {
+            continue;
+        }
+        if !metadata.is_file() {
+            return Err(refusal());
+        }
+        let source = read(&entry.path())?;
+        bytes = bytes.checked_add(source.len() as u64).ok_or_else(refusal)?;
+        if bytes > maximum.saturating_mul(4) {
+            return Err(refusal());
+        }
+        consume(&source)?;
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

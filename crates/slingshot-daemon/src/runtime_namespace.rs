@@ -57,7 +57,7 @@ pub const DIAGNOSTIC_DIRECTORY: &str = "diagnostics";
 pub const TARGETS_DIRECTORY: &str = "targets";
 
 /// File at the state root that holds the global installation record.
-pub const INSTALLATION_RECORD_FILE_NAME: &str = "installation.json";
+pub const INSTALLATION_RECORD_FILE_NAME: &str = slingshot_storage::installation_state::RECORD_FILE_NAME;
 
 /// Reason a target could not name a runtime namespace.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -371,7 +371,7 @@ impl PersistentTargetPaths {
 }
 
 /// Creates one directory reachable by its owner alone, or validates the one there.
-fn create_private_directory(path: &Path) -> Result<(), NamespaceFailure> {
+pub(crate) fn create_private_directory(path: &Path) -> Result<(), NamespaceFailure> {
     crate::platform_runtime::current_user::create_owner_only_directory(path)
         .map_err(|failure| NamespaceFailure::FilesystemRefused(failure.to_string()))?;
     let metadata = std::fs::symlink_metadata(path)

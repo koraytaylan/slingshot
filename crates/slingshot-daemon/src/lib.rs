@@ -20,6 +20,7 @@ pub mod platform_runtime;
 pub mod process_checkpoint;
 pub mod request_dispatch;
 pub mod retained_author_protocol;
+pub mod runtime_builder;
 pub mod runtime_namespace;
 pub mod service;
 pub mod shutdown;

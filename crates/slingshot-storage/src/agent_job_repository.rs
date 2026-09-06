@@ -538,6 +538,27 @@ impl AgentJobRepository {
         )
     }
 
+    /// Reconstructs the unique remote child of a local operation in one read
+    /// transaction. Presence is retained submission evidence, never permission
+    /// to submit again. The schema enforces one child per target/local identity.
+    pub fn read_for_local_operation(
+        &self,
+        target: &str,
+        local_identifier: &str,
+    ) -> Result<Option<AgentSubmission>, AgentRepositoryFailure> {
+        let transaction = self.database.connection().unchecked_transaction()?;
+        let identifier: Option<String> = transaction.query_row(
+            statement_text("find one local operation's retained author submission"),
+            rusqlite::params![target, local_identifier], |row| row.get(0),
+        ).optional()?;
+        let submission = match identifier {
+            Some(identifier) => read_submission(&transaction, target, &identifier)?,
+            None => None,
+        };
+        transaction.commit()?;
+        Ok(submission)
+    }
+
     /// Records one more physical Sling job carrying one submission.
     ///
     /// Recording the same name twice changes nothing, which is what
