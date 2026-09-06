@@ -18,10 +18,10 @@ http.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
-jsonwebtoken.workspace = true
 jsonschema.workspace = true
 rustls.workspace = true
 rustls-pki-types.workspace = true
+ring.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -47,6 +47,9 @@ openssl-probe.workspace = true
 
 [target.aarch64-apple-darwin.dependencies]
 security-framework.workspace = true
+
+[target.x86_64-pc-windows-msvc.dependencies]
+schannel.workspace = true
 
 [lints]
 workspace = true

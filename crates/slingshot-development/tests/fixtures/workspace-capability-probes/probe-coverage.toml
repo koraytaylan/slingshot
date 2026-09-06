@@ -321,7 +321,7 @@ capability = "signed-assertions"
 package = "slingshot-agent-connection"
 module = "signed_assertions"
 kind = "normal"
-interface = ["jsonwebtoken::{Algorithm", "DecodingKey::from_rsa_pem", "Validation::new"]
+interface = ["ring::signature::{RSA_PKCS1_SHA256, RsaKeyPair}", "RSA_PKCS1_SHA256", "SystemRandom"]
 targets = []
 
 [[probe]]
@@ -403,3 +403,43 @@ module = "workflow_documents"
 kind = "normal"
 interface = ["serde_yaml_ng::Value", "serde_yaml_ng::from_str", "as_sequence()"]
 targets = []
+
+[[probe]]
+capability = "platform-trust-decisions-windows"
+package = "slingshot-agent-connection"
+module = "platform_trust_decisions_windows"
+kind = "normal"
+interface = ["schannel::cert_store::CertStore", "ValidUses::Oids", "to_der()"]
+targets = ["x86_64-pc-windows-msvc"]
+
+[[probe]]
+capability = "json-schema-validation"
+package = "slingshot-agent-connection"
+module = "json_schema_validation"
+kind = "normal"
+interface = ["jsonschema::draft202012::new", "validator", "is_valid("]
+targets = []
+
+[[probe]]
+capability = "windows-file-identity"
+package = "slingshot-configuration"
+module = "windows_file_identity"
+kind = "normal"
+interface = ["winsafe::{HFILE, co}", "OPEN_REPARSE_POINT", "GetFileInformationByHandle()"]
+targets = ["x86_64-pc-windows-msvc"]
+
+[[probe]]
+capability = "windows-process-creation-flags"
+package = "slingshot-daemon"
+module = "windows_process_creation_flags"
+kind = "normal"
+interface = ["windows_sys::Win32::System::Threading", "DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP"]
+targets = ["x86_64-pc-windows-msvc"]
+
+[[probe]]
+capability = "windows-security-identifiers"
+package = "slingshot-configuration"
+module = "windows_security_identifiers"
+kind = "normal"
+interface = ["windows_permissions::wrappers::", "GetSecurityInfo", "dacl()"]
+targets = ["x86_64-pc-windows-msvc"]

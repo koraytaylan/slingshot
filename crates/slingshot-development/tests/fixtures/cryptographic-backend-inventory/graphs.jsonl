@@ -1,0 +1,5 @@
+{"package":"ring","version":"0.17.14","role":"selected"}
+{"package":"jsonwebtoken","version":null,"role":"forbidden"}
+{"package":"aws-lc-rs","version":null,"role":"forbidden"}
+{"package":"aws-lc-sys","version":null,"role":"forbidden"}
+{"package":"openssl","version":null,"role":"forbidden"}

@@ -52,12 +52,16 @@ pub const MACOS_TARGET_TRIPLE: &str = "aarch64-apple-darwin";
 pub const WINDOWS_TARGET_TRIPLE: &str = "x86_64-pc-windows-msvc";
 
 /// Exact supported target triples, in manifest order.
-pub const SUPPORTED_TARGET_TRIPLES: &[&str] = &[LINUX_TARGET_TRIPLE, MACOS_TARGET_TRIPLE];
+pub const SUPPORTED_TARGET_TRIPLES: &[&str] =
+    &[LINUX_TARGET_TRIPLE, MACOS_TARGET_TRIPLE, WINDOWS_TARGET_TRIPLE];
 
 /// Operating system, architecture, executable suffix, and archive profile of
 /// each supported triple, in the same order as [`SUPPORTED_TARGET_TRIPLES`].
-const SUPPORTED_TARGET_LAYOUTS: &[(&str, &str, &str, &str)] =
-    &[("linux", "x86_64", "", "tar.gz"), ("macos", "aarch64", "", "tar.gz")];
+const SUPPORTED_TARGET_LAYOUTS: &[(&str, &str, &str, &str)] = &[
+    ("linux", "x86_64", "", "tar.gz"),
+    ("macos", "aarch64", "", "tar.gz"),
+    ("windows", "x86_64", ".exe", "zip"),
+];
 
 /// Provider-record trust decisions every row must expose without reduction.
 const PROVIDER_TRUST_CAPABILITIES: &[&str] = &[
