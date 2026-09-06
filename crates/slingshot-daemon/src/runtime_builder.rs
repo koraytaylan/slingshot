@@ -298,6 +298,30 @@ impl DurableRuntime {
     pub fn context(&self) -> &RuntimeBuilder {
         &self.builder
     }
+
+    /// Acquires the durable local scheduler fence for one retained operation.
+    /// Selection and the compare-and-set claim happen in one SQLite transaction;
+    /// a stale lifecycle/revision or worker loses without executor authority.
+    pub fn claim_scheduled_operation(
+        &self,
+        operation_identifier: &str,
+        expected_lifecycle: &str,
+        expected_revision: u64,
+        fence: u64,
+        lease_expires_at_unix_milliseconds: u64,
+        now_unix_milliseconds: u64,
+    ) -> Result<slingshot_storage::operation::scheduler_claim::ClaimOutcome, slingshot_storage::operation_repository::RepositoryFailure> {
+        slingshot_storage::operation::scheduler_claim::claim(
+            self.database(),
+            &self.context().target().author_target_identity_digest,
+            operation_identifier,
+            expected_lifecycle,
+            expected_revision,
+            fence,
+            lease_expires_at_unix_milliseconds,
+            now_unix_milliseconds,
+        )
+    }
 }
 
 impl Drop for DurableRuntime {
