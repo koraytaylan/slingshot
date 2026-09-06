@@ -168,9 +168,22 @@ pub trait AuthorAgentProtocol: ::core::fmt::Debug {
 #[derive(Debug)]
 pub struct ProductAuthorPorts<'protocol> {
     /// The frozen direct connector for the selected endpoint and trust policy.
-    transport: SelectedAuthorTransport,
+    transport: ProductTransport<'protocol>,
     /// The protocol codec operating only through `transport`.
     protocol: &'protocol dyn AuthorAgentProtocol,
+}
+
+#[derive(Debug)]
+enum ProductTransport<'runtime> {
+    Owned(SelectedAuthorTransport),
+    Runtime(&'runtime SelectedAuthorTransport),
+}
+
+impl core::ops::Deref for ProductTransport<'_> {
+    type Target = SelectedAuthorTransport;
+    fn deref(&self) -> &Self::Target {
+        match self { Self::Owned(transport) => transport, Self::Runtime(transport) => transport }
+    }
 }
 
 impl<'protocol> ProductAuthorPorts<'protocol> {
@@ -180,7 +193,13 @@ impl<'protocol> ProductAuthorPorts<'protocol> {
         connection: SelectedAuthorConnection,
         protocol: &'protocol dyn AuthorAgentProtocol,
     ) -> Result<Self, SelectedAuthorTransportFailure> {
-        Ok(Self { transport: SelectedAuthorTransport::new(connection)?, protocol })
+        Ok(Self { transport: ProductTransport::Owned(SelectedAuthorTransport::new(connection)?), protocol })
+    }
+
+    /// Uses the runtime's already established immutable connector, without
+    /// reconstructing trust configuration or introducing another client.
+    pub fn over_transport(transport: &'protocol SelectedAuthorTransport, protocol: &'protocol dyn AuthorAgentProtocol) -> Self {
+        Self { transport: ProductTransport::Runtime(transport), protocol }
     }
 }
 

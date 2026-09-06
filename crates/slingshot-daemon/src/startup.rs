@@ -50,6 +50,8 @@ pub struct SelectedTarget {
 /// One partition's unfinished work, as the audit found it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnfinishedPartition {
+    /// The runtime contract that admitted the unfinished work.
+    pub daemon_runtime_contract_digest: String,
     /// The target that admitted it.
     pub author_target_identity_digest: String,
     /// The revision it was admitted under.
@@ -77,9 +79,9 @@ pub enum StartupRefusal {
         /// Which invariant.
         invariant: &'static str,
     },
-    /// Durable state holds unfinished work belonging to somebody else.
+    /// Durable state holds unfinished work under another selected execution context.
     #[error(
-        "{count} unfinished operations belong to another target or revision; \
+        "{count} unfinished partitions belong to another target, revision or runtime contract; \
          startup changed nothing, and they are neither failed nor reconciled here"
     )]
     ForeignWorkOutstanding {
@@ -164,10 +166,10 @@ fn require_verifiable_invariants(database: &OperationDatabase) -> Result<(), Sta
     Ok(())
 }
 
-/// Refuses to start over unfinished work belonging to another identity.
+/// Refuses unfinished work under another target, revision or runtime contract.
 ///
 /// Finished work is left alone and stays queryable. Unfinished work under
-/// another target or revision is not failed, reconciled, or adopted: it is
+/// another target, revision or runtime contract is not failed, reconciled, or adopted: it is
 /// reported, and startup stops.
 fn require_no_foreign_work(
     database: &OperationDatabase,
@@ -179,6 +181,7 @@ fn require_no_foreign_work(
         .filter(|partition| {
             partition.author_target_identity_digest != target.author_target_identity_digest
                 || partition.selected_environment_revision != target.selected_environment_revision
+                || partition.daemon_runtime_contract_digest != target.daemon_runtime_contract_digest
         })
         .collect();
     if foreign.is_empty() {
@@ -195,7 +198,7 @@ fn require_no_foreign_work(
 /// which no product crate depends on.
 ///
 /// The audit runs first and the executor is created after it, so durable work
-/// belonging to another target or revision refuses before anything exists to
+/// belonging to another target, revision or runtime contract refuses before anything exists to
 /// run it and therefore before the daemon binds or reports ready.
 ///
 /// # Errors
@@ -225,8 +228,8 @@ pub fn unfinished_partitions(
     database.unfinished_partitions().map_err(|_| unavailable()).map(|partitions| {
         partitions
             .into_iter()
-            .map(|(author_target_identity_digest, selected_environment_revision)| {
-                UnfinishedPartition { author_target_identity_digest, selected_environment_revision }
+            .map(|(author_target_identity_digest, selected_environment_revision, daemon_runtime_contract_digest)| {
+                UnfinishedPartition { author_target_identity_digest, selected_environment_revision, daemon_runtime_contract_digest }
             })
             .collect()
     })

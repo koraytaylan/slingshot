@@ -58,11 +58,49 @@ pub struct InstallationState {
     root: PathBuf,
 }
 
+/// Exclusive installation-ledger scope. Each replacement is durable immediately;
+/// dropping this guard releases the lock, not a rollback of published intent.
+/// Use its methods instead of the separately locking InstallationState methods.
+#[must_use = "retain this guard across the complete installation decision"]
+pub struct InstallationTransaction<'state> {
+    state: &'state InstallationState,
+    _lock: std::fs::File,
+}
+
+impl core::fmt::Debug for InstallationTransaction<'_> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("InstallationTransaction([redacted])")
+    }
+}
+
+impl InstallationTransaction<'_> {
+    /// Reads while retaining the cross-process lock.
+    pub fn read(&self) -> Result<InstallationRecord, InstallationStateFailure> {
+        self.state.read_locked()
+    }
+
+    /// Atomically publishes one durable ledger step without releasing ownership.
+    pub fn replace(&mut self, record: &InstallationRecord) -> Result<(), InstallationStateFailure> {
+        self.state.replace_locked(record)
+    }
+
+    /// Tests occupancy under the same lock used to decide first installation.
+    pub fn state_root_occupied(&self) -> bool {
+        self.state.state_root_occupied_locked()
+    }
+}
+
 impl InstallationState {
     /// Returns the state for the root at `root`.
     #[must_use]
     pub fn at(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
+    }
+
+    /// Acquires one lock spanning the complete installation decision and its
+    /// durable staging/registration steps. No async work should hold this guard.
+    pub fn transaction(&self) -> Result<InstallationTransaction<'_>, InstallationStateFailure> {
+        Ok(InstallationTransaction { state: self, _lock: self.take_lock()? })
     }
 
     /// Returns where the record lives.
@@ -88,9 +126,13 @@ impl InstallationState {
     /// where inventing a replacement would strand live subscriptions.
     #[must_use]
     pub fn state_root_occupied(&self) -> bool {
-        if self.take_lock().is_err() {
+        let Ok(transaction) = self.transaction() else {
             return true;
-        }
+        };
+        transaction.state_root_occupied()
+    }
+
+    fn state_root_occupied_locked(&self) -> bool {
         std::fs::read_dir(&self.root)
             .map(|entries| {
                 entries
@@ -115,7 +157,10 @@ impl InstallationState {
     /// Returns [`InstallationStateFailure`] naming what was wrong, and reads
     /// nothing further once anything is.
     pub fn read(&self) -> Result<InstallationRecord, InstallationStateFailure> {
-        let _lock = self.take_lock()?;
+        self.transaction()?.read()
+    }
+
+    fn read_locked(&self) -> Result<InstallationRecord, InstallationStateFailure> {
         let path = self.record_path();
         let file = match open_without_following(&path) {
             Ok(file) => file,
@@ -164,7 +209,10 @@ impl InstallationState {
     /// Returns [`InstallationStateFailure::FilesystemRefused`] when any step
     /// refuses, leaving the published record as it was.
     pub fn replace(&self, record: &InstallationRecord) -> Result<(), InstallationStateFailure> {
-        let _lock = self.take_lock()?;
+        self.transaction()?.replace(record)
+    }
+
+    fn replace_locked(&self, record: &InstallationRecord) -> Result<(), InstallationStateFailure> {
         let refused = |failure: std::io::Error| {
             InstallationStateFailure::FilesystemRefused(failure.to_string())
         };

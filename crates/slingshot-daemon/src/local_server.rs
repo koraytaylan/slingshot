@@ -85,6 +85,8 @@ pub struct LocalListener {
     inner: tokio::net::UnixListener,
     #[cfg(unix)]
     path: PathBuf,
+    #[cfg(unix)]
+    identity: (u64, u64),
     #[cfg(windows)]
     name: String,
     #[cfg(windows)]
@@ -103,15 +105,23 @@ impl LocalListener {
     /// Returns [`ServerFailure::Unbindable`] when the endpoint cannot be bound.
     #[cfg(unix)]
     pub fn bind(address: &EndpointAddress) -> Result<Self, ServerFailure> {
+        use std::os::unix::fs::{FileTypeExt as _, MetadataExt as _};
         let EndpointAddress::UnixDomainSocket(path) = address;
         let unbindable =
             |reason: String| ServerFailure::Unbindable { address: address.display(), reason };
-        if path.exists() {
-            std::fs::remove_file(path).map_err(|failure| unbindable(failure.to_string()))?;
+        match std::fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_socket() => {
+                std::fs::remove_file(path).map_err(|failure| unbindable(failure.to_string()))?;
+            }
+            Ok(_) => return Err(unbindable("the existing endpoint is not a socket".to_owned())),
+            Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => {}
+            Err(failure) => return Err(unbindable(failure.to_string())),
         }
         let inner = tokio::net::UnixListener::bind(path)
             .map_err(|failure| unbindable(failure.to_string()))?;
-        Ok(Self { inner, path: path.clone() })
+        let metadata =
+            std::fs::symlink_metadata(path).map_err(|failure| unbindable(failure.to_string()))?;
+        Ok(Self { inner, path: path.clone(), identity: (metadata.dev(), metadata.ino()) })
     }
 
     /// Binds the endpoint of one owned runtime namespace.
@@ -168,7 +178,13 @@ impl LocalListener {
     /// Removes the endpoint object this listener created.
     #[cfg(unix)]
     pub fn remove(&self) {
-        std::fs::remove_file(&self.path).ok();
+        use std::os::unix::fs::{FileTypeExt as _, MetadataExt as _};
+        if let Ok(metadata) = std::fs::symlink_metadata(&self.path)
+            && metadata.file_type().is_socket()
+            && (metadata.dev(), metadata.ino()) == self.identity
+        {
+            std::fs::remove_file(&self.path).ok();
+        }
     }
 
     /// Removes the endpoint object this listener created.
@@ -177,6 +193,12 @@ impl LocalListener {
     /// server handles, so there is nothing to unlink.
     #[cfg(windows)]
     pub fn remove(&self) {}
+}
+
+impl Drop for LocalListener {
+    fn drop(&mut self) {
+        self.remove();
+    }
 }
 
 /// The order a daemon must reach readiness in.
@@ -479,31 +501,42 @@ pub async fn serve(
 ) -> Result<(), ServerFailure> {
     let capacity = service.contract().server.connection_capacity as usize;
     let permits = Arc::new(Semaphore::new(capacity));
-    loop {
-        let permit = tokio::select! {
-            biased;
-            () = shutdown.cancelled() => break,
-            permit = Arc::clone(&permits).acquire_owned() => match permit {
-                Ok(permit) => permit,
-                Err(_) => break,
-            },
-        };
-        let accepted = tokio::select! {
-            biased;
-            () = shutdown.cancelled() => break,
-            accepted = listener.accept() => accepted?,
-        };
-        let served = Arc::clone(&service);
-        let stopper = shutdown.clone();
-        tokio::spawn(async move {
-            let mut stream = accepted;
-            if serve_connection(served.as_ref(), &mut stream).await.unwrap_or(false) {
-                stopper.cancel();
-            }
-            drop(permit);
-        });
+    let mut connections = tokio::task::JoinSet::new();
+    let result = async {
+        loop {
+            while connections.try_join_next().is_some() {}
+            let permit = tokio::select! {
+                biased;
+                () = shutdown.cancelled() => break,
+                permit = Arc::clone(&permits).acquire_owned() => match permit {
+                    Ok(permit) => permit,
+                    Err(_) => break,
+                },
+            };
+            let accepted = tokio::select! {
+                biased;
+                () = shutdown.cancelled() => break,
+                accepted = listener.accept() => accepted?,
+            };
+            let served = Arc::clone(&service);
+            let stopper = shutdown.clone();
+            connections.spawn(async move {
+                let mut stream = accepted;
+                if serve_connection(served.as_ref(), &mut stream).await.unwrap_or(false) {
+                    stopper.cancel();
+                }
+                drop(permit);
+            });
+        }
+        Ok(())
     }
-    Ok(())
+    .await;
+    // Neither an accept failure nor orderly stop may leave detached tasks
+    // retaining service/namespace ownership after this function has returned.
+    shutdown.cancel();
+    connections.abort_all();
+    while connections.join_next().await.is_some() {}
+    result
 }
 
 /// How many connections this daemon is serving at once.

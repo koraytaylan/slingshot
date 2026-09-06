@@ -24,8 +24,9 @@ use std::ffi::CStr;
 use std::fs::File;
 use std::sync::OnceLock;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
+use slingshot_domain::installation::InstallationIdentifier;
 
 use crate::sqlite_statement_inventory::FORBIDDEN_CONSTRUCTS;
 
@@ -136,6 +137,19 @@ impl RequiredSettings {
     }
 }
 
+/// The selected installation and execution partition checked before startup recovery.
+#[derive(Debug, Clone, Copy)]
+pub struct StartupDatabaseBinding<'binding> {
+    /// Identity from the locked installation ledger.
+    pub installation: &'binding InstallationIdentifier,
+    /// Target derived from the immutable selected environment.
+    pub target: &'binding str,
+    /// Revision derived from the immutable selected environment.
+    pub revision: &'binding str,
+    /// Runtime contract embedded in this daemon build.
+    pub runtime_contract: &'binding str,
+}
+
 /// One opened operation database.
 #[derive(Debug)]
 pub struct OperationDatabase {
@@ -160,7 +174,7 @@ impl OperationDatabase {
         path: &std::path::Path,
         settings: RequiredSettings,
     ) -> Result<Self, DatabaseFailure> {
-        Self::open_with_startup_recovery(path, settings, true)
+        Self::open_with_startup_recovery(path, settings, true, None)
     }
 
     /// Opens another connection for an already-started, exclusively owned
@@ -176,19 +190,39 @@ impl OperationDatabase {
         path: &std::path::Path,
         settings: RequiredSettings,
     ) -> Result<Self, DatabaseFailure> {
-        Self::open_with_startup_recovery(path, settings, false)
+        Self::open_with_startup_recovery(path, settings, false, None)
+    }
+
+    /// Reopens a ledger-registered database only after a read-only identity and
+    /// unfinished-partition audit. Refusal precedes migration and artifact recovery.
+    /// The caller must retain installation and namespace ownership throughout.
+    pub fn reopen_bound(
+        path: &std::path::Path,
+        settings: RequiredSettings,
+        binding: StartupDatabaseBinding<'_>,
+    ) -> Result<Self, DatabaseFailure> {
+        Self::open_with_startup_recovery(path, settings, true, Some(binding))
     }
 
     fn open_with_startup_recovery(
         path: &std::path::Path,
         settings: RequiredSettings,
         startup: bool,
+        binding: Option<StartupDatabaseBinding<'_>>,
     ) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let (state_root, pinned_path) = PinnedDatabasePath::open(path)?;
         let physical_inventory = PhysicalInventory::new(pinned_path.clone())?;
         physical_inventory.require_within_budget()?;
         let inspected = inspect_existing_schema(&pinned_path, !startup)?;
+        if let Some(binding) = binding {
+            if inspected.is_none() {
+                return Err(DatabaseFailure::Refused(
+                    "the registered database is missing".to_owned(),
+                ));
+            }
+            audit_existing_binding(&pinned_path, binding)?;
+        }
         if !startup && inspected.is_none() {
             return Err(DatabaseFailure::Refused(
                 "a live connection requires an initialized database".to_owned(),
@@ -289,21 +323,65 @@ impl OperationDatabase {
             .map_err(refused)
     }
 
-    /// Lists target partitions that still hold a nonterminal operation.
+    /// Reads the database's installation identity without creating or repairing it.
+    /// An absent identity is distinct from malformed or unreadable durable state.
+    pub fn installation_identifier(
+        &self,
+    ) -> Result<Option<InstallationIdentifier>, DatabaseFailure> {
+        let statement = crate::sqlite_statement_inventory::statement_text(
+            "read this installation's identifier",
+        );
+        let value: Option<String> = self
+            .connection
+            .query_row(statement, [], |row| row.get(0))
+            .optional()
+            .map_err(refused)?;
+        value
+            .map(|value| {
+                InstallationIdentifier::parse(&value).map_err(|_| {
+                    DatabaseFailure::Refused(
+                        "the database installation identifier is not canonical".to_owned(),
+                    )
+                })
+            })
+            .transpose()
+    }
+
+    /// Records the staged installation exactly once. Even an identical second
+    /// insertion refuses; callers must read and verify existing identity, never
+    /// use this method to adopt or repair an existing database.
+    pub fn record_installation_identifier(
+        &self,
+        identifier: &InstallationIdentifier,
+        recorded_at_unix_milliseconds: i64,
+    ) -> Result<(), DatabaseFailure> {
+        let statement = crate::sqlite_statement_inventory::statement_text(
+            "record this installation's identifier once",
+        );
+        self.connection
+            .execute(
+                statement,
+                rusqlite::params![identifier.as_text(), recorded_at_unix_milliseconds,],
+            )
+            .map_err(refused)?;
+        Ok(())
+    }
+
+    /// Lists target/revision/runtime-contract partitions holding nonterminal work.
     ///
     /// # Errors
     ///
     /// Returns [`DatabaseFailure::Refused`] when the reviewed audit statement
     /// cannot be prepared or read.
-    pub fn unfinished_partitions(&self) -> Result<Vec<(String, String)>, DatabaseFailure> {
+    pub fn unfinished_partitions(&self) -> Result<Vec<(String, String, String)>, DatabaseFailure> {
         let statement = crate::sqlite_statement_inventory::statement_text(
             "list every partition holding work that has not ended",
         );
         let mut prepared = self.connection.prepare(statement).map_err(refused)?;
         prepared
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
             .map_err(refused)?
-            .collect::<Result<Vec<(String, String)>, _>>()
+            .collect::<Result<Vec<(String, String, String)>, _>>()
             .map_err(refused)
     }
 
@@ -740,6 +818,70 @@ fn inspect_existing_schema(
     Ok(Some(snapshot))
 }
 
+/// Uses only reviewed reads before the mutable startup connection is opened.
+fn audit_existing_binding(
+    path: &std::path::Path,
+    binding: StartupDatabaseBinding<'_>,
+) -> Result<(), DatabaseFailure> {
+    let connection =
+        Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(refused)?;
+    let identity: Option<String> = connection
+        .query_row(
+            crate::sqlite_statement_inventory::statement_text(
+                "read this installation's identifier",
+            ),
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(refused)?;
+    if identity.as_deref() != Some(binding.installation.as_text()) {
+        return Err(DatabaseFailure::Refused(
+            "the database does not belong to the selected installation".to_owned(),
+        ));
+    }
+    let foreign_installations: i64 = connection.query_row(
+        crate::sqlite_statement_inventory::statement_text("count unfinished operations from another installation"),
+        [binding.installation.as_text()], |row| row.get(0),
+    ).map_err(refused)?;
+    if foreign_installations != 0 {
+        return Err(DatabaseFailure::Refused("unfinished work belongs to another installation".to_owned()));
+    }
+    let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0)).map_err(refused)?;
+    // Version one predates the outbox; its normal migration creates the empty
+    // table. Never query a table that this supported historical schema lacks.
+    if version >= 2 {
+        let foreign_children: i64 = connection.query_row(
+            crate::sqlite_statement_inventory::statement_text("count unfinished author submissions without the selected local owner"),
+            rusqlite::params![binding.target, binding.revision], |row| row.get(0),
+        ).map_err(refused)?;
+        if foreign_children != 0 {
+            return Err(DatabaseFailure::Refused("unfinished author work has no selected local owner".to_owned()));
+        }
+    }
+    let mut statement = connection
+        .prepare(crate::sqlite_statement_inventory::statement_text(
+            "list every partition holding work that has not ended",
+        ))
+        .map_err(refused)?;
+    let mut rows = statement.query([]).map_err(refused)?;
+    while let Some(row) = rows.next().map_err(refused)? {
+        let target: String = row.get(0).map_err(refused)?;
+        let revision: String = row.get(1).map_err(refused)?;
+        let contract: String = row.get(2).map_err(refused)?;
+        if target != binding.target
+            || revision != binding.revision
+            || contract != binding.runtime_contract
+        {
+            return Err(DatabaseFailure::Refused(
+                "unfinished work belongs to another target, revision or runtime contract"
+                    .to_owned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// The stable identity of one inspected database pathname.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct FileSnapshot(u64, u64);
@@ -794,14 +936,58 @@ fn refused(failure: rusqlite::Error) -> DatabaseFailure {
 
 #[cfg(test)]
 mod tests {
-    use super::{OperationDatabase, RequiredSettings};
+    use super::{OperationDatabase, RequiredSettings, StartupDatabaseBinding};
     use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
+    use slingshot_domain::installation::InstallationIdentifier;
 
     fn settings() -> RequiredSettings {
         RequiredSettings {
             page_bytes: 4096,
             database_pages: 262_144,
             busy_timeout_milliseconds: 5000,
+        }
+    }
+
+    #[test]
+    fn bound_startup_refuses_each_foreign_partition_before_changes() {
+        for dimension in 0..4 {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("operations.sqlite3");
+            let identity = InstallationIdentifier::parse(&"a".repeat(64)).unwrap();
+            let database = OperationDatabase::open(&path, settings()).unwrap();
+            database.record_installation_identifier(&identity, 123).unwrap();
+            let mut partition = ["target", "revision", "contract"];
+            if dimension < 3 { partition[dimension] = "foreign"; }
+            let retained_installation = if dimension == 3 { "b".repeat(64) } else { identity.as_text().to_owned() };
+            database.connection.execute(
+                "INSERT INTO operation (author_target_identity, author_target_identity_digest, \
+                 canonical_command, command_fingerprint, command_wire_name, daemon_runtime_contract_digest, \
+                 enqueue_sequence, installation_identifier, lifecycle_state, operation_identifier, \
+                 operation_revision, recorded_at_unix_milliseconds, selected_environment_revision) \
+                 VALUES ('identity', ?1, '{}', 'fingerprint', 'command', ?3, 1, ?4, 'queued', 'operation', 1, 123, ?2)",
+                rusqlite::params![partition[0], partition[1], partition[2], retained_installation],
+            ).unwrap();
+            drop(database);
+            let before = std::fs::read(&path).unwrap();
+            let binding = StartupDatabaseBinding {
+                installation: &identity,
+                target: "target",
+                revision: "revision",
+                runtime_contract: "contract",
+            };
+            assert!(OperationDatabase::reopen_bound(&path, settings(), binding).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            let database = OperationDatabase::open_live(&path, settings()).unwrap();
+            assert_eq!(
+                database.unfinished_partitions().unwrap(),
+                vec![(partition[0].to_owned(), partition[1].to_owned(), partition[2].to_owned(),)]
+            );
+            database
+                .connection
+                .execute("UPDATE operation SET lifecycle_state = 'succeeded'", [])
+                .unwrap();
+            drop(database);
+            assert!(OperationDatabase::reopen_bound(&path, settings(), binding).is_ok());
         }
     }
 

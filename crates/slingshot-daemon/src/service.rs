@@ -14,6 +14,15 @@ use slingshot_local_protocol::ping::{
 };
 
 use crate::ownership::DaemonOwnership;
+use crate::runtime_builder::DurableRuntime;
+
+/// Keep SQLite behind a mutex: connections are movable, but not shareable.
+/// The runtime retains its namespace lock until all runtime resources close.
+#[derive(Debug)]
+enum ServiceLifetime {
+    Control(DaemonOwnership),
+    Runtime(Box<std::sync::Mutex<DurableRuntime>>),
+}
 
 /// Version of the product this daemon was built from.
 const PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -47,14 +56,34 @@ impl ServiceOutcome {
 #[derive(Debug)]
 pub struct DaemonService {
     contract: FoundationContract,
-    ownership: DaemonOwnership,
+    lifetime: ServiceLifetime,
 }
 
 impl DaemonService {
     /// Builds the service of one owned runtime namespace.
     #[must_use]
     pub fn new(contract: FoundationContract, ownership: DaemonOwnership) -> Self {
-        Self { contract, ownership }
+        Self { contract, lifetime: ServiceLifetime::Control(ownership) }
+    }
+
+    /// Retains the complete selected runtime for every connection's lifetime.
+    /// This does not publish readiness or claim operation protocol support.
+    #[must_use]
+    pub fn from_runtime(contract: FoundationContract, mut runtime: DurableRuntime) -> Self {
+        let target = runtime.context().target();
+        let identity = crate::platform_runtime::readiness::PublishedIdentity {
+            author_target_identity_digest: target.author_target_identity_digest.clone(),
+            daemon_runtime_contract_digest: target.daemon_runtime_contract_digest.clone(),
+            retained_control_version: contract.control.version,
+            selected_environment_revision: target.selected_environment_revision.clone(),
+            // Dispatch is still control-only; never advertise an uninstalled surface.
+            supported_operation_versions: Vec::new(),
+        };
+        runtime.ownership_mut().identify(identity);
+        Self {
+            contract,
+            lifetime: ServiceLifetime::Runtime(Box::new(std::sync::Mutex::new(runtime))),
+        }
     }
 
     /// Returns the foundation contract this service is bounded by.
@@ -63,15 +92,30 @@ impl DaemonService {
         &self.contract
     }
 
-    /// Returns the ownership this service answers for.
+    /// Returns the nonce of the ownership this service retains.
     #[must_use]
-    pub fn ownership(&self) -> &DaemonOwnership {
-        &self.ownership
+    pub fn readiness_nonce(&self) -> String {
+        self.with_ownership(|ownership| ownership.readiness_nonce().to_owned())
     }
 
-    /// Returns the ownership this service answers for, for withdrawal.
+    fn with_ownership<T>(&self, read: impl FnOnce(&DaemonOwnership) -> T) -> T {
+        match &self.lifetime {
+            ServiceLifetime::Control(ownership) => read(ownership),
+            ServiceLifetime::Runtime(runtime) => {
+                let runtime = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                read(runtime.ownership())
+            }
+        }
+    }
+
+    /// Returns exclusive ownership access before the service is shared.
     pub fn ownership_mut(&mut self) -> &mut DaemonOwnership {
-        &mut self.ownership
+        match &mut self.lifetime {
+            ServiceLifetime::Control(ownership) => ownership,
+            ServiceLifetime::Runtime(runtime) => {
+                runtime.get_mut().unwrap_or_else(std::sync::PoisonError::into_inner).ownership_mut()
+            }
+        }
     }
 
     /// Answers one frame payload.
@@ -118,7 +162,9 @@ impl DaemonService {
             );
             return ServiceOutcome::Respond(self.render(&request.request_identifier, Err(error)));
         };
-        if !self.ownership.stop_is_authorized(&arguments.readiness_nonce) {
+        if !self
+            .with_ownership(|ownership| ownership.stop_is_authorized(&arguments.readiness_nonce))
+        {
             let refusal = ping::stale_instance_refusal();
             return ServiceOutcome::Respond(self.render(&request.request_identifier, Err(refusal)));
         }
@@ -129,14 +175,14 @@ impl DaemonService {
 
     /// Builds the result of one retained ping.
     fn ping_result(&self) -> PingResult {
-        PingResult {
+        self.with_ownership(|ownership| PingResult {
             product_version: PRODUCT_VERSION.to_owned(),
             process_identifier: std::process::id(),
-            profile: self.ownership.namespace().profile().to_owned(),
-            environment: self.ownership.namespace().environment().to_owned(),
-            readiness_nonce: self.ownership.readiness_nonce().to_owned(),
+            profile: ownership.namespace().profile().to_owned(),
+            environment: ownership.namespace().environment().to_owned(),
+            readiness_nonce: ownership.readiness_nonce().to_owned(),
             supported_operation_protocol_versions: Vec::new(),
-        }
+        })
     }
 
     /// Renders one served result as a frame.
@@ -163,5 +209,13 @@ impl DaemonService {
                     .expect("a retained refusal is within the frame limit")
             }
         }
+    }
+}
+
+impl Drop for DaemonService {
+    fn drop(&mut self) {
+        // Stop advertising before SQLite, transport and the lock are released.
+        // Ownership's drop remains a second best-effort cleanup on failure.
+        let _ = self.ownership_mut().withdraw_readiness();
     }
 }

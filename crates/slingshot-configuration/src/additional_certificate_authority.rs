@@ -82,7 +82,11 @@ impl AdditionalAuthorCertificates {
         let text = core::str::from_utf8(source).map_err(|_| {
             refusal(ConfigurationFailureCode::AdditionalCertificateAuthorityInvalid)
         })?;
-        let blocks = read_blocks(text)?;
+        let blocks = read_blocks(
+            text,
+            limits.maximum_additional_certificate_authorities,
+            limits.maximum_additional_certificate_authority_der_bytes,
+        )?;
         if blocks.is_empty() {
             return Err(refusal(ConfigurationFailureCode::AdditionalCertificateAuthorityInvalid));
         }
@@ -121,11 +125,20 @@ impl AdditionalAuthorCertificates {
 }
 
 /// Reads every certificate block, refusing a source that carries anything else.
-fn read_blocks(text: &str) -> Result<Vec<Vec<u8>>, ConfigurationDiagnostic> {
+pub(crate) fn read_blocks(
+    text: &str,
+    maximum_blocks: u64,
+    maximum_der_bytes: u64,
+) -> Result<Vec<Vec<u8>>, ConfigurationDiagnostic> {
     let invalid = || refusal(ConfigurationFailureCode::AdditionalCertificateAuthorityInvalid);
+    let exceeded =
+        || refusal(ConfigurationFailureCode::AdditionalCertificateAuthorityLimitExceeded);
     let mut blocks = Vec::new();
     let mut remainder = text;
     while let Some(opening) = remainder.find(BLOCK_OPENING) {
+        if blocks.len() as u64 >= maximum_blocks {
+            return Err(exceeded());
+        }
         if remainder[..opening].contains(|character| !SEPARATING_BYTES.contains(&character)) {
             return Err(invalid());
         }
@@ -144,7 +157,18 @@ fn read_blocks(text: &str) -> Result<Vec<Vec<u8>>, ConfigurationDiagnostic> {
             .chars()
             .filter(|character| !SEPARATING_BYTES.contains(character))
             .collect();
-        blocks.push(STANDARD.decode(encoded.as_bytes()).map_err(|_| invalid())?);
+        let maximum_encoded = maximum_der_bytes
+            .checked_add(2)
+            .and_then(|value| (value / 3).checked_mul(4))
+            .ok_or_else(exceeded)?;
+        if encoded.len() as u64 > maximum_encoded {
+            return Err(exceeded());
+        }
+        let decoded = STANDARD.decode(encoded.as_bytes()).map_err(|_| invalid())?;
+        if decoded.len() as u64 > maximum_der_bytes {
+            return Err(exceeded());
+        }
+        blocks.push(decoded);
         remainder = &body[body_end + closing.len()..];
     }
     if remainder.contains(|character| !SEPARATING_BYTES.contains(&character)) {

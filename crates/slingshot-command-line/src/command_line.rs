@@ -426,7 +426,7 @@ impl ConfigurationBoundary for ProductConfiguration {
 
 /// Returns the profiles this account's configuration root holds.
 #[cfg(unix)]
-fn loaded_profiles() -> Result<LoadedProfiles, Vec<ConfigurationDiagnostic>> {
+pub(crate) fn loaded_profiles() -> Result<LoadedProfiles, Vec<ConfigurationDiagnostic>> {
     use slingshot_configuration::configuration_root::{
         ConfigurationRoot, OperatingSystemAccountResolver,
     };
@@ -441,7 +441,7 @@ fn loaded_profiles() -> Result<LoadedProfiles, Vec<ConfigurationDiagnostic>> {
 
 /// Returns the profiles this account's configuration root holds.
 #[cfg(windows)]
-fn loaded_profiles() -> Result<LoadedProfiles, Vec<ConfigurationDiagnostic>> {
+pub(crate) fn loaded_profiles() -> Result<LoadedProfiles, Vec<ConfigurationDiagnostic>> {
     use slingshot_configuration::configuration_root::{
         ConfigurationRoot, OperatingSystemAccountResolver,
     };

@@ -161,6 +161,67 @@ fn submission(named: &str) -> AgentSubmission {
 }
 
 #[test]
+fn bound_startup_audits_outbox_ownership_before_mutable_recovery() {
+    use slingshot_domain::{installation::InstallationIdentifier, command_fingerprint::{CommandFingerprint, FingerprintInput}};
+    use slingshot_storage::{database::StartupDatabaseBinding, operation_repository::{AdmissionRequest,OperationRepository}};
+    for mode in ["matched", "orphan", "wrong-revision", "terminal-orphan"] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("operations.sqlite3");
+        let remote = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        let installation = InstallationIdentifier::parse(&"a".repeat(64)).unwrap();
+        remote.database().record_installation_identifier(&installation, 1).unwrap();
+        let target = "1d".repeat(32);
+        let mut child = submission_in(&target, "audit");
+        let revision = child.identity.selected_environment_revision.clone();
+        if mode == "wrong-revision" { child.identity.selected_environment_revision = "foreign".into(); }
+        remote.submit(&child).unwrap();
+        if mode == "terminal-orphan" {
+            let mut observation = child.observation;
+            observation.state = AgentJobState::Succeeded;
+            remote.settle(&child.identity, observation, RETENTION, "succeeded").unwrap();
+        }
+        if matches!(mode, "matched" | "wrong-revision") {
+            let local = OperationRepository::new(OperationDatabase::open_live(&path, settings()).unwrap());
+            local.admit(&AdmissionRequest {
+                author_target_identity:"opaque-target".into(),author_target_identity_digest:target.clone(),caller_identity:None,
+                canonical_command:"{}".into(),command_fingerprint:CommandFingerprint::derive(&FingerprintInput {
+                    author_target_identity_digest:target.clone(),canonical_command:"{}".into(),command_wire_name:"query_paths".into(),command_semantic_contract_version:"1".into(),selected_environment_revision:revision.clone(),
+                }).unwrap(),command_wire_name:"query_paths".into(),daemon_runtime_contract_digest:"c".repeat(64),installation_identifier:installation.clone(),operation_identifier:child.identity.operation_identifier.clone(),selected_environment_revision:revision.clone(),workflow_correlation_identifier:None,
+            },1).unwrap();
+        }
+        drop(remote);
+        let before = std::fs::read(&path).unwrap();
+        let contract = "c".repeat(64);
+        let result = OperationDatabase::reopen_bound(&path,settings(),StartupDatabaseBinding {
+            installation:&installation,target:&target,revision:&revision,runtime_contract:&contract,
+        });
+        if matches!(mode, "orphan" | "wrong-revision") {
+            assert!(result.is_err(), "{mode} reached mutable startup");
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+        } else { assert!(result.is_ok(), "{mode} was refused"); }
+    }
+}
+
+#[test]
+fn local_operation_lookup_retains_exact_child_evidence_across_restart() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("operations.sqlite3");
+    let expected = submission("restart-local");
+    let foreign = submission_in(ANOTHER_TARGET, "restart-local");
+    {
+        let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+        assert!(repository.read_for_local_operation(TARGET, &expected.identity.operation_identifier).unwrap().is_none());
+        repository.submit(&expected).unwrap();
+        repository.submit(&foreign).unwrap();
+    }
+    let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());
+    assert_eq!(repository.read_for_local_operation(TARGET, &expected.identity.operation_identifier).unwrap(), Some(expected.clone()));
+    assert_eq!(repository.read_for_local_operation(ANOTHER_TARGET, &expected.identity.operation_identifier).unwrap(), Some(foreign));
+    assert!(repository.read_for_local_operation(TARGET, "absent-local").unwrap().is_none());
+    assert_eq!(repository.read(TARGET, &expected.identity.agent_operation_identifier).unwrap(), Some(expected));
+}
+
+#[test]
 fn retained_submission_debug_does_not_disclose_the_stored_request() {
     let repository = repository();
     let mut expected = submission("private-operation-sentinel");
