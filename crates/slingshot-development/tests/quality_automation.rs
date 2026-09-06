@@ -205,6 +205,27 @@ fn every_external_executable_is_pinned_to_an_exact_version_and_source() {
 }
 
 #[test]
+fn hosted_quality_installs_and_rechecks_every_manifest_tool_before_the_gate() {
+    let installer = read_repository_file("scripts/install_pinned_repository_tools");
+    for required in [
+        "pinned_version",
+        "pinned_field",
+        "verify_archive",
+        "require_reported_version",
+        "cargo install --locked",
+    ] {
+        assert!(installer.contains(required), "the installer omits {required}");
+    }
+    let workflow = read_repository_file(".github/workflows/quality.yml");
+    let install = workflow.find("scripts/install_pinned_repository_tools").expect("installer step");
+    let gate = workflow.find("scripts/quality").expect("quality step");
+    assert!(install < gate, "the hosted gate must install its pinned tools first");
+    for hardcoded in ["cargo-deny 0.18.6", "shellcheck 0.11.0", "gh version 2.97.0"] {
+        assert!(!installer.contains(hardcoded), "the installer repeats a version outside the manifest: {hardcoded}");
+    }
+}
+
+#[test]
 fn the_dependency_policy_names_its_accepted_licenses_and_refuses_unknown_sources() {
     let policy: toml::Value =
         toml::from_str(&read_repository_file(DEPENDENCY_POLICY_PATH)).expect("the policy reads");
