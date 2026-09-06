@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-daemon/tests/author_agent_operation_executor.rs
   - crates/slingshot-daemon/tests/author_agent_conformance.rs
 status: completed
-merged_as: ""
+merged_as: "980c5a0"
 ---
 # The Product Has One Author Port
 

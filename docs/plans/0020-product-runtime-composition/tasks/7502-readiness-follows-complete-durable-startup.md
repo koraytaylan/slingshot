@@ -11,7 +11,7 @@ touches:
   - crates/slingshot-daemon/src/service.rs
   - crates/slingshot-development/tests/operation_executor_composition.rs
 status: completed
-merged_as: ""
+merged_as: "47d67ea"
 ---
 # Readiness Follows Complete Durable Startup
 
