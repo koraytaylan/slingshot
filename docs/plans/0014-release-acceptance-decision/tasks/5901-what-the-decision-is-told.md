@@ -10,8 +10,8 @@ touches:
   - scripts/release_acceptance
   - .github/workflows/release.yml
   - crates/slingshot-development/tests/release_acceptance.rs
-status: planned
-merged_as: ""
+status: completed
+merged_as: "48b81cb"
 ---
 # What The Decision Is Told About Its Run
 
