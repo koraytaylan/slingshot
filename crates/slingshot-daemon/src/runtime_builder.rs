@@ -354,6 +354,41 @@ impl DurableRuntime {
             now_unix_milliseconds,
         )
     }
+
+    /// Settles a locally executed operation only through the fence acquired
+    /// by [`Self::claim_scheduled_operation`]. This keeps executor handoff and
+    /// terminal publication on the same durable ownership boundary.
+    pub fn settle_success_with_scheduler_fence(
+        &self,
+        operation_identifier: &str,
+        settlement: &slingshot_domain::operation::SuccessfulSettlement,
+        scheduler_fence: u64,
+    ) -> Result<slingshot_storage::operation_repository::OperationSummary, slingshot_storage::operation_repository::RepositoryFailure> {
+        self.operations.settle_success_with_scheduler_fence(
+            &self.context().target().author_target_identity_digest,
+            operation_identifier,
+            settlement,
+            scheduler_fence,
+        )
+    }
+
+    /// Persists any executor outcome through the same scheduler fence used for
+    /// handoff. This is the required settlement path for local workers.
+    pub fn settle_execution_with_scheduler_fence(
+        &self,
+        summary: &slingshot_storage::operation_repository::OperationSummary,
+        outcome: &slingshot_domain::operation_executor::OperationExecutorOutcome,
+        now_unix_milliseconds: u64,
+        scheduler_fence: u64,
+    ) -> Result<slingshot_storage::operation_repository::OperationSummary, slingshot_storage::operation_repository::RepositoryFailure> {
+        crate::operation_submission::settle_with_scheduler_fence(
+            &self.operations,
+            summary,
+            outcome,
+            now_unix_milliseconds,
+            scheduler_fence,
+        )
+    }
 }
 
 impl Drop for DurableRuntime {
