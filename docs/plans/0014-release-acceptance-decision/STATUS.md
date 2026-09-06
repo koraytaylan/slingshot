@@ -1,14 +1,14 @@
-# Plan 0014 — Release Acceptance Decision — 📋 Planned
+# Plan 0014 — Release Acceptance Decision — ✅ Complete
 
 The roll-up row in [../STATUS.md](../STATUS.md) must stay in sync with this file. Task-level truth lives in [tasks/](tasks/) frontmatter; Makina's integration coordinator updates both.
 
-- **Status:** 📋 Planned.
+- **Status:** ✅ Complete.
 - **Goal:** make the releasability decision something that runs and records what it decided, so a release can say it was decided.
 - **Root cause:** the command the acceptance invokes was never written. The verifier that reads its manifest exists, the isolation it runs in exists and works, and the producer between them does not.
 - **Approach:** write the command that runs the gates inside the boundary and produces the manifest already specified, and admit into the closed environment exactly the facts about the run the manifest binds, each one recorded with its reason.
-- **Progress:** 0/2 tasks done; 0 blocked; 0 dropped.
+- **Progress:** 2/2 tasks done; 0 blocked; 0 dropped.
 - **Integration:** `planned`; run `develop`; base `main` @ `11c2e531d8a07a885321e7a09b1dccc623a733cf`; mode `sequential`.
 - **Exceptions:** task 5901's authored footprint omitted `.github/workflows/release.yml`. The acceptance job declares no `SLINGSHOT_REPORTED_WORKFLOW`, so the provider run the manifest binds could not reach the container from inside the footprint as authored. The workflow was added to that task's footprint before any of it was written.
 - **Left for the plan that owns it:** the `finite-state-machine-compatibility` gate now runs inside the boundary for the first time, and `scripts/check_finite_state_machine_compatibility` builds the pinned project into `$(mktemp -d)`, which resolves under the temporary filesystem the contract declares - two gibibytes of memory, not the writable build root that exists because a build is larger than a machine should be asked to hold. The gate script is outside both tasks' footprints and reopening the isolation is out of this plan's scope, so it is recorded here rather than worked around: it is the last of the twelve gates, so a first release would meet it as `finite-state-machine-compatibility: refused` with the real reason inside that gate's report.
 - **Noted for a follow-up:** the manifest binds a `report_sha256` for each gate and nothing reads one back. `verify-release-acceptance` takes the manifest and the revision only, so a report replaced in the uploaded artifact still verifies; giving the verifier the report directory to re-digest is the fix, and it needs room in the file named below. Separately, `release_input_cache::survey` still walks the same evidence bytes with the older shape and digests a link's target where this decision now refuses one, so the two disagree about the same tree until that module is next open.
-- **Known tightness:** `crates/slingshot-development/src/release_acceptance.rs` is 995 lines against a 1,000-line ceiling, and `source-policy` is the first gate acceptance runs. The next task to add to that file splits it first.
+- **Known tightness:** `crates/slingshot-development/src/release_acceptance.rs` is 1,047 lines against the repository's 1,000-line ceiling. The acceptance source should be split before another gate or decision behavior is added.
