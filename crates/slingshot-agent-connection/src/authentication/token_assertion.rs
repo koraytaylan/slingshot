@@ -19,13 +19,17 @@
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use ring::rand::SystemRandom;
+use ring::signature::{RSA_PKCS1_SHA256, RsaKeyPair};
 use slingshot_domain::profile_authentication_contract::{
     ConfigurationFailureCode, ProfileAuthenticationContract,
 };
 use slingshot_domain::secret_value::SecretValue;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
-use crate::authentication::cloud_service_credentials::CloudServiceCredentials;
+use crate::authentication::cloud_service_credentials::{
+    CloudServiceCredentials, read_private_key_der,
+};
 
 /// Separator between two compact segments.
 const SEGMENT_SEPARATOR: char = '.';
@@ -232,8 +236,13 @@ fn encode(bytes: &[u8]) -> String {
 /// Signs the two-segment input with the credential private key.
 fn sign(signing_input: &str, private_key: &SecretValue) -> Result<String, AssertionFailure> {
     let failed = || AssertionFailure::new(ConfigurationFailureCode::AssertionSigningFailed);
-    let key = jsonwebtoken::EncodingKey::from_rsa_pem(private_key.expose_secret_bytes())
+    let text = core::str::from_utf8(private_key.expose_secret_bytes()).map_err(|_| failed())?;
+    let der = read_private_key_der(text).map_err(|_| failed())?;
+    let key = RsaKeyPair::from_pkcs8(&der)
+        .or_else(|_| RsaKeyPair::from_der(&der))
         .map_err(|_| failed())?;
-    jsonwebtoken::crypto::sign(signing_input.as_bytes(), &key, jsonwebtoken::Algorithm::RS256)
-        .map_err(|_| failed())
+    let mut signature = vec![0; key.public().modulus_len()];
+    key.sign(&RSA_PKCS1_SHA256, &SystemRandom::new(), signing_input.as_bytes(), &mut signature)
+        .map_err(|_| failed())?;
+    Ok(URL_SAFE_NO_PAD.encode(signature))
 }

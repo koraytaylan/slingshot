@@ -140,6 +140,8 @@ jobs:
             coordinator: true
           - runner: macos-14
             triple: aarch64-apple-darwin
+          - runner: windows-2022
+            triple: x86_64-pc-windows-msvc
             coordinator: false
     # How this run reports itself, said once for the row. The packager answers
     # for the authority again before it builds, because the build is what the

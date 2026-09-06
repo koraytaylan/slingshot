@@ -28,7 +28,7 @@ development = ["property-tests"]
 [[consumer]]
 name = "slingshot_configuration"
 package = "slingshot-configuration"
-normal = ["typed-errors", "serialization", "toml-documents", "uniform-resource-locators", "secret-buffers", "platform-directories", "base64-encoding", "descriptor-relative-filesystem", "posix-access-control-lists", "extended-access-control-lists", "operating-system-account-database", "secure-hash-digests", "certificate-record-decoding", "platform-trust-store-locations", "platform-trust-decisions-macos"]
+normal = ["typed-errors", "serialization", "toml-documents", "uniform-resource-locators", "secret-buffers", "platform-directories", "base64-encoding", "descriptor-relative-filesystem", "posix-access-control-lists", "extended-access-control-lists", "windows-security-identifiers", "windows-file-identity", "operating-system-account-database", "secure-hash-digests", "certificate-record-decoding", "platform-trust-store-locations", "platform-trust-decisions-macos", "platform-trust-decisions-windows"]
 build = []
 development = ["property-tests", "diagnostics", "diagnostics-subscriber"]
 
@@ -56,7 +56,7 @@ development = ["property-tests"]
 [[consumer]]
 name = "slingshot_agent_connection"
 package = "slingshot-agent-connection"
-normal = ["typed-errors", "serialization", "javascript-object-notation", "uniform-resource-locators", "byte-buffers", "asynchronous-runtime", "cancellation-tokens", "hypertext-transfer-protocol-types", "hypertext-transfer-protocol-engine", "hypertext-transfer-protocol-utilities", "hypertext-transfer-protocol-body", "transport-layer-security", "certificate-types", "asynchronous-transport-layer-security", "certificate-record-decoding", "diagnostics", "secure-hash-digests", "base64-encoding", "secret-buffers", "platform-trust-store-locations", "platform-trust-decisions-macos"]
+normal = ["typed-errors", "serialization", "javascript-object-notation", "uniform-resource-locators", "byte-buffers", "asynchronous-runtime", "cancellation-tokens", "hypertext-transfer-protocol-types", "hypertext-transfer-protocol-engine", "hypertext-transfer-protocol-utilities", "hypertext-transfer-protocol-body", "transport-layer-security", "certificate-types", "asynchronous-transport-layer-security", "certificate-record-decoding", "diagnostics", "secure-hash-digests", "base64-encoding", "secret-buffers", "platform-trust-store-locations", "platform-trust-decisions-macos", "platform-trust-decisions-windows", "json-schema-validation"]
 build = []
 development = ["temporary-files", "property-tests"]
 
@@ -70,7 +70,7 @@ development = []
 [[consumer]]
 name = "slingshot_storage"
 package = "slingshot-storage"
-normal = ["typed-errors", "embedded-structured-query-language", "serialization", "javascript-object-notation", "secure-hash-digests", "hexadecimal-encoding", "unique-identifiers", "diagnostics", "operating-system-account-database"]
+normal = ["typed-errors", "embedded-structured-query-language", "serialization", "javascript-object-notation", "secure-hash-digests", "hexadecimal-encoding", "unique-identifiers", "diagnostics", "operating-system-account-database", "file-locks", "descriptor-relative-filesystem"]
 build = []
 development = ["temporary-files", "property-tests"]
 
@@ -84,9 +84,9 @@ development = []
 [[consumer]]
 name = "slingshot_daemon"
 package = "slingshot-daemon"
-normal = ["typed-errors", "asynchronous-runtime", "cancellation-tokens", "byte-buffers", "serialization", "javascript-object-notation", "diagnostics", "diagnostics-subscriber", "platform-directories", "file-locks", "random-values", "secure-hash-digests", "hexadecimal-encoding"]
+normal = ["typed-errors", "asynchronous-runtime", "cancellation-tokens", "byte-buffers", "serialization", "javascript-object-notation", "diagnostics", "diagnostics-subscriber", "platform-directories", "file-locks", "random-values", "secure-hash-digests", "hexadecimal-encoding", "base64-encoding"]
 build = []
-development = ["temporary-files"]
+development = ["temporary-files", "embedded-structured-query-language"]
 
 [[consumer]]
 name = "slingshot_daemon::operation"
@@ -98,7 +98,7 @@ development = []
 [[consumer]]
 name = "slingshot_daemon::platform_runtime"
 package = "slingshot-daemon"
-normal = ["typed-errors", "asynchronous-runtime", "file-locks", "platform-directories", "secure-hash-digests", "hexadecimal-encoding", "random-values", "descriptor-relative-filesystem"]
+normal = ["typed-errors", "asynchronous-runtime", "file-locks", "platform-directories", "secure-hash-digests", "hexadecimal-encoding", "random-values", "descriptor-relative-filesystem", "windows-process-creation-flags"]
 build = []
 development = []
 
@@ -112,7 +112,7 @@ development = ["temporary-files", "process-assertions", "process-predicates"]
 [[consumer]]
 name = "slingshot_command_line::commands"
 package = "slingshot-command-line"
-normal = ["command-line-arguments", "typed-errors", "serialization"]
+normal = ["command-line-arguments", "typed-errors", "serialization", "unique-identifiers"]
 build = []
 development = []
 
@@ -126,7 +126,7 @@ development = []
 [[consumer]]
 name = "slingshot_command_line::platform_runtime"
 package = "slingshot-command-line"
-normal = ["typed-errors", "file-locks", "platform-directories", "descriptor-relative-filesystem"]
+normal = ["typed-errors", "file-locks", "platform-directories", "descriptor-relative-filesystem", "windows-process-creation-flags"]
 build = []
 development = []
 
@@ -156,7 +156,7 @@ name = "slingshot_development"
 package = "slingshot-development"
 normal = ["typed-errors", "serialization", "javascript-object-notation", "toml-documents", "command-line-arguments", "secure-hash-digests", "hexadecimal-encoding", "temporary-files", "diagnostics", "base64-encoding"]
 build = []
-development = ["process-assertions", "process-predicates", "property-tests"]
+development = ["process-assertions", "process-predicates", "property-tests", "transport-layer-security", "certificate-types", "asynchronous-runtime", "asynchronous-transport-layer-security", "uniform-resource-locators"]
 
 [[consumer]]
 name = "slingshot_development::source-policy"

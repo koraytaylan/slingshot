@@ -457,6 +457,16 @@ fn read_single_block(text: &str, label: &str) -> Result<Vec<u8>, ConfigurationDi
     STANDARD.decode(encoded.as_bytes()).map_err(|_| invalid())
 }
 
+/// Reads the decoded private-key bytes from one validated PEM block.
+pub(crate) fn read_private_key_der(text: &str) -> Result<Vec<u8>, ConfigurationDiagnostic> {
+    let invalid = || refusal(ConfigurationFailureCode::ServiceCredentialsInvalid);
+    let label = PRIVATE_KEY_LABELS
+        .iter()
+        .find(|label| text.contains(&format!("{BLOCK_OPENING}{label}{BOUNDARY_SUFFIX}")))
+        .ok_or_else(invalid)?;
+    read_single_block(text, label)
+}
+
 /// One decoded key's public parameters.
 #[derive(Debug, PartialEq, Eq)]
 struct KeyParameters {
@@ -469,11 +479,7 @@ struct KeyParameters {
 /// Reads the public parameters of the document's private key.
 fn read_private_key(text: &str) -> Result<KeyParameters, ConfigurationDiagnostic> {
     let invalid = || refusal(ConfigurationFailureCode::ServiceCredentialsInvalid);
-    let label = PRIVATE_KEY_LABELS
-        .iter()
-        .find(|label| text.contains(&format!("{BLOCK_OPENING}{label}{BOUNDARY_SUFFIX}")))
-        .ok_or_else(invalid)?;
-    let der = read_single_block(text, label)?;
+    let der = read_private_key_der(text)?;
     let sequence = read_element(&der, SEQUENCE_TAG).ok_or_else(invalid)?;
     let (_, after_version) = read_integer(sequence).ok_or_else(invalid)?;
     if let Some(parameters) = read_pkcs_one(after_version) {
