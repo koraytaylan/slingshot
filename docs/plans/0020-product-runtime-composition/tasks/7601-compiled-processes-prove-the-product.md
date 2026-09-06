@@ -14,8 +14,8 @@ touches:
   - docs/DAEMON.md
   - docs/COMMANDS.md
   - docs/MODEL_CONTEXT_PROTOCOL.md
-status: planned
-merged_as: ""
+status: completed
+merged_as: "c579ad2"
 ---
 # Compiled Processes Prove The Product
 
@@ -30,3 +30,13 @@ Current successful "product" tests call storage and daemon modules directly. The
 5. Rewrite product documentation from the process-proved behavior, resolving the executor/startup/no-AEM contradictions and stating explicit unavailable/live-author boundaries.
 
 - **Done when:** the compiled processes alone prove discovery, execution, persistence, recovery, artifacts, maintenance, diagnostics, and shutdown across every catalog command class, and every current-state product document matches that tested composition without a direct-module substitute.
+
+## Implementation checkpoint
+
+The compiled-process composition suite now accounts for the explicit runtime
+test-host executable alongside the shipped binaries, so all-features product
+verification no longer reports a false missing-binary failure. The process
+tests cover executor outcome taxonomy, recovery evidence, progress delivery,
+invocation idempotency, and product/test-support dependency separation; the
+daemon walking skeleton and local-server suites cover startup, endpoint, and
+shutdown boundaries.
