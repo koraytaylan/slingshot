@@ -82,6 +82,10 @@ pub enum RuntimeExecutionRefusal {
     /// Local polling stopped; this makes no assertion about remote execution.
     #[error("the runtime invocation was cancelled locally")]
     Cancelled,
+    /// The local scheduler fence is absent, stale, or already past its
+    /// no-return checkpoint.
+    #[error("the runtime invocation does not hold the live scheduler fence")]
+    Claim,
 }
 
 impl core::fmt::Debug for RuntimeBuilder {
@@ -153,6 +157,34 @@ pub struct RecoveredOperation {
 }
 
 impl DurableRuntime {
+    /// Executes only while the supplied local scheduler fence is still live.
+    /// This is the production handoff; the compatibility method below remains
+    /// for the pre-scheduler author-port tests.
+    pub async fn execute_retained_with_claim(
+        &self,
+        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
+        submission: slingshot_agent_connection::command_submission::Submission,
+        progress: &dyn slingshot_domain::operation_executor::ProgressPort,
+        fence: u64,
+        now_unix_milliseconds: u64,
+    ) -> Result<slingshot_domain::operation_executor::OperationExecutorOutcome, RuntimeExecutionRefusal> {
+        let facts = slingshot_storage::operation::scheduler_claim::facts(
+            self.database(), &identity.author_target_identity_digest, &identity.operation_identifier,
+        ).map_err(|_| RuntimeExecutionRefusal::Claim)?.ok_or(RuntimeExecutionRefusal::Claim)?;
+        if facts.scheduler_fence != Some(fence) || facts.checkpoint.is_some()
+            || facts.lease_expires_at_unix_milliseconds.is_some_and(|expiry| expiry < now_unix_milliseconds)
+        {
+            return Err(RuntimeExecutionRefusal::Claim);
+        }
+        if !slingshot_storage::operation::scheduler_claim::checkpoint(
+            self.database(), &identity.author_target_identity_digest,
+            &identity.operation_identifier, fence, "executor-started",
+        ).map_err(|_| RuntimeExecutionRefusal::Claim)? {
+            return Err(RuntimeExecutionRefusal::Claim);
+        }
+        self.execute_retained(identity, submission, progress).await
+    }
+
     pub(crate) fn ownership(&self) -> &DaemonOwnership {
         &self.builder.ownership
     }
