@@ -121,7 +121,8 @@ impl SelectedAuthorTransport {
         generation: u64,
         authentication: &RequestAuthentication,
     ) -> Result<HighWaterOutcome, FiniteHttpFailure> {
-        self.capture_high_water(identity, subscription, generation, authentication, Some(false)).await
+        self.capture_high_water(identity, subscription, generation, authentication, Some(false))
+            .await
     }
     /// Captures the same fixed route through strict HTTP/2 negotiation.
     pub async fn capture_high_water_http2(
@@ -131,7 +132,8 @@ impl SelectedAuthorTransport {
         generation: u64,
         authentication: &RequestAuthentication,
     ) -> Result<HighWaterOutcome, FiniteHttpFailure> {
-        self.capture_high_water(identity, subscription, generation, authentication, Some(true)).await
+        self.capture_high_water(identity, subscription, generation, authentication, Some(true))
+            .await
     }
     /// Captures on the original negotiated connection. The captured position
     /// remains evidence for durable reconciliation, not permission to install
@@ -157,18 +159,33 @@ impl SelectedAuthorTransport {
         reading: u64,
     ) -> Result<HighWaterOutcome, FiniteHttpFailure> {
         let mut fields = crate::selected_author_events::request_fields(
-            self, identity, subscription, generation, None,
+            self,
+            identity,
+            subscription,
+            generation,
+            None,
         )?;
         fields.insert("accept", HeaderValue::from_static("application/json"));
         let generation_text = generation.to_string();
-        let receipt = self.authenticated_finite_get(provider, source, reading,
-            &["bin", "slingshot-agent", "events", "high-water"],
-            &[("agent_event_store_generation", generation_text.as_str()),
-              ("daemon_subscription_identifier", subscription)], &fields,
-        ).await.map_err(|error| match error {
-            crate::selected_author_authenticated_read::AuthenticatedReadFailure::Transport(failure) => failure,
-            _ => FiniteHttpFailure::Request,
-        })?;
+        let receipt = self
+            .authenticated_finite_get(
+                provider,
+                source,
+                reading,
+                &["bin", "slingshot-agent", "events", "high-water"],
+                &[
+                    ("agent_event_store_generation", generation_text.as_str()),
+                    ("daemon_subscription_identifier", subscription),
+                ],
+                &fields,
+            )
+            .await
+            .map_err(|error| match error {
+                crate::selected_author_authenticated_read::AuthenticatedReadFailure::Transport(
+                    failure,
+                ) => failure,
+                _ => FiniteHttpFailure::Request,
+            })?;
         Self::decode_high_water_response(receipt.response, subscription, generation)
     }
 
@@ -189,19 +206,33 @@ impl SelectedAuthorTransport {
         Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
     {
         let mut fields = crate::selected_author_events::request_fields(
-            self, identity, subscription, generation, None,
+            self,
+            identity,
+            subscription,
+            generation,
+            None,
         )?;
         fields.insert("accept", HeaderValue::from_static("application/json"));
         let generation_text = generation.to_string();
-        let receipt = self.authenticated_finite_get_async(
-            provider, clock, utc,
-            &["bin", "slingshot-agent", "events", "high-water"],
-            &[("agent_event_store_generation", generation_text.as_str()),
-              ("daemon_subscription_identifier", subscription)], &fields,
-        ).await.map_err(|error| match error {
-            crate::selected_author_authenticated_read::AuthenticatedReadFailure::Transport(failure) => failure,
-            _ => FiniteHttpFailure::Request,
-        })?;
+        let receipt = self
+            .authenticated_finite_get_async(
+                provider,
+                clock,
+                utc,
+                &["bin", "slingshot-agent", "events", "high-water"],
+                &[
+                    ("agent_event_store_generation", generation_text.as_str()),
+                    ("daemon_subscription_identifier", subscription),
+                ],
+                &fields,
+            )
+            .await
+            .map_err(|error| match error {
+                crate::selected_author_authenticated_read::AuthenticatedReadFailure::Transport(
+                    failure,
+                ) => failure,
+                _ => FiniteHttpFailure::Request,
+            })?;
         Self::decode_high_water_response(receipt.response, subscription, generation)
     }
 
@@ -228,8 +259,15 @@ impl SelectedAuthorTransport {
             ("daemon_subscription_identifier", subscription),
         ];
         let receipt = if http2.is_none() {
-            self.finite_negotiated_query(Method::GET, &segments, &query, authentication, &fields, b"")
-                .await?
+            self.finite_negotiated_query(
+                Method::GET,
+                &segments,
+                &query,
+                authentication,
+                &fields,
+                b"",
+            )
+            .await?
         } else if http2 == Some(true) {
             self.finite_http2_query(Method::GET, &segments, &query, authentication, &fields, b"")
                 .await?

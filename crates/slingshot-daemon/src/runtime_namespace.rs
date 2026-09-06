@@ -57,7 +57,8 @@ pub const DIAGNOSTIC_DIRECTORY: &str = "diagnostics";
 pub const TARGETS_DIRECTORY: &str = "targets";
 
 /// File at the state root that holds the global installation record.
-pub const INSTALLATION_RECORD_FILE_NAME: &str = slingshot_storage::installation_state::RECORD_FILE_NAME;
+pub const INSTALLATION_RECORD_FILE_NAME: &str =
+    slingshot_storage::installation_state::RECORD_FILE_NAME;
 
 /// Reason a target could not name a runtime namespace.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

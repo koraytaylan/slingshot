@@ -5,6 +5,8 @@
 //! because a refusal that left a row behind gives a client an operation it can
 //! find and wait on, describing work nothing was ever going to do.
 
+const MISSING_LOOKUP_RETENTION_MILLISECONDS: u64 = 2000;
+
 use slingshot_daemon::operation_submission::{
     ExecuteRequest, ServedTarget, SubmissionOutcome, SubmissionRefusal, capacity_unavailable,
     settle, submit,
@@ -93,8 +95,14 @@ fn missing_lookup_grace_survives_restart_and_exhaustion_never_proves_nonexecutio
     drop(store);
     let store = OperationRepository::new(OperationDatabase::open(&path, settings()).unwrap());
     assert_eq!(store.read(&digest, "operation-1").unwrap().unwrap(), first);
-    let mut held =
-        record_missing_lookup(&store, &identity, first.record.revision, NOW, NOW + 2000).unwrap();
+    let mut held = record_missing_lookup(
+        &store,
+        &identity,
+        first.record.revision,
+        NOW,
+        NOW + MISSING_LOOKUP_RETENTION_MILLISECONDS,
+    )
+    .unwrap();
     assert_eq!(held.record.outstanding_recovery.as_ref().unwrap().retry_delay_milliseconds, 28000);
     for _ in 2..automatic_attempt_cap() {
         held = record_missing_lookup(&store, &identity, held.record.revision, NOW, NOW + 40000)

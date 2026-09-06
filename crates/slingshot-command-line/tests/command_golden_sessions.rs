@@ -173,7 +173,8 @@ fn normalized(root: &Path, stream: &str) -> String {
         written.push_str(before);
         let suffix = &after[INVENTED_IDENTIFIER_PREFIX.len()..];
         if let Some(identifier) = suffix.get(..36)
-            && uuid::Uuid::parse_str(identifier).is_ok_and(|value| value.hyphenated().to_string() == identifier)
+            && uuid::Uuid::parse_str(identifier)
+                .is_ok_and(|value| value.hyphenated().to_string() == identifier)
         {
             written.push_str(NORMALIZED_IDENTIFIER);
             scanning = &suffix[36..];
@@ -351,6 +352,7 @@ fn stop_quoting(address: &EndpointAddress, nonce: &str) -> bool {
 #[test]
 fn the_owned_sessions_run_in_order_against_one_real_daemon() {
     let root = TemporaryRuntimeRoot::create("o").expect("the temporary root is created");
+    let _cleanup = OwnedDaemonCleanup(root.path().to_owned());
     runtime_fixture::prepare(root.path(), PROFILE, &[ENVIRONMENT]);
     let namespace = namespace_of(root.path(), ENVIRONMENT);
     for session in declared_sessions().iter().filter(|row| row.kind == AGAINST_A_DAEMON) {
@@ -370,6 +372,7 @@ fn the_owned_sessions_run_in_order_against_one_real_daemon() {
 fn a_stale_nonce_never_stops_the_replacement_that_followed_it() {
     let contract = FoundationContract::embedded();
     let root = TemporaryRuntimeRoot::create("s").expect("the temporary root is created");
+    let _cleanup = OwnedDaemonCleanup(root.path().to_owned());
     runtime_fixture::prepare(root.path(), PROFILE, &[ENVIRONMENT]);
     let namespace = namespace_of(root.path(), ENVIRONMENT);
     let address = endpoint::endpoint_address(&contract, root.path(), namespace.digest())
@@ -411,6 +414,29 @@ fn published_nonce(root: &Path, namespace: &RuntimeNamespace) -> Option<String> 
     slingshot_daemon::platform_runtime::readiness::read(root, namespace.digest())
         .expect("the record is readable")
         .map(|record| record.readiness_nonce)
+}
+
+/// Stops the fixture's current owner before its root is removed, even on panic.
+struct OwnedDaemonCleanup(PathBuf);
+
+impl Drop for OwnedDaemonCleanup {
+    fn drop(&mut self) {
+        let contract = FoundationContract::embedded();
+        let namespace = namespace_of(&self.0, ENVIRONMENT);
+        let Ok(Some(record)) =
+            slingshot_daemon::platform_runtime::readiness::read(&self.0, namespace.digest())
+        else {
+            return;
+        };
+        let Ok(address) = endpoint::endpoint_address(&contract, &self.0, namespace.digest()) else {
+            return;
+        };
+        if stop_quoting(&address, &record.readiness_nonce) {
+            let _ = wait_until(contract.shutdown.cooperative_stop(), || {
+                OwnerLock::acquire(&self.0, namespace.digest()).is_ok_and(|owner| owner.is_some())
+            });
+        }
+    }
 }
 
 #[test]

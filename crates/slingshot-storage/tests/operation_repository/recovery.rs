@@ -320,6 +320,34 @@ fn one_resume_source_commits_one_receipt_and_replays_it_afterwards() {
         Some(&applied),
         "and the receipt reads back the same either way"
     );
+    assert!(matches!(
+        store
+            .record_resume_receipt(
+                &digest,
+                OPERATION,
+                &source(1),
+                "foreign-revision",
+                1,
+                SECOND_INSTANT
+            )
+            .unwrap(),
+        ResumeOutcome::Refused(ResumeEligibilityRefusal::EnvironmentRevision)
+    ));
+    assert!(matches!(
+        store
+            .record_eligible_resume_receipt(
+                &digest,
+                OPERATION,
+                &source(1),
+                "foreign-revision",
+                RecoveryCategory::OperationLookup,
+                1,
+                SECOND_INSTANT
+            )
+            .unwrap(),
+        ResumeOutcome::Refused(ResumeEligibilityRefusal::EnvironmentRevision)
+    ));
+    assert_eq!(store.read_resume_receipt(&digest, OPERATION, &source(1)).unwrap(), Some(applied));
 }
 
 #[test]

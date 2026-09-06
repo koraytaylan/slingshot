@@ -15,6 +15,8 @@
 //! is touched, so a build whose contracts moved finds out before it reaches a
 //! credential provider or a socket - both of which are observable from outside.
 
+const SUBMISSION_OBSERVED_AT: u64 = 100;
+
 use slingshot_agent_connection::command_submission::{
     Checkpoint, ExpectedArtifactManifest, NonExecution, Submission, SubmissionOutcome,
 };
@@ -162,14 +164,16 @@ fn a_dropped_initial_send_permit_survives_restart_as_lookup_only() {
     let mut drifted = submitted.clone();
     drifted.submitted_command_digest = "another-digest".to_owned();
     assert!(matches!(
-        prepare_initial_submission(&repository, &identity, &drifted, 100),
+        prepare_initial_submission(&repository, &identity, &drifted, SUBMISSION_OBSERVED_AT),
         Err(DurableSubmissionRefusal::Preflight)
     ));
     assert!(
         repository.read(TARGET, &submitted.operation.agent_operation_identifier).unwrap().is_none()
     );
     let permit =
-        prepare_initial_submission(&repository, &identity, &submitted, 100).unwrap().unwrap();
+        prepare_initial_submission(&repository, &identity, &submitted, SUBMISSION_OBSERVED_AT)
+            .unwrap()
+            .unwrap();
     let retained =
         repository.read(TARGET, &submitted.operation.agent_operation_identifier).unwrap().unwrap();
     assert_eq!(retained.canonical_submission.as_bytes(), submitted.wire_body().unwrap());
@@ -224,7 +228,7 @@ fn racing_initial_admissions_issue_only_one_send_permit() {
                     &repository,
                     &identity,
                     &submitted,
-                    100 + u64::from(index),
+                    SUBMISSION_OBSERVED_AT + u64::from(index),
                 )
                 .unwrap()
                 .is_some()

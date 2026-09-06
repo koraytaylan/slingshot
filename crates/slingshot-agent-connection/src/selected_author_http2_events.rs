@@ -295,8 +295,17 @@ impl SelectedAuthorTransport {
         resolver: R,
         consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
-        self.events_over(identity, subscription, generation, committed_cursor,
-            authentication, resolver, consume, false).await
+        self.events_over(
+            identity,
+            subscription,
+            generation,
+            committed_cursor,
+            authentication,
+            resolver,
+            consume,
+            false,
+        )
+        .await
     }
 
     /// Attaches on the original negotiated socket with the same committed
@@ -312,8 +321,17 @@ impl SelectedAuthorTransport {
         resolver: R,
         consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
-        self.events_over(identity, subscription, generation, committed_cursor,
-            authentication, resolver, consume, true).await
+        self.events_over(
+            identity,
+            subscription,
+            generation,
+            committed_cursor,
+            authentication,
+            resolver,
+            consume,
+            true,
+        )
+        .await
     }
 
     /// Attaches with request-scoped provider authentication. A fully framed JSON
@@ -333,18 +351,37 @@ impl SelectedAuthorTransport {
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
         request_fields(self, identity, subscription, generation, committed_cursor)?;
         self.require_provider(provider).map_err(|_| FiniteHttpFailure::Request)?;
-        let (authentication, lease) = provider.authenticate(
-            &self.endpoint(&["bin", "slingshot-agent", "events"]), reading, source,
-        ).map_err(|_| FiniteHttpFailure::Request)?;
-        let mut outcome = self.events_negotiated(identity, subscription, generation, committed_cursor,
-            &authentication, |operation: &str| resolver.resolve(operation), &mut consume).await?;
+        let (authentication, lease) = provider
+            .authenticate(&self.endpoint(&["bin", "slingshot-agent", "events"]), reading, source)
+            .map_err(|_| FiniteHttpFailure::Request)?;
+        let mut outcome = self
+            .events_negotiated(
+                identity,
+                subscription,
+                generation,
+                committed_cursor,
+                &authentication,
+                |operation: &str| resolver.resolve(operation),
+                &mut consume,
+            )
+            .await?;
         drop(authentication);
         if matches!(&outcome, EventHttpOutcome::Response(response) if response.status==401) {
             if let Some(lease) = lease {
-                let (authentication, _) = provider.refresh_after_unauthorized(lease, source)
+                let (authentication, _) = provider
+                    .refresh_after_unauthorized(lease, source)
                     .map_err(|_| FiniteHttpFailure::Head)?;
-                outcome = self.events_negotiated(identity, subscription, generation, committed_cursor,
-                    &authentication, |operation: &str| resolver.resolve(operation), &mut consume).await?;
+                outcome = self
+                    .events_negotiated(
+                        identity,
+                        subscription,
+                        generation,
+                        committed_cursor,
+                        &authentication,
+                        |operation: &str| resolver.resolve(operation),
+                        &mut consume,
+                    )
+                    .await?;
             }
         }
         Ok(outcome)
@@ -370,18 +407,39 @@ impl SelectedAuthorTransport {
     {
         request_fields(self, identity, subscription, generation, committed_cursor)?;
         self.require_provider(provider).map_err(|_| FiniteHttpFailure::Request)?;
-        let (authentication, lease) = provider.authenticate(
-            &self.endpoint(&["bin", "slingshot-agent", "events"]), clock, utc,
-        ).await.map_err(|_| FiniteHttpFailure::Request)?;
-        let mut outcome = self.events_negotiated(identity, subscription, generation, committed_cursor,
-            &authentication, |operation: &str| resolver.resolve(operation), &mut consume).await?;
+        let (authentication, lease) = provider
+            .authenticate(&self.endpoint(&["bin", "slingshot-agent", "events"]), clock, utc)
+            .await
+            .map_err(|_| FiniteHttpFailure::Request)?;
+        let mut outcome = self
+            .events_negotiated(
+                identity,
+                subscription,
+                generation,
+                committed_cursor,
+                &authentication,
+                |operation: &str| resolver.resolve(operation),
+                &mut consume,
+            )
+            .await?;
         drop(authentication);
         if matches!(&outcome, EventHttpOutcome::Response(response) if response.status==401) {
             if let Some(lease) = lease {
-                let (authentication, _) = provider.refresh_after_unauthorized(lease, clock, utc).await
+                let (authentication, _) = provider
+                    .refresh_after_unauthorized(lease, clock, utc)
+                    .await
                     .map_err(|_| FiniteHttpFailure::Head)?;
-                outcome = self.events_negotiated(identity, subscription, generation, committed_cursor,
-                    &authentication, |operation: &str| resolver.resolve(operation), &mut consume).await?;
+                outcome = self
+                    .events_negotiated(
+                        identity,
+                        subscription,
+                        generation,
+                        committed_cursor,
+                        &authentication,
+                        |operation: &str| resolver.resolve(operation),
+                        &mut consume,
+                    )
+                    .await?;
             }
         }
         Ok(outcome)
@@ -412,29 +470,53 @@ impl SelectedAuthorTransport {
             b"",
         );
         let http1 = if automatic {
-            Some(crate::selected_author_http::encode_request(self, Method::GET,
+            Some(crate::selected_author_http::encode_request(
+                self,
+                Method::GET,
                 &["bin", "slingshot-agent", "events"],
-                &[("agent_event_store_generation", &generation_text),
-                  ("daemon_subscription_identifier", subscription)],
-                authentication, &fields, b""))
-        } else {None};
+                &[
+                    ("agent_event_store_generation", &generation_text),
+                    ("daemon_subscription_identifier", subscription),
+                ],
+                authentication,
+                &fields,
+                b"",
+            ))
+        } else {
+            None
+        };
         if head.is_err() && http1.as_ref().is_none_or(Result::is_err) {
             return Err(FiniteHttpFailure::Request);
         }
         let mut stream = if automatic {
-            let (protocol, stream) = self.connect_negotiated().await
-                .map_err(|_| FiniteHttpFailure::Connect)?.into_parts();
+            let (protocol, stream) = self
+                .connect_negotiated()
+                .await
+                .map_err(|_| FiniteHttpFailure::Connect)?
+                .into_parts();
             if protocol == crate::selected_author_transport::SelectedHttpProtocol::Http1 {
-                return Self::events_http1_on_stream(stream, &http1.ok_or(FiniteHttpFailure::Request)??,
-                    subscription, generation, committed_cursor, resolver, consume).await;
+                return Self::events_http1_on_stream(
+                    stream,
+                    &http1.ok_or(FiniteHttpFailure::Request)??,
+                    subscription,
+                    generation,
+                    committed_cursor,
+                    resolver,
+                    consume,
+                )
+                .await;
             }
             stream
-        } else {self.connect_http2().await.map_err(|_| FiniteHttpFailure::Connect)?};
+        } else {
+            self.connect_http2().await.map_err(|_| FiniteHttpFailure::Connect)?
+        };
         let head = head?;
         let deadlines = ExchangeDeadlines::embedded();
         let negotiated = crate::selected_author_http2_handshake::negotiate(
-            &mut stream, tokio::time::Duration::from_millis(deadlines.response_header_milliseconds),
-        ).await?;
+            &mut stream,
+            tokio::time::Duration::from_millis(deadlines.response_header_milliseconds),
+        )
+        .await?;
         drive_response(
             stream,
             negotiated,

@@ -148,22 +148,27 @@ pub fn result(
     operation_identifier: &str,
 ) -> Result<OperationResult, QueryFailure> {
     let summary = required(repository, author_target_identity_digest, operation_identifier)?;
-    if let Some(failure) = summary.record.terminal_failure {
+    result_of(&summary)
+}
+
+/// Classifies one immutable repository observation without performing a second read.
+pub(crate) fn result_of(summary: &OperationSummary) -> Result<OperationResult, QueryFailure> {
+    if let Some(failure) = &summary.record.terminal_failure {
         if !terminal_pairing_is_legal(failure.kind, failure.disposition) {
             return Err(QueryFailure::TerminalPairingNotAdmitted { kind: failure.kind });
         }
-        return Ok(OperationResult::Failed { failure });
+        return Ok(OperationResult::Failed { failure: failure.clone() });
     }
     if summary.record.lifecycle_state == OperationLifecycleState::Succeeded {
         let disposition =
             summary.result_disposition.ok_or(QueryFailure::ResultDispositionMissing)?;
         return Ok(OperationResult::Succeeded {
             disposition,
-            inline_result: summary.result_inline_bytes,
+            inline_result: summary.result_inline_bytes.clone(),
         });
     }
-    match summary.record.outstanding_recovery {
-        Some(recovery) => Ok(OperationResult::RecoveryRequired { recovery }),
+    match &summary.record.outstanding_recovery {
+        Some(recovery) => Ok(OperationResult::RecoveryRequired { recovery: recovery.clone() }),
         None => Ok(OperationResult::Pending { lifecycle_state: summary.record.lifecycle_state }),
     }
 }

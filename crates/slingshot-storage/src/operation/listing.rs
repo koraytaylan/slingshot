@@ -13,7 +13,7 @@
 //! No command payload is read. A listing answers what happened to work; a
 //! client that wants the work itself asks about one operation.
 
-use slingshot_domain::operation::{OperationListing, TerminalFailureKind};
+use slingshot_domain::operation::{OperationLifecycleState, OperationListing, TerminalFailureKind};
 
 use crate::database::OperationDatabase;
 use crate::operation_repository::RepositoryFailure;
@@ -21,6 +21,64 @@ use crate::sqlite_statement_inventory::statement_text;
 
 /// Purpose of the statement one listing page runs.
 pub const LISTING_STATEMENT: &str = "list one target's operations, newest first";
+
+/// Intersected filters for one target's bounded history page.
+pub struct ListingFilters<'request> {
+    /// Empty selects every lifecycle state.
+    pub states: &'request [OperationLifecycleState],
+    /// Optional exact opaque caller.
+    pub caller_identity: Option<&'request str>,
+    /// Optional terminal/nonterminal restriction.
+    pub terminal: Option<bool>,
+    /// Optional exact workflow correlation.
+    pub workflow_correlation_identifier: Option<&'request str>,
+}
+
+/// Reads a lifecycle-filtered keyset page without loading command/result bodies.
+/// An empty filter set selects every lifecycle state. The cursor's identifier
+/// is the ascending tie-breaker within a descending enqueue sequence.
+///
+/// # Errors
+///
+/// Returns the repository's decoding or database refusal.
+pub fn list_filtered(
+    database: &OperationDatabase,
+    target: &str,
+    before_sequence: u64,
+    last_identifier: &str,
+    filters: ListingFilters<'_>,
+    page_size: u64,
+) -> Result<Vec<OperationListing>, RepositoryFailure> {
+    use OperationLifecycleState::{Accepted, Failed, Queued, Running, Submitting, Succeeded};
+    let includes = |state| filters.states.is_empty() || filters.states.contains(&state);
+    let sequence = i64::try_from(before_sequence).unwrap_or(i64::MAX);
+    let mut query = database
+        .connection()
+        .prepare(statement_text("list one target's operations with lifecycle filters"))?;
+    let rows = query.query_map(
+        rusqlite::params![
+            target,
+            sequence,
+            sequence,
+            last_identifier,
+            includes(Queued),
+            includes(Submitting),
+            includes(Accepted),
+            includes(Running),
+            includes(Succeeded),
+            includes(Failed),
+            filters.caller_identity,
+            filters.caller_identity,
+            filters.terminal,
+            filters.terminal,
+            filters.workflow_correlation_identifier,
+            filters.workflow_correlation_identifier,
+            i64::try_from(page_size).unwrap_or(i64::MAX),
+        ],
+        |row| Ok(listing_from(row)),
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()?.into_iter().collect()
+}
 
 /// Returns one page of a target's operations, newest first.
 ///

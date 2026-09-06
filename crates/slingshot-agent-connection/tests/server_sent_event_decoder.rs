@@ -56,7 +56,9 @@ fn decoded_events_preserve_missing_counters_without_accepting_explicit_regressio
     use slingshot_domain::remote_job::{AgentJobState, JobEventSequence, RemoteJobObservation};
     let held = RetainedJob {
         observation: RemoteJobObservation {
-            applied_sequence: JobEventSequence::of(3), attempt: 2, progress: 40,
+            applied_sequence: JobEventSequence::of(3),
+            attempt: 2,
+            progress: 40,
             state: AgentJobState::Running,
         },
         snapshot_watermark: JobEventSequence::of(1),
@@ -66,7 +68,9 @@ fn decoded_events_preserve_missing_counters_without_accepting_explicit_regressio
         selected_environment_revision: "retained-revision".into(),
         submitted_command_digest: SUBMITTED_DIGEST.into(),
     };
-    for (attempt, progress) in [(None, None), (Some(3), None), (None, Some(41)), (Some(0), None), (None, Some(0))] {
+    for (attempt, progress) in
+        [(None, None), (Some(3), None), (None, Some(41)), (Some(0), None), (None, Some(0))]
+    {
         for sequence in [2, 3, 4, 5] {
             let mut document = serde_json::json!({
                 "agent_event_store_generation": GENERATION,
@@ -75,21 +79,40 @@ fn decoded_events_preserve_missing_counters_without_accepting_explicit_regressio
                 "sling_job_identifier": "job-fixture", "kind": "progress",
                 "state": "running", "sequence": sequence
             });
-            if let Some(attempt) = attempt { document["attempt"] = attempt.into(); }
-            if let Some(progress) = progress { document["progress"] = progress.into(); }
+            if let Some(attempt) = attempt {
+                document["attempt"] = attempt.into();
+            }
+            if let Some(progress) = progress {
+                document["progress"] = progress.into();
+            }
             let bytes = format!("id:cursor\ndata:{document}\n\n");
             let items = decode_in_chunks(bytes.as_bytes(), 1).unwrap();
             let StreamItem::Event(event) = &items[0] else { panic!("event missing") };
-            for (generation, operation) in [(GENERATION + 1, TERMINAL_OPERATION), (GENERATION, "wrong-operation")] {
-                assert_eq!(reduce_decoded(&held, &binding, generation, operation, event), Err(ReducerRefusal::AnotherJob));
+            for (generation, operation) in
+                [(GENERATION + 1, TERMINAL_OPERATION), (GENERATION, "wrong-operation")]
+            {
+                assert_eq!(
+                    reduce_decoded(&held, &binding, generation, operation, event),
+                    Err(ReducerRefusal::AnotherJob)
+                );
             }
             let result = reduce_decoded(&held, &binding, GENERATION, TERMINAL_OPERATION, event);
             match sequence {
                 2 => assert_eq!(result.unwrap(), (JobDisposition::StaleCursorOnly, None)),
-                3 => assert_eq!(result.unwrap(), (if attempt.is_none() && progress.is_none() {
-                    JobDisposition::ExactReplay
-                } else { JobDisposition::IntegrityConflictNeedsReconciliation }, None)),
-                4 if attempt == Some(0) || progress == Some(0) => assert!(matches!(result, Err(ReducerRefusal::Job(_)))),
+                3 => assert_eq!(
+                    result.unwrap(),
+                    (
+                        if attempt.is_none() && progress.is_none() {
+                            JobDisposition::ExactReplay
+                        } else {
+                            JobDisposition::IntegrityConflictNeedsReconciliation
+                        },
+                        None
+                    )
+                ),
+                4 if attempt == Some(0) || progress == Some(0) => {
+                    assert!(matches!(result, Err(ReducerRefusal::Job(_))))
+                }
                 4 => {
                     let (disposition, observation) = result.unwrap();
                     assert_eq!(disposition, JobDisposition::Applied);
@@ -127,9 +150,14 @@ fn canonical_event_identity_covers_the_envelope_and_preserves_omission() {
     assert_eq!(first.canonical_bytes, canonical.len() as u64);
     // Reverse member order and add insignificant JSON whitespace. SSE cursor
     // and event-name framing are not part of the event document's identity.
-    let reversed = base.as_object().unwrap().iter().rev()
+    let reversed = base
+        .as_object()
+        .unwrap()
+        .iter()
+        .rev()
         .map(|(key, value)| format!("{} : {value}", serde_json::to_string(key).unwrap()))
-        .collect::<Vec<_>>().join(", ");
+        .collect::<Vec<_>>()
+        .join(", ");
     let equivalent = decode(&format!("{{ {reversed} }}"), "id:second\nevent:other-name\n");
     assert_eq!(first.canonical_digest, equivalent.canonical_digest);
     assert_eq!(first.canonical_bytes, equivalent.canonical_bytes);
@@ -176,35 +204,73 @@ fn physical_event_state_and_optional_counters_are_validated_and_preserved() {
     let base = serde_json::json!({"agent_event_store_generation":GENERATION,
         "agent_operation_identifier":TERMINAL_OPERATION, "daemon_subscription_identifier":SUBSCRIPTION,
         "sling_job_identifier":"job-fixture", "state":"running", "kind":"progress", "sequence":1});
-    let decode = |document: &serde_json::Value| attached().push(format!("data:{document}\n\n").as_bytes());
-    for (kind, expected) in [("accepted", "queued"), ("started", "running"), ("progress", "running"), ("succeeded", "succeeded"), ("failed", "failed")] {
+    let decode =
+        |document: &serde_json::Value| attached().push(format!("data:{document}\n\n").as_bytes());
+    for (kind, expected) in [
+        ("accepted", "queued"),
+        ("started", "running"),
+        ("progress", "running"),
+        ("succeeded", "succeeded"),
+        ("failed", "failed"),
+    ] {
         for state in ["queued", "running", "succeeded", "failed"] {
-            let mut document = base.clone(); document["kind"] = kind.into(); document["state"] = state.into();
+            let mut document = base.clone();
+            document["kind"] = kind.into();
+            document["state"] = state.into();
             if ["succeeded", "failed"].contains(&kind) {
                 document["terminal"] = serde_json::json!({"provenance":installed_provenance().provenance(), "submitted_command_digest":SUBMITTED_DIGEST});
             }
             assert_eq!(decode(&document).is_ok(), state == expected, "{kind}/{state}");
         }
     }
-    for (physical, valid) in [("job /?é".into(), true), (String::new(), false), ("a".repeat(1024), true), ("a".repeat(1025), false), ("é".repeat(512), true), ("é".repeat(513), false)] {
-        let mut document = base.clone(); document["sling_job_identifier"] = physical.clone().into();
+    for (physical, valid) in [
+        ("job /?é".into(), true),
+        (String::new(), false),
+        ("a".repeat(1024), true),
+        ("a".repeat(1025), false),
+        ("é".repeat(512), true),
+        ("é".repeat(513), false),
+    ] {
+        let mut document = base.clone();
+        document["sling_job_identifier"] = physical.clone().into();
         let result = decode(&document);
         assert_eq!(result.is_ok(), valid);
-        if valid { let StreamItem::Event(event) = &result.unwrap()[0] else {panic!("event missing");}; assert_eq!(event.sling_job_identifier, physical); }
+        if valid {
+            let StreamItem::Event(event) = &result.unwrap()[0] else {
+                panic!("event missing");
+            };
+            assert_eq!(event.sling_job_identifier, physical);
+        }
     }
     for field in ["sling_job_identifier", "state"] {
-        let mut document = base.clone(); document.as_object_mut().unwrap().remove(field);
+        let mut document = base.clone();
+        document.as_object_mut().unwrap().remove(field);
         assert!(decode(&document).is_err());
     }
     for counter in [None, Some(0), Some(17), Some(u64::MAX)] {
         let mut document = base.clone();
-        if let Some(counter) = counter { document["attempt"] = counter.into(); document["progress"] = counter.into(); }
-        let items = decode(&document).unwrap(); let StreamItem::Event(event) = &items[0] else {panic!("event missing");};
-        assert_eq!(event.attempt, counter); assert_eq!(event.progress, counter);
+        if let Some(counter) = counter {
+            document["attempt"] = counter.into();
+            document["progress"] = counter.into();
+        }
+        let items = decode(&document).unwrap();
+        let StreamItem::Event(event) = &items[0] else {
+            panic!("event missing");
+        };
+        assert_eq!(event.attempt, counter);
+        assert_eq!(event.progress, counter);
     }
     for field in ["attempt", "progress"] {
-        for value in [serde_json::Value::Null, serde_json::json!(-1), serde_json::json!(1.5), serde_json::json!("1"), serde_json::json!(true)] {
-            let mut document = base.clone(); document[field] = value; assert!(decode(&document).is_err());
+        for value in [
+            serde_json::Value::Null,
+            serde_json::json!(-1),
+            serde_json::json!(1.5),
+            serde_json::json!("1"),
+            serde_json::json!(true),
+        ] {
+            let mut document = base.clone();
+            document[field] = value;
+            assert!(decode(&document).is_err());
         }
     }
 }
@@ -212,20 +278,41 @@ fn physical_event_state_and_optional_counters_are_validated_and_preserved() {
 #[test]
 fn event_operation_identifiers_obey_the_closed_wire_grammar() {
     let valid = "a".repeat(64);
-    for identifier in [String::new(), "operation-placeholder".into(), "a".repeat(63), "a".repeat(65),
-        "A".repeat(64), "g".repeat(64), format!(" {}", "a".repeat(63)), "é".repeat(32),
-        valid.clone(), "0".repeat(64), "f".repeat(64)] {
+    for identifier in [
+        String::new(),
+        "operation-placeholder".into(),
+        "a".repeat(63),
+        "a".repeat(65),
+        "A".repeat(64),
+        "g".repeat(64),
+        format!(" {}", "a".repeat(63)),
+        "é".repeat(32),
+        valid.clone(),
+        "0".repeat(64),
+        "f".repeat(64),
+    ] {
         let mut decoder = attached();
         let document = serde_json::json!({"agent_event_store_generation":GENERATION,
             "agent_operation_identifier":identifier, "daemon_subscription_identifier":SUBSCRIPTION,
             "kind":"progress", "sequence":1, "sling_job_identifier":"job-fixture", "state":"running"});
         let mut delivered = Vec::new();
-        let result = decoder.push_each(format!(": prefix\ndata:{document}\n\n").as_bytes(), |item| {delivered.push(item); Ok(())});
-        let acceptable = identifier.len() == 64 && identifier.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+        let result =
+            decoder.push_each(format!(": prefix\ndata:{document}\n\n").as_bytes(), |item| {
+                delivered.push(item);
+                Ok(())
+            });
+        let acceptable = identifier.len() == 64
+            && identifier
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
         if acceptable {
-            assert!(result.is_ok()); assert_eq!(delivered.len(), 2);
+            assert!(result.is_ok());
+            assert_eq!(delivered.len(), 2);
         } else {
-            assert_eq!(result, Err(StreamRefusal::Malformed {field:"agent_operation_identifier"}));
+            assert_eq!(
+                result,
+                Err(StreamRefusal::Malformed { field: "agent_operation_identifier" })
+            );
             assert_eq!(delivered.len(), 1, "only the prior heartbeat may escape");
             assert_eq!(decoder.push(b": later\n"), Err(StreamRefusal::Closed));
         }
@@ -234,10 +321,17 @@ fn event_operation_identifiers_obey_the_closed_wire_grammar() {
 
 #[test]
 fn event_and_terminal_debug_views_do_not_expose_wire_identity() {
-    let items = attached().push(&terminal_stream(&installed_provenance().provenance(), SUBMITTED_DIGEST)).unwrap();
-    let StreamItem::Event(event) = &items[0] else { panic!("expected terminal event"); };
+    let items = attached()
+        .push(&terminal_stream(&installed_provenance().provenance(), SUBMITTED_DIGEST))
+        .unwrap();
+    let StreamItem::Event(event) = &items[0] else {
+        panic!("expected terminal event");
+    };
     assert_eq!(format!("{event:?}"), "DecodedEvent([redacted])");
-    assert_eq!(format!("{:?}", event.terminal.as_ref().unwrap()), "TerminalCorrelation([redacted])");
+    assert_eq!(
+        format!("{:?}", event.terminal.as_ref().unwrap()),
+        "TerminalCorrelation([redacted])"
+    );
 }
 
 #[test]
@@ -246,7 +340,10 @@ fn explicitly_null_terminal_data_is_not_an_absent_member() {
         let document = serde_json::json!({"agent_event_store_generation":GENERATION,
             "agent_operation_identifier":TERMINAL_OPERATION, "daemon_subscription_identifier":SUBSCRIPTION,
             "kind":kind, "sequence":1, "terminal":null, "sling_job_identifier":"job-fixture", "state":if kind == "progress" {"running"} else {"succeeded"}});
-        assert_eq!(attached().push(format!("data:{document}\n\n").as_bytes()), Err(StreamRefusal::Malformed {field:"payload"}));
+        assert_eq!(
+            attached().push(format!("data:{document}\n\n").as_bytes()),
+            Err(StreamRefusal::Malformed { field: "payload" })
+        );
     }
 }
 
@@ -303,7 +400,10 @@ fn subscription_terminals_resolve_each_operations_own_contract_and_digest() {
     let first_bytes = terminal_stream(&first.provenance(), SUBMITTED_DIGEST);
     let second_bytes = String::from_utf8(terminal_stream(&second.provenance(), SUBSTITUTED_DIGEST))
         .unwrap()
-        .replace(TERMINAL_OPERATION, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        .replace(
+            TERMINAL_OPERATION,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        )
         .replace("cursor-terminal", "cursor-second")
         .into_bytes();
     let bytes = [first_bytes, second_bytes].concat();
@@ -313,7 +413,9 @@ fn subscription_terminals_resolve_each_operations_own_contract_and_digest() {
             resolved.push(operation.to_owned());
             let (provenance, digest) = match operation {
                 TERMINAL_OPERATION => (first.clone(), SUBMITTED_DIGEST),
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" => (second.clone(), SUBSTITUTED_DIGEST),
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" => {
+                    (second.clone(), SUBSTITUTED_DIGEST)
+                }
                 _ => return Err(StreamRefusal::AnotherSubmission),
             };
             Ok(OperationStreamExpectation {
@@ -344,7 +446,13 @@ fn subscription_terminals_resolve_each_operations_own_contract_and_digest() {
         }
         assert_eq!(delivered.len(), 2);
         drop(decoder);
-        assert_eq!(resolved, [TERMINAL_OPERATION, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]);
+        assert_eq!(
+            resolved,
+            [
+                TERMINAL_OPERATION,
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            ]
+        );
     }
 }
 
@@ -779,7 +887,10 @@ fn data_fields_join_with_a_newline_and_the_fields_this_build_ignores_are_ignored
         panic!("a data field joined across lines is still one event")
     };
     let (cursor, event) = (&decoded.cursor, &decoded.event);
-    assert_eq!(event.agent_operation_identifier, "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd");
+    assert_eq!(
+        event.agent_operation_identifier,
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    );
     assert_eq!(
         cursor.as_ref().map(EventStreamCursor::as_text),
         Some("cursor-joined"),
@@ -799,7 +910,9 @@ fn interleaved_jobs_keep_independent_sequences_and_distinct_cursors() {
         let StreamItem::Event(decoded) = item else { panic!("no comments here") };
         let (cursor, event) = (&decoded.cursor, &decoded.event);
         cursors.push(cursor.as_ref().expect("each carries one").as_text().to_owned());
-        if event.agent_operation_identifier == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+        if event.agent_operation_identifier
+            == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        {
             alpha.push(event.sequence);
         } else {
             beta.push(event.sequence);

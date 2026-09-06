@@ -63,6 +63,61 @@ fn progress(revision: u64) -> WaitUpdate {
 }
 
 #[test]
+fn catch_up_and_observed_revisions_never_receive_older_publisher_updates() {
+    for take_catch_up in [false, true] {
+        let mut registry = WaiterRegistry::new(small_bounds(), FIRST_REVISION);
+        let ticket = registry.attach(FIRST_REVISION, Some(progress(SEVENTH_REVISION))).unwrap();
+        if take_catch_up {
+            assert_eq!(registry.take(ticket), Some(progress(SEVENTH_REVISION)));
+        }
+        for revision in SECOND_REVISION..=SEVENTH_REVISION {
+            registry.publish(&progress(revision));
+        }
+        registry.publish(&progress(EIGHTH_REVISION));
+        let mut revisions = Vec::new();
+        while let Some(update) = registry.take(ticket) {
+            revisions.push(update.revision());
+        }
+        assert_eq!(
+            revisions,
+            if take_catch_up {
+                vec![EIGHTH_REVISION]
+            } else {
+                vec![SEVENTH_REVISION, EIGHTH_REVISION]
+            }
+        );
+    }
+    let mut registry = WaiterRegistry::new(small_bounds(), FIRST_REVISION);
+    let ticket = registry.attach(SEVENTH_REVISION, None).unwrap();
+    registry.publish(&progress(SECOND_REVISION));
+    assert!(registry.take(ticket).is_none());
+}
+
+#[test]
+fn full_critical_queue_preserves_the_latest_recovery_resume_and_terminal_state() {
+    let mut registry = WaiterRegistry::new(small_bounds(), FIRST_REVISION);
+    let ticket = registry.attach(FIRST_REVISION, None).unwrap();
+    registry.publish(&WaitUpdate::RecoveryRequired { revision: SECOND_REVISION });
+    registry.publish(&WaitUpdate::Resumed { revision: THIRD_REVISION });
+    registry.publish(&WaitUpdate::RecoveryRequired { revision: FOURTH_REVISION });
+    registry.publish(&progress(FIFTH_REVISION));
+    assert_eq!(registry.take(ticket), Some(WaitUpdate::Resumed { revision: THIRD_REVISION }));
+    assert_eq!(
+        registry.take(ticket),
+        Some(WaitUpdate::RecoveryRequired { revision: FOURTH_REVISION })
+    );
+    registry.publish(&WaitUpdate::Resumed { revision: SIXTH_REVISION });
+    registry.publish(&WaitUpdate::RecoveryRequired { revision: SEVENTH_REVISION });
+    registry.publish(&WaitUpdate::Terminal { revision: EIGHTH_REVISION });
+    assert_eq!(
+        registry.take(ticket),
+        Some(WaitUpdate::RecoveryRequired { revision: SEVENTH_REVISION })
+    );
+    assert_eq!(registry.take(ticket), Some(WaitUpdate::Terminal { revision: EIGHTH_REVISION }));
+    assert!(registry.take(ticket).is_none());
+}
+
+#[test]
 fn the_bounds_are_the_manifest_s_own() {
     let bounds = WaitBounds::embedded();
     assert_eq!(bounds.queue_updates, QUEUE_UPDATES);

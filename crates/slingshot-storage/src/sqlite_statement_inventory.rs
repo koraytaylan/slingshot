@@ -151,6 +151,17 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: LISTING_ROWS,
     },
     InventoriedStatement {
+        purpose: "count waiting operations during admission",
+        // Stream identifiers, not command/result bodies. The namespace owner
+        // excludes its live execution slots while this write transaction holds
+        // the admission decision and insert together.
+        text: "SELECT operation_identifier, caller_identity FROM operation \
+               WHERE author_target_identity_digest = ? \
+                 AND lifecycle_state NOT IN ('succeeded', 'failed')",
+        parameters: 1,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
         purpose: "reconstruct one target's operations in enqueue order",
         text: "SELECT operation_identifier FROM operation \
                WHERE author_target_identity_digest = ? \
@@ -171,6 +182,23 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                ORDER BY enqueue_sequence DESC, operation_identifier \
                LIMIT ?",
         parameters: 3,
+        maximum_rows: LISTING_ROWS,
+    },
+    InventoriedStatement {
+        purpose: "list one target's operations with lifecycle filters",
+        text: "SELECT enqueue_sequence, lifecycle_state, operation_identifier, \
+                      operation_revision, caller_identity, workflow_correlation_identifier, \
+                      terminal_failure_kind, settled_at_unix_milliseconds \
+               FROM operation WHERE author_target_identity_digest = ? \
+                 AND (enqueue_sequence < ? OR (enqueue_sequence = ? AND operation_identifier > ?)) \
+                 AND ((lifecycle_state = 'queued' AND ?) OR (lifecycle_state = 'submitting' AND ?) \
+                   OR (lifecycle_state = 'accepted' AND ?) OR (lifecycle_state = 'running' AND ?) \
+                   OR (lifecycle_state = 'succeeded' AND ?) OR (lifecycle_state = 'failed' AND ?)) \
+                 AND (? IS NULL OR caller_identity = ?) \
+                 AND (? IS NULL OR (lifecycle_state IN ('succeeded', 'failed')) = ?) \
+                 AND (? IS NULL OR workflow_correlation_identifier = ?) \
+               ORDER BY enqueue_sequence DESC, operation_identifier LIMIT ?",
+        parameters: 17,
         maximum_rows: LISTING_ROWS,
     },
     InventoriedStatement {
@@ -324,6 +352,18 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: 0,
     },
     InventoriedStatement {
+        purpose: "bind a maintenance publication to its operation-free owner",
+        text: "INSERT INTO maintenance_publication (publication_identifier, author_target_identity_digest, kind, reviewed_source_digest) VALUES (?, ?, ?, ?)",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read one target's pending maintenance publication",
+        text: "SELECT p.publication_identifier, p.artifact_identifier, p.content_digest, b.byte_length, p.recorded_at_unix_milliseconds, m.kind, m.reviewed_source_digest FROM maintenance_publication m JOIN artifact_publication p ON p.publication_identifier = m.publication_identifier LEFT JOIN artifact_blob b ON b.content_digest = p.content_digest WHERE m.author_target_identity_digest = ?",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
         purpose: "consume one completed artifact publication",
         text: "DELETE FROM artifact_publication WHERE publication_identifier = ? AND artifact_identifier = ? AND content_digest = ?",
         parameters: 3,
@@ -352,6 +392,12 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                  AND artifact_slot = ?",
         parameters: 3,
         maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "resolve an artifact identifier inside one operation",
+        text: "SELECT artifact_slot FROM artifact_association WHERE author_target_identity_digest = ? AND operation_identifier = ? AND artifact_identifier = ? LIMIT 2",
+        parameters: 3,
+        maximum_rows: 2,
     },
     InventoriedStatement {
         purpose: "record one maintenance-application receipt",
@@ -453,6 +499,12 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
+        purpose: "count durable associations retaining shared artifact content",
+        text: "SELECT (SELECT COUNT(*) FROM artifact_association WHERE content_digest = ?) + (SELECT COUNT(*) FROM maintenance_result_association WHERE content_digest = ?)",
+        parameters: 2,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
         purpose: "remove one artifact's content, once nothing references it",
         text: "DELETE FROM artifact_blob WHERE content_digest = ?",
         parameters: 1,
@@ -469,13 +521,66 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
     },
     InventoriedStatement {
         purpose: "read one maintenance result by target and identifier alone",
-        text: "SELECT association_revision, byte_length, content_digest, kind, media_type, \
-                      owning_application_receipt_identifier, reviewed_source_digest \
-               FROM maintenance_result_association \
-               WHERE author_target_identity_digest = ? \
-                 AND maintenance_result_identifier = ?",
+        text: "SELECT a.association_revision, a.byte_length, a.content_digest, a.kind, a.media_type, \
+                      a.owning_application_receipt_identifier, a.reviewed_source_digest, \
+                      a.is_current_preview, b.byte_length, r.application_receipt_identifier \
+               FROM maintenance_result_association a \
+               LEFT JOIN artifact_blob b ON b.content_digest = a.content_digest \
+               LEFT JOIN maintenance_application_receipt r \
+                 ON r.author_target_identity_digest = a.author_target_identity_digest \
+                AND r.application_receipt_identifier = a.owning_application_receipt_identifier \
+               WHERE a.author_target_identity_digest = ? \
+                 AND a.maintenance_result_identifier = ?",
         parameters: 2,
         maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "read the current maintenance preview identifier",
+        text: "SELECT maintenance_result_identifier FROM maintenance_result_association WHERE author_target_identity_digest = ? AND is_current_preview = 1",
+        parameters: 1,
+        maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "read pending superseded preview cleanup",
+        text: "SELECT application_receipt_identifier, content_digest FROM maintenance_artifact_cleanup_work WHERE author_target_identity_digest = ? AND substr(application_receipt_identifier, 1, 8) = 'preview:' ORDER BY application_receipt_identifier LIMIT 2",
+        parameters: 1,
+        maximum_rows: 2,
+    },
+    InventoriedStatement {
+        purpose: "retain an applied preview under its application receipt",
+        text: "UPDATE maintenance_result_association SET is_current_preview = 0, owning_application_receipt_identifier = ?, association_revision = association_revision + 1 WHERE author_target_identity_digest = ? AND maintenance_result_identifier = ? AND reviewed_source_digest = ? AND association_revision = ? AND is_current_preview = 1 AND owning_application_receipt_identifier IS NULL",
+        parameters: 5,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "retire the current maintenance preview association",
+        text: "DELETE FROM maintenance_result_association WHERE author_target_identity_digest = ? AND is_current_preview = 1 AND owning_application_receipt_identifier IS NULL",
+        parameters: 1,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "record the current maintenance preview association",
+        text: "INSERT INTO maintenance_result_association (association_revision, author_target_identity_digest, byte_length, content_digest, is_current_preview, kind, maintenance_result_identifier, media_type, owning_application_receipt_identifier, reviewed_source_digest) VALUES (1, ?, ?, ?, 1, 'preview', ?, 'application/json', NULL, ?)",
+        parameters: 5,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "read application result identifiers owned by one receipt",
+        text: "SELECT maintenance_result_identifier FROM maintenance_result_association WHERE author_target_identity_digest = ? AND owning_application_receipt_identifier = ? AND kind = 'application' LIMIT 2",
+        parameters: 2,
+        maximum_rows: 2,
+    },
+    InventoriedStatement {
+        purpose: "read maintenance result identifiers retained by one receipt",
+        text: "SELECT maintenance_result_identifier FROM maintenance_result_association WHERE author_target_identity_digest = ? AND owning_application_receipt_identifier = ? ORDER BY maintenance_result_identifier LIMIT 2",
+        parameters: 2,
+        maximum_rows: 2,
+    },
+    InventoriedStatement {
+        purpose: "record a receipt-owned maintenance application result",
+        text: "INSERT INTO maintenance_result_association (association_revision, author_target_identity_digest, byte_length, content_digest, is_current_preview, kind, maintenance_result_identifier, media_type, owning_application_receipt_identifier, reviewed_source_digest) VALUES (1, ?, ?, ?, 0, 'application', ?, 'application/json', ?, ?)",
+        parameters: 6,
+        maximum_rows: 0,
     },
     InventoriedStatement {
         purpose: "read one recovery-resume receipt by operation and source fingerprint",

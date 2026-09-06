@@ -262,6 +262,14 @@ fn an_exact_repeat_replays_after_progress_a_new_cycle_and_settlement() {
         panic!("an exact repeat replays whatever happened since: {response:?}");
     };
     assert_eq!(replayed, receipt, "and hands back exactly what was committed");
+    let before = repository.read(&digest, OPERATION).unwrap();
+    let foreign =
+        ResumeRequest { selected_environment_revision: OTHER_REVISION.to_owned(), ..asked };
+    assert_eq!(
+        resume(&repository, &foreign, LATER).unwrap(),
+        ResumeResponse::Refused(ResumeRefusal::RevisionMismatch)
+    );
+    assert_eq!(repository.read(&digest, OPERATION).unwrap(), before);
 }
 
 #[test]

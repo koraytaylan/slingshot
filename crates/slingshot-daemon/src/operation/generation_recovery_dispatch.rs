@@ -1,7 +1,7 @@
 //! Single-use scheduled dispatch of one retained generation-loss recovery.
 use super::{
-    generation_loss_probe::{PhysicalRecoveryStatus, probe_generation_loss_with_authentication},
     author_authentication::AuthorAuthentication,
+    generation_loss_probe::{PhysicalRecoveryStatus, probe_generation_loss_with_authentication},
     subscription_reset::ResetTransport,
 };
 use slingshot_agent_connection::{
@@ -79,8 +79,16 @@ impl<'runtime> ScheduledGenerationRecovery<'runtime> {
         protocol: ResetTransport,
         now_unix_milliseconds: u64,
     ) -> Result<Self, GenerationDispatchRefusal> {
-        Self::new_with_authentication(ledger, operations, repository, transport,
-            AuthorAuthentication::Fixed { authentication, protocol }, reset, identity, now_unix_milliseconds)
+        Self::new_with_authentication(
+            ledger,
+            operations,
+            repository,
+            transport,
+            AuthorAuthentication::Fixed { authentication, protocol },
+            reset,
+            identity,
+            now_unix_milliseconds,
+        )
     }
 
     /// Captures one scheduled pass using a provider policy without freezing its
@@ -221,12 +229,7 @@ impl<'runtime> ScheduledGenerationRecovery<'runtime> {
             .ok_or(GenerationDispatchRefusal)?;
         match report.status() {
             PhysicalRecoveryStatus::Recovered => report
-                .reconcile_saved(
-                    self.repository,
-                    self.transport,
-                    now,
-                    completion,
-                )
+                .reconcile_saved(self.repository, self.transport, now, completion)
                 .await
                 .map(GenerationDispatchOutcome::Reconciled)
                 .map_err(|_| GenerationDispatchRefusal),
@@ -257,13 +260,14 @@ fn residual_wait(chosen: u64, observed: u64, now: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::residual_wait;
+    const LONG_AFTER_OBSERVATION: u64 = 5000;
     #[test]
     fn restart_wait_is_bounded_without_addition_overflow() {
         for (chosen, observed, now, expected) in [
             (50, 1000, 1000, 50),
             (50, 1000, 1020, 30),
             (50, 1000, 1050, 0),
-            (50, 1000, 5000, 0),
+            (50, 1000, LONG_AFTER_OBSERVATION, 0),
             (50, 1000, 0, 50),
             (50, u64::MAX - 10, u64::MAX, 40),
             (0, u64::MAX, 0, 0),

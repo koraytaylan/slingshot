@@ -154,7 +154,8 @@ pub(crate) fn validate_finite_head(
     }
     let head = response_head(version, headers)?;
     head.require_acceptable()?;
-    let content_type = singleton(headers, "content-type")?.ok_or(SelectedAuthorExchangeRefusal::MissingContentType)?;
+    let content_type = singleton(headers, "content-type")?
+        .ok_or(SelectedAuthorExchangeRefusal::MissingContentType)?;
     singleton(headers, "retry-after")?;
     Ok((head, content_type))
 }

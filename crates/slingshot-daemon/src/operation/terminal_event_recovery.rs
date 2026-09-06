@@ -1,6 +1,8 @@
 //! Single-use recovery of a terminal event through independent snapshot evidence.
 
-use super::{durable_author_event::DurableEventRefusal, author_authentication::AuthorAuthentication};
+use super::{
+    author_authentication::AuthorAuthentication, durable_author_event::DurableEventRefusal,
+};
 
 fn remaining_delay(chosen: u64, observed: u64, now: u64) -> u64 {
     chosen.saturating_sub(now.saturating_sub(observed))
@@ -233,8 +235,11 @@ impl<'runtime> CapturedTerminalEvent<'runtime> {
         )>,
     ) -> Result<OperationLookupReceipt, DurableEventRefusal> {
         let policy = match self.authentication {
-            AuthorAuthentication::Fixed { protocol, .. } => AuthorAuthentication::Fixed { authentication, protocol },
-            policy @ (AuthorAuthentication::Provider { .. } | AuthorAuthentication::AsyncProvider { .. }) => policy,
+            AuthorAuthentication::Fixed { protocol, .. } => {
+                AuthorAuthentication::Fixed { authentication, protocol }
+            }
+            policy @ (AuthorAuthentication::Provider { .. }
+            | AuthorAuthentication::AsyncProvider { .. }) => policy,
         };
         self.reconcile_using(repository, transport, policy, completion).await
     }
@@ -245,8 +250,10 @@ impl<'runtime> CapturedTerminalEvent<'runtime> {
         self,
         repository: &AgentJobRepository,
         transport: &SelectedAuthorTransport,
-        completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
+        completion: Option<(
+            &slingshot_storage::artifact_store::ArtifactStore,
+            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+        )>,
     ) -> Result<OperationLookupReceipt, DurableEventRefusal> {
         let authentication = self.authentication;
         self.reconcile_using(repository, transport, authentication, completion).await
@@ -257,8 +264,10 @@ impl<'runtime> CapturedTerminalEvent<'runtime> {
         repository: &AgentJobRepository,
         transport: &SelectedAuthorTransport,
         authentication: AuthorAuthentication<'_>,
-        completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
+        completion: Option<(
+            &slingshot_storage::artifact_store::ArtifactStore,
+            &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+        )>,
     ) -> Result<OperationLookupReceipt, DurableEventRefusal> {
         authentication.require_execution(&self.identity).map_err(|_| DurableEventRefusal)?;
         if !repository.database().shares_database_with(self.operations.database()) {
@@ -270,7 +279,8 @@ impl<'runtime> CapturedTerminalEvent<'runtime> {
         self.require_current()?;
         tokio::time::sleep_until(self.ready_at).await;
         self.require_current()?;
-        let capabilities = authentication.discover(transport, &self.identity, &self.submission).await;
+        let capabilities =
+            authentication.discover(transport, &self.identity, &self.submission).await;
         if capabilities.is_err() {
             self.record_exchange_failure()?;
             return Err(DurableEventRefusal);
@@ -342,15 +352,16 @@ impl<'runtime> CapturedTerminalEvent<'runtime> {
 
 #[cfg(test)]
 mod tests {
+    const OBSERVED_AT: u64 = 100;
     #[test]
     fn persisted_retry_delay_uses_only_unelapsed_time_and_survives_clock_regression() {
         for (chosen, observed, now, remaining) in [
-            (50, 100, 100, 50),
-            (50, 100, 120, 30),
-            (50, 100, 150, 0),
-            (50, 100, 200, 0),
-            (50, 100, 90, 50),
-            (0, 100, 90, 0),
+            (50, OBSERVED_AT, OBSERVED_AT, 50),
+            (50, OBSERVED_AT, 120, 30),
+            (50, OBSERVED_AT, 150, 0),
+            (50, OBSERVED_AT, 200, 0),
+            (50, OBSERVED_AT, 90, 50),
+            (0, OBSERVED_AT, 90, 0),
             (50, 0, u64::MAX, 0),
         ] {
             assert_eq!(super::remaining_delay(chosen, observed, now), remaining);

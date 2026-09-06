@@ -8,8 +8,8 @@ use slingshot_configuration::{
     },
     profile_loader::ConfigurationDiagnostic,
 };
-use tokio::{io::AsyncReadExt, net::TcpListener};
 use tokio::time::timeout;
+use tokio::{io::AsyncReadExt, net::TcpListener};
 
 struct Store(Vec<Vec<u8>>);
 impl PlatformTrustSource for Store {

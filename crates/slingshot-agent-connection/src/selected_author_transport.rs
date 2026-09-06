@@ -163,7 +163,9 @@ impl SelectedAuthorTransport {
     /// Rejects another provider before its token source can be invoked.
     pub(crate) fn require_provider<Cache>(
         &self,
-        provider: &crate::authentication::environment_provider::EnvironmentAuthenticationProvider<Cache>,
+        provider: &crate::authentication::environment_provider::EnvironmentAuthenticationProvider<
+            Cache,
+        >,
     ) -> Result<(), SelectedAuthorConnectionRefusal> {
         if provider.snapshot().target() != self.connection.target() {
             return Err(SelectedAuthorConnectionRefusal::AnotherTarget);
@@ -193,7 +195,11 @@ impl SelectedAuthorTransport {
     pub fn new(
         connection: SelectedAuthorConnection,
     ) -> Result<Self, SelectedAuthorTransportFailure> {
-        let (transport_layer_security, transport_layer_security_http2, transport_layer_security_negotiated) = if connection.requires_transport_layer_security() {
+        let (
+            transport_layer_security,
+            transport_layer_security_http2,
+            transport_layer_security_negotiated,
+        ) = if connection.requires_transport_layer_security() {
             let mut http1 = client_configuration(&connection)?;
             http1.alpn_protocols = vec![b"http/1.1".to_vec()];
             let mut http2 = http1.clone();
@@ -204,7 +210,12 @@ impl SelectedAuthorTransport {
         } else {
             (None, None, None)
         };
-        Ok(Self { connection, transport_layer_security, transport_layer_security_http2, transport_layer_security_negotiated })
+        Ok(Self {
+            connection,
+            transport_layer_security,
+            transport_layer_security_http2,
+            transport_layer_security_negotiated,
+        })
     }
 
     /// Returns an endpoint below the one selected author origin.
@@ -247,23 +258,34 @@ impl SelectedAuthorTransport {
     /// is attempted. A selected permitted cleartext author uses HTTP/2 prior
     /// knowledge, whose preface/settings exchange the driver must validate
     /// before sending a request. This method sends no HTTP application bytes.
-    pub async fn connect_http2(&self) -> Result<SelectedAuthorStream, SelectedAuthorTransportFailure> {
+    pub async fn connect_http2(
+        &self,
+    ) -> Result<SelectedAuthorStream, SelectedAuthorTransportFailure> {
         self.connect_selected(Some(true)).await
     }
 
     /// Negotiates only h2 or HTTP/1.1 on one selected TLS connection. A peer
     /// without ALPN, or permitted cleartext, uses HTTP/1.1 without an upgrade
     /// probe. No retry, alternate endpoint or protocol fallback is performed.
-    pub async fn connect_negotiated(&self) -> Result<NegotiatedAuthorStream, SelectedAuthorTransportFailure> {
+    pub async fn connect_negotiated(
+        &self,
+    ) -> Result<NegotiatedAuthorStream, SelectedAuthorTransportFailure> {
         let stream = self.connect_selected(None).await?;
         let protocol = match &stream {
-            SelectedAuthorStream::Protected(stream) if stream.get_ref().1.alpn_protocol() == Some(b"h2".as_slice()) => SelectedHttpProtocol::Http2,
+            SelectedAuthorStream::Protected(stream)
+                if stream.get_ref().1.alpn_protocol() == Some(b"h2".as_slice()) =>
+            {
+                SelectedHttpProtocol::Http2
+            }
             _ => SelectedHttpProtocol::Http1,
         };
         Ok(NegotiatedAuthorStream { protocol, stream })
     }
 
-    async fn connect_selected(&self, http2: Option<bool>) -> Result<SelectedAuthorStream, SelectedAuthorTransportFailure> {
+    async fn connect_selected(
+        &self,
+        http2: Option<bool>,
+    ) -> Result<SelectedAuthorStream, SelectedAuthorTransportFailure> {
         let deadlines = ExchangeDeadlines::embedded();
         let author = self.connection.author();
         let port = author.port().unwrap_or(if author.is_protected() { 443 } else { 80 });
@@ -276,8 +298,11 @@ impl SelectedAuthorTransport {
             .unwrap_or(author.host());
         let stream = crate::connection_phase::within(
             Duration::from_millis(deadlines.connect_milliseconds),
-            async { TcpStream::connect((host, port)).await
-                .map_err(|_| SelectedAuthorTransportFailure::ConnectFailed) },
+            async {
+                TcpStream::connect((host, port))
+                    .await
+                    .map_err(|_| SelectedAuthorTransportFailure::ConnectFailed)
+            },
             SelectedAuthorTransportFailure::ConnectDeadlineExceeded,
         )
         .await?;
@@ -295,8 +320,12 @@ impl SelectedAuthorTransport {
         // validation, provider, TLS versions and deadlines remain identical.
         let stream = crate::connection_phase::within(
             Duration::from_millis(deadlines.transport_layer_security_milliseconds),
-            async { TlsConnector::from(configuration.clone()).connect(server_name, stream).await
-                .map_err(|_| SelectedAuthorTransportFailure::TransportLayerSecurityFailed) },
+            async {
+                TlsConnector::from(configuration.clone())
+                    .connect(server_name, stream)
+                    .await
+                    .map_err(|_| SelectedAuthorTransportFailure::TransportLayerSecurityFailed)
+            },
             SelectedAuthorTransportFailure::TransportLayerSecurityDeadlineExceeded,
         )
         .await?;

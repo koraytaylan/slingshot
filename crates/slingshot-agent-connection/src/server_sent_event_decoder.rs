@@ -621,14 +621,16 @@ impl<R: TerminalExpectationResolver> ServerSentEventDecoder<R> {
     /// Requires one document to belong to the stream that was asked for.
     fn require_requested(&self, document: &JobEventDocument) -> Result<(), StreamRefusal> {
         slingshot_domain::remote_job::AgentJobIdentifier::new(&document.sling_job_identifier)
-            .map_err(|_| StreamRefusal::Malformed {field: "sling_job_identifier"})?;
+            .map_err(|_| StreamRefusal::Malformed { field: "sling_job_identifier" })?;
         let state = match document.kind {
             JobEventKind::Accepted => JobEventState::Queued,
             JobEventKind::Started | JobEventKind::Progress => JobEventState::Running,
             JobEventKind::Succeeded => JobEventState::Succeeded,
             JobEventKind::Failed => JobEventState::Failed,
         };
-        if document.state != state { return Err(StreamRefusal::Malformed {field: "state"}); }
+        if document.state != state {
+            return Err(StreamRefusal::Malformed { field: "state" });
+        }
         if document.daemon_subscription_identifier != self.subscription {
             return Err(StreamRefusal::AnotherSubscription);
         }
@@ -639,9 +641,10 @@ impl<R: TerminalExpectationResolver> ServerSentEventDecoder<R> {
             });
         }
         if document.agent_operation_identifier.len() != 64
-            || !document.agent_operation_identifier.bytes().all(|byte| {
-                byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)
-            })
+            || !document
+                .agent_operation_identifier
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
         {
             return Err(StreamRefusal::Malformed { field: "agent_operation_identifier" });
         }

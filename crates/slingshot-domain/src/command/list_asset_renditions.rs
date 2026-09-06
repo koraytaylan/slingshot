@@ -84,9 +84,15 @@ pub struct ListAssetRenditionsRefusal {
 
 impl ListAssetRenditionsRefusal {
     /// Requires the exact anchor named by the retained command.
-    pub fn require_answers(&self, command: &ListAssetRenditionsCommand) -> Result<(), crate::command::query_paths::DiscoveryResultFailure> {
-        if self.asset_path == command.asset_path { Ok(()) }
-        else { Err(crate::command::query_paths::DiscoveryResultFailure::NotThisRequest) }
+    pub fn require_answers(
+        &self,
+        command: &ListAssetRenditionsCommand,
+    ) -> Result<(), crate::command::query_paths::DiscoveryResultFailure> {
+        if self.asset_path == command.asset_path {
+            Ok(())
+        } else {
+            Err(crate::command::query_paths::DiscoveryResultFailure::NotThisRequest)
+        }
     }
 }
 

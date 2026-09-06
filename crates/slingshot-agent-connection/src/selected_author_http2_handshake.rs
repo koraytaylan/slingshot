@@ -54,7 +54,9 @@ pub async fn negotiate(
     stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
     deadline: Duration,
 ) -> Result<Negotiated, FiniteHttpFailure> {
-    timeout(deadline, negotiate_frames(stream, ResponseFrameReader::new())).await.map_err(|_| FiniteHttpFailure::Connect)?
+    timeout(deadline, negotiate_frames(stream, ResponseFrameReader::new()))
+        .await
+        .map_err(|_| FiniteHttpFailure::Connect)?
 }
 
 pub(crate) async fn negotiate_frames(

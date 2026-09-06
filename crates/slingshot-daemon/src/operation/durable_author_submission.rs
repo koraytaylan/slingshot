@@ -5,6 +5,8 @@
 //! process died before reaching the socket. Neither time nor a higher local
 //! attempt number proves that the POST was never sent.
 
+use super::author_authentication::AuthorAuthentication;
+use super::subscription_reset::ResetTransport;
 use slingshot_agent_connection::authentication::environment_provider::RequestAuthentication;
 use slingshot_agent_connection::command_submission::{Submission, SubmissionOutcome, UnknownCause};
 use slingshot_agent_connection::selected_author_submission::{
@@ -17,8 +19,6 @@ use slingshot_storage::agent_job_repository::{
     AgentJobRepository, AgentSubmission, SubmissionContracts, SubmissionIdentity,
     SubmissionOutcome as AdmissionOutcome,
 };
-use super::subscription_reset::ResetTransport;
-use super::author_authentication::AuthorAuthentication;
 
 /// Local failure before a new author request can be issued.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -62,9 +62,14 @@ impl InitialSubmissionPermit<'_> {
         now_unix_milliseconds: u64,
     ) -> Result<SubmissionOutcome, SubmissionSendRefusal> {
         self.send_over(
-            operations, expected_operation_revision, transport, authentication,
-            now_unix_milliseconds, ResetTransport::Http1,
-        ).await
+            operations,
+            expected_operation_revision,
+            transport,
+            authentication,
+            now_unix_milliseconds,
+            ResetTransport::Http1,
+        )
+        .await
     }
 
     /// Consumes the first-send permit using one mode for discovery, token and
@@ -78,8 +83,14 @@ impl InitialSubmissionPermit<'_> {
         now_unix_milliseconds: u64,
         protocol: ResetTransport,
     ) -> Result<SubmissionOutcome, SubmissionSendRefusal> {
-        self.send_with_authentication(operations, expected_operation_revision, transport,
-            AuthorAuthentication::Fixed { authentication, protocol }, now_unix_milliseconds).await
+        self.send_with_authentication(
+            operations,
+            expected_operation_revision,
+            transport,
+            AuthorAuthentication::Fixed { authentication, protocol },
+            now_unix_milliseconds,
+        )
+        .await
     }
 
     /// Consumes the durable first-send claim using request-scoped authentication.
@@ -93,7 +104,9 @@ impl InitialSubmissionPermit<'_> {
         now_unix_milliseconds: u64,
     ) -> Result<SubmissionOutcome, SubmissionSendRefusal> {
         let started = std::time::Instant::now();
-        authentication.require_execution(&self.identity).map_err(|_| SubmissionSendRefusal::Identity)?;
+        authentication
+            .require_execution(&self.identity)
+            .map_err(|_| SubmissionSendRefusal::Identity)?;
         let require_local = || {
             let local = super::durable_author_lookup::retained_command(
                 operations,
@@ -112,10 +125,19 @@ impl InitialSubmissionPermit<'_> {
         };
         require_local()?;
         transport.require_submission(&self.identity, &self.submission)?;
-        authentication.discover(transport, &self.identity, &self.submission).await
+        authentication
+            .discover(transport, &self.identity, &self.submission)
+            .await
             .map_err(|_| SubmissionSendRefusal::Request)?;
-        let mut outcome = authentication.submit(transport, &self.identity, &self.submission,
-            now_unix_milliseconds, require_local).await?;
+        let mut outcome = authentication
+            .submit(
+                transport,
+                &self.identity,
+                &self.submission,
+                now_unix_milliseconds,
+                require_local,
+            )
+            .await?;
         if let SubmissionOutcome::Accepted {
             physical_sling_job_identifiers,
             remaining_retention_milliseconds,
@@ -246,9 +268,17 @@ pub async fn submit_initial(
     now_unix_milliseconds: u64,
 ) -> Result<SubmissionOutcome, DurableSubmissionRefusal> {
     submit_initial_over(
-        repository, operations, expected_operation_revision, transport,
-        identity, submission, authentication, now_unix_milliseconds, ResetTransport::Http1,
-    ).await
+        repository,
+        operations,
+        expected_operation_revision,
+        transport,
+        identity,
+        submission,
+        authentication,
+        now_unix_milliseconds,
+        ResetTransport::Http1,
+    )
+    .await
 }
 
 /// Runs durable initial admission and its consumed permit over one HTTP mode.
@@ -264,9 +294,17 @@ pub async fn submit_initial_over(
     now_unix_milliseconds: u64,
     protocol: ResetTransport,
 ) -> Result<SubmissionOutcome, DurableSubmissionRefusal> {
-    submit_initial_with_authentication(repository, operations, expected_operation_revision,
-        transport, identity, submission, AuthorAuthentication::Fixed { authentication, protocol },
-        now_unix_milliseconds).await
+    submit_initial_with_authentication(
+        repository,
+        operations,
+        expected_operation_revision,
+        transport,
+        identity,
+        submission,
+        AuthorAuthentication::Fixed { authentication, protocol },
+        now_unix_milliseconds,
+    )
+    .await
 }
 
 /// Admits and sends using one authentication policy, retaining every durable
@@ -307,7 +345,9 @@ pub async fn submit_initial_with_authentication(
         )
         .map_err(|_| DurableSubmissionRefusal::Storage)?;
     if existing.is_none() {
-        authentication.discover(transport, identity, submission).await
+        authentication
+            .discover(transport, identity, submission)
+            .await
             .map_err(|_| DurableSubmissionRefusal::Preflight)?;
     }
     let elapsed = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);

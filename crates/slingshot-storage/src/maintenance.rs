@@ -44,7 +44,7 @@ mod column {
 }
 
 /// One operation a manifest proposes to remove.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct ProposedRemoval {
     /// The identifier its caller chose.
     pub operation_identifier: String,
@@ -60,7 +60,7 @@ pub struct ProposedRemoval {
 /// because the two are removed for the same reason and reviewed as one list.
 /// A reviewer who saw only the local half would be approving the removal of
 /// remote correlation they were never shown.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct ProposedAgentRemoval {
     /// What the submission is called at the agent.
     pub agent_operation_identifier: String,
@@ -77,7 +77,7 @@ pub struct ProposedAgentRemoval {
 /// never proposes to remove half of one - a partly removed operation would be a
 /// row whose history had holes in it, which is worse than either keeping it or
 /// removing it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TerminalMaintenanceManifest {
     /// The remote submissions it proposes to remove, in a fixed order.
     pub agent_removals: Vec<ProposedAgentRemoval>,
@@ -307,6 +307,9 @@ pub fn maximum_removals() -> u64 {
 /// Reason a maintenance run could not be applied.
 #[derive(Debug, thiserror::Error)]
 pub enum MaintenanceFailure {
+    /// A retained preview's identity or ownership failed validation.
+    #[error(transparent)]
+    ResultAssociation(#[from] crate::maintenance_results::ReadFailure),
     /// Journaled content deletion could not be durably completed.
     #[error(transparent)]
     Artifact(#[from] crate::artifact_store::ArtifactFailure),
@@ -394,6 +397,18 @@ fn remove_and_record(
     {
         transaction.commit()?;
         return Ok(ApplyOutcome::Replayed(Box::new(held)));
+    }
+    let retained_preview = crate::maintenance_results::current_preview(
+        database,
+        &reviewed.author_target_identity_digest,
+    )?;
+    if let Some(preview) = &retained_preview
+        && preview.reviewed_source_digest != digest
+    {
+        return Err(MaintenanceFailure::ManifestChanged {
+            current: preview.reviewed_source_digest.clone(),
+            reviewed: digest.to_owned(),
+        });
     }
     let current = preview_with(
         &transaction,
@@ -485,6 +500,13 @@ fn remove_and_record(
             digest,
         ],
     )?;
+    if let Some(preview) = &retained_preview {
+        crate::maintenance_results::retain_applied_preview(
+            database,
+            &reviewed.author_target_identity_digest,
+            preview,
+        )?;
+    }
     transaction.commit()?;
     Ok(ApplyOutcome::Applied(Box::new(ApplicationReceipt {
         application_receipt_identifier: digest.to_owned(),
@@ -605,6 +627,22 @@ pub fn complete_cleanup_with_store(
             |row| row.get(0),
         )?;
         if references != 0 {
+            let durable_references: i64 = transaction.query_row(
+                statement_text("count durable associations retaining shared artifact content"),
+                rusqlite::params![digest, digest],
+                |row| row.get(0),
+            )?;
+            if durable_references != 0 {
+                // This receipt's cleanup is complete by retaining shared
+                // content. Its eventual deletion belongs to maintenance of
+                // the remaining owners, not to an indefinitely pending receipt.
+                transaction.execute(
+                    statement_text("remove one completed maintenance artifact cleanup item"),
+                    rusqlite::params![target, identifier, digest],
+                )?;
+            }
+            // A publication hold alone is temporary: retain retryable intent
+            // until that producer either publishes an association or releases it.
             continue;
         }
         store.remove_unreferenced_content(&digest)?;

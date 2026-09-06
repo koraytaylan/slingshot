@@ -1,7 +1,7 @@
 //! Lookup-first recovery over an existing, byte-identical remote child.
 
-use slingshot_agent_connection::authentication::environment_provider::RequestAuthentication;
 use super::author_authentication::AuthorAuthentication;
+use slingshot_agent_connection::authentication::environment_provider::RequestAuthentication;
 use slingshot_agent_connection::command_submission::Submission;
 use slingshot_agent_connection::selected_author_lookup::OperationLookupReceipt;
 use slingshot_agent_connection::selected_author_transport::SelectedAuthorTransport;
@@ -244,23 +244,27 @@ fn record_lookup_recovery(
         return Ok(held);
     }
     let evidence = if authoritative_unknown {
-        if previous.is_some_and(|fact| fact.evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess) {
+        if previous.is_some_and(|fact| {
+            fact.evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess
+        }) {
             return Err(DurableLookupRefusal);
         }
-        RecoveryExecutionEvidence::ExecutionCertainty { certainty: OperationExecutionCertainty::RemoteOutcomeUnknown }
-    } else { previous.map_or(
         RecoveryExecutionEvidence::ExecutionCertainty {
             certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
-        },
-        |fact| fact.evidence,
-    ) };
+        }
+    } else {
+        previous.map_or(
+            RecoveryExecutionEvidence::ExecutionCertainty {
+                certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
+            },
+            |fact| fact.evidence,
+        )
+    };
     operations
         .apply_for_retained_agent(
             retained,
             expected_revision,
-            &OperationFact::Recovery {
-                recovery: next_lookup_recovery(previous, evidence, now),
-            },
+            &OperationFact::Recovery { recovery: next_lookup_recovery(previous, evidence, now) },
             now,
         )
         .map_err(|_| DurableLookupRefusal)
@@ -272,18 +276,25 @@ pub(super) fn next_lookup_recovery(
     evidence: RecoveryExecutionEvidence,
     now: u64,
 ) -> RecoveryFact {
-    use crate::operation::recovery_and_event_supervisor::{automatic_attempt_cap, jitter_ceiling_milliseconds};
+    use crate::operation::recovery_and_event_supervisor::{
+        automatic_attempt_cap, jitter_ceiling_milliseconds,
+    };
     use rand::RngExt;
     let attempt_count = previous.map_or(1, |fact| fact.attempt_count.saturating_add(1));
     let paused = u64::from(attempt_count) >= automatic_attempt_cap();
     RecoveryFact {
         category: if evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess {
             RecoveryCategory::ResultAcquisition
-        } else { RecoveryCategory::OperationLookup },
-        evidence, attempt_count,
+        } else {
+            RecoveryCategory::OperationLookup
+        },
+        evidence,
+        attempt_count,
         detail: "author lookup did not produce a usable observation".to_owned(),
         manual_resume_eligible: paused,
-        retry_delay_milliseconds: if paused {0} else {
+        retry_delay_milliseconds: if paused {
+            0
+        } else {
             rand::rng().random_range(0..=jitter_ceiling_milliseconds(u64::from(attempt_count)))
         },
         retry_observed_at_unix_milliseconds: now,
@@ -338,8 +349,22 @@ pub async fn lookup_retained_operation_with_completion(
         &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
     )>,
 ) -> Result<OperationLookupReceipt, DurableLookupRefusal> {
-    reconcile_retained_operation(repository, operations, expected_operation_revision, transport, identity,
-        submission, AuthorAuthentication::Fixed { authentication, protocol: super::subscription_reset::ResetTransport::Http1 }, now_unix_milliseconds, completion, None).await
+    reconcile_retained_operation(
+        repository,
+        operations,
+        expected_operation_revision,
+        transport,
+        identity,
+        submission,
+        AuthorAuthentication::Fixed {
+            authentication,
+            protocol: super::subscription_reset::ResetTransport::Http1,
+        },
+        now_unix_milliseconds,
+        completion,
+        None,
+    )
+    .await
 }
 
 /// Lookup and result acquisition over one explicit HTTP mode, without fallback.
@@ -353,12 +378,25 @@ pub async fn lookup_retained_operation_over(
     submission: &Submission,
     authentication: &RequestAuthentication,
     now: u64,
-    completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
+    completion: Option<(
+        &slingshot_storage::artifact_store::ArtifactStore,
+        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+    )>,
     protocol: super::subscription_reset::ResetTransport,
 ) -> Result<OperationLookupReceipt, DurableLookupRefusal> {
-    reconcile_retained_operation(repository, operations, expected_operation_revision, transport,
-        identity, submission, AuthorAuthentication::Fixed { authentication, protocol }, now, completion, None).await
+    reconcile_retained_operation(
+        repository,
+        operations,
+        expected_operation_revision,
+        transport,
+        identity,
+        submission,
+        AuthorAuthentication::Fixed { authentication, protocol },
+        now,
+        completion,
+        None,
+    )
+    .await
 }
 
 /// Looks up and completes retained work using request-scoped provider or fixed
@@ -372,11 +410,24 @@ pub async fn lookup_retained_operation_with_authentication(
     submission: &Submission,
     authentication: AuthorAuthentication<'_>,
     now: u64,
-    completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
+    completion: Option<(
+        &slingshot_storage::artifact_store::ArtifactStore,
+        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+    )>,
 ) -> Result<OperationLookupReceipt, DurableLookupRefusal> {
-    reconcile_retained_operation(repository, operations, expected_operation_revision, transport,
-        identity, submission, authentication, now, completion, None).await
+    reconcile_retained_operation(
+        repository,
+        operations,
+        expected_operation_revision,
+        transport,
+        identity,
+        submission,
+        authentication,
+        now,
+        completion,
+        None,
+    )
+    .await
 }
 
 /// Consumes sealed terminal evidence under the capturing invocation's policy.
@@ -389,15 +440,29 @@ pub(crate) async fn reconcile_captured_lookup_with_authentication(
     submission: &Submission,
     authentication: AuthorAuthentication<'_>,
     now_unix_milliseconds: u64,
-    completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
+    completion: Option<(
+        &slingshot_storage::artifact_store::ArtifactStore,
+        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+    )>,
     receipt: OperationLookupReceipt,
 ) -> Result<OperationLookupReceipt, DurableLookupRefusal> {
-    if matches!(&receipt, OperationLookupReceipt::Found(found) if !found.snapshot.kind.is_terminal()) {
+    if matches!(&receipt, OperationLookupReceipt::Found(found) if !found.snapshot.kind.is_terminal())
+    {
         return Err(DurableLookupRefusal);
     }
-    reconcile_retained_operation(repository, operations, expected_operation_revision, transport, identity,
-        submission, authentication, now_unix_milliseconds, completion, Some(receipt)).await
+    reconcile_retained_operation(
+        repository,
+        operations,
+        expected_operation_revision,
+        transport,
+        identity,
+        submission,
+        authentication,
+        now_unix_milliseconds,
+        completion,
+        Some(receipt),
+    )
+    .await
 }
 
 /// Only the sealed generation-loss report may pass a physical snapshot here.
@@ -411,12 +476,25 @@ pub(super) async fn reconcile_captured_physical_snapshot(
     submission: &Submission,
     authentication: AuthorAuthentication<'_>,
     now_unix_milliseconds: u64,
-    completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
+    completion: Option<(
+        &slingshot_storage::artifact_store::ArtifactStore,
+        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+    )>,
     receipt: slingshot_agent_connection::selected_author_lookup::SnapshotLookupReceipt,
 ) -> Result<OperationLookupReceipt, DurableLookupRefusal> {
-    reconcile_retained_operation(repository, operations, expected_operation_revision, transport, identity,
-        submission, authentication, now_unix_milliseconds, completion, Some(OperationLookupReceipt::Found(receipt))).await
+    reconcile_retained_operation(
+        repository,
+        operations,
+        expected_operation_revision,
+        transport,
+        identity,
+        submission,
+        authentication,
+        now_unix_milliseconds,
+        completion,
+        Some(OperationLookupReceipt::Found(receipt)),
+    )
+    .await
 }
 
 async fn reconcile_retained_operation(
@@ -428,8 +506,10 @@ async fn reconcile_retained_operation(
     submission: &Submission,
     authentication: AuthorAuthentication<'_>,
     now_unix_milliseconds: u64,
-    completion: Option<(&slingshot_storage::artifact_store::ArtifactStore,
-        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>)>,
+    completion: Option<(
+        &slingshot_storage::artifact_store::ArtifactStore,
+        &slingshot_storage::persistent_capacity::PersistentCapacityAccount<'_>,
+    )>,
     captured: Option<OperationLookupReceipt>,
 ) -> Result<OperationLookupReceipt, DurableLookupRefusal> {
     let started = std::time::Instant::now();
@@ -491,16 +571,21 @@ async fn reconcile_retained_operation(
     let receipt_was_captured = captured.is_some();
     let mut receipt = if let Some(mut receipt) = captured {
         if let OperationLookupReceipt::Found(found) = &mut receipt {
-            let elapsed = u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).map_err(|_| failed_exchange())?;
+            let elapsed = u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000))
+                .map_err(|_| failed_exchange())?;
             // Expiry removes remote acquisition time, not already validated
             // terminal truth. Complete retained terminal bodies can still settle.
-            found.remaining_retention_milliseconds = found.remaining_retention_milliseconds.saturating_sub(elapsed);
+            found.remaining_retention_milliseconds =
+                found.remaining_retention_milliseconds.saturating_sub(elapsed);
         }
         receipt
     } else {
-    let capabilities = authentication.discover(transport, identity, submission).await;
-    capabilities.map_err(|_| failed_exchange())?;
-    authentication.lookup(transport, identity, submission).await.map_err(|_| failed_exchange())?
+        let capabilities = authentication.discover(transport, identity, submission).await;
+        capabilities.map_err(|_| failed_exchange())?;
+        authentication
+            .lookup(transport, identity, submission)
+            .await
+            .map_err(|_| failed_exchange())?
     };
     if matches!(
         &receipt,
@@ -534,25 +619,58 @@ async fn reconcile_retained_operation(
     }
     if let OperationLookupReceipt::Found(found) = &mut receipt {
         if found.snapshot.described_state() == slingshot_domain::remote_job::AgentJobState::Failed {
-            use slingshot_agent_connection::terminal_failure::{decode_configuration_failure, decode_creation_failure, decode_load_failure, decode_package_failure};
+            use slingshot_agent_connection::terminal_failure::{
+                decode_configuration_failure, decode_creation_failure, decode_load_failure,
+                decode_package_failure,
+            };
             use slingshot_domain::command::catalog::Command;
-            if local.record.outstanding_recovery.as_ref().is_some_and(|fact| fact.evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess)
-                || found.snapshot.sequence < retained.snapshot_watermark
+            if local.record.outstanding_recovery.as_ref().is_some_and(|fact| {
+                fact.evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess
+            }) || found.snapshot.sequence < retained.snapshot_watermark
                 || (found.remaining_retention_milliseconds == 0 && !receipt_was_captured)
                 || (found.snapshot.sequence == retained.observation.applied_sequence
-                    && RemoteJobObservation { state: found.snapshot.described_state(), applied_sequence: found.snapshot.sequence, attempt: found.snapshot.attempt, progress: found.snapshot.progress } != retained.observation)
-            { return Err(failed_exchange()); }
-            let held_jobs = repository.physical_jobs(&identity.author_target_identity_digest, &submission.operation.agent_operation_identifier).map_err(|_| failed_exchange())?;
-            if held_jobs.iter().any(|name| found.snapshot.physical_sling_job_identifiers.binary_search(name).is_err()) {
+                    && RemoteJobObservation {
+                        state: found.snapshot.described_state(),
+                        applied_sequence: found.snapshot.sequence,
+                        attempt: found.snapshot.attempt,
+                        progress: found.snapshot.progress,
+                    } != retained.observation)
+            {
                 return Err(failed_exchange());
             }
-            retained.observation.advanced(found.snapshot.described_state(), found.snapshot.sequence, found.snapshot.attempt, found.snapshot.progress)
+            let held_jobs = repository
+                .physical_jobs(
+                    &identity.author_target_identity_digest,
+                    &submission.operation.agent_operation_identifier,
+                )
                 .map_err(|_| failed_exchange())?;
-            let mut arguments: serde_json::Value = serde_json::from_str(&submission.canonical_arguments).map_err(|_| failed_exchange())?;
-            if arguments.as_object_mut().ok_or_else(&failed_exchange)?.insert("command".to_owned(), contract.command_wire_name.clone().into()).is_some() {
+            if held_jobs.iter().any(|name| {
+                found.snapshot.physical_sling_job_identifiers.binary_search(name).is_err()
+            }) {
                 return Err(failed_exchange());
             }
-            let command: Command = serde_json::from_value(arguments).map_err(|_| failed_exchange())?;
+            retained
+                .observation
+                .advanced(
+                    found.snapshot.described_state(),
+                    found.snapshot.sequence,
+                    found.snapshot.attempt,
+                    found.snapshot.progress,
+                )
+                .map_err(|_| failed_exchange())?;
+            let mut arguments: serde_json::Value =
+                serde_json::from_str(&submission.canonical_arguments)
+                    .map_err(|_| failed_exchange())?;
+            if arguments
+                .as_object_mut()
+                .ok_or_else(&failed_exchange)?
+                .insert("command".to_owned(), contract.command_wire_name.clone().into())
+                .is_some()
+            {
+                return Err(failed_exchange());
+            }
+            let command: Command =
+                serde_json::from_value(arguments).map_err(|_| failed_exchange())?;
             let document = found.snapshot.terminal_failure.as_ref().ok_or_else(&failed_exchange)?;
             let body = serde_json::to_vec(document).map_err(|_| failed_exchange())?;
             let expectation = slingshot_agent_connection::structured_job_result::ResultExpectation {
@@ -570,64 +688,166 @@ async fn reconcile_retained_operation(
             let mut diagnosis = None;
             let mut partial_admission = false;
             let no_effect = match &command {
-                Command::InspectSlingJob(_) | Command::InspectWorkflowInstance(_) | Command::InspectReplicationAgent(_) | Command::ResolveResourcePath(_) | Command::MapResourcePath(_)
-                | Command::ListChildPages(_) | Command::ListGroupMembers(_) | Command::ListAssetRenditions(_) | Command::InspectReplicationQueue(_)
-                | Command::ReadContentFragment(_) | Command::FindOpenServiceGatewayInitiativeConfigurations(_) | Command::FindSlingJobs(_) | Command::FindWorkflowInstances(_) | Command::ListOpenServiceGatewayInitiativeBundles(_) | Command::ListOpenServiceGatewayInitiativeComponents(_) | Command::ListReplicationAgents(_) | Command::ListResourceMappings(_) | Command::ListSlingJobQueues(_) | Command::ListWorkflowModels(_) => {
-                    slingshot_agent_connection::terminal_failure::decode_read_failure(&body, &expectation, &command).map_err(|_| failed_exchange())?;
+                Command::InspectSlingJob(_)
+                | Command::InspectWorkflowInstance(_)
+                | Command::InspectReplicationAgent(_)
+                | Command::ResolveResourcePath(_)
+                | Command::MapResourcePath(_)
+                | Command::ListChildPages(_)
+                | Command::ListGroupMembers(_)
+                | Command::ListAssetRenditions(_)
+                | Command::InspectReplicationQueue(_)
+                | Command::ReadContentFragment(_)
+                | Command::FindOpenServiceGatewayInitiativeConfigurations(_)
+                | Command::FindSlingJobs(_)
+                | Command::FindWorkflowInstances(_)
+                | Command::ListOpenServiceGatewayInitiativeBundles(_)
+                | Command::ListOpenServiceGatewayInitiativeComponents(_)
+                | Command::ListReplicationAgents(_)
+                | Command::ListResourceMappings(_)
+                | Command::ListSlingJobQueues(_)
+                | Command::ListWorkflowModels(_) => {
+                    slingshot_agent_connection::terminal_failure::decode_read_failure(
+                        &body,
+                        &expectation,
+                        &command,
+                    )
+                    .map_err(|_| failed_exchange())?;
                     true
                 }
-                Command::UpdatePage(_) | Command::MovePage(_) | Command::DeletePage(_) | Command::UpdateComponent(_) | Command::DeleteComponent(_) | Command::ReorderComponent(_)
-                | Command::CreateAsset(_) | Command::CreateAssetFolder(_) | Command::MoveAsset(_) | Command::DeleteAsset(_) | Command::UpdateAssetMetadata(_)
-                | Command::CreateContentFragment(_) | Command::UpdateContentFragment(_) | Command::DeleteContentFragment(_)
-                | Command::CreateExperienceFragment(_) | Command::UpdateExperienceFragment(_) | Command::DeleteExperienceFragment(_)
-                | Command::CreateUser(_) | Command::CreateGroup(_) | Command::DeleteAuthorizable(_) | Command::UpdateUserProfile(_) | Command::SetUserDisabled(_) | Command::AddGroupMember(_) | Command::RemoveGroupMember(_)
-                | Command::CancelSlingJob(_) | Command::StartWorkflow(_) | Command::TerminateWorkflowInstance(_) | Command::SetWorkflowInstanceSuspension(_) | Command::FlushReplicationQueue(_) | Command::RetryReplicationQueueEntry(_)
-                | Command::UpdateOpenServiceGatewayInitiativeConfiguration(_) | Command::DeleteOpenServiceGatewayInitiativeConfiguration(_) | Command::SetOpenServiceGatewayInitiativeBundleState(_) => {
-                    slingshot_agent_connection::terminal_failure::decode_mutation_failure(&body, &expectation, &command).map_err(|_| failed_exchange())?.proves_no_effect()
+                Command::UpdatePage(_)
+                | Command::MovePage(_)
+                | Command::DeletePage(_)
+                | Command::UpdateComponent(_)
+                | Command::DeleteComponent(_)
+                | Command::ReorderComponent(_)
+                | Command::CreateAsset(_)
+                | Command::CreateAssetFolder(_)
+                | Command::MoveAsset(_)
+                | Command::DeleteAsset(_)
+                | Command::UpdateAssetMetadata(_)
+                | Command::CreateContentFragment(_)
+                | Command::UpdateContentFragment(_)
+                | Command::DeleteContentFragment(_)
+                | Command::CreateExperienceFragment(_)
+                | Command::UpdateExperienceFragment(_)
+                | Command::DeleteExperienceFragment(_)
+                | Command::CreateUser(_)
+                | Command::CreateGroup(_)
+                | Command::DeleteAuthorizable(_)
+                | Command::UpdateUserProfile(_)
+                | Command::SetUserDisabled(_)
+                | Command::AddGroupMember(_)
+                | Command::RemoveGroupMember(_)
+                | Command::CancelSlingJob(_)
+                | Command::StartWorkflow(_)
+                | Command::TerminateWorkflowInstance(_)
+                | Command::SetWorkflowInstanceSuspension(_)
+                | Command::FlushReplicationQueue(_)
+                | Command::RetryReplicationQueueEntry(_)
+                | Command::UpdateOpenServiceGatewayInitiativeConfiguration(_)
+                | Command::DeleteOpenServiceGatewayInitiativeConfiguration(_)
+                | Command::SetOpenServiceGatewayInitiativeBundleState(_) => {
+                    slingshot_agent_connection::terminal_failure::decode_mutation_failure(
+                        &body,
+                        &expectation,
+                        &command,
+                    )
+                    .map_err(|_| failed_exchange())?
+                    .proves_no_effect()
                 }
                 Command::ReplicateContent(_) => {
-                    use slingshot_agent_connection::terminal_failure::{decode_replication_failure, ReplicationFailureEffect};
-                    let effect = decode_replication_failure(&body, &expectation, &command).map_err(|_| failed_exchange())?.effect();
+                    use slingshot_agent_connection::terminal_failure::{
+                        ReplicationFailureEffect, decode_replication_failure,
+                    };
+                    let effect = decode_replication_failure(&body, &expectation, &command)
+                        .map_err(|_| failed_exchange())?
+                        .effect();
                     partial_admission = effect == ReplicationFailureEffect::PartialAdmission;
                     effect == ReplicationFailureEffect::NoAdmission
                 }
-                Command::CreatePage(_) | Command::AddComponent(_) => decode_creation_failure(&body, &expectation, &command).map_err(|_| failed_exchange())?.proves_no_effect(),
-                Command::LoadContentAsJson(_) => { decode_load_failure(&body, &expectation, &command).map_err(|_| failed_exchange())?; true },
-                Command::InspectOpenServiceGatewayInitiativeConfiguration(_) => { decode_configuration_failure(&body, &expectation, &command).map_err(|_| failed_exchange())?; true },
-                Command::QueryPaths(_) | Command::FindPagesByTemplate(_) | Command::FindPagesContainingPhrase(_) | Command::FindPagesUsingComponents(_) | Command::FindAssetsByMetadata(_) | Command::FindAssetsReferencedByPage(_) => {
-                    slingshot_agent_connection::terminal_failure::decode_discovery_failure(&body, &expectation, &command).map_err(|_| failed_exchange())?;
+                Command::CreatePage(_) | Command::AddComponent(_) => {
+                    decode_creation_failure(&body, &expectation, &command)
+                        .map_err(|_| failed_exchange())?
+                        .proves_no_effect()
+                }
+                Command::LoadContentAsJson(_) => {
+                    decode_load_failure(&body, &expectation, &command)
+                        .map_err(|_| failed_exchange())?;
                     true
-                },
+                }
+                Command::InspectOpenServiceGatewayInitiativeConfiguration(_) => {
+                    decode_configuration_failure(&body, &expectation, &command)
+                        .map_err(|_| failed_exchange())?;
+                    true
+                }
+                Command::QueryPaths(_)
+                | Command::FindPagesByTemplate(_)
+                | Command::FindPagesContainingPhrase(_)
+                | Command::FindPagesUsingComponents(_)
+                | Command::FindAssetsByMetadata(_)
+                | Command::FindAssetsReferencedByPage(_) => {
+                    slingshot_agent_connection::terminal_failure::decode_discovery_failure(
+                        &body,
+                        &expectation,
+                        &command,
+                    )
+                    .map_err(|_| failed_exchange())?;
+                    true
+                }
                 Command::DownloadContentPackage(_) => {
-                    let failure = decode_package_failure(&body, &expectation, &command).map_err(|_| failed_exchange())?;
+                    let failure = decode_package_failure(&body, &expectation, &command)
+                        .map_err(|_| failed_exchange())?;
                     if failure.category() == "staging_cleanup_failed" {
                         diagnosis = Some(slingshot_storage::agent_job_repository::RejectedAgentDiagnosis::PackageStagingCleanupRequired);
                     }
                     failure.proves_no_publication()
-                },
+                }
             };
-            let elapsed = u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+            let elapsed =
+                u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
             let now = now_unix_milliseconds.saturating_add(elapsed);
             if no_effect || partial_admission {
                 let snapshot = slingshot_storage::agent_job_repository::FailedAgentSnapshot {
-                        observation: RemoteJobObservation {
-                            state: found.snapshot.described_state(),
-                            applied_sequence: found.snapshot.sequence,
-                            attempt: found.snapshot.attempt,
-                            progress: found.snapshot.progress,
-                        },
-                        physical_sling_job_identifiers: found.snapshot.physical_sling_job_identifiers.clone(),
-                        remaining_retention_milliseconds: found.remaining_retention_milliseconds,
-                    };
+                    observation: RemoteJobObservation {
+                        state: found.snapshot.described_state(),
+                        applied_sequence: found.snapshot.sequence,
+                        attempt: found.snapshot.attempt,
+                        progress: found.snapshot.progress,
+                    },
+                    physical_sling_job_identifiers: found
+                        .snapshot
+                        .physical_sling_job_identifiers
+                        .clone(),
+                    remaining_retention_milliseconds: found.remaining_retention_milliseconds,
+                };
                 if partial_admission {
-                    operations.settle_partial_admission_snapshot(&retained, expected_operation_revision, &snapshot, now)
+                    operations.settle_partial_admission_snapshot(
+                        &retained,
+                        expected_operation_revision,
+                        &snapshot,
+                        now,
+                    )
                 } else {
-                    operations.settle_rejected_agent_snapshot(&retained, expected_operation_revision, &snapshot, diagnosis, now)
-                }.map_err(|_| DurableLookupRefusal)?;
+                    operations.settle_rejected_agent_snapshot(
+                        &retained,
+                        expected_operation_revision,
+                        &snapshot,
+                        diagnosis,
+                        now,
+                    )
+                }
+                .map_err(|_| DurableLookupRefusal)?;
             } else {
                 // Leave the remote child open for same-operation reconciliation;
                 // never convert the failed wire state into known effect evidence.
-                record_lookup_recovery(operations, &retained, expected_operation_revision, now, true)?;
+                record_lookup_recovery(
+                    operations,
+                    &retained,
+                    expected_operation_revision,
+                    now,
+                    true,
+                )?;
             }
         }
         if found.snapshot.described_state()

@@ -45,6 +45,8 @@ pub const FIELD_SEPARATOR: u8 = 0;
 /// The slot every command reserves for its own structured result.
 pub const STRUCTURED_RESULT_SLOT: &str = "structured_result";
 
+pub mod maintenance_content;
+
 /// Media type a canonical structured result is stored under.
 pub const CANONICAL_JSON_MEDIA_TYPE: &str = "application/json";
 
@@ -661,7 +663,11 @@ impl StagedArtifact<'_> {
         if HandleSnapshot::of(&file)? != self.stage.identity {
             return Err(ArtifactFailure::FilesystemRefused("the private stage changed".to_owned()));
         }
-        VerifiedArtifactReader::from_file(file, &self.metadata)
+        VerifiedArtifactReader::from_file(
+            file,
+            &self.metadata.content_digest,
+            self.metadata.byte_length,
+        )
     }
 
     /// Publishes verified content without replacing an existing digest object.
@@ -696,21 +702,33 @@ impl ArtifactStore {
         for entry in std::fs::read_dir(&self.content).map_err(refused)? {
             let entry = entry.map_err(refused)?;
             let name = entry.file_name();
-            let Some(name) = name.to_str() else { continue; };
-            let Some(identifier) = name.strip_suffix(STAGING_SUFFIX) else { continue; };
-            let parsed = uuid::Uuid::parse_str(identifier).map_err(|_| ArtifactFailure::NotPrivate)?;
-            if parsed.to_string() != identifier { return Err(ArtifactFailure::NotPrivate); }
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            let Some(identifier) = name.strip_suffix(STAGING_SUFFIX) else {
+                continue;
+            };
+            let parsed =
+                uuid::Uuid::parse_str(identifier).map_err(|_| ArtifactFailure::NotPrivate)?;
+            if parsed.to_string() != identifier {
+                return Err(ArtifactFailure::NotPrivate);
+            }
             let metadata = std::fs::symlink_metadata(entry.path()).map_err(refused)?;
             require_current_user_only(&metadata)?;
-            #[cfg(unix)] {
+            #[cfg(unix)]
+            {
                 use std::os::unix::fs::MetadataExt as _;
-                if metadata.nlink() != 1 { return Err(ArtifactFailure::NotPrivate); }
+                if metadata.nlink() != 1 {
+                    return Err(ArtifactFailure::NotPrivate);
+                }
             }
             std::fs::remove_file(entry.path()).map_err(refused)?;
             removed = removed.saturating_add(1);
         }
         if removed != 0 {
-            std::fs::File::open(&self.content).and_then(|directory| directory.sync_all()).map_err(refused)?;
+            std::fs::File::open(&self.content)
+                .and_then(|directory| directory.sync_all())
+                .map_err(refused)?;
         }
         Ok(removed)
     }
@@ -720,21 +738,28 @@ impl ArtifactStore {
     /// prove there are no retained references. Missing content is an idempotent
     /// retry after deletion; the directory is synchronized before acknowledgement.
     pub(crate) fn remove_unreferenced_content(&self, digest: &str) -> Result<(), ArtifactFailure> {
-        if !is_canonical_digest(digest) { return Err(ArtifactFailure::DigestNotCanonical); }
+        if !is_canonical_digest(digest) {
+            return Err(ArtifactFailure::DigestNotCanonical);
+        }
         let path = self.content.join(digest);
         match std::fs::symlink_metadata(&path) {
             Ok(metadata) => {
                 require_current_user_only(&metadata)?;
-                #[cfg(unix)] {
+                #[cfg(unix)]
+                {
                     use std::os::unix::fs::MetadataExt as _;
-                    if metadata.nlink() != 1 { return Err(ArtifactFailure::NotPrivate); }
+                    if metadata.nlink() != 1 {
+                        return Err(ArtifactFailure::NotPrivate);
+                    }
                 }
                 std::fs::remove_file(&path).map_err(refused)?;
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(refused(error)),
         }
-        std::fs::File::open(&self.content).and_then(|directory| directory.sync_all()).map_err(refused)
+        std::fs::File::open(&self.content)
+            .and_then(|directory| directory.sync_all())
+            .map_err(refused)
     }
 
     /// Returns a store rooted at `root`, creating what it needs.
@@ -909,7 +934,7 @@ impl ArtifactStore {
     ) -> Result<(), ArtifactFailure> {
         let mut existing = open_without_following(destination)?;
         HandleSnapshot::of(&existing)?;
-        let (digest, length) = measure(&mut existing)?;
+        let (digest, length) = measure(&mut (&mut existing).take(byte_length.saturating_add(1)))?;
         if length != byte_length {
             return Err(ArtifactFailure::LengthMismatch { actual: length, expected: byte_length });
         }
@@ -977,19 +1002,45 @@ impl ArtifactStore {
         &self,
         metadata: &ArtifactMetadata,
     ) -> Result<VerifiedArtifactReader, ArtifactFailure> {
-        if !is_canonical_digest(&metadata.content_digest) {
+        self.open_verified_content(&metadata.content_digest, metadata.byte_length)
+    }
+
+    /// Opens operation-free maintenance content through the same verified-handle
+    /// contract as artifacts. The caller first resolves its target-qualified
+    /// association; no operation identifier or artifact slot is fabricated here.
+    ///
+    /// # Errors
+    /// Returns a verification refusal without altering the result association.
+    pub fn open_maintenance_result(
+        &self,
+        metadata: &crate::maintenance_results::MaintenanceResultMetadata,
+    ) -> Result<VerifiedArtifactReader, ArtifactFailure> {
+        self.open_verified_content(&metadata.content_digest, metadata.byte_length)
+    }
+
+    fn open_verified_content(
+        &self,
+        digest: &str,
+        length: u64,
+    ) -> Result<VerifiedArtifactReader, ArtifactFailure> {
+        if !is_canonical_digest(digest) {
             return Err(ArtifactFailure::DigestNotCanonical);
         }
-        let path = self.content.join(&metadata.content_digest);
-        if !path.exists() {
-            return Err(ArtifactFailure::NoSuchContent(metadata.content_digest.clone()));
+        let maximum =
+            DaemonRuntimeContract::embedded().formula("maximum_individual_artifact_bytes");
+        if length > maximum {
+            return Err(ArtifactFailure::ContentTooLong { actual: length, allowed: maximum });
         }
-        VerifiedArtifactReader::from_file(open_without_following(&path)?, metadata)
+        let path = self.content.join(digest);
+        if !path.exists() {
+            return Err(ArtifactFailure::NoSuchContent(digest.to_owned()));
+        }
+        VerifiedArtifactReader::from_file(open_without_following(&path)?, digest, length)
     }
 }
 
 /// Reads `file` through to its end, returning the digest and length found.
-fn measure(file: &mut std::fs::File) -> Result<(String, u64), ArtifactFailure> {
+fn measure(file: &mut impl std::io::Read) -> Result<(String, u64), ArtifactFailure> {
     let mut hasher = Sha256::new();
     let mut byte_length = 0_u64;
     let mut transfer = vec![0_u8; TRANSFER_BYTES];
@@ -1001,27 +1052,6 @@ fn measure(file: &mut std::fs::File) -> Result<(String, u64), ArtifactFailure> {
         byte_length = byte_length.saturating_add(read as u64);
         hasher.update(&transfer[..read]);
     }
-}
-
-/// Requires what was read to be what the metadata describes.
-fn require_matches(
-    metadata: &ArtifactMetadata,
-    digest: &str,
-    byte_length: u64,
-) -> Result<(), ArtifactFailure> {
-    if byte_length != metadata.byte_length {
-        return Err(ArtifactFailure::LengthMismatch {
-            actual: byte_length,
-            expected: metadata.byte_length,
-        });
-    }
-    if digest != metadata.content_digest {
-        return Err(ArtifactFailure::DigestMismatch {
-            actual: digest.to_owned(),
-            expected: metadata.content_digest.clone(),
-        });
-    }
-    Ok(())
 }
 
 /// One artifact being read, on the handle that was verified.
@@ -1055,19 +1085,40 @@ impl std::io::Read for VerifiedArtifactReader {
 impl VerifiedArtifactReader {
     fn from_file(
         mut file: std::fs::File,
-        metadata: &ArtifactMetadata,
+        expected_digest: &str,
+        expected_length: u64,
     ) -> Result<Self, ArtifactFailure> {
         let opened = HandleSnapshot::of(&file)?;
-        let (digest, byte_length) = measure(&mut file)?;
-        require_matches(metadata, &digest, byte_length)?;
+        if opened.byte_length != expected_length {
+            return Err(ArtifactFailure::LengthMismatch {
+                actual: opened.byte_length,
+                expected: expected_length,
+            });
+        }
+        // Concurrent append cannot turn verification into an unbounded scan.
+        // One extra byte is enough to prove the retained length is no longer true.
+        let (digest, byte_length) =
+            measure(&mut (&mut file).take(expected_length.saturating_add(1)))?;
+        if byte_length != expected_length {
+            return Err(ArtifactFailure::LengthMismatch {
+                actual: byte_length,
+                expected: expected_length,
+            });
+        }
+        if digest != expected_digest {
+            return Err(ArtifactFailure::DigestMismatch {
+                actual: digest,
+                expected: expected_digest.to_owned(),
+            });
+        }
         if HandleSnapshot::of(&file)? != opened {
             return Err(ArtifactFailure::HandleMoved);
         }
         file.rewind().map_err(refused)?;
         Ok(Self {
             byte_length: 0,
-            expected_digest: metadata.content_digest.clone(),
-            expected_length: metadata.byte_length,
+            expected_digest: expected_digest.to_owned(),
+            expected_length,
             file,
             hasher: Sha256::new(),
             opened,
@@ -1169,6 +1220,37 @@ pub struct ArtifactAssociations<'database> {
 }
 
 impl<'database> ArtifactAssociations<'database> {
+    /// Resolves an opaque artifact only inside its addressed operation/target.
+    /// Ambiguous associations fail closed rather than choosing an arbitrary slot.
+    ///
+    /// # Errors
+    /// Returns a storage refusal for unreadable or ambiguous associations.
+    pub fn read_identifier(
+        &self,
+        target: &str,
+        operation: &str,
+        identifier: &ArtifactIdentifier,
+    ) -> Result<Option<ArtifactMetadata>, ArtifactFailure> {
+        let mut prepared = self
+            .database
+            .connection()
+            .prepare(statement("resolve an artifact identifier inside one operation"))
+            .map_err(database_refused)?;
+        let mut rows = prepared
+            .query(rusqlite::params![target, operation, identifier.as_text()])
+            .map_err(database_refused)?;
+        let Some(row) = rows.next().map_err(database_refused)? else {
+            return Ok(None);
+        };
+        let slot: String = row.get(0).map_err(database_refused)?;
+        if rows.next().map_err(database_refused)?.is_some() {
+            return Err(ArtifactFailure::FilesystemRefused(
+                "ambiguous artifact association".to_owned(),
+            ));
+        }
+        self.read(target, operation, &slot)
+    }
+
     /// Returns the associations held in `database`.
     #[must_use]
     pub fn new(database: &'database crate::database::OperationDatabase) -> Self {

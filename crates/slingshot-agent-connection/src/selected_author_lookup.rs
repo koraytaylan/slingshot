@@ -275,7 +275,8 @@ impl SelectedAuthorTransport {
         authentication: &RequestAuthentication,
     ) -> Result<OperationLookupReceipt, SnapshotLookupRefusal> {
         self.lookup_operation_over(identity, submission, authentication, None, None, None)
-            .await?.logical()
+            .await?
+            .logical()
     }
 
     /// Retrieves a physical snapshot using the same negotiated socket.
@@ -287,8 +288,17 @@ impl SelectedAuthorTransport {
         sling_job_identifier: &str,
         authentication: &RequestAuthentication,
     ) -> Result<SnapshotLookupReceipt, SnapshotLookupRefusal> {
-        match self.lookup_operation_over(identity, submission, authentication, None,
-            Some(sling_job_identifier), None).await? {
+        match self
+            .lookup_operation_over(
+                identity,
+                submission,
+                authentication,
+                None,
+                Some(sling_job_identifier),
+                None,
+            )
+            .await?
+        {
             DecodedLookup::Found(receipt) => Ok(receipt),
             _ => Err(SnapshotLookupRefusal),
         }
@@ -304,8 +314,16 @@ impl SelectedAuthorTransport {
         current_generation: u64,
         authentication: &RequestAuthentication,
     ) -> Result<PhysicalLookupReceipt, SnapshotLookupRefusal> {
-        self.lookup_operation_over(identity, submission, authentication, None,
-            Some(sling_job_identifier), Some(current_generation)).await?.physical()
+        self.lookup_operation_over(
+            identity,
+            submission,
+            authentication,
+            None,
+            Some(sling_job_identifier),
+            Some(current_generation),
+        )
+        .await?
+        .physical()
     }
 
     async fn lookup_operation_over(
@@ -317,21 +335,41 @@ impl SelectedAuthorTransport {
         physical: Option<&str>,
         current_generation: Option<u64>,
     ) -> Result<DecodedLookup, SnapshotLookupRefusal> {
-        let (segments, query) = self.lookup_request(identity, submission, physical, current_generation)?;
+        let (segments, query) =
+            self.lookup_request(identity, submission, physical, current_generation)?;
         let started = std::time::Instant::now();
         let receipt = if http2.is_none() {
             self.finite_negotiated_query(
-                http::Method::GET, &segments, &query, authentication, &http::HeaderMap::new(), b"",
-            ).await
+                http::Method::GET,
+                &segments,
+                &query,
+                authentication,
+                &http::HeaderMap::new(),
+                b"",
+            )
+            .await
         } else if http2 == Some(true) {
             self.finite_http2_query(
-                http::Method::GET, &segments, &query, authentication, &http::HeaderMap::new(), b"",
-            ).await
+                http::Method::GET,
+                &segments,
+                &query,
+                authentication,
+                &http::HeaderMap::new(),
+                b"",
+            )
+            .await
         } else {
             self.finite_http1_query(
-                http::Method::GET, &segments, &query, authentication, &http::HeaderMap::new(), b"",
-            ).await
-        }.map_err(|_| SnapshotLookupRefusal)?;
+                http::Method::GET,
+                &segments,
+                &query,
+                authentication,
+                &http::HeaderMap::new(),
+                b"",
+            )
+            .await
+        }
+        .map_err(|_| SnapshotLookupRefusal)?;
         Self::decode_lookup_receipt(submission, physical, current_generation, started, receipt)
     }
 
@@ -346,7 +384,8 @@ impl SelectedAuthorTransport {
         reading: u64,
     ) -> Result<OperationLookupReceipt, SnapshotLookupRefusal> {
         self.lookup_authenticated(identity, submission, provider, source, reading, None, None)
-            .await?.logical()
+            .await?
+            .logical()
     }
 
     /// Reads one retained physical job with provider-owned authentication.
@@ -362,8 +401,17 @@ impl SelectedAuthorTransport {
         source: &dyn crate::authentication::access_token_cache::AccessTokenSource,
         reading: u64,
     ) -> Result<PhysicalLookupReceipt, SnapshotLookupRefusal> {
-        self.lookup_authenticated(identity, submission, provider, source, reading,
-            Some(sling_job_identifier), Some(current_generation)).await?.physical()
+        self.lookup_authenticated(
+            identity,
+            submission,
+            provider,
+            source,
+            reading,
+            Some(sling_job_identifier),
+            Some(current_generation),
+        )
+        .await?
+        .physical()
     }
 
     /// Reads a physical snapshot without accepting absence as snapshot evidence.
@@ -376,8 +424,18 @@ impl SelectedAuthorTransport {
         source: &dyn crate::authentication::access_token_cache::AccessTokenSource,
         reading: u64,
     ) -> Result<SnapshotLookupReceipt, SnapshotLookupRefusal> {
-        match self.lookup_authenticated(identity, submission, provider, source, reading,
-            Some(sling_job_identifier), None).await? {
+        match self
+            .lookup_authenticated(
+                identity,
+                submission,
+                provider,
+                source,
+                reading,
+                Some(sling_job_identifier),
+                None,
+            )
+            .await?
+        {
             DecodedLookup::Found(receipt) => Ok(receipt),
             _ => Err(SnapshotLookupRefusal),
         }
@@ -393,11 +451,20 @@ impl SelectedAuthorTransport {
         physical: Option<&str>,
         current_generation: Option<u64>,
     ) -> Result<DecodedLookup, SnapshotLookupRefusal> {
-        let (segments, query) = self.lookup_request(identity, submission, physical, current_generation)?;
+        let (segments, query) =
+            self.lookup_request(identity, submission, physical, current_generation)?;
         let started = std::time::Instant::now();
-        let receipt = self.authenticated_finite_get(
-            provider, source, reading, &segments, &query, &http::HeaderMap::new(),
-        ).await.map_err(|_| SnapshotLookupRefusal)?;
+        let receipt = self
+            .authenticated_finite_get(
+                provider,
+                source,
+                reading,
+                &segments,
+                &query,
+                &http::HeaderMap::new(),
+            )
+            .await
+            .map_err(|_| SnapshotLookupRefusal)?;
         Self::decode_lookup_receipt(submission, physical, current_generation, started, receipt)
     }
 
@@ -415,7 +482,8 @@ impl SelectedAuthorTransport {
         Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
     {
         self.lookup_authenticated_async(identity, submission, provider, clock, utc, None, None)
-            .await?.logical()
+            .await?
+            .logical()
     }
 
     /// Reads physical state with the same generation-bound absence validation.
@@ -433,8 +501,17 @@ impl SelectedAuthorTransport {
         Clock: crate::authentication::identity_management_exchange::MonotonicClock + Sync,
         Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
     {
-        self.lookup_authenticated_async(identity, submission, provider, clock, utc,
-            Some(sling_job_identifier), Some(current_generation)).await?.physical()
+        self.lookup_authenticated_async(
+            identity,
+            submission,
+            provider,
+            clock,
+            utc,
+            Some(sling_job_identifier),
+            Some(current_generation),
+        )
+        .await?
+        .physical()
     }
 
     /// Reads a physical snapshot; absence is never accepted as snapshot evidence.
@@ -451,8 +528,18 @@ impl SelectedAuthorTransport {
         Clock: crate::authentication::identity_management_exchange::MonotonicClock + Sync,
         Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
     {
-        match self.lookup_authenticated_async(identity, submission, provider, clock, utc,
-            Some(sling_job_identifier), None).await? {
+        match self
+            .lookup_authenticated_async(
+                identity,
+                submission,
+                provider,
+                clock,
+                utc,
+                Some(sling_job_identifier),
+                None,
+            )
+            .await?
+        {
             DecodedLookup::Found(receipt) => Ok(receipt),
             _ => Err(SnapshotLookupRefusal),
         }
@@ -472,11 +559,20 @@ impl SelectedAuthorTransport {
         Clock: crate::authentication::identity_management_exchange::MonotonicClock + Sync,
         Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
     {
-        let (segments, query) = self.lookup_request(identity, submission, physical, current_generation)?;
+        let (segments, query) =
+            self.lookup_request(identity, submission, physical, current_generation)?;
         let started = std::time::Instant::now();
-        let receipt = self.authenticated_finite_get_async(
-            provider, clock, utc, &segments, &query, &http::HeaderMap::new(),
-        ).await.map_err(|_| SnapshotLookupRefusal)?;
+        let receipt = self
+            .authenticated_finite_get_async(
+                provider,
+                clock,
+                utc,
+                &segments,
+                &query,
+                &http::HeaderMap::new(),
+            )
+            .await
+            .map_err(|_| SnapshotLookupRefusal)?;
         Self::decode_lookup_receipt(submission, physical, current_generation, started, receipt)
     }
 

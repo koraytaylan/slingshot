@@ -262,8 +262,13 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         authentication: &crate::authentication::environment_provider::RequestAuthentication,
     ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
         self.discover_capabilities_over(
-            identity, command_wire_name, expected_generation, authentication, None,
-        ).await
+            identity,
+            command_wire_name,
+            expected_generation,
+            authentication,
+            None,
+        )
+        .await
     }
 
     /// Discovers compatibility with request-scoped provider authentication.
@@ -282,13 +287,21 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         let command = SelectedCommandContractIdentity::installed(command_wire_name)
             .map_err(|_| CapabilityExchangeRefusal)?;
         let required = RequiredCapabilities::of(
-            command, &slingshot_domain::command::schema::canonical_contract_digest(),
+            command,
+            &slingshot_domain::command::schema::canonical_contract_digest(),
             expected_generation,
         );
-        let receipt = self.authenticated_finite_get(
-            provider, source, reading, &["bin", "slingshot-agent", "capabilities"],
-            &[], &http::HeaderMap::new(),
-        ).await.map_err(|_| CapabilityExchangeRefusal)?;
+        let receipt = self
+            .authenticated_finite_get(
+                provider,
+                source,
+                reading,
+                &["bin", "slingshot-agent", "capabilities"],
+                &[],
+                &http::HeaderMap::new(),
+            )
+            .await
+            .map_err(|_| CapabilityExchangeRefusal)?;
         Self::decode_capability_receipt(receipt, &required)
     }
 
@@ -310,13 +323,21 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         let command = SelectedCommandContractIdentity::installed(command_wire_name)
             .map_err(|_| CapabilityExchangeRefusal)?;
         let required = RequiredCapabilities::of(
-            command, &slingshot_domain::command::schema::canonical_contract_digest(),
+            command,
+            &slingshot_domain::command::schema::canonical_contract_digest(),
             expected_generation,
         );
-        let receipt = self.authenticated_finite_get_async(
-            provider, clock, utc, &["bin", "slingshot-agent", "capabilities"],
-            &[], &http::HeaderMap::new(),
-        ).await.map_err(|_| CapabilityExchangeRefusal)?;
+        let receipt = self
+            .authenticated_finite_get_async(
+                provider,
+                clock,
+                utc,
+                &["bin", "slingshot-agent", "capabilities"],
+                &[],
+                &http::HeaderMap::new(),
+            )
+            .await
+            .map_err(|_| CapabilityExchangeRefusal)?;
         Self::decode_capability_receipt(receipt, &required)
     }
 
@@ -338,9 +359,14 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         );
         let receipt = if http2.is_none() {
             self.finite_negotiated_query(
-                http::Method::GET, &["bin", "slingshot-agent", "capabilities"],
-                &[], authentication, &http::HeaderMap::new(), b"",
-            ).await
+                http::Method::GET,
+                &["bin", "slingshot-agent", "capabilities"],
+                &[],
+                authentication,
+                &http::HeaderMap::new(),
+                b"",
+            )
+            .await
         } else if http2 == Some(true) {
             self.finite_http2_query(
                 http::Method::GET,

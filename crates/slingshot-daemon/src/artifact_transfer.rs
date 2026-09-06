@@ -130,8 +130,7 @@ impl ArtifactTransfer {
                 offset: request.starting_offset,
             });
         }
-        let mut reader = store.open_verified(metadata)?;
-        reader.discard_prefix(request.starting_offset)?;
+        let reader = store.open_verified(metadata)?;
         let remaining = metadata.byte_length - request.starting_offset;
         let start = TransferStart {
             artifact_identifier: metadata.artifact_identifier.as_text().to_owned(),
@@ -139,9 +138,30 @@ impl ArtifactTransfer {
             total_byte_length: metadata.byte_length,
             transferred_byte_length: remaining,
         };
-        let chunk_bytes =
-            usize::try_from(chunk_bytes(request.preferred_chunk_bytes)).unwrap_or(usize::MAX);
-        Ok((Self { chunk_bytes, reader, remaining }, start))
+        Ok((
+            Self::from_verified(
+                reader,
+                metadata.byte_length,
+                request.starting_offset,
+                request.preferred_chunk_bytes,
+            )?,
+            start,
+        ))
+    }
+
+    /// Shares bounded transfer mechanics with operation-free maintenance reads.
+    pub(crate) fn from_verified(
+        mut reader: VerifiedArtifactReader,
+        length: u64,
+        offset: u64,
+        preferred: u64,
+    ) -> Result<Self, TransferFailure> {
+        if offset > length {
+            return Err(TransferFailure::OffsetPastEnd { holding: length, offset });
+        }
+        reader.discard_prefix(offset)?;
+        let chunk_bytes = usize::try_from(chunk_bytes(preferred)).unwrap_or(usize::MAX);
+        Ok(Self { chunk_bytes, reader, remaining: length - offset })
     }
 
     /// Returns the next chunk, or nothing when the suffix is done.
