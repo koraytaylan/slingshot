@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# Run the local release/quality checks and preserve every result for review.
+#
+# The runner intentionally continues after a failed check. Each command gets a
+# log and an adjacent .exit file, while the runner's final status is non-zero
+# whenever a check failed or could not be run because a required input was
+# absent.
+
+set -u
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+OUTPUT_ROOT=${SLINGSHOT_RUN_LOG_DIRECTORY:-"$ROOT/.run-logs-$STAMP"}
+mkdir -p "$OUTPUT_ROOT"
+
+OVERALL_STATUS=0
+
+record_status() {
+    local name=$1
+    local status=$2
+    printf '%s\n' "$status" > "$OUTPUT_ROOT/$name.exit"
+    if [ "$status" -ne 0 ]; then
+        OVERALL_STATUS=1
+    fi
+}
+
+run_capture() {
+    local name=$1
+    shift
+    printf '\n===== %s =====\n' "$name"
+    printf 'command:'
+    printf ' %q' "$@"
+    printf '\n'
+    "$@" 2>&1 | tee "$OUTPUT_ROOT/$name.log"
+    local status=${PIPESTATUS[0]}
+    record_status "$name" "$status"
+    printf 'exit: %s\n' "$status"
+}
+
+record_refusal() {
+    local name=$1
+    shift
+    local message=$*
+    printf '%s\n' "$message" | tee "$OUTPUT_ROOT/$name.log"
+    record_status "$name" 2
+}
+
+run_capture full-tests \
+    cargo test --workspace --all-features --locked
+
+run_capture clippy \
+    cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+if [ -n "${SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY:-}" ]; then
+    run_capture quality \
+        scripts/quality
+else
+    record_refusal quality \
+        "refused: set SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY before running scripts/quality"
+fi
+
+HOST_TARGET=$(rustc -vV 2>/dev/null | sed -n 's/^host: //p')
+if [ "$HOST_TARGET" = "x86_64-pc-windows-msvc" ]; then
+    run_capture windows-check \
+        cargo check --workspace --target x86_64-pc-windows-msvc --locked
+    run_capture windows-agent-tests \
+        cargo test -p slingshot-agent-connection --test workspace-capabilities --locked
+    run_capture windows-config-tests \
+        cargo test -p slingshot-configuration --test credential_filesystem_windows --locked
+    run_capture windows-daemon-tests \
+        cargo test -p slingshot-daemon --test workspace-capabilities --locked
+else
+    record_refusal windows \
+        "not run: Windows/MSVC checks require host x86_64-pc-windows-msvc; detected ${HOST_TARGET:-unknown}"
+fi
+
+required_acceptance_inputs=(
+    SLINGSHOT_REPORTED_WORKFLOW
+    SLINGSHOT_FINITE_STATE_MACHINE_SOURCE
+    SLINGSHOT_RUSTSEC_ADVISORY_DATABASE
+    SLINGSHOT_RUSTSEC_OWNER_REVIEW_RECORD
+    SLINGSHOT_LOCKED_SOURCE_CACHE
+    SLINGSHOT_PLATFORM_EVIDENCE_DIRECTORY
+)
+missing_acceptance_input=''
+for input_name in "${required_acceptance_inputs[@]}"; do
+    if [ -z "${!input_name:-}" ]; then
+        missing_acceptance_input+=" $input_name"
+    fi
+done
+
+if [ -z "$missing_acceptance_input" ]; then
+    acceptance_output="$OUTPUT_ROOT/acceptance-output"
+    SLINGSHOT_REPORTED_WORKFLOW="$SLINGSHOT_REPORTED_WORKFLOW" \
+        run_capture acceptance \
+        scripts/release_acceptance \
+        --finite-state-machine-source "$SLINGSHOT_FINITE_STATE_MACHINE_SOURCE" \
+        --rustsec-advisory-database "$SLINGSHOT_RUSTSEC_ADVISORY_DATABASE" \
+        --rustsec-owner-review-record "$SLINGSHOT_RUSTSEC_OWNER_REVIEW_RECORD" \
+        --locked-source-cache "$SLINGSHOT_LOCKED_SOURCE_CACHE" \
+        --platform-evidence-directory "$SLINGSHOT_PLATFORM_EVIDENCE_DIRECTORY" \
+        --output-directory "$acceptance_output"
+else
+    record_refusal acceptance \
+        "not run: missing acceptance inputs:$missing_acceptance_input"
+fi
+
+cat > "$OUTPUT_ROOT/README.txt" <<EOF
+Slingshot release-gate capture
+Generated: $STAMP
+Repository: $ROOT
+
+Each check has two files:
+  <name>.log   complete combined stdout/stderr
+  <name>.exit  numeric exit status (0 passed, 1 failed, 2 not run)
+
+Acceptance output, when it ran, is under:
+  acceptance-output/
+EOF
+
+printf '\nResults saved under: %s\n' "$OUTPUT_ROOT"
+printf 'Overall status: %s\n' "$OVERALL_STATUS"
+exit "$OVERALL_STATUS"
