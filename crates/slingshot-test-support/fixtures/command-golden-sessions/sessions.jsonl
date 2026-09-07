@@ -47,7 +47,7 @@
 {"name": "owned-start-adopted", "arguments": ["--profile", "local", "--environment", "author", "daemon", "start"], "intent": "a second start adopts the owner rather than contending", "kind": "owned"}
 {"name": "owned-ping-serving", "arguments": ["--profile", "local", "--environment", "author", "daemon", "ping"], "intent": "a probe finds the owner", "kind": "owned"}
 {"name": "owned-status-serving", "arguments": ["--profile", "local", "--environment", "author", "daemon", "status"], "intent": "a status finds the owner", "kind": "owned"}
-{"name": "owned-operation-list-unserved", "arguments": ["--profile", "local", "--environment", "author", "operation-list"], "intent": "a daemon serving retained control alone says so rather than pretending", "kind": "owned"}
+{"name": "owned-operation-list-served", "arguments": ["--profile", "local", "--environment", "author", "operation-list"], "intent": "a daemon with its selected runtime serves the operation list", "kind": "owned"}
 {"name": "owned-load-content-unserved", "arguments": ["--profile", "local", "--environment", "author", "load_content_as_json", "--path", "/content/site/en", "--machine"], "intent": "a submission against the same daemon says the same thing", "kind": "owned"}
 {"name": "owned-stop", "arguments": ["--profile", "local", "--environment", "author", "daemon", "stop"], "intent": "a stop quotes the nonce the owner published", "kind": "owned"}
 {"name": "protocol-serve-reads-nothing", "arguments": ["--profile", "local", "--environment", "author", "protocol", "serve"], "intent": "a server handed no input answers nothing and finishes", "kind": "local"}

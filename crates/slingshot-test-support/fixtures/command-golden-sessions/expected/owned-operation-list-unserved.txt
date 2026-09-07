@@ -1,4 +1,0 @@
-exit: 6
-standard output:
-standard error:
-slingshot: the daemon serves no operation-protocol version this client speaks; inspect it or stop it explicitly by its current nonce
