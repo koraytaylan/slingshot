@@ -11,8 +11,11 @@
 use std::path::{Path, PathBuf};
 
 use slingshot_agent_connection::authentication::runtime_snapshot::build_runtime_snapshot;
+#[cfg(feature = "runtime-test-host")]
+use slingshot_configuration::platform_trust::ProviderRecord;
 use slingshot_configuration::{
-    platform_trust::OperatingSystemTrustSource, profile_loader::LoadedProfiles,
+    platform_trust::{OperatingSystemTrustSource, PlatformTrustSource},
+    profile_loader::LoadedProfiles,
     profile_selection::RequestedSelection,
 };
 use slingshot_daemon::local_server::{self, LocalListener};
@@ -107,7 +110,7 @@ pub async fn run_daemon_entry(
     arguments: &DaemonEntryArguments,
     shutdown: CancellationToken,
 ) -> Result<DaemonEntryOutcome, DaemonEntryFailure> {
-    run_with_sources(contract, arguments, shutdown, || {
+    run_with_sources(contract, arguments, shutdown, &OperatingSystemTrustSource, || {
         let loaded = crate::command_line::loaded_profiles()
             .map_err(|_| DaemonEntryFailure::Configuration)?;
         let directories = directories::ProjectDirs::from("", "", "slingshot")
@@ -127,7 +130,7 @@ pub async fn run_daemon_entry_for_test(
     root: slingshot_configuration::configuration_root::ConfigurationRoot,
     state_root: PathBuf,
 ) -> Result<DaemonEntryOutcome, DaemonEntryFailure> {
-    run_with_sources(contract, arguments, shutdown, || {
+    run_with_sources(contract, arguments, shutdown, &TestPlatformTrustSource, || {
         #[cfg(unix)]
         let authority =
             slingshot_configuration::credential_filesystem::UnixConfigurationFilesystem::new(root);
@@ -148,6 +151,7 @@ async fn run_with_sources(
     contract: &FoundationContract,
     arguments: &DaemonEntryArguments,
     shutdown: CancellationToken,
+    platform: &dyn PlatformTrustSource,
     sources: impl FnOnce() -> Result<(LoadedProfiles, PathBuf), DaemonEntryFailure>,
 ) -> Result<DaemonEntryOutcome, DaemonEntryFailure> {
     let namespace = RuntimeNamespace::name(
@@ -174,7 +178,7 @@ async fn run_with_sources(
                 .map_err(|_| DaemonEntryFailure::Configuration)?,
         ),
     };
-    let snapshot = build_runtime_snapshot(loaded, &requested, &OperatingSystemTrustSource)?;
+    let snapshot = build_runtime_snapshot(loaded, &requested, platform)?;
     let limits = DaemonRuntimeContract::embedded();
     let runtime = RuntimeBuilder::new(
         snapshot,
@@ -209,4 +213,22 @@ async fn run_with_sources(
     served?;
     withdrawn?;
     Ok(DaemonEntryOutcome::Served)
+}
+
+/// Deterministic trust source for the compiled runtime test host.
+///
+/// The host must not inherit the machine's CA store: its contents are
+/// platform- and image-dependent, and a single restricted root would make a
+/// fixture that is otherwise local fail before it can bind its endpoint.
+#[cfg(feature = "runtime-test-host")]
+struct TestPlatformTrustSource;
+
+#[cfg(feature = "runtime-test-host")]
+impl PlatformTrustSource for TestPlatformTrustSource {
+    fn records(
+        &self,
+    ) -> Result<Vec<ProviderRecord>, slingshot_configuration::profile_loader::ConfigurationDiagnostic>
+    {
+        Ok(Vec::new())
+    }
 }
