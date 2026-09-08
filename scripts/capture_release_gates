@@ -1,17 +1,46 @@
 #!/usr/bin/env bash
 # Run the local release/quality checks and preserve every result for review.
 #
-# The runner intentionally continues after a failed check. Each command gets a
-# log and an adjacent .exit file, while the runner's final status is non-zero
-# whenever a check failed or could not be run because a required input was
-# absent.
+# The runner refuses incomplete release inputs before any expensive command.
+# Once preflight passes, it continues after a failed check; each command gets a
+# log and an adjacent .exit file, while the final status is non-zero whenever a
+# check failed or could not be run.
 
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+CDPATH=
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-OUTPUT_ROOT=${SLINGSHOT_RUN_LOG_DIRECTORY:-"$ROOT/.run-logs-$STAMP"}
+OUTPUT_ROOT=${SLINGSHOT_RUN_LOG_DIRECTORY:-"/tmp/slingshot-gates-$STAMP"}
 mkdir -p "$OUTPUT_ROOT"
+
+# Unix-domain socket names have a hard 100-byte limit. Never derive TMPDIR
+# from the repository or log directory: long paths turn daemon startup errors
+# into misleading test timeouts. A caller may provide a custom directory, but
+# preflight below rejects paths without enough headroom for test-created names.
+TEMP_ROOT_CREATED=0
+if [ -n "${TMPDIR:-}" ]; then
+    GATE_TMPDIR=$TMPDIR
+else
+    GATE_TMPDIR=$(mktemp -d /tmp/slingshot-gates.XXXXXX)
+    TEMP_ROOT_CREATED=1
+fi
+export TMPDIR="$GATE_TMPDIR"
+
+# shellcheck disable=SC2329
+cleanup_gate_tmpdir() {
+    if [ "$TEMP_ROOT_CREATED" -eq 1 ]; then
+        rm -rf -- "$GATE_TMPDIR"
+    fi
+}
+
+NATIVE_CARGO_HOME=$(mktemp -d /tmp/slingshot-native-cargo.XXXXXX)
+# shellcheck disable=SC2329
+cleanup_native_cargo_home() {
+    rm -rf -- "$NATIVE_CARGO_HOME"
+    cleanup_gate_tmpdir
+}
+trap cleanup_native_cargo_home EXIT
 
 # Keep compiler artifacts and temporary C/Rust build files in the workspace
 # rather than inheriting a user-level cache that may be quota-limited.
@@ -19,8 +48,6 @@ export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-"$ROOT/target"}
 export CARGO_INCREMENTAL=${CARGO_INCREMENTAL:-0}
 export CARGO_PROFILE_DEV_DEBUG=${CARGO_PROFILE_DEV_DEBUG:-0}
 export CARGO_PROFILE_TEST_DEBUG=${CARGO_PROFILE_TEST_DEBUG:-0}
-export TMPDIR=${TMPDIR:-"$OUTPUT_ROOT/tmp"}
-mkdir -p "$TMPDIR"
 
 OVERALL_STATUS=0
 
@@ -54,21 +81,138 @@ record_refusal() {
     record_status "$name" 2
 }
 
-run_capture full-tests \
-    cargo test --workspace --all-features --locked
+write_readme() {
+    cat > "$OUTPUT_ROOT/README.txt" <<EOF
+Slingshot release-gate capture
+Generated: $STAMP
+Repository: $ROOT
+
+Each check has two files:
+  <name>.log   complete combined stdout/stderr
+  <name>.exit  numeric exit status (0 passed, 1 failed, 2 not run)
+
+Acceptance output, when it ran, is under:
+  acceptance-output/
+
+This capture refuses incomplete release inputs and a host-only native matrix.
+Set SLINGSHOT_ALLOW_PARTIAL_NATIVE=1 only for diagnostic host checks; that run
+is not release evidence.
+EOF
+}
+
+run_preflight() {
+    local failures=''
+    local input_name
+    local required_acceptance_inputs=(
+        SLINGSHOT_REPORTED_WORKFLOW
+        SLINGSHOT_FINITE_STATE_MACHINE_SOURCE
+        SLINGSHOT_RUSTSEC_ADVISORY_DATABASE
+        SLINGSHOT_RUSTSEC_OWNER_REVIEW_RECORD
+        SLINGSHOT_LOCKED_SOURCE_CACHE
+        SLINGSHOT_PLATFORM_EVIDENCE_DIRECTORY
+    )
+
+    if [ "${#TMPDIR}" -gt 60 ]; then
+        failures+=" TMPDIR(path-too-long:${#TMPDIR})"
+    fi
+    if [ ! -d "$TMPDIR" ] || [ ! -w "$TMPDIR" ]; then
+        failures+=' TMPDIR(not-writable)'
+    fi
+    case "$OUTPUT_ROOT" in
+        "$ROOT"|"$ROOT"/*) failures+=' log-directory-inside-repository' ;;
+    esac
+    if [ -z "${SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY:-}" ]; then
+        failures+=' SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY'
+    fi
+    for input_name in "${required_acceptance_inputs[@]}"; do
+        if [ -z "${!input_name:-}" ]; then
+            failures+=" $input_name"
+        fi
+    done
+    for directory_name in \
+        SLINGSHOT_FINITE_STATE_MACHINE_SOURCE \
+        SLINGSHOT_RUSTSEC_ADVISORY_DATABASE \
+        SLINGSHOT_LOCKED_SOURCE_CACHE \
+        SLINGSHOT_PLATFORM_EVIDENCE_DIRECTORY; do
+        if [ -n "${!directory_name:-}" ] && [ ! -d "${!directory_name}" ]; then
+            failures+=" $directory_name(not-a-directory)"
+        fi
+    done
+    if [ -n "${SLINGSHOT_RUSTSEC_OWNER_REVIEW_RECORD:-}" ] \
+        && [ ! -f "$SLINGSHOT_RUSTSEC_OWNER_REVIEW_RECORD" ]; then
+        failures+=' SLINGSHOT_RUSTSEC_OWNER_REVIEW_RECORD(not-a-file)'
+    fi
+    if ! git diff --quiet HEAD || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+        failures+=' working-tree-not-clean'
+    fi
+
+    HOST_TARGET=$(rustc -vV 2>/dev/null | sed -n 's/^host: //p')
+    case "$HOST_TARGET" in
+        x86_64-unknown-linux-gnu|aarch64-apple-darwin|x86_64-pc-windows-msvc) ;;
+        *) failures+=" supported-native-host(${HOST_TARGET:-unknown})" ;;
+    esac
+    if [ "${SLINGSHOT_ALLOW_PARTIAL_NATIVE:-0}" != 1 ]; then
+        failures+=' native-matrix-requires-CI(set SLINGSHOT_ALLOW_PARTIAL_NATIVE=1 only for host diagnostics)'
+    fi
+
+    for tool in cargo shellcheck; do
+        command -v "$tool" >/dev/null 2>&1 || failures+=" $tool"
+    done
+    cargo deny --version >/dev/null 2>&1 || failures+=' cargo-deny'
+    gh --version >/dev/null 2>&1 || failures+=' gh'
+
+    if [ -f support/repository-tools.toml ]; then
+        tool_checks=$(mktemp "$TMPDIR/slingshot-tool-checks.XXXXXX")
+        awk '
+            $0 == "[[tool]]" {
+                if (version != "" && quality) print version
+                version = ""; quality = 1; next
+            }
+            /^version-check = / { version = $0 }
+            /^quality-gate = false$/ { quality = 0 }
+            /^\[advisory-database\]$/ { if (version != "" && quality) print version; exit }
+            END { if (version != "" && quality) print version }
+        ' support/repository-tools.toml \
+            | sed -n 's/^version-check = "\(.*\)"$/\1/p' > "$tool_checks"
+        while IFS= read -r specification; do
+            probe=${specification%%|*}
+            required=${specification#*|}
+            if ! sh -c "$probe" 2>&1 | grep -qF "$required"; then
+                failures+=" pinned-tool(${required})"
+            fi
+        done < "$tool_checks"
+        rm -f "$tool_checks"
+    else
+        failures+=' support/repository-tools.toml'
+    fi
+
+    if [ -n "$failures" ]; then
+        printf 'preflight refused; resolve:%s\n' "$failures" | tee "$OUTPUT_ROOT/preflight.log"
+        record_status preflight 2
+        write_readme
+        exit 2
+    fi
+    printf 'preflight passed (host=%s, TMPDIR=%s)\n' "$HOST_TARGET" "$TMPDIR" \
+        | tee "$OUTPUT_ROOT/preflight.log"
+    record_status preflight 0
+}
+
+run_preflight
+
+run_capture native-dependencies \
+    env CARGO_HOME="$NATIVE_CARGO_HOME" \
+    SLINGSHOT_AUTOMATION_ROW="$HOST_TARGET" scripts/prepare_native_dependencies
+
+run_capture native-gate \
+    env CARGO_HOME="$NATIVE_CARGO_HOME" \
+    SLINGSHOT_AUTOMATION_ROW="$HOST_TARGET" scripts/platform_quality
 
 run_capture clippy \
     cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
-if [ -n "${SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY:-}" ]; then
-    run_capture quality \
-        scripts/quality
-else
-    record_refusal quality \
-        "refused: set SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY before running scripts/quality"
-fi
+run_capture quality \
+    scripts/quality
 
-HOST_TARGET=$(rustc -vV 2>/dev/null | sed -n 's/^host: //p')
 if [ "$HOST_TARGET" = "x86_64-pc-windows-msvc" ]; then
     run_capture windows-check \
         cargo check --workspace --target x86_64-pc-windows-msvc --locked
@@ -83,49 +227,18 @@ else
         "not run: Windows/MSVC checks require host x86_64-pc-windows-msvc; detected ${HOST_TARGET:-unknown}"
 fi
 
-required_acceptance_inputs=(
-    SLINGSHOT_REPORTED_WORKFLOW
-    SLINGSHOT_FINITE_STATE_MACHINE_SOURCE
-    SLINGSHOT_RUSTSEC_ADVISORY_DATABASE
-    SLINGSHOT_RUSTSEC_OWNER_REVIEW_RECORD
-    SLINGSHOT_LOCKED_SOURCE_CACHE
-    SLINGSHOT_PLATFORM_EVIDENCE_DIRECTORY
-)
-missing_acceptance_input=''
-for input_name in "${required_acceptance_inputs[@]}"; do
-    if [ -z "${!input_name:-}" ]; then
-        missing_acceptance_input+=" $input_name"
-    fi
-done
+acceptance_output="$OUTPUT_ROOT/acceptance-output"
+SLINGSHOT_REPORTED_WORKFLOW="$SLINGSHOT_REPORTED_WORKFLOW" \
+    run_capture acceptance \
+    scripts/release_acceptance \
+    --finite-state-machine-source "$SLINGSHOT_FINITE_STATE_MACHINE_SOURCE" \
+    --rustsec-advisory-database "$SLINGSHOT_RUSTSEC_ADVISORY_DATABASE" \
+    --rustsec-owner-review-record "$SLINGSHOT_RUSTSEC_OWNER_REVIEW_RECORD" \
+    --locked-source-cache "$SLINGSHOT_LOCKED_SOURCE_CACHE" \
+    --platform-evidence-directory "$SLINGSHOT_PLATFORM_EVIDENCE_DIRECTORY" \
+    --output-directory "$acceptance_output"
 
-if [ -z "$missing_acceptance_input" ]; then
-    acceptance_output="$OUTPUT_ROOT/acceptance-output"
-    SLINGSHOT_REPORTED_WORKFLOW="$SLINGSHOT_REPORTED_WORKFLOW" \
-        run_capture acceptance \
-        scripts/release_acceptance \
-        --finite-state-machine-source "$SLINGSHOT_FINITE_STATE_MACHINE_SOURCE" \
-        --rustsec-advisory-database "$SLINGSHOT_RUSTSEC_ADVISORY_DATABASE" \
-        --rustsec-owner-review-record "$SLINGSHOT_RUSTSEC_OWNER_REVIEW_RECORD" \
-        --locked-source-cache "$SLINGSHOT_LOCKED_SOURCE_CACHE" \
-        --platform-evidence-directory "$SLINGSHOT_PLATFORM_EVIDENCE_DIRECTORY" \
-        --output-directory "$acceptance_output"
-else
-    record_refusal acceptance \
-        "not run: missing acceptance inputs:$missing_acceptance_input"
-fi
-
-cat > "$OUTPUT_ROOT/README.txt" <<EOF
-Slingshot release-gate capture
-Generated: $STAMP
-Repository: $ROOT
-
-Each check has two files:
-  <name>.log   complete combined stdout/stderr
-  <name>.exit  numeric exit status (0 passed, 1 failed, 2 not run)
-
-Acceptance output, when it ran, is under:
-  acceptance-output/
-EOF
+write_readme
 
 printf '\nResults saved under: %s\n' "$OUTPUT_ROOT"
 printf 'Overall status: %s\n' "$OVERALL_STATUS"

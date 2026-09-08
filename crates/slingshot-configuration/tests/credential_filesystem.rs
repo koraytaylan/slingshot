@@ -180,6 +180,21 @@ mod current_row {
     /// Permission bits of a directory only its owner may enter or change.
     const OWNER_ONLY_DIRECTORY: u32 = 0o700;
 
+    /// Removes host-inherited macOS ACL metadata from a fixture entry.
+    #[cfg(target_os = "macos")]
+    fn clear_inherited_extended_access_control_list(path: &std::path::Path) {
+        let names: Vec<_> =
+            xattr::list(path).map(|attributes| attributes.collect()).unwrap_or_default();
+        for name in names {
+            let _ = xattr::remove(path, name);
+        }
+        let _ = xattr::remove(path, "com.apple.system.Security");
+        let _ = xattr::remove(path, "com.apple.macl");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn clear_inherited_extended_access_control_list(_path: &std::path::Path) {}
+
     /// Builds a configuration tree below one temporary home.
     fn build_tree() -> (tempfile::TempDir, UnixConfigurationFilesystem) {
         let home = tempfile::tempdir().expect("a temporary home is created");
@@ -189,11 +204,13 @@ mod current_row {
             std::fs::create_dir(&root).expect("the component is created");
             std::fs::set_permissions(&root, PermissionsExt::from_mode(OWNER_ONLY_DIRECTORY))
                 .expect("the component is protected");
+            clear_inherited_extended_access_control_list(&root);
         }
         let directory = root.join("credentials");
         std::fs::create_dir(&directory).expect("the directory is created");
         std::fs::set_permissions(&directory, PermissionsExt::from_mode(OWNER_ONLY_DIRECTORY))
             .expect("the directory is protected");
+        clear_inherited_extended_access_control_list(&directory);
         write_source(&directory.join("production.json"), OWNER_ONLY_FILE);
         let identity = AccountIdentity::UnixUser(uzers::get_effective_uid());
         let configuration =
@@ -209,6 +226,7 @@ mod current_row {
         file.write_all(SOURCE_BYTES).expect("the source is written");
         std::fs::set_permissions(path, PermissionsExt::from_mode(mode))
             .expect("the source is protected");
+        clear_inherited_extended_access_control_list(path);
     }
 
     /// Returns the generic bound one source is read under.

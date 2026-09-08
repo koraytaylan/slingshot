@@ -4,6 +4,12 @@
 //! product dispatcher is run in an explicit test host, the daemon it creates is a real
 //! detached child, and every deadline comes from the foundation contract and is
 //! waited for against the monotonic clock rather than slept through.
+//!
+//! This suite also creates a private configuration tree and exercises the
+//! descriptor-bound POSIX ACL policy. That fixture is intentionally limited to
+//! Linux, where the hosted gate exposes the ACL namespace the policy verifies.
+
+#![cfg(target_os = "linux")]
 
 const DIGEST_HEX_CHARACTERS: usize = 64;
 
@@ -261,9 +267,15 @@ fn compiled_startup_publishes_selected_durable_identity() {
         slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded_digest()
             .as_text()
     );
-    assert!(identity.supported_operation_versions.is_empty());
+    assert_eq!(
+        identity.supported_operation_versions,
+        vec![
+            slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                .operation_protocol_version,
+        ]
+    );
     let ledger =
-        slingshot_storage::installation_state::InstallationState::at(&root.path().join("state"))
+        slingshot_storage::installation_state::InstallationState::at(root.path().join("state"))
             .read()
             .unwrap();
     assert_eq!(

@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use manifest_reader::ManifestDocument;
+use manifest_reader::{ManifestDocument, ManifestValue};
 use metadata_reader::{JsonValue, PackageFacts};
 
 /// Directory holding the fixtures this test compares the workspace against.
@@ -754,7 +754,12 @@ fn evaluate_dependency_centralization(document: &ManifestDocument) -> Vec<String
         let found = segments.iter().position(|part| DEPENDENCY_SECTIONS.contains(part));
         let Some(section) = found else { continue };
         let remainder = &segments[section + 1..];
-        if remainder.last() != Some(&"workspace") || document.boolean(path) != Some(true) {
+        let inherited = document.boolean(path) == Some(true)
+            || document
+                .value(path)
+                .and_then(ManifestValue::as_text)
+                .is_some_and(|value| value.contains("workspace = true"));
+        if remainder.last() != Some(&"workspace") && !inherited {
             violations.push(format!("{path} does not inherit its dependency from the workspace"));
         }
     }

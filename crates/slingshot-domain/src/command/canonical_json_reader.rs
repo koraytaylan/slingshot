@@ -13,6 +13,9 @@ pub struct Bounds {
     pub depth: usize,
 }
 
+/// Maximum nesting accepted by both streaming document readers.
+pub const MAXIMUM_READER_DEPTH: usize = 128;
+
 /// Opaque failure: source bytes and filesystem diagnostics never escape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("canonical document verification failed")]
@@ -22,8 +25,12 @@ pub struct Refusal;
 /// and EOF. Array order and schema semantics remain the document codec's job.
 /// Memory is bounded by container depth times key length plus one scalar token;
 /// no array or object value tree is collected.
+///
+/// # Errors
+///
+/// Returns [`Refusal`] when the input is not canonical or exceeds any bound.
 pub fn require_canonical_reader(source: impl Read, bounds: Bounds) -> Result<(), Refusal> {
-    if bounds.depth > 128 || bounds.depth == 0 || bounds.token_bytes == 0 {
+    if bounds.depth > MAXIMUM_READER_DEPTH || bounds.depth == 0 || bounds.token_bytes == 0 {
         return Err(Refusal);
     }
     let mut reader = Reader { source: BufReader::new(source), next: None, consumed: 0, bounds };
@@ -34,15 +41,15 @@ pub fn require_canonical_reader(source: impl Read, bounds: Bounds) -> Result<(),
     Ok(())
 }
 
-pub(super) struct Reader<R> {
-    source: BufReader<R>,
+pub(super) struct Reader<Source> {
+    source: BufReader<Source>,
     next: Option<u8>,
     consumed: u64,
     bounds: Bounds,
 }
 
-impl<R: Read> Reader<R> {
-    pub(super) fn new(source: R, bounds: Bounds) -> Self {
+impl<Source: Read> Reader<Source> {
+    pub(super) fn new(source: Source, bounds: Bounds) -> Self {
         Self { source: BufReader::new(source), next: None, consumed: 0, bounds }
     }
 

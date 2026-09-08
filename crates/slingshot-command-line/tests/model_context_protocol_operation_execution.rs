@@ -118,6 +118,9 @@ fn nothing_runs_until_provenance_the_tool_and_the_arguments_all_pass() {
     let unknown = require_runnable("tools/invent", &arguments, &Provenance::recomputed())
         .expect_err("no such tool");
     assert_eq!(unknown, ExecutionRefusal::ToolUnknown("tools/invent".to_owned()));
+    let rendered = unknown.to_string();
+    assert_eq!(rendered, "this server offers no tool with the requested name");
+    assert!(!rendered.contains("tools/invent"));
 
     let drifted = Provenance {
         canonical_contract_digest:

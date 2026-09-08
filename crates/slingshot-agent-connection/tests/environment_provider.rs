@@ -341,7 +341,7 @@ fn snapshot_from_loaded_with_platform(
         author_trust_policy_identity: author_trust.identity(),
     })
     .expect("the revision builds");
-    let snapshot = SelectedEnvironmentSnapshot::assemble(
+    SelectedEnvironmentSnapshot::assemble(
         &selection,
         SnapshotMaterial {
             author: chosen.author_connection_target().clone(),
@@ -354,8 +354,7 @@ fn snapshot_from_loaded_with_platform(
             identity_management_trust: identity_management,
             author_trust,
         },
-    );
-    snapshot
+    )
 }
 
 #[test]

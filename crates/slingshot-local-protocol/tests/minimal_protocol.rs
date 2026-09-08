@@ -219,7 +219,11 @@ fn every_canonical_fixture_decodes_and_re_encodes_byte_for_byte() {
     ] {
         let text = fixture_text(name);
         let response: ControlResponse = serde_json::from_str(&text).expect("the response reads");
-        assert_eq!(serde_json::to_string(&response).expect("the response renders"), text, "{name}");
+        assert_eq!(
+            serde_json::to_string(&response).expect("the response renders"),
+            text.trim_end_matches('\n'),
+            "{name}"
+        );
         assert_eq!(response.control_version, contract.control.version);
     }
 }
@@ -234,10 +238,7 @@ fn a_ping_reports_the_live_owner_and_a_stop_accepts_only_the_live_nonce() {
         serde_json::from_value(response.result.clone().expect("the response carries a result"))
             .expect("the ping result reads");
     assert!(ping::nonce_is_well_formed(&contract, &result.readiness_nonce));
-    assert!(
-        result.supported_operation_protocol_versions.is_empty(),
-        "no operation protocol is served yet"
-    );
+    assert_eq!(result.supported_operation_protocol_versions, vec![1]);
 
     let live = result.readiness_nonce.clone();
     let stale = format!("b{}", &live[1..]);

@@ -23,6 +23,7 @@ use slingshot_local_protocol::envelope::{
 use slingshot_local_protocol::foundation_contract::FoundationContract;
 use slingshot_local_protocol::framing;
 use slingshot_local_protocol::ping::{PING_METHOD, PingResult, STOP_METHOD};
+use slingshot_test_support::runtime_harness::runtime_root_path;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 use tokio_util::sync::CancellationToken;
@@ -58,11 +59,7 @@ struct RunningDaemon {
 /// foundation contract records that bound, and the namespace digest takes most
 /// of it. A runtime root that leaves no room is a real defect.
 fn temporary_runtime_root(name: &str) -> PathBuf {
-    let root = tempfile::Builder::new()
-        .prefix(&format!("s{name}"))
-        .tempdir()
-        .expect("a unique short runtime root is created")
-        .keep();
+    let root = runtime_root_path(name);
     current_user::create_owner_only_directory(&root).expect("the runtime root is created");
     root
 }
@@ -180,7 +177,13 @@ async fn readiness_is_present_only_once_the_endpoint_answers_a_ping() {
     assert_eq!(record.endpoint_display, daemon.address.display());
     assert_eq!(result.profile, PROFILE);
     assert_eq!(result.environment, ENVIRONMENT);
-    assert!(result.supported_operation_protocol_versions.is_empty());
+    assert_eq!(
+        result.supported_operation_protocol_versions,
+        vec![
+            slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                .operation_protocol_version as u32,
+        ]
+    );
     finish(daemon).await;
 }
 

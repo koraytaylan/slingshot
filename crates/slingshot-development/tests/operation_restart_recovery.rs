@@ -16,7 +16,7 @@ use slingshot_domain::operation::{
     OperationFact, OperationLifecycleState, RecoveryCategory, RecoveryExecutionEvidence,
     RecoveryFact,
 };
-use slingshot_storage::artifact_store::{ArtifactStore, InstallationRequest, STAGING_SUFFIX};
+use slingshot_storage::artifact_store::{ArtifactStore, InstallationRequest};
 use slingshot_storage::database::{OperationDatabase, RequiredSettings};
 use slingshot_storage::operation_repository::{
     AdmissionOutcome, AdmissionRequest, OperationRepository,
@@ -236,11 +236,7 @@ fn an_artifact_interrupted_before_publication_leaves_nothing_addressable() {
         .expect("the content directory reads")
         .map(|entry| entry.expect("an entry").file_name().to_string_lossy().into_owned())
         .collect();
-    assert_eq!(left.len(), 1, "the partial write is still there to be found: {left:?}");
-    assert!(
-        left[0].ends_with(STAGING_SUFFIX),
-        "wearing the staging suffix, so nothing addresses it as content"
-    );
+    assert!(left.is_empty(), "the interrupted stage is removed: {left:?}");
 
     let reopened = ArtifactStore::open(&directory.path().join("artifacts")).expect("a store");
     let whole = reopened

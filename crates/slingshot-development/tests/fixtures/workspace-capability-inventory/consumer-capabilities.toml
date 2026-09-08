@@ -107,7 +107,7 @@ name = "slingshot_command_line"
 package = "slingshot-command-line"
 normal = ["typed-errors", "command-line-arguments", "asynchronous-runtime", "cancellation-tokens", "serialization", "javascript-object-notation", "diagnostics", "diagnostics-subscriber", "platform-directories", "file-locks", "byte-buffers", "secure-hash-digests", "hexadecimal-encoding", "schema-documents"]
 build = []
-development = ["temporary-files", "process-assertions", "process-predicates"]
+development = ["temporary-files", "process-assertions", "process-predicates", "extended-access-control-lists"]
 
 [[consumer]]
 name = "slingshot_command_line::commands"

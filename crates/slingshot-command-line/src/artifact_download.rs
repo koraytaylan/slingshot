@@ -246,11 +246,37 @@ fn publish_no_replace(
     held.sync_all().map_err(|_| DownloadRefusal::DestinationUnusable)
 }
 
-/// Refuses publication where this build cannot prove an atomic no-replace rename.
+/// Publishes with the portable standard-library no-replace primitive.
+///
+/// `hard_link` is atomic with respect to the destination name and never
+/// replaces an existing directory entry. The staging path is checked without
+/// following links before it is linked, and the staged file is synchronized
+/// before publication. This path intentionally uses only safe standard-library
+/// APIs so production code remains free of `unsafe` blocks on platforms where
+/// the Linux descriptor-based adapter is unavailable.
 #[cfg(not(target_os = "linux"))]
 fn publish_no_replace(
-    _staging: &std::path::Path,
-    _destination: &std::path::Path,
+    staging: &std::path::Path,
+    destination: &std::path::Path,
 ) -> Result<(), DownloadRefusal> {
-    Err(DownloadRefusal::DestinationUnusable)
+    let directory = destination.parent().ok_or(DownloadRefusal::DestinationUnusable)?;
+    if staging.parent() != Some(directory) {
+        return Err(DownloadRefusal::DestinationUnusable);
+    }
+    let staged =
+        std::fs::symlink_metadata(staging).map_err(|_| DownloadRefusal::DestinationUnusable)?;
+    if !staged.is_file() {
+        return Err(DownloadRefusal::DestinationUnusable);
+    }
+    std::fs::File::open(staging)
+        .and_then(|file| file.sync_all())
+        .map_err(|_| DownloadRefusal::DestinationUnusable)?;
+    std::fs::hard_link(staging, destination).map_err(|failure| {
+        if failure.kind() == std::io::ErrorKind::AlreadyExists {
+            DownloadRefusal::DestinationOccupied
+        } else {
+            DownloadRefusal::DestinationUnusable
+        }
+    })?;
+    std::fs::remove_file(staging).map_err(|_| DownloadRefusal::DestinationUnusable)
 }

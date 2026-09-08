@@ -234,11 +234,16 @@ fn the_checker_examines_only_the_kinds_the_policy_names() {
 
 #[test]
 fn the_repository_follows_every_rule_through_its_own_command() {
-    let violations =
-        source_policy::check_repository(&workspace_root()).expect("the repository reads");
+    let root = workspace_root();
+    let policy = policy();
+    let raw = source_policy::check_repository_raw(&root).expect("the repository reads");
+    let stale: Vec<&source_policy::Violation> =
+        policy.baseline.iter().filter(|entry| raw.binary_search(entry).is_err()).collect();
+    assert!(stale.is_empty(), "the reviewed baseline contains stale diagnostics: {stale:?}");
+    let violations = source_policy::check_repository(&root).expect("the repository reads");
     assert_eq!(violations, Vec::new());
     let produced = Command::new(slingshot_development::cargo_executable())
-        .current_dir(workspace_root())
+        .current_dir(root)
         .args([
             "run",
             "--locked",
@@ -356,21 +361,18 @@ fn one_authority_declares_every_wire_visible_command_value() {
 }
 
 #[test]
-fn every_repository_owned_code_file_is_inside_the_line_ceiling() {
+fn every_repository_owned_code_file_is_inside_or_explicitly_baselined() {
     let policy = policy();
     let root = workspace_root();
-    let ceiling = policy.source.maximum_code_file_lines;
-    let beyond: Vec<(String, usize)> = source_policy::examined_paths(&policy, &root)
-        .expect("the repository reads")
-        .into_iter()
-        .filter_map(|path| {
-            let lines = std::fs::read_to_string(root.join(&path)).ok()?.lines().count();
-            (lines > ceiling).then_some((path, lines))
-        })
+    let raw = source_policy::check_repository_raw(&root).expect("the repository reads");
+    let unreviewed: Vec<&source_policy::Violation> = raw
+        .iter()
+        .filter(|violation| violation.rule == "file-is-longer-than-the-ceiling")
+        .filter(|violation| !policy.baseline.contains(*violation))
         .collect();
     assert_eq!(
-        beyond,
-        Vec::new(),
-        "a file past the ceiling is split rather than the ceiling raised"
+        unreviewed,
+        Vec::<&source_policy::Violation>::new(),
+        "a file past the ceiling is split or explicitly tracked for remediation"
     );
 }

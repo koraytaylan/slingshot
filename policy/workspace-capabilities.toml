@@ -251,8 +251,8 @@ version = "1.6.1"
 default-features = false
 features = []
 targets = ["aarch64-apple-darwin"]
-kinds = ["normal"]
-owners = ["slingshot-configuration"]
+kinds = ["development", "normal"]
+owners = ["slingshot-command-line", "slingshot-configuration"]
 
 [[capability]]
 name = "file-locks"

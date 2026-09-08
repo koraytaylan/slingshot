@@ -5,25 +5,32 @@
 //! the repository tooling, so any of those can be driven as a real process
 //! without the harness knowing anything about them.
 //!
-//! Every child a harness starts is owned: it is accounted for, waited for, and
-//! reaped, whether the test succeeds or fails.
+//! Linux retained children use a pidfd bound to that instance. Other hosts use
+//! the owned standard-library child channel for forced cleanup because stable
+//! Rust exposes no portable instance-bound signal API. Every child a harness
+//! starts is owned: it is accounted for, waited for, and reaped, whether the
+//! test succeeds or fails.
 
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::io::Read;
+#[cfg(unix)]
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::{Arc, Barrier};
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
 use rustix::fs::{Mode, OFlags, open};
+#[cfg(unix)]
 use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
 
 /// How often a timed wait asks the operating system again.
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// How much terminal output one read asks for.
+#[cfg(unix)]
 const TERMINAL_READ_CHUNK: usize = 4096;
 
 /// One executable named by path alone.
@@ -203,6 +210,7 @@ fn command_for(executable: &ExecutablePath, request: &ProcessRequest) -> Command
 }
 
 /// Opens one pseudo-terminal and returns its controlling and follower ends.
+#[cfg(unix)]
 fn open_terminal_pair() -> Result<(OwnedFd, OwnedFd), HarnessFailure> {
     let flags = OpenptFlags::RDWR | OpenptFlags::NOCTTY;
     let controller = openpt(flags).map_err(unusable)?;
@@ -439,36 +447,19 @@ pub enum DeliverableSignal {
     Kill,
 }
 
-/// What one retained child is held by.
+/// What one retained child is held by on Linux.
 ///
-/// A process file descriptor, on the one supported platform that has them. It
-/// is taken while the child is known to exist and closed only after the child
-/// is waited for, so it names that child and no later occupant of its number.
+/// It is taken while the child is known to exist and closed only after the
+/// child is waited for, so it names that child and no later occupant of its
+/// number.
 #[cfg(target_os = "linux")]
 type InstanceHandle = OwnedFd;
-
-/// What one retained child is held by where no such handle exists.
-///
-/// The other supported platform offers no descriptor bound to one process
-/// instance. Rather than fall back to signalling a number - the mistake the
-/// retained handle exists to prevent - this harness starts no retained child
-/// there, and the type says so by having no values.
-#[cfg(not(target_os = "linux"))]
-type InstanceHandle = core::convert::Infallible;
 
 /// Takes the handle that names one running child.
 #[cfg(target_os = "linux")]
 fn retain_instance(child: &Child) -> Result<InstanceHandle, HarnessFailure> {
     use rustix::process::{Pid, PidfdFlags, pidfd_open};
     pidfd_open(Pid::from_child(child), PidfdFlags::empty()).map_err(unusable)
-}
-
-/// Refuses to retain a child where no instance-bound handle exists.
-#[cfg(not(target_os = "linux"))]
-fn retain_instance(_child: &Child) -> Result<InstanceHandle, HarnessFailure> {
-    Err(HarnessFailure::Unusable(
-        "this platform offers no handle bound to one process instance".to_owned(),
-    ))
 }
 
 /// Delivers one signal through the handle that names the child.
@@ -488,29 +479,36 @@ fn deliver_through(
 
 /// Delivers nothing, because no child is ever retained here.
 #[cfg(not(target_os = "linux"))]
-fn deliver_through(
-    handle: &InstanceHandle,
-    _signal: DeliverableSignal,
-) -> Result<(), HarnessFailure> {
-    match *handle {}
+fn deliver_through(child: &mut Child, signal: DeliverableSignal) -> Result<(), HarnessFailure> {
+    if signal == DeliverableSignal::Kill {
+        child.kill().map_err(unusable)
+    } else {
+        Err(HarnessFailure::Unusable(
+            "this platform's stable standard-library child channel exposes forced cleanup only"
+                .to_owned(),
+        ))
+    }
 }
 
-/// One child held by an instance-bound handle from spawn until reap.
+/// One child held by an instance-bound handle from spawn until reap on Linux,
+/// or by the owned standard-library child channel on other hosts.
 ///
-/// The handle is a process file descriptor taken the moment the child exists
-/// and kept until it is waited for. Everything this type does to the child goes
-/// through it. That is what makes the operations safe to perform late: the
-/// descriptor names *this* child, so a signal sent after the child has gone
-/// fails rather than reaching whatever the operating system has since given the
-/// same number to.
+/// On Linux the handle is a process file descriptor taken the moment the child
+/// exists and kept until it is waited for. Other hosts expose only forced
+/// cleanup through the owned child channel because stable Rust has no portable
+/// instance-bound signal API.
 ///
 /// The numeric process identifier is recorded, and never used to find, check,
 /// or signal anything.
 #[derive(Debug)]
 pub struct RetainedChild {
     child: Child,
+    #[cfg(target_os = "linux")]
     instance: InstanceHandle,
+    #[cfg(unix)]
     controller: Option<OwnedFd>,
+    #[cfg(not(unix))]
+    controller: Option<()>,
     identifier: u32,
     reaped: bool,
 }
@@ -534,11 +532,18 @@ impl RetainedChild {
     ///
     /// Returns [`HarnessFailure::AlreadyReaped`] once the child has been waited
     /// for, and [`HarnessFailure::Unusable`] when the operating system refuses.
-    pub fn deliver(&self, signal: DeliverableSignal) -> Result<(), HarnessFailure> {
+    pub fn deliver(&mut self, signal: DeliverableSignal) -> Result<(), HarnessFailure> {
         if self.reaped {
             return Err(HarnessFailure::AlreadyReaped);
         }
-        deliver_through(&self.instance, signal)
+        #[cfg(target_os = "linux")]
+        {
+            deliver_through(&self.instance, signal)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            deliver_through(&mut self.child, signal)
+        }
     }
 
     /// Waits for the child to finish inside `deadline`.
@@ -631,20 +636,30 @@ impl RetainedChild {
     /// Returns [`HarnessFailure::Unusable`] when the child was not given a
     /// terminal.
     pub fn terminal_output(&mut self) -> Result<String, HarnessFailure> {
-        let controller = self
-            .controller
-            .take()
-            .ok_or_else(|| HarnessFailure::Unusable("this child has no terminal".to_owned()))?;
-        let mut reader = std::fs::File::from(controller);
-        let mut collected = Vec::new();
-        let mut chunk = vec![0_u8; TERMINAL_READ_CHUNK];
-        while let Ok(read) = reader.read(&mut chunk) {
-            if read == 0 {
-                break;
-            }
-            collected.extend_from_slice(&chunk[..read]);
+        #[cfg(not(unix))]
+        {
+            let _ = self.controller.take();
+            return Err(HarnessFailure::Unusable(
+                "this platform has no portable pseudo-terminal API".to_owned(),
+            ));
         }
-        Ok(String::from_utf8_lossy(&collected).into_owned())
+        #[cfg(unix)]
+        {
+            let controller = self
+                .controller
+                .take()
+                .ok_or_else(|| HarnessFailure::Unusable("this child has no terminal".to_owned()))?;
+            let mut reader = std::fs::File::from(controller);
+            let mut collected = Vec::new();
+            let mut chunk = vec![0_u8; TERMINAL_READ_CHUNK];
+            while let Ok(read) = reader.read(&mut chunk) {
+                if read == 0 {
+                    break;
+                }
+                collected.extend_from_slice(&chunk[..read]);
+            }
+            Ok(String::from_utf8_lossy(&collected).into_owned())
+        }
     }
 }
 
@@ -676,8 +691,12 @@ impl ProcessHarness {
         let controller = self.attach_terminal(&mut command, request)?;
         let child = command.spawn().map_err(unusable)?;
         let identifier = child.id();
+        #[cfg(target_os = "linux")]
         let instance = retain_instance(&child)?;
+        #[cfg(target_os = "linux")]
         let mut retained = RetainedChild { child, instance, controller, identifier, reaped: false };
+        #[cfg(not(target_os = "linux"))]
+        let mut retained = RetainedChild { child, controller, identifier, reaped: false };
         if !request.input.is_empty() {
             write_and_close(&mut retained, &request.input)?;
         }
@@ -685,6 +704,7 @@ impl ProcessHarness {
     }
 
     /// Points one command's three streams at a fresh pseudo-terminal.
+    #[cfg(unix)]
     fn attach_terminal(
         &self,
         command: &mut Command,
@@ -698,6 +718,21 @@ impl ProcessHarness {
         let error = follower.try_clone().map_err(unusable)?;
         command.stdin(Stdio::from(input)).stdout(Stdio::from(follower)).stderr(Stdio::from(error));
         Ok(Some(controller))
+    }
+
+    #[cfg(not(unix))]
+    fn attach_terminal(
+        &self,
+        _command: &mut Command,
+        request: &ProcessRequest,
+    ) -> Result<Option<()>, HarnessFailure> {
+        if request.attachment == StreamAttachment::Terminal {
+            Err(HarnessFailure::Unusable(
+                "this platform has no portable pseudo-terminal API".to_owned(),
+            ))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Runs one process to completion inside `deadline`, draining as it goes.

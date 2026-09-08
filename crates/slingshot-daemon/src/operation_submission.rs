@@ -247,22 +247,24 @@ pub fn settle_with_scheduler_fence(
                 },
                 scheduler_fence,
             ),
-        OperationExecutorOutcome::TerminalFailure { failure } => repository.apply_with_scheduler_fence(
-            digest,
-            identifier,
-            summary.record.revision,
-            &OperationFact::Terminal { failure: failure.clone() },
-            now_unix_milliseconds,
-            scheduler_fence,
-        ),
-        OperationExecutorOutcome::RecoveryRequired { recovery } => repository.apply_with_scheduler_fence(
-            digest,
-            identifier,
-            summary.record.revision,
-            &OperationFact::Recovery { recovery: recovery.clone() },
-            now_unix_milliseconds,
-            scheduler_fence,
-        ),
+        OperationExecutorOutcome::TerminalFailure { failure } => repository
+            .apply_with_scheduler_fence(
+                digest,
+                identifier,
+                summary.record.revision,
+                &OperationFact::Terminal { failure: failure.clone() },
+                now_unix_milliseconds,
+                scheduler_fence,
+            ),
+        OperationExecutorOutcome::RecoveryRequired { recovery } => repository
+            .apply_with_scheduler_fence(
+                digest,
+                identifier,
+                summary.record.revision,
+                &OperationFact::Recovery { recovery: recovery.clone() },
+                now_unix_milliseconds,
+                scheduler_fence,
+            ),
     }
 }
 

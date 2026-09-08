@@ -17,15 +17,19 @@
 //! through a handle bound to one instance, a handle for a reaped child refuses,
 //! and no path in the harness turns an identifier into an action.
 
+#![cfg(unix)]
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::time::Duration;
 
 use slingshot_test_support::daemon_process::{Handshake, Lifecycle, ScriptedDaemon, StopAnswer};
+#[cfg(target_os = "linux")]
+use slingshot_test_support::process_harness::DeliverableSignal;
 use slingshot_test_support::process_harness::{
-    CleanupRefusal, CleanupRoute, CooperativeStop, DeliverableSignal, ExecutablePath,
-    HarnessFailure, ProcessHarness, ProcessRequest, RetainedChild,
+    CleanupRefusal, CleanupRoute, CooperativeStop, ExecutablePath, HarnessFailure, ProcessHarness,
+    ProcessRequest, RetainedChild,
 };
 
 /// The variable naming which behaviour a helper child performs.
@@ -56,6 +60,7 @@ const CHOSEN_EXIT_CODE: i32 = 7;
 const UNKNOWN_MODE_EXIT_CODE: i32 = 9;
 
 /// The signal number an interrupt carries.
+#[cfg(target_os = "linux")]
 const INTERRUPT_SIGNAL_NUMBER: i32 = 2;
 
 /// How many lines the flooding helper writes to each stream.
@@ -278,6 +283,7 @@ fn flooded_streams_are_drained_while_the_child_runs() {
 
 /// The same helper answers one way on a terminal and another on a pipe.
 #[test]
+#[cfg(unix)]
 fn terminal_and_redirected_children_answer_differently() {
     let harness = ProcessHarness::new();
     let redirected = harness
@@ -298,6 +304,7 @@ fn terminal_and_redirected_children_answer_differently() {
 
 /// An interrupt reaches the child through the handle taken at spawn.
 #[test]
+#[cfg(target_os = "linux")]
 fn interrupt_reaches_the_child_through_the_retained_handle() {
     let harness = ProcessHarness::new();
     let mut sleeping = harness
@@ -384,6 +391,7 @@ fn a_child_this_harness_does_not_own_is_never_ended() {
 
 /// A reaped child's handle refuses, and a fresh child keeps running.
 #[test]
+#[cfg(target_os = "linux")]
 fn reaped_handle_refuses_and_a_replacement_keeps_running() {
     let harness = ProcessHarness::new();
     let mut first = harness

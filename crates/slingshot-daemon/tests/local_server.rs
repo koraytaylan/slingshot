@@ -53,10 +53,11 @@ async fn shutdown_joins_idle_connections_before_releasing_namespace_ownership() 
         runtime_namespace::RuntimeNamespace,
         service::DaemonService,
     };
+    use slingshot_test_support::runtime_harness::TemporaryRuntimeRoot;
     use std::sync::Arc;
     use tokio::time::{Duration, timeout};
     for connected in [1, CONNECTION_CAPACITY as usize] {
-        let root = tempfile::tempdir().unwrap();
+        let root = TemporaryRuntimeRoot::create("l").unwrap();
         let contract = FoundationContract::embedded();
         let namespace =
             RuntimeNamespace::name(&contract, &root.path().join("runtime"), "test", "test")
@@ -81,7 +82,7 @@ async fn shutdown_joins_idle_connections_before_releasing_namespace_ownership() 
         }
         timeout(Duration::from_secs(2), async {
             loop {
-                if observed.strong_count() >= connected + 1 {
+                if observed.strong_count() > connected {
                     break;
                 }
                 tokio::task::yield_now().await;

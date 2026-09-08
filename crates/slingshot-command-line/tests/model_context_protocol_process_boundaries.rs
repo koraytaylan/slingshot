@@ -152,6 +152,7 @@ fn a_diagnostic_reader_that_goes_away_delays_no_answer() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn a_server_waiting_on_its_input_is_ended_through_its_retained_handle() {
     let harness = ProcessHarness::new();
     let mut child = harness

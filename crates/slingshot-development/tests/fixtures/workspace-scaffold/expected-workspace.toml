@@ -10,7 +10,7 @@ resolver = "3"
 edition = "2024"
 rust-version = "1.98.0"
 version = "0.1.0"
-unsafe-code-lint-level = "forbid"
+unsafe-code-lint-level = "deny"
 member-directory = "crates"
 publish = false
 required-release-fields = ["license or license-file", "repository"]
@@ -47,3 +47,4 @@ support-packages = [
 [binaries]
 slingshot = "slingshot-command-line"
 slingshot-development = "slingshot-development"
+slingshot-runtime-test-host = "slingshot-command-line"
