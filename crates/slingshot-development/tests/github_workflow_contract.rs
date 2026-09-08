@@ -178,6 +178,7 @@ fn the_hosted_gate_runs_the_repository_local_commands_rather_than_its_own() {
     let quality = read_repository_file(".github/workflows/quality.yml");
     for command in [
         "scripts/quality",
+        "scripts/prepare_native_dependencies",
         "scripts/checkout_pinned_advisory_database",
         "scripts/check_finite_state_machine_compatibility",
         "github-automation-authority",
@@ -284,12 +285,25 @@ fn the_native_matrix_is_exactly_the_rows_the_authority_maps() {
         "one row failing hides nothing about the others"
     );
     assert!(
-        document["on"].as_mapping().is_some_and(
-            |triggers| triggers.contains_key(&Value::String("pull_request".to_owned()))
-        ),
+        document["on"].as_mapping().is_some_and(|triggers| triggers.contains_key("pull_request")),
         "every supported native row gates pull requests as well as pushes"
     );
     let native_steps = steps(job);
+    let bootstrap_invocations: Vec<&str> = native_steps
+        .iter()
+        .filter_map(|step| step["run"].as_str())
+        .filter(|run| run.contains("scripts/prepare_native_dependencies"))
+        .collect();
+    assert_eq!(
+        bootstrap_invocations,
+        vec!["scripts/prepare_native_dependencies"],
+        "the native job seeds the exact graph before entering its offline gate"
+    );
+    let local_capture = read_repository_file("scripts/capture_release_gates");
+    assert!(
+        local_capture.contains("scripts/prepare_native_dependencies"),
+        "the local release capture must seed the same graph before its offline gate"
+    );
     let native_invocations: Vec<&str> = native_steps
         .iter()
         .filter_map(|step| step["run"].as_str())
@@ -370,10 +384,8 @@ fn exactly_one_job_attests_and_it_does_so_over_named_files() {
 fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
     let document = workflow(".github/workflows/release.yml");
     let named = jobs(&document);
-    let (_, job) = named
-        .iter()
-        .find(|(name, _)| name == ATTESTATION_JOB)
-        .expect("the attestation job");
+    let (_, job) =
+        named.iter().find(|(name, _)| name == ATTESTATION_JOB).expect("the attestation job");
     let steps = steps(job);
     let attest = steps
         .iter()
@@ -389,7 +401,9 @@ fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
     assert!(copy.contains("$RUNNER_TEMP/release/attestation.jsonl"));
     let upload = steps
         .iter()
-        .find(|step| step["uses"].as_str().is_some_and(|uses| uses.starts_with("actions/upload-artifact@")))
+        .find(|step| {
+            step["uses"].as_str().is_some_and(|uses| uses.starts_with("actions/upload-artifact@"))
+        })
         .expect("the row is uploaded");
     assert_eq!(upload["with"]["path"].as_str(), Some("${{ runner.temp }}/release"));
     assert!(upload["with"]["name"].as_str().is_some_and(|name| name.contains("matrix.triple")));

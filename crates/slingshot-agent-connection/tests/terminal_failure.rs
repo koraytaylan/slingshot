@@ -149,9 +149,7 @@ fn targeted_read_failures_bind_subjects_and_selected_categories() {
                 serde_json::json!({"budget":"candidate_nodes","failure":category})
             } else if category == "configuration_lookup_budget_exceeded" {
                 serde_json::json!({"budget":"lookup_duration","failure":category})
-            } else if category.starts_with("continuation_token_") {
-                serde_json::json!({"failure":category})
-            } else if field.is_empty() {
+            } else if category.starts_with("continuation_token_") || field.is_empty() {
                 serde_json::json!({"failure":category})
             } else {
                 serde_json::json!({"failure":category,field:subject})

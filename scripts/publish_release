@@ -27,7 +27,6 @@ MANIFEST=Cargo.toml
 PLATFORM_AUTHORITY=support/platforms.toml
 NOTES_PATH=release-notes/RELEASE_NOTES.md
 ACCEPTANCE_PATH=release-acceptance/acceptance.json
-ARCHIVE_SUFFIX=.tar.gz
 BUNDLE_NAME=attestation.jsonl
 EVIDENCE_NAME=evidence.toml
 TAG_REFERENCE=tag
@@ -39,6 +38,21 @@ report_stage() {
 report_refusal() {
     printf 'refused: %s\n' "$1" >&2
     exit 1
+}
+
+archive_suffix_for() {
+    profile=$(awk -v wanted="$1" '
+        $0 == "[[target]]" { matching = 0 }
+        $0 == "triple = \"" wanted "\"" { matching = 1; next }
+        matching && /^archive-profile = / {
+            sub("^archive-profile = \\\"", ""); sub("\\\"$", ""); print; exit
+        }
+    ' "$PLATFORM_AUTHORITY")
+    case "$profile" in
+        tar.gz) printf '.tar.gz' ;;
+        zip) printf '.zip' ;;
+        *) report_refusal "$PLATFORM_AUTHORITY names no supported archive profile for $1" ;;
+    esac
 }
 
 while [ "$#" -gt 0 ]; do
@@ -99,6 +113,7 @@ EXPECTED_ROWS=$(sed -n 's/^triple = "\(.*\)"$/\1/p' "$PLATFORM_AUTHORITY" | tr '
 for TRIPLE in $EXPECTED_ROWS; do
     ROW=$EVIDENCE_DIRECTORY/release-$TRIPLE
     [ -d "$ROW" ] || report_refusal "the supported $TRIPLE row is absent"
+    ARCHIVE_SUFFIX=$(archive_suffix_for "$TRIPLE")
     ARCHIVE_COUNT=$(find "$ROW" -maxdepth 1 -type f -name "*$ARCHIVE_SUFFIX" | wc -l | tr -d ' ')
     [ "$ARCHIVE_COUNT" = 1 ] || report_refusal "$ROW holds $ARCHIVE_COUNT archives rather than one"
 done
@@ -112,12 +127,15 @@ for ROW in "$EVIDENCE_DIRECTORY"/release-*; do
         *" $TRIPLE "*) ;;
         *) report_refusal "$ROW is not a supported release row" ;;
     esac
+    ARCHIVE_SUFFIX=$(archive_suffix_for "$TRIPLE")
 done
 
 report_stage 'every archive, against the reviewed root'
 set --
 for ROW in "$EVIDENCE_DIRECTORY"/*; do
     [ -d "$ROW" ] || continue
+    TRIPLE=${ROW#"$EVIDENCE_DIRECTORY/release-"}
+    ARCHIVE_SUFFIX=$(archive_suffix_for "$TRIPLE")
     ARCHIVE=$(find "$ROW" -maxdepth 1 -type f -name "*$ARCHIVE_SUFFIX" | head -n 1)
     [ -n "$ARCHIVE" ] || continue
     # The row evidence names the cache the archive was built from; the complete

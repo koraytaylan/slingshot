@@ -153,13 +153,16 @@ pub trait ConfigurationFilesystemAuthority {
 ///
 /// Returns [`ConfigurationFailureCode::ConfigurationFileChangedDuringRead`]
 /// when either read was short, the reads disagreed, or the evidence moved.
-pub fn read_twice(
-    file: &mut std::fs::File,
+pub fn read_twice<FileType>(
+    file: &mut FileType,
     before: SourceEvidence,
     location: &'static str,
-    observe: impl Fn(&std::fs::File) -> Result<SourceEvidence, CredentialFilesystemFailure>,
-) -> Result<Vec<u8>, CredentialFilesystemFailure> {
-    use std::io::{Seek, SeekFrom};
+    observe: impl Fn(&FileType) -> Result<SourceEvidence, CredentialFilesystemFailure>,
+) -> Result<Vec<u8>, CredentialFilesystemFailure>
+where
+    FileType: std::io::Read + std::io::Seek,
+{
+    use std::io::SeekFrom;
 
     let changed = || {
         CredentialFilesystemFailure::at(
@@ -182,9 +185,7 @@ pub fn read_twice(
 ///
 /// A short read and a longer one are both refused: either means the object
 /// moved under the read.
-fn read_exactly(file: &mut std::fs::File, length: u64) -> Option<Vec<u8>> {
-    use std::io::Read;
-
+fn read_exactly<FileType: std::io::Read>(file: &mut FileType, length: u64) -> Option<Vec<u8>> {
     let mut bytes = vec![0; usize::try_from(length).unwrap_or(usize::MAX)];
     file.read_exact(&mut bytes).ok()?;
     let mut beyond = [0; 1];
@@ -231,82 +232,61 @@ mod unix_policy {
     };
     use crate::configuration_root::{AccountIdentity, ConfigurationRoot};
 
-    /// Extended attribute carrying the access access-control list.
     #[cfg(target_os = "linux")]
     const ACCESS_LIST_ATTRIBUTE: &str = "system.posix_acl_access";
 
-    /// Extended attribute carrying a directory's default access-control list.
     #[cfg(target_os = "linux")]
     const DEFAULT_LIST_ATTRIBUTE: &str = "system.posix_acl_default";
 
-    /// Extended attribute carrying an extended access-control list.
     #[cfg(target_os = "macos")]
     const EXTENDED_LIST_ATTRIBUTE: &str = "com.apple.system.Security";
 
-    /// Version every POSIX access-control-list record declares.
     #[cfg(target_os = "linux")]
     const ACCESS_LIST_VERSION: u32 = 2;
 
-    /// Bytes the version prefix of such a record occupies.
     #[cfg(target_os = "linux")]
     const VERSION_LENGTH: usize = 4;
 
-    /// Bytes one access-control-list entry occupies.
     #[cfg(target_os = "linux")]
     const ENTRY_LENGTH: usize = 8;
 
-    /// Tag of an entry naming another user.
     #[cfg(target_os = "linux")]
     const NAMED_USER_TAG: u16 = 0x02;
 
-    /// Tag of the entry describing the owning group.
     #[cfg(target_os = "linux")]
     const OWNING_GROUP_TAG: u16 = 0x04;
 
-    /// Tag of an entry naming another group.
     #[cfg(target_os = "linux")]
     const NAMED_GROUP_TAG: u16 = 0x08;
 
-    /// Tag of the entry bounding every named and group entry.
     #[cfg(target_os = "linux")]
     const MASK_TAG: u16 = 0x10;
 
-    /// Tag of the entry describing every other user.
     #[cfg(target_os = "linux")]
     const OTHER_TAG: u16 = 0x20;
 
-    /// Every permission bit an entry can grant.
+    #[cfg(target_os = "linux")]
     const EVERY_PERMISSION: u16 = 0x07;
 
-    /// Permission bit of write access.
     #[cfg(target_os = "linux")]
     const WRITE_PERMISSION: u16 = 0x02;
 
-    /// Mode bits granting any access to a group or to others.
     const NON_OWNER_ACCESS: u64 = 0o077;
 
-    /// Mode bits granting write access to a group or to others.
     const NON_OWNER_WRITE: u64 = 0o022;
 
-    /// Names a final configuration source may have.
     const ACCEPTED_LINKS: u64 = 1;
 
-    /// Nanoseconds in one second.
     const NANOSECONDS_PER_SECOND: i128 = 1_000_000_000;
 
-    /// Structural location every root decision is reported at.
     const ROOT_LOCATION: &str = "configuration_root";
 
-    /// Structural location every source decision is reported at.
     const SOURCE_LOCATION: &str = "configuration_source";
 
-    /// One decoded access-control-list entry.
     #[cfg(target_os = "linux")]
     #[derive(Debug, Clone, Copy)]
     struct AccessEntry {
-        /// What kind of principal the entry describes.
         tag: u16,
-        /// Permissions the entry grants before the mask is applied.
         permissions: u16,
     }
 
@@ -495,7 +475,6 @@ mod unix_policy {
         }
     }
 
-    /// Returns one failure at a named structural location.
     fn failure(
         code: ConfigurationFailureCode,
         location: &'static str,
@@ -503,7 +482,6 @@ mod unix_policy {
         CredentialFilesystemFailure::at(code, location)
     }
 
-    /// Splits a source path into the directories above it and its own name.
     fn split_components<'components>(
         components: &'components [&'components str],
     ) -> Result<(&'components [&'components str], &'components str), CredentialFilesystemFailure>
@@ -514,7 +492,6 @@ mod unix_policy {
             .ok_or_else(|| CredentialFilesystemFailure::unsafe_file(SOURCE_LOCATION))
     }
 
-    /// Opens one child without following a link.
     fn open_child(
         parent: &File,
         component: &str,
@@ -526,7 +503,6 @@ mod unix_policy {
             .map_err(|_| CredentialFilesystemFailure::unsafe_file(location))
     }
 
-    /// Opens one child directory without following a link.
     fn open_child_directory(
         parent: &File,
         component: &str,
@@ -535,7 +511,6 @@ mod unix_policy {
         open_child(parent, component, OFlags::RDONLY | OFlags::DIRECTORY, location)
     }
 
-    /// Returns the identity and mutation evidence of one open object.
     fn evidence(object: &File) -> Result<SourceEvidence, CredentialFilesystemFailure> {
         let identity = rustix::fs::fstat(object)
             .map_err(|_| CredentialFilesystemFailure::unsafe_file(SOURCE_LOCATION))?;
@@ -550,19 +525,10 @@ mod unix_policy {
         })
     }
 
-    /// Widens one platform integer, saturating rather than wrapping.
-    ///
-    /// The width of every field in a status record differs between the two
-    /// rows, so the conversion is written once rather than at each field.
     fn widen<Value: TryInto<u64>>(value: Value) -> u64 {
         value.try_into().unwrap_or(u64::MAX)
     }
 
-    /// Returns one timestamp as a single nanosecond count.
-    ///
-    /// The seconds and the nanoseconds of a status record do not have the same
-    /// width, and neither has the same width on both rows, so each is widened
-    /// on its own.
     fn moment<Seconds: TryInto<i128>, Nanoseconds: TryInto<i128>>(
         seconds: Seconds,
         nanoseconds: Nanoseconds,
@@ -572,8 +538,6 @@ mod unix_policy {
         seconds * NANOSECONDS_PER_SECOND + nanoseconds
     }
 
-    /// Refuses an object whose access-control state widens it beyond its owner.
-    ///
     /// The two Unix rows keep that state in different places, so each asks its
     /// own platform's question. Asking the other's is not merely useless: the
     /// kernel refuses a name outside the namespaces it knows, and that refusal
@@ -608,7 +572,6 @@ mod unix_policy {
         }
     }
 
-    /// Refuses every object on a Unix this build does not support.
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     fn refuse_widened_access(
         _object: &File,
@@ -658,7 +621,6 @@ mod unix_policy {
         Ok(())
     }
 
-    /// Decodes one stored access-control list, or reports that it is unusable.
     #[cfg(target_os = "linux")]
     fn decode_list(stored: &[u8]) -> Option<Vec<AccessEntry>> {
         let version = stored.get(..VERSION_LENGTH)?;
@@ -682,22 +644,12 @@ mod unix_policy {
     }
 }
 
-/// The authority the Windows row uses.
-///
-/// The interfaces this workspace selects expose no safe handle-relative open on
-/// this row, so the traversal opens each component by its complete path with
-/// reparse traversal disabled and verifies it before opening the next. That
-/// refuses a link at every step and an object owned or reachable by another
-/// principal, but does not carry the directory-descriptor guarantee the Unix
-/// rows have. Plan 0009 owns this row's authenticated evidence.
 #[cfg(windows)]
 #[derive(Debug)]
+/// Windows configuration filesystem authority.
 pub struct WindowsConfigurationFilesystem {
-    /// Root this authority reads below.
     root: crate::configuration_root::ConfigurationRoot,
-    /// Security identifier every object must be owned by.
     owner: String,
-    /// Attempts one source receives before it is refused as unstable.
     attempts: u32,
 }
 
@@ -705,8 +657,8 @@ pub struct WindowsConfigurationFilesystem {
 mod windows_policy {
     //! Rules the Windows row applies to one already-open object.
 
-    use std::fs::{File, OpenOptions};
-    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    use std::io::{self, Read, Seek, SeekFrom};
+    use std::os::windows::io::{AsRawHandle, RawHandle};
     use std::path::{Path, PathBuf};
 
     use slingshot_domain::profile_authentication_contract::{
@@ -724,32 +676,88 @@ mod windows_policy {
     };
     use crate::configuration_root::{AccountIdentity, ConfigurationRoot};
 
-    /// Opens a directory rather than failing because it is one.
-    const BACKUP_SEMANTICS: u32 = 0x0200_0000;
-
-    /// Opens the object itself rather than what a reparse point names.
-    const OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-
-    /// Attribute marking an object as a reparse point.
     const REPARSE_POINT_ATTRIBUTE: u32 = 0x0000_0400;
 
-    /// Attribute marking an object as a directory.
     const DIRECTORY_ATTRIBUTE: u32 = 0x0000_0010;
 
-    /// Canonical text of the local system security identifier.
     const LOCAL_SYSTEM: &str = "S-1-5-18";
 
-    /// Canonical text of the built-in administrators security identifier.
     const BUILTIN_ADMINISTRATORS: &str = "S-1-5-32-544";
 
-    /// Names a final configuration source may have.
     const ACCEPTED_LINKS: u64 = 1;
 
-    /// Structural location every root decision is reported at.
     const ROOT_LOCATION: &str = "configuration_root";
 
-    /// Structural location every source decision is reported at.
     const SOURCE_LOCATION: &str = "configuration_source";
+
+    struct WindowsFile {
+        handle: winsafe::guard::CloseHandleGuard<winsafe::HFILE>,
+    }
+
+    impl WindowsFile {
+        fn open(path: &Path, location: &'static str) -> Result<Self, CredentialFilesystemFailure> {
+            let path =
+                path.to_str().ok_or_else(|| CredentialFilesystemFailure::unsafe_file(location))?;
+            let (handle, _) = winsafe::HFILE::CreateFile(
+                path,
+                winsafe::co::GENERIC::READ,
+                Some(
+                    winsafe::co::FILE_SHARE::READ
+                        | winsafe::co::FILE_SHARE::WRITE
+                        | winsafe::co::FILE_SHARE::DELETE,
+                ),
+                None,
+                winsafe::co::DISPOSITION::OPEN_EXISTING,
+                winsafe::co::FILE_ATTRIBUTE::NORMAL,
+                Some(
+                    winsafe::co::FILE_FLAG::BACKUP_SEMANTICS
+                        | winsafe::co::FILE_FLAG::OPEN_REPARSE_POINT,
+                ),
+                None,
+                None,
+            )
+            .map_err(|_| CredentialFilesystemFailure::unsafe_file(location))?;
+            Ok(Self { handle })
+        }
+    }
+
+    impl AsRawHandle for WindowsFile {
+        fn as_raw_handle(&self) -> RawHandle {
+            self.handle.ptr()
+        }
+    }
+
+    impl Read for WindowsFile {
+        fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+            self.handle
+                .ReadFile(bytes)
+                .map(|read| usize::try_from(read).unwrap_or(usize::MAX))
+                .map_err(windows_io_error)
+        }
+    }
+
+    impl Seek for WindowsFile {
+        fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+            let (distance, origin) = match position {
+                SeekFrom::Start(offset) => (
+                    i64::try_from(offset).map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "offset too large")
+                    })?,
+                    winsafe::co::FILE_STARTING_POINT::BEGIN,
+                ),
+                SeekFrom::Current(offset) => (offset, winsafe::co::FILE_STARTING_POINT::CURRENT),
+                SeekFrom::End(offset) => (offset, winsafe::co::FILE_STARTING_POINT::END),
+            };
+            let offset =
+                self.handle.SetFilePointerEx(distance, origin).map_err(windows_io_error)?;
+            u64::try_from(offset)
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "negative offset"))
+        }
+    }
+
+    fn windows_io_error<Error: Into<u32>>(error: Error) -> io::Error {
+        io::Error::from_raw_os_error(i32::try_from(error.into()).unwrap_or(i32::MAX))
+    }
 
     impl WindowsConfigurationFilesystem {
         /// Returns the authority for `root`.
@@ -774,7 +782,6 @@ mod windows_policy {
             Ok(Self { root, owner, attempts })
         }
 
-        /// Opens and verifies every component from the traversal origin down.
         fn walk(&self, components: &[&str]) -> Result<PathBuf, CredentialFilesystemFailure> {
             let mut path = self.root.traversal_origin().to_path_buf();
             let root_components: Vec<&str> =
@@ -797,10 +804,9 @@ mod windows_policy {
             Ok(path)
         }
 
-        /// Reports that one open directory lets no untrusted principal change it.
         fn verify_directory(
             &self,
-            directory: &File,
+            directory: &WindowsFile,
             location: &'static str,
         ) -> Result<(), CredentialFilesystemFailure> {
             let observed = evidence(directory, location)?;
@@ -810,10 +816,9 @@ mod windows_policy {
             self.verify_security(directory, location)
         }
 
-        /// Reports that one open final file is a source this authority may read.
         fn verify_source(
             &self,
-            file: &File,
+            file: &WindowsFile,
         ) -> Result<SourceEvidence, CredentialFilesystemFailure> {
             let observed = evidence(file, SOURCE_LOCATION)?;
             if !observed.ordinary_file || observed.links != ACCEPTED_LINKS {
@@ -823,11 +828,9 @@ mod windows_policy {
             Ok(observed)
         }
 
-        /// Reports that one open object is owned by the sampled user and grants
-        /// no untrusted principal anything beyond reading its own permissions.
         fn verify_security(
             &self,
-            object: &File,
+            object: &WindowsFile,
             location: &'static str,
         ) -> Result<(), CredentialFilesystemFailure> {
             let refuse = || CredentialFilesystemFailure::unsafe_file(location);
@@ -963,37 +966,35 @@ mod windows_policy {
         }
     }
 
-    /// Opens one object without traversing a reparse point.
     fn open_object(
         path: &Path,
         location: &'static str,
-    ) -> Result<File, CredentialFilesystemFailure> {
-        OpenOptions::new()
-            .read(true)
-            .custom_flags(BACKUP_SEMANTICS | OPEN_REPARSE_POINT)
-            .open(path)
-            .map_err(|_| CredentialFilesystemFailure::unsafe_file(location))
+    ) -> Result<WindowsFile, CredentialFilesystemFailure> {
+        WindowsFile::open(path, location)
     }
 
-    /// Returns the identity and mutation evidence of one open object.
     fn evidence(
-        object: &File,
+        object: &WindowsFile,
         location: &'static str,
     ) -> Result<SourceEvidence, CredentialFilesystemFailure> {
         let refuse = || CredentialFilesystemFailure::unsafe_file(location);
-        let metadata = object.metadata().map_err(|_| refuse())?;
-        let attributes = metadata.file_attributes();
+        let metadata = object.handle.GetFileInformationByHandle().map_err(|_| refuse())?;
+        let attributes = metadata.dwFileAttributes.raw();
         if attributes & REPARSE_POINT_ATTRIBUTE != 0 {
             return Err(refuse());
         }
+        let (creation, _, last_write) = object.handle.GetFileTime().map_err(|_| refuse())?;
         Ok(SourceEvidence {
-            volume: u64::from(metadata.volume_serial_number().ok_or_else(refuse)?),
-            object: u128::from(metadata.file_index().ok_or_else(refuse)?),
+            volume: u64::from(metadata.dwVolumeSerialNumber),
+            object: u128::from(metadata.nFileIndex()),
             ordinary_file: attributes & DIRECTORY_ATTRIBUTE == 0,
-            links: u64::from(metadata.number_of_links().ok_or_else(refuse)?),
-            length: metadata.file_size(),
-            content_changed: i128::from(metadata.last_write_time()),
-            metadata_changed: i128::from(metadata.change_time().ok_or_else(refuse)?),
+            links: u64::from(metadata.nNumberOfLinks),
+            length: metadata.nFileSize(),
+            content_changed: i128::from(u64::from(last_write)),
+            // Stable Rust has no public Windows change-time accessor. The
+            // creation time is immutable identity metadata and therefore gives
+            // the stable read protocol a safe, handle-bound metadata value.
+            metadata_changed: i128::from(u64::from(creation)),
         })
     }
 }

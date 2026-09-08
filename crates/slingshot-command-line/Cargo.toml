@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
 repository.workspace = true
+default-run = "slingshot"
 
 [features]
 runtime-test-host = []
@@ -65,6 +66,9 @@ rustix.workspace = true
 
 [target.aarch64-apple-darwin.dependencies]
 rustix.workspace = true
+
+[target.aarch64-apple-darwin.dev-dependencies]
+xattr.workspace = true
 
 [target.x86_64-pc-windows-msvc.dependencies]
 windows-sys.workspace = true

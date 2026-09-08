@@ -89,7 +89,7 @@ pub fn read_bounded_line(input: &mut dyn BufRead) -> io::Result<BoundedLine> {
         let room = maximum.saturating_add(1).saturating_sub(line.len());
         let taken = available.len().min(room);
         let newline = available[..taken].iter().position(|byte| *byte == b'\n');
-        let copied = newline.map_or(taken, |at| at);
+        let copied = newline.unwrap_or(taken);
         line.extend_from_slice(&available[..copied]);
         input.consume(newline.map_or(taken, |at| at + 1));
         if newline.is_some() {

@@ -87,6 +87,42 @@ const DELEGATED_FAMILIES: &[(&str, &str)] = &[(
 /// pretend to.
 const PLACEHOLDER_BODIES: &[&str] = &["todo!(", "unimplemented!("];
 
+/// Physical test modules whose Rust declarations use a different nested name.
+const PATH_MODULE_OVERRIDES: &[(&str, &str)] = &[
+    (
+        "crates/slingshot-agent-connection/src/authentication/identity_management_client_wire_tests.rs",
+        "slingshot_agent_connection::authentication::identity_management_client::wire_tests",
+    ),
+    (
+        "crates/slingshot-agent-connection/src/authentication/identity_management_client_token_tests.rs",
+        "slingshot_agent_connection::authentication::identity_management_client::wire_tests::token_tests",
+    ),
+    (
+        "crates/slingshot-agent-connection/src/authentication/identity_management_provider_tests.rs",
+        "slingshot_agent_connection::authentication::identity_management_client::wire_tests::token_tests::provider_tests",
+    ),
+    (
+        "crates/slingshot-agent-connection/src/authentication/identity_management_connector_tests.rs",
+        "slingshot_agent_connection::authentication::identity_management_connector::tests",
+    ),
+    (
+        "crates/slingshot-agent-connection/src/authentication/identity_management_http1_tests.rs",
+        "slingshot_agent_connection::authentication::identity_management_http1::tests",
+    ),
+    (
+        "crates/slingshot-agent-connection/src/authentication/identity_management_http2_headers_tests.rs",
+        "slingshot_agent_connection::authentication::identity_management_http2_headers::tests",
+    ),
+    (
+        "crates/slingshot-agent-connection/src/authentication/identity_management_http2_response_tests.rs",
+        "slingshot_agent_connection::authentication::identity_management_http2_response::tests",
+    ),
+    (
+        "crates/slingshot-agent-connection/src/authentication/identity_management_http2_tests.rs",
+        "slingshot_agent_connection::authentication::identity_management_http2::tests",
+    ),
+];
+
 /// Vocabulary the architecture places in an exact crate.
 const VOCABULARY_PLACEMENT: &[(&str, &str)] = &[
     ("AgentJobIdentifier", "slingshot-domain"),
@@ -171,6 +207,15 @@ fn derive_shape(path: &str) -> Result<(String, String, String), String> {
     let (Some(file_name), parents) = (tail.last(), &tail[..tail.len().saturating_sub(1)]) else {
         return Err(format!("{path} names no source file"));
     };
+    // A few implementation-only test modules are included with `#[path]`
+    // from their owning production module. Their physical path is flat, but
+    // their Rust module path is nested under that owner.
+    let path_module = PATH_MODULE_OVERRIDES
+        .iter()
+        .find_map(|(source, module)| (*source == path).then_some(*module));
+    if let Some(module) = path_module {
+        return Ok(((*package).to_owned(), LEAF_KIND.to_owned(), module.to_owned()));
+    }
     let mut module = vec![root];
     module.extend(parents.iter().map(|&segment| segment.to_owned()));
     match *file_name {
@@ -426,12 +471,22 @@ fn compare_paths(
 
 /// Returns the child module names a source file declares.
 fn declared_children(text: &str) -> BTreeSet<String> {
-    text.lines()
-        .map(str::trim)
-        .filter_map(|line| line.strip_prefix("pub mod ").or_else(|| line.strip_prefix("mod ")))
-        .filter_map(|rest| rest.strip_suffix(';'))
-        .map(str::to_owned)
-        .collect()
+    let mut depth = 0usize;
+    let mut children = BTreeSet::new();
+    for line in text.lines().map(str::trim) {
+        if depth == 0 {
+            if let Some(rest) = line.strip_prefix("pub mod ").or_else(|| line.strip_prefix("mod "))
+            {
+                if let Some(name) = rest.strip_suffix(';') {
+                    children.insert(name.to_owned());
+                }
+            }
+        }
+        depth = depth
+            .saturating_add(line.bytes().filter(|byte| *byte == b'{').count())
+            .saturating_sub(line.bytes().filter(|byte| *byte == b'}').count());
+    }
+    children
 }
 
 /// Reports every way a module fails the present-state documentation rule.

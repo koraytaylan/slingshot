@@ -9,6 +9,9 @@ on:
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: platform-runtime-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 env:
   AWS_LC_SYS_PREBUILT_NASM: "1"
 jobs:
@@ -27,6 +30,7 @@ jobs:
             triple: aarch64-apple-darwin
           - runner: windows-2022
             triple: x86_64-pc-windows-msvc
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -39,7 +43,15 @@ jobs:
           SLINGSHOT_REPORTED_WORKFLOW: ${{ github.workflow_ref }}
           SLINGSHOT_REPORTED_RUNNER: ${{ matrix.runner }}
         run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
+      - name: seed this row's Cargo sources before the offline gate
+        env:
+          SLINGSHOT_AUTOMATION_ROW: ${{ matrix.triple }}
+        run: scripts/prepare_native_dependencies
       - name: run the complete native repository gate for this row
         env:
           SLINGSHOT_AUTOMATION_ROW: ${{ matrix.triple }}
+          TMPDIR: ${{ runner.temp }}
+          CARGO_INCREMENTAL: "0"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          CARGO_PROFILE_TEST_DEBUG: "0"
         run: scripts/platform_quality

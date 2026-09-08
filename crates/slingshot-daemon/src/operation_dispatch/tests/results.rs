@@ -1,3 +1,5 @@
+//! Tests for durable maintenance-result dispatch.
+
 use super::*;
 use slingshot_domain::installation::InstallationIdentifier;
 use slingshot_domain::operation::*;

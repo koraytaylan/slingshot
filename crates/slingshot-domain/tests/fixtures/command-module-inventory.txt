@@ -12,6 +12,7 @@ artifact
 authorizable_identity
 cancel_sling_job
 canonical_json
+canonical_json_reader
 catalog
 classification
 classification_administration
@@ -60,6 +61,7 @@ list_resource_mappings
 list_sling_job_queues
 list_workflow_models
 load_content_as_javascript_object_notation
+loaded_document_reader
 move_asset
 move_page
 operational_listing

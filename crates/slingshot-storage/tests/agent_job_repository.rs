@@ -816,7 +816,7 @@ fn snapshot_and_success_transactions_guard_the_owner_and_roll_back_failed_public
                 &retained,
                 &settlement,
                 &snapshot,
-                &[publication.clone()]
+                std::slice::from_ref(&publication)
             )
             .is_err()
     );

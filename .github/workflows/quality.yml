@@ -10,10 +10,14 @@ on:
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   authority:
     name: the automation authority
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -32,24 +36,39 @@ jobs:
     name: the repository-local gate
     needs: authority
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: seed the complete Cargo graph before offline repository checks
+        env:
+          SLINGSHOT_AUTOMATION_ROW: x86_64-unknown-linux-gnu
+        run: scripts/prepare_native_dependencies
       - name: install the tools the gate verifies before it verifies them
         run: scripts/install_pinned_repository_tools
       - name: check out the exact pinned advisory snapshot
         run: scripts/checkout_pinned_advisory_database "$RUNNER_TEMP/advisory-db"
       - name: run the gate
         env:
+          TMPDIR: ${{ runner.temp }}
           SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY: ${{ runner.temp }}/advisory-db
         run: scripts/quality
   pinned-fsm-compatibility:
     name: the pinned compatibility gate
-    needs: authority
+    needs: [authority, gate]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     permissions:
       contents: read
     steps:
@@ -59,4 +78,6 @@ jobs:
       - name: check out the pinned external source
         run: scripts/checkout_pinned_finite_state_machine "$RUNNER_TEMP/finite-state-machine"
       - name: run the unchanged repository-local gate
+        env:
+          TMPDIR: ${{ runner.temp }}
         run: scripts/check_finite_state_machine_compatibility --finite-state-machine-source "$RUNNER_TEMP/finite-state-machine"

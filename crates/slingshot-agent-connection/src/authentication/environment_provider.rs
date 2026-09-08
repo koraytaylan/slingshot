@@ -383,9 +383,10 @@ impl RequestAuthentication {
         Ok(())
     }
 
-    pub(crate) fn require_connection(&self, connection: &SelectedAuthorConnection)
-        -> Result<(), SelectedAuthorConnectionRefusal>
-    {
+    pub(crate) fn require_connection(
+        &self,
+        connection: &SelectedAuthorConnection,
+    ) -> Result<(), SelectedAuthorConnectionRefusal> {
         if self.target != connection.target() {
             return Err(SelectedAuthorConnectionRefusal::AnotherTarget);
         }
@@ -469,23 +470,31 @@ impl EnvironmentAuthenticationProvider {
                 ConfigurationFailureCode::AuthenticationTargetMismatch,
             ));
         };
-        let (value, lease) = self.cache.refresh_after_unauthorized(lease, source, bearer_authentication)?;
+        let (value, lease) =
+            self.cache.refresh_after_unauthorized(lease, source, bearer_authentication)?;
         Ok((self.bind_authentication(value), lease))
     }
-
 }
 
 impl<Cache> EnvironmentAuthenticationProvider<Cache> {
     /// Returns the immutable startup snapshot, independent of cache strategy.
     #[must_use]
-    pub fn snapshot(&self) -> &SelectedEnvironmentSnapshot { &self.snapshot }
+    pub fn snapshot(&self) -> &SelectedEnvironmentSnapshot {
+        &self.snapshot
+    }
 
     /// Returns an endpoint below this provider's only author address.
     #[must_use]
-    pub fn author_endpoint(&self, segments: &[&str]) -> String { self.snapshot.author.endpoint(segments) }
+    pub fn author_endpoint(&self, segments: &[&str]) -> String {
+        self.snapshot.author.endpoint(segments)
+    }
 
     fn bind_authentication(&self, value: SecretValue) -> RequestAuthentication {
-        RequestAuthentication { value, target: self.snapshot.target(), revision: self.snapshot.revision() }
+        RequestAuthentication {
+            value,
+            target: self.snapshot.target(),
+            revision: self.snapshot.revision(),
+        }
     }
 
     /// Requires `endpoint` to be the author address or an endpoint below it.
@@ -518,10 +527,7 @@ impl<Cache> EnvironmentAuthenticationProvider<Cache> {
 /// The canonical input is assembled and encoded inside one lend, so the
 /// assembled bytes are scrubbed when this returns and only the encoded value
 /// outlives it.
-fn basic_authentication(
-    user_name: &BasicUserName,
-    password: &SecretValue,
-) -> SecretValue {
+fn basic_authentication(user_name: &BasicUserName, password: &SecretValue) -> SecretValue {
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
 

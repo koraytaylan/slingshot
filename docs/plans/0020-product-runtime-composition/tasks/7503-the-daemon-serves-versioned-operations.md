@@ -9,6 +9,22 @@ touches:
   - crates/slingshot-daemon/src/service.rs
   - crates/slingshot-daemon/src/request_dispatch.rs
   - crates/slingshot-daemon/tests/request_dispatch.rs
+  - crates/slingshot-agent-connection/src/authentication/identity_management_connector_tests.rs
+  - crates/slingshot-agent-connection/src/selected_author_**
+  - crates/slingshot-agent-connection/src/subscription_high_water.rs
+  - crates/slingshot-agent-connection/src/terminal_failure.rs
+  - crates/slingshot-daemon/src/operation/**
+  - crates/slingshot-daemon/src/operation_dispatch.rs
+  - crates/slingshot-daemon/src/operation_dispatch/**
+  - crates/slingshot-daemon/src/operation_wait/**
+  - crates/slingshot-daemon/src/retained_author_protocol.rs
+  - crates/slingshot-daemon/src/runtime_builder/publication_recovery.rs
+  - crates/slingshot-local-protocol/src/operation_decode.rs
+  - crates/slingshot-storage/src/artifact_store/maintenance_content.rs
+  - crates/slingshot-storage/src/maintenance/recovery_tests.rs
+  - crates/slingshot-storage/src/maintenance_results.rs
+  - crates/slingshot-storage/src/maintenance_results/**
+  - crates/slingshot-storage/src/persistent_capacity/maintenance_recovery.rs
 status: completed
 merged_as: "1f9d579"
 ---

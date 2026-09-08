@@ -30,10 +30,10 @@ use crate::model_context_protocol::current_stateless_revision::{
 use crate::model_context_protocol::legacy_initialized_revision::{
     LegacySession, Lifecycle, undecorated,
 };
+use crate::model_context_protocol::operation_execution;
 use crate::model_context_protocol::progress_and_cancellation::ProgressRegistry;
 use crate::model_context_protocol::protocol_diagnostics::ProtocolDiagnosticSink;
 use crate::model_context_protocol::schema_projection;
-use crate::model_context_protocol::operation_execution;
 use crate::model_context_protocol::standard_stream_transport::{
     LineSink, Message, MessageRefusal, OutputFailure, OutputQueue, read_message,
 };
@@ -224,37 +224,30 @@ impl ServerApplication {
             self.legacy
                 .require_actionable(method)
                 .map_err(|refusal| Refusal::MethodUnavailable { named: refusal.to_string() })?;
-                return Ok(undecorated(self.payload_for(method)));
+            return Ok(undecorated(self.payload_for(method)));
         }
         let revision = requested_revision(parameters);
         current_stateless_revision::require_answerable(method, revision)?;
         if method == "tools/call" {
-            let name = parameters
-                .get("name")
-                .and_then(Value::as_str)
-                .ok_or_else(|| Refusal::ParametersUnusable {
+            let name = parameters.get("name").and_then(Value::as_str).ok_or_else(|| {
+                Refusal::ParametersUnusable {
                     detail: "tools/call requires a string name".to_owned(),
-                })?;
-            let arguments = parameters
-                .get("arguments")
-                .cloned()
-                .unwrap_or_else(|| json!({}));
-            let raw = serde_json::to_vec(&arguments).map_err(|failure| Refusal::ParametersUnusable {
-                detail: failure.to_string(),
+                }
             })?;
+            let arguments = parameters.get("arguments").cloned().unwrap_or_else(|| json!({}));
+            let raw = serde_json::to_vec(&arguments)
+                .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
             operation_execution::require_runnable(name, &raw, &Provenance::recomputed())
                 .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
         }
         if method == "resources/read" {
-            let uri = parameters
-                .get("uri")
-                .and_then(Value::as_str)
-                .ok_or_else(|| Refusal::ParametersUnusable {
+            let uri = parameters.get("uri").and_then(Value::as_str).ok_or_else(|| {
+                Refusal::ParametersUnusable {
                     detail: "resources/read requires a string uri".to_owned(),
-                })?;
-            crate::model_context_protocol::resource_catalog::parse(uri).map_err(|failure| {
-                Refusal::ParametersUnusable { detail: failure.to_string() }
+                }
             })?;
+            crate::model_context_protocol::resource_catalog::parse(uri)
+                .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
         }
         Ok(current_stateless_revision::decorated(method, self.payload_for(method)))
     }
@@ -275,32 +268,32 @@ impl ServerApplication {
 impl ServerApplication {
     fn payload_for(&self, method: &str) -> Value {
         match method {
-        "server/discover" => current_stateless_revision::discovery(),
-        "ping" => json!({}),
-        "tools/list" => json!({
-            "tools": self.tools.iter().filter_map(|tool| {
-                Some(json!({
-                    "name": &tool.name,
-                    "title": &tool.title,
-                    "description": &tool.description,
-                    "inputSchema": schema_projection::input_schema(tool).ok()?,
-                    "outputSchema": schema_projection::output_schema(tool),
-                    "annotations": {
-                        "readOnlyHint": tool.read_only_hint,
-                        "destructiveHint": tool.destructive_hint,
-                        "idempotentHint": tool.idempotent_hint,
-                    }
-                }))
-            }).collect::<Vec<_>>(),
-        }),
-        "tools/call" => json!({ "content": [] }),
-        "resources/list" => json!({ "resources": [] }),
-        "resources/templates/list" => json!({ "resourceTemplates": [
+            "server/discover" => current_stateless_revision::discovery(),
+            "ping" => json!({}),
+            "tools/list" => json!({
+                "tools": self.tools.iter().filter_map(|tool| {
+                    Some(json!({
+                        "name": &tool.name,
+                        "title": &tool.title,
+                        "description": &tool.description,
+                        "inputSchema": schema_projection::input_schema(tool).ok()?,
+                        "outputSchema": schema_projection::output_schema(tool),
+                        "annotations": {
+                            "readOnlyHint": tool.read_only_hint,
+                            "destructiveHint": tool.destructive_hint,
+                            "idempotentHint": tool.idempotent_hint,
+                        }
+                    }))
+                }).collect::<Vec<_>>(),
+            }),
+            "tools/call" => json!({ "content": [] }),
+            "resources/list" => json!({ "resources": [] }),
+            "resources/templates/list" => json!({ "resourceTemplates": [
             { "uriTemplate": crate::model_context_protocol::resource_catalog::OPERATION_TEMPLATE, "name": "operation", "mimeType": "application/json" },
             { "uriTemplate": crate::model_context_protocol::resource_catalog::ARTIFACT_TEMPLATE, "name": "artifact", "mimeType": "application/octet-stream" },
             { "uriTemplate": crate::model_context_protocol::resource_catalog::MAINTENANCE_TEMPLATE, "name": "maintenance-result", "mimeType": "application/json" },
         ] }),
-        _ => json!({ "contents": [] }),
+            _ => json!({ "contents": [] }),
         }
     }
 }

@@ -6,6 +6,7 @@ pub fn prepare(root: &std::path::Path, profile_name: &str, environments: &[&str]
     use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
     std::fs::create_dir_all(root).unwrap();
     std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700)).unwrap();
+    clear_inherited_extended_access_control_list(root);
     let configuration = root.join("fixture-home/.config/slingshot");
     for path in [
         root.join("fixture-home"),
@@ -15,6 +16,7 @@ pub fn prepare(root: &std::path::Path, profile_name: &str, environments: &[&str]
     ] {
         slingshot_daemon::platform_runtime::current_user::create_owner_only_directory(&path)
             .unwrap();
+        clear_inherited_extended_access_control_list(&path);
     }
     let mut profile = format!("format_version = 1\nname = \"{profile_name}\"\n");
     for environment in environments {
@@ -36,6 +38,7 @@ pub fn prepare(root: &std::path::Path, profile_name: &str, environments: &[&str]
             .unwrap()
             .write_all(bytes)
             .unwrap();
+        clear_inherited_extended_access_control_list(&configuration.join(relative));
     }
     use slingshot_configuration::configuration_root::{
         AccountResolver as _, ConfigurationRoot, OperatingSystemAccountResolver,
@@ -51,3 +54,17 @@ pub fn prepare(root: &std::path::Path, profile_name: &str, environments: &[&str]
     slingshot_configuration::profile_loader::load_profiles(authority)
         .expect("the complete fixture generation verifies");
 }
+
+#[cfg(target_os = "macos")]
+fn clear_inherited_extended_access_control_list(path: &std::path::Path) {
+    let names: Vec<_> =
+        xattr::list(path).map(|attributes| attributes.collect()).unwrap_or_default();
+    for name in names {
+        let _ = xattr::remove(path, name);
+    }
+    let _ = xattr::remove(path, "com.apple.system.Security");
+    let _ = xattr::remove(path, "com.apple.macl");
+}
+
+#[cfg(not(target_os = "macos"))]
+fn clear_inherited_extended_access_control_list(_path: &std::path::Path) {}

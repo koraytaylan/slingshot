@@ -16,6 +16,9 @@ on:
       - v[0-9]*
 permissions:
   contents: read
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 # The Windows row builds a dependency whose assembly is normally produced by
 # NASM, which no runner image is required to carry. The crate ships the same
 # assembly prebuilt, so the build uses those objects: they come from the locked
@@ -27,6 +30,7 @@ jobs:
   release-version:
     name: the version this run publishes
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -42,6 +46,7 @@ jobs:
     name: the changelog and this release's notes
     needs: release-version
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -63,6 +68,7 @@ jobs:
     name: the same-release advisory review
     needs: release-version
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     environment: release-rustsec-review
     permissions:
       contents: read
@@ -98,6 +104,7 @@ jobs:
     name: the one locked source cache
     needs: rustsec-owner-review
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
@@ -143,6 +150,7 @@ jobs:
           - runner: windows-2022
             triple: x86_64-pc-windows-msvc
             coordinator: false
+    timeout-minutes: 60
     # How this run reports itself, said once for the row. The packager answers
     # for the authority again before it builds, because the build is what the
     # evidence is about, and a step that answers for a run has to be able to say
@@ -198,6 +206,7 @@ jobs:
     name: the acceptance matrix
     needs: release-binary-provenance
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:

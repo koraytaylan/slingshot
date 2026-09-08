@@ -65,12 +65,13 @@ not a claim that a release has happened.
 ## Supported targets
 
 `support/platforms.toml` is the only abstract supported-target authority. It
-declares two rows and their release artifact layout:
+declares three rows and their release artifact layout:
 
 | Target | Executable | Archive | Native smoke |
 |---|---|---|---|
 | `x86_64-unknown-linux-gnu` | `slingshot` | `tar.gz` | `direct` |
 | `aarch64-apple-darwin` | `slingshot` | `tar.gz` | `direct` |
+| `x86_64-pc-windows-msvc` | `slingshot.exe` | `zip` | `direct` |
 
 Each row also names the capabilities the target must provide: the
 provider-record trust decisions a store must not flatten, the endpoint, the two

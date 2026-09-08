@@ -7,6 +7,8 @@ depends_on: []
 gated: false
 touches:
   - crates/slingshot-domain/src/command/**
+  - crates/slingshot-domain/src/command/canonical_json_reader.rs
+  - crates/slingshot-domain/src/command/loaded_document_reader.rs
   - crates/slingshot-domain/tests/fixtures/command-module-inventory.txt
   - schemas/command-contract-limits-1.json
   - crates/slingshot-domain/tests/command_module_inventory.rs
