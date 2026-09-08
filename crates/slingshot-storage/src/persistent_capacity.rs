@@ -671,7 +671,7 @@ impl<'database> PersistentCapacityAccount<'database> {
             rusqlite::TransactionBehavior::Immediate,
         )
         .map_err(refused)?;
-        let existing = self.committed_length(&metadata.content_digest)?;
+        let existing = self.committed_length(metadata.content_digest)?;
         // Each retained command can produce one remote artifact and one local
         // structured-result artifact. Pending producers consume bounded rows
         // even when their shared content consumes no additional byte charge.

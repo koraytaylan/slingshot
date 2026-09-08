@@ -1,3 +1,5 @@
+#![cfg(not(windows))]
+
 //! Every session this executable can be driven through, byte for byte.
 //!
 //! A golden session is one argument vector, one recorded transcript, and one
@@ -350,6 +352,7 @@ fn stop_quoting(address: &EndpointAddress, nonce: &str) -> bool {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn the_owned_sessions_run_in_order_against_one_real_daemon() {
     let root = TemporaryRuntimeRoot::create("o").expect("the temporary root is created");
     let _cleanup = OwnedDaemonCleanup(root.path().to_owned());
@@ -369,6 +372,7 @@ fn the_owned_sessions_run_in_order_against_one_real_daemon() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn a_stale_nonce_never_stops_the_replacement_that_followed_it() {
     let contract = FoundationContract::embedded();
     let root = TemporaryRuntimeRoot::create("s").expect("the temporary root is created");
@@ -440,6 +444,7 @@ impl Drop for OwnedDaemonCleanup {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn an_unresponsive_owned_child_ends_through_its_retained_handle() {
     let root = TemporaryRuntimeRoot::create("c").expect("the temporary root is created");
     runtime_fixture::prepare(root.path(), PROFILE, &[ENVIRONMENT]);
@@ -542,6 +547,7 @@ const SCENARIO_PATIENCE: Duration = Duration::from_secs(120);
 const SETTLING_DEADLINE: Duration = Duration::from_millis(400);
 
 #[test]
+#[cfg(target_os = "linux")]
 fn an_interrupted_run_says_how_far_it_got_and_exits_one_hundred_and_thirty() {
     let contract = FoundationContract::embedded();
     let root = TemporaryRuntimeRoot::create("i").expect("the temporary root is created");

@@ -10,6 +10,7 @@ touches:
   - crates/slingshot-daemon/src/startup.rs
   - crates/slingshot-daemon/src/service.rs
   - crates/slingshot-development/tests/operation_executor_composition.rs
+  - crates/slingshot-agent-connection/src/authentication/runtime_snapshot.rs
 status: completed
 merged_as: "47d67ea"
 ---

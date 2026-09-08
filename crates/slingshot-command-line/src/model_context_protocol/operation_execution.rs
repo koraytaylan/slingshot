@@ -63,7 +63,7 @@ pub enum ExecutionRefusal {
     #[error("this build's provenance does not agree: {0}")]
     ProvenanceDrifted(String),
     /// This server offers no such tool.
-    #[error("this server offers no tool called {0}")]
+    #[error("this server offers no tool with the requested name")]
     ToolUnknown(String),
     /// The arguments were refused by one of the three checks.
     #[error(transparent)]

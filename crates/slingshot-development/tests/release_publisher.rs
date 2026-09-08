@@ -43,7 +43,11 @@ fn an_invalid_later_attestation_stops_before_any_release_upload() {
     std::fs::create_dir_all(evidence.join("release-acceptance")).expect("acceptance directory");
     std::fs::write(evidence.join("release-notes/RELEASE_NOTES.md"), "notes\n").unwrap();
     std::fs::write(evidence.join("release-acceptance/acceptance.json"), "manifest\n").unwrap();
-    for (row, archive) in [("aarch64-apple-darwin", "good.tar.gz"), ("x86_64-unknown-linux-gnu", "bad.tar.gz")] {
+    for (row, archive) in [
+        ("aarch64-apple-darwin", "good.tar.gz"),
+        ("x86_64-pc-windows-msvc", "good.zip"),
+        ("x86_64-unknown-linux-gnu", "bad.tar.gz"),
+    ] {
         let directory = evidence.join(format!("release-{row}"));
         std::fs::create_dir(&directory).unwrap();
         std::fs::write(directory.join(archive), b"archive").unwrap();
@@ -61,7 +65,11 @@ fn an_invalid_later_attestation_stops_before_any_release_upload() {
         .expect("the publisher runs");
     assert!(!output.status.success(), "invalid attestation must refuse publication");
     let provider_calls = std::fs::read_to_string(&log).unwrap_or_else(|failure| {
-        panic!("the verifier did not call the provider: {failure}; stdout={}; stderr={}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr))
+        panic!(
+            "the verifier did not call the provider: {failure}; stdout={}; stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
     });
     assert!(provider_calls.contains("attestation verify"));
     assert!(!provider_calls.contains("release upload"));

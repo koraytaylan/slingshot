@@ -43,7 +43,10 @@ esac
 "#,
     );
     let fake_curl = tools.join("curl");
-    executable(&fake_curl, "#!/bin/sh\nwhile [ \"$#\" -gt 0 ]; do if [ \"$1\" = \"--output\" ]; then : > \"$2\"; shift 2; else shift; fi; done\n");
+    executable(
+        &fake_curl,
+        "#!/bin/sh\nwhile [ \"$#\" -gt 0 ]; do if [ \"$1\" = \"--output\" ]; then : > \"$2\"; shift 2; else shift; fi; done\n",
+    );
     let fake_sha = tools.join("sha256sum");
     executable(&fake_sha, "#!/bin/sh\nexit 0\n");
     let fake_tar = tools.join("tar");
@@ -74,7 +77,12 @@ esac
 #[test]
 fn a_tagged_run_asks_for_latest_history_and_writes_notes() {
     let (root, output) = run(Some("tag"));
-    assert!(output.status.success(), "stdout={} stderr={}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     let notes = std::fs::read_to_string(root.path().join("output/RELEASE_NOTES.md"))
         .expect("release notes are written");
     assert!(notes.contains("tagged feature"));
@@ -88,7 +96,12 @@ fn a_tagged_run_asks_for_latest_history_and_writes_notes() {
 #[test]
 fn a_manual_run_asks_for_unreleased_history() {
     let (root, output) = run(None);
-    assert!(output.status.success(), "stdout={} stderr={}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     let notes = std::fs::read_to_string(root.path().join("output/RELEASE_NOTES.md"))
         .expect("release notes are written");
     assert!(notes.contains("unreleased feature"));

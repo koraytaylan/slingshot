@@ -490,9 +490,14 @@ where
         };
         first_frame = false;
         if is_wait_operation(&payload) {
-            let response = service.wait_for_update(&payload, &shutdown).await.unwrap_or_else(|response| response);
-            let body = serde_json::to_vec(&response).map_err(|failure| ConnectionFailure::Transport(failure.to_string()))?;
-            let frame = framing::render(&contract.framing, &body).map_err(ConnectionFailure::Framing)?;
+            let response = service
+                .wait_for_update(&payload, &shutdown)
+                .await
+                .unwrap_or_else(|response| response);
+            let body = serde_json::to_vec(&response)
+                .map_err(|failure| ConnectionFailure::Transport(failure.to_string()))?;
+            let frame =
+                framing::render(&contract.framing, &body).map_err(ConnectionFailure::Framing)?;
             write_frame(stream, contract, &frame).await?;
             post_response = true;
             continue;
@@ -514,10 +519,12 @@ where
 }
 
 fn is_wait_operation(payload: &[u8]) -> bool {
-    serde_json::from_slice::<serde_json::Value>(payload).ok()
+    serde_json::from_slice::<serde_json::Value>(payload)
+        .ok()
         .and_then(|value| value.get("request").and_then(|request| request.get("request")).cloned())
         .and_then(|value| value.as_str().map(str::to_owned))
-        .as_deref() == Some("wait")
+        .as_deref()
+        == Some("wait")
 }
 
 /// Serves one owned runtime namespace until a stop is authorized.
@@ -557,7 +564,10 @@ pub async fn serve(
             let stopper = shutdown.clone();
             connections.spawn(async move {
                 let mut stream = accepted;
-                if serve_connection_with_shutdown(served.as_ref(), &mut stream, stopper.clone()).await.unwrap_or(false) {
+                if serve_connection_with_shutdown(served.as_ref(), &mut stream, stopper.clone())
+                    .await
+                    .unwrap_or(false)
+                {
                     stopper.cancel();
                 }
                 drop(permit);

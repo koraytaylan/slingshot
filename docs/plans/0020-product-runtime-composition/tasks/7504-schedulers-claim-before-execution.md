@@ -10,6 +10,8 @@ touches:
   - crates/slingshot-storage/src/operation_repository.rs
   - crates/slingshot-storage/migrations/**
   - crates/slingshot-daemon/tests/operation_scheduler.rs
+  - crates/slingshot-daemon/src/runtime_builder.rs
+  - crates/slingshot-storage/src/operation/scheduler_claim.rs
 status: completed
 merged_as: "513b54c"
 ---

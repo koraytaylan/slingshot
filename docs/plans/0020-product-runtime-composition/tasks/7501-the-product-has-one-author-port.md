@@ -10,6 +10,10 @@ touches:
   - crates/slingshot-daemon/src/author_agent_operation_executor.rs
   - crates/slingshot-daemon/tests/author_agent_operation_executor.rs
   - crates/slingshot-daemon/tests/author_agent_conformance.rs
+  - crates/slingshot-agent-connection/src/**
+  - crates/slingshot-agent-protocol/src/**
+  - crates/slingshot-daemon/src/operation/author_authentication.rs
+  - crates/slingshot-daemon/src/operation/durable_author_event.rs
 status: completed
 merged_as: "980c5a0"
 ---

@@ -19,6 +19,9 @@ use syn::visit::Visit;
 /// Repository path of the source policy values.
 pub const SOURCE_POLICY_PATH: &str = "policy/source-policy.toml";
 
+/// Repository path of the reviewed diagnostics baseline.
+pub const SOURCE_POLICY_BASELINE_PATH: &str = "policy/source-policy-baseline.tsv";
+
 /// Repository path of the shortened forms a declared name may not use.
 pub const ABBREVIATED_IDENTIFIERS_PATH: &str = "policy/abbreviated-identifiers.txt";
 
@@ -167,6 +170,8 @@ pub struct LoadedPolicy {
     pub interfaces: ExternalInterfaces,
     /// Documentation rules and the review checklist.
     pub documentation: DocumentationRules,
+    /// Diagnostics accepted as pre-existing policy debt.
+    pub baseline: BTreeSet<Violation>,
 }
 
 /// Reads one policy document out of the repository.
@@ -182,6 +187,35 @@ fn parse_policy<Shape: serde::de::DeserializeOwned>(
 ) -> Result<Shape, PolicyFailure> {
     toml::from_str(text)
         .map_err(|failure| PolicyFailure { path: relative.to_owned(), reason: failure.to_string() })
+}
+
+/// Reads the reviewed diagnostics baseline when the repository provides one.
+fn read_baseline(root: &Path) -> Result<BTreeSet<Violation>, PolicyFailure> {
+    let path = root.join(SOURCE_POLICY_BASELINE_PATH);
+    if !path.exists() {
+        return Ok(BTreeSet::new());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|failure| PolicyFailure {
+        path: SOURCE_POLICY_BASELINE_PATH.to_owned(),
+        reason: failure.to_string(),
+    })?;
+    let mut baseline = BTreeSet::new();
+    for (offset, line) in text.lines().enumerate() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = line.splitn(4, '\t').collect();
+        let malformed = || PolicyFailure {
+            path: SOURCE_POLICY_BASELINE_PATH.to_owned(),
+            reason: format!("line {} is not path<TAB>line<TAB>rule<TAB>symbol", offset + 1),
+        };
+        if fields.len() != 4 {
+            return Err(malformed());
+        }
+        let line_number = fields[1].parse::<usize>().map_err(|_| malformed())?;
+        baseline.insert(Violation::at(fields[0], line_number, fields[2], fields[3]));
+    }
+    Ok(baseline)
 }
 
 impl LoadedPolicy {
@@ -203,7 +237,8 @@ impl LoadedPolicy {
             .filter(|line| !line.is_empty() && !line.starts_with('#'))
             .map(str::to_owned)
             .collect();
-        Ok(Self { source, abbreviations, interfaces, documentation })
+        let baseline = read_baseline(root)?;
+        Ok(Self { source, abbreviations, interfaces, documentation, baseline })
     }
 
     /// Reports whether a declared name is spelled in full.
@@ -881,9 +916,24 @@ pub fn examined_paths(policy: &LoadedPolicy, root: &Path) -> Result<Vec<String>,
 /// be read.
 pub fn check_repository(root: &Path) -> Result<Vec<Violation>, PolicyFailure> {
     let policy = LoadedPolicy::load(root)?;
+    let violations = check_repository_with_policy(&policy, root)?;
+    Ok(violations.into_iter().filter(|violation| !policy.baseline.contains(violation)).collect())
+}
+
+/// Reports every diagnostic before the reviewed baseline is applied.
+pub fn check_repository_raw(root: &Path) -> Result<Vec<Violation>, PolicyFailure> {
+    let policy = LoadedPolicy::load(root)?;
+    check_repository_with_policy(&policy, root)
+}
+
+/// Scans every examined file using one already-loaded policy.
+fn check_repository_with_policy(
+    policy: &LoadedPolicy,
+    root: &Path,
+) -> Result<Vec<Violation>, PolicyFailure> {
     let mut violations = Vec::new();
-    for relative in examined_paths(&policy, root)? {
-        violations.extend(check_file(&policy, root, &relative)?);
+    for relative in examined_paths(policy, root)? {
+        violations.extend(check_file(policy, root, &relative)?);
     }
     violations.sort();
     Ok(violations)

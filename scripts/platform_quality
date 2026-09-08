@@ -22,6 +22,14 @@ if [ -z "${SLINGSHOT_AUTOMATION_ROW:-}" ]; then
     refuse 'SLINGSHOT_AUTOMATION_ROW names the authenticated native row'
 fi
 
+native_tmpdir=${TMPDIR:-/tmp}
+if [ "${#native_tmpdir}" -gt 60 ]; then
+    refuse "TMPDIR is too long for Unix-domain test endpoints (${#native_tmpdir} bytes; max 60)"
+fi
+if [ ! -d "$native_tmpdir" ] || [ ! -w "$native_tmpdir" ]; then
+    refuse "TMPDIR is not a writable directory: $native_tmpdir"
+fi
+
 # Compile all targets and features before testing them.  The integration test
 # below contains the macOS-only sentinel; `--all-targets` therefore prevents a
 # native PR row from silently proving only platform_runtime_contract.

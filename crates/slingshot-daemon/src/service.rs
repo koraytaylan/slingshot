@@ -157,7 +157,10 @@ impl DaemonService {
         }
         match envelope::decode_request(&self.contract, payload) {
             Err(refused) => {
-                self.record_diagnostic(&format!("control request refused: {}", refused.error.message));
+                self.record_diagnostic(&format!(
+                    "control request refused: {}",
+                    refused.error.message
+                ));
                 let identifier = refused.request_identifier.unwrap_or_default();
                 ServiceOutcome::Respond(self.render(&identifier, Err(refused.error)))
             }
@@ -323,11 +326,13 @@ impl DaemonService {
                 maximum_operations,
                 ..
             } => {
-                let allowed = slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
-                    .limit("maximum_terminal_maintenance_operations");
+                let allowed =
+                    slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                        .limit("maximum_terminal_maintenance_operations");
                 if *maximum_operations == 0 || u64::from(*maximum_operations) > allowed {
                     return self.render_operation(OperationResponse::MalformedFrame {
-                        detail: "the maintenance preview bound is outside the runtime limit".to_owned(),
+                        detail: "the maintenance preview bound is outside the runtime limit"
+                            .to_owned(),
                     });
                 }
                 match slingshot_storage::maintenance::preview(
@@ -451,19 +456,51 @@ impl DaemonService {
                 daemon_runtime_contract_digest: target.daemon_runtime_contract_digest.clone(),
                 execution_available: true,
             };
-            let version = slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded().operation_protocol_version as u32;
-            let bound = crate::operation_dispatch::BoundRequest::decode(&self.contract, &served, &[version], payload)?;
+            let version =
+                slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                    .operation_protocol_version as u32;
+            let bound = crate::operation_dispatch::BoundRequest::decode(
+                &self.contract,
+                &served,
+                &[version],
+                payload,
+            )?;
             let operation = bound.request().operation_identifier().unwrap_or_default().to_owned();
-            let waiter = bound.wait(guard.operations(), guard.waiters())?
-                .ok_or(OperationResponse::MalformedFrame { detail: "the wait request is malformed".to_owned() })?;
+            let waiter = bound.wait(guard.operations(), guard.waiters())?.ok_or(
+                OperationResponse::MalformedFrame {
+                    detail: "the wait request is malformed".to_owned(),
+                },
+            )?;
             (waiter, operation)
         };
-        let update = waiter.next(cancellation).await.ok_or(OperationResponse::InternalFailure { detail: "the wait observer was cancelled before an update".to_owned() })?;
+        let update = waiter.next(cancellation).await.ok_or(OperationResponse::InternalFailure {
+            detail: "the wait observer was cancelled before an update".to_owned(),
+        })?;
         Ok(match update {
-            crate::operation_wait::WaitUpdate::Progress { detail, revision } => OperationResponse::Progress { detail, operation_identifier: operation, operation_revision: revision },
-            crate::operation_wait::WaitUpdate::RecoveryRequired { revision } => OperationResponse::Status { lifecycle_state: "recovery_required".to_owned(), operation_identifier: operation, operation_revision: revision },
-            crate::operation_wait::WaitUpdate::Resumed { revision } => OperationResponse::Status { lifecycle_state: "resumed".to_owned(), operation_identifier: operation, operation_revision: revision },
-            crate::operation_wait::WaitUpdate::Terminal { revision } => OperationResponse::Status { lifecycle_state: "terminal".to_owned(), operation_identifier: operation, operation_revision: revision },
+            crate::operation_wait::WaitUpdate::Progress { detail, revision } => {
+                OperationResponse::Progress {
+                    detail,
+                    operation_identifier: operation,
+                    operation_revision: revision,
+                }
+            }
+            crate::operation_wait::WaitUpdate::RecoveryRequired { revision } => {
+                OperationResponse::Status {
+                    lifecycle_state: "recovery_required".to_owned(),
+                    operation_identifier: operation,
+                    operation_revision: revision,
+                }
+            }
+            crate::operation_wait::WaitUpdate::Resumed { revision } => OperationResponse::Status {
+                lifecycle_state: "resumed".to_owned(),
+                operation_identifier: operation,
+                operation_revision: revision,
+            },
+            crate::operation_wait::WaitUpdate::Terminal { revision } => OperationResponse::Status {
+                lifecycle_state: "terminal".to_owned(),
+                operation_identifier: operation,
+                operation_revision: revision,
+            },
         })
     }
 

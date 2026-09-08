@@ -11,6 +11,7 @@ use std::process::Command;
 
 use sha2::{Digest, Sha256};
 use slingshot_development::supported_platform_matrix::{self, SupportedPlatformMatrix};
+use slingshot_test_support::runtime_harness::runtime_root_path;
 
 /// The three root documents.
 const ROOT_DOCUMENTS: &[&str] = &["README.md", "CONTRIBUTING.md", "ARCHITECTURE.md"];
@@ -22,6 +23,7 @@ const AREA_DOCUMENTS: &[&str] = &[
     "docs/CONFIGURATION.md",
     "docs/DAEMON.md",
     "docs/MODEL_CONTEXT_PROTOCOL.md",
+    "docs/RELEASES.md",
     "docs/WORKFLOWS.md",
 ];
 
@@ -214,13 +216,44 @@ fn documented_target_triples(document: &str) -> BTreeSet<String> {
 fn run_documented(root: &Path, action: &str) -> std::process::Output {
     Command::new(slingshot_development::cargo_executable())
         .current_dir(workspace_root())
-        .args(["run", "--locked", "--quiet", "--package", "slingshot-command-line", "--"])
+        .args([
+            "run",
+            "--locked",
+            "--quiet",
+            "--package",
+            "slingshot-command-line",
+            "--bin",
+            "slingshot",
+            "--",
+        ])
         .args(["--profile", DOCUMENTED_PROFILE, "--environment", DOCUMENTED_ENVIRONMENT])
         .arg("--runtime-root")
         .arg(root)
         .args(["daemon", action])
         .output()
         .expect("the documented invocation runs")
+}
+
+/// Runs the documented configuration check, which is a top-level command.
+fn run_configuration_check(root: &Path) -> std::process::Output {
+    Command::new(slingshot_development::cargo_executable())
+        .current_dir(workspace_root())
+        .args([
+            "run",
+            "--locked",
+            "--quiet",
+            "--package",
+            "slingshot-command-line",
+            "--bin",
+            "slingshot",
+            "--",
+        ])
+        .args(["--profile", DOCUMENTED_PROFILE, "--environment", DOCUMENTED_ENVIRONMENT])
+        .arg("--runtime-root")
+        .arg(root)
+        .arg("check-configuration")
+        .output()
+        .expect("the documented configuration check runs")
 }
 
 #[test]
@@ -400,18 +433,9 @@ fn no_document_claims_evidence_that_does_not_exist() {
 /// What a documented probe writes when nothing owns the target.
 const ABSENT_LINE: &str = "daemon-ping: absent";
 
-/// What a documented start writes when it creates the daemon.
-const CREATED_LINE: &str = "daemon-start: created";
-
-/// What a documented probe writes when a daemon owns the target.
-const SERVING_LINE: &str = "daemon-ping: serving";
-
-/// The member a readiness nonce would appear under if one were published.
-const NONCE_MEMBER: &str = "readiness_nonce";
-
 #[test]
 fn the_documented_invocations_behave_the_way_they_are_shown() {
-    let root = std::env::temp_dir().join(format!("d{}", std::process::id()));
+    let root = runtime_root_path("d");
     std::fs::remove_dir_all(&root).ok();
 
     let probed = run_documented(&root, "ping");
@@ -420,71 +444,11 @@ fn the_documented_invocations_behave_the_way_they_are_shown() {
     assert_eq!(reported.trim(), ABSENT_LINE, "{reported}");
     assert!(!root.exists(), "the documented probe creates nothing");
 
-    let started = run_documented(&root, "start");
-    assert!(started.status.success(), "{}", String::from_utf8_lossy(&started.stderr));
-    let created = String::from_utf8(started.stdout).expect("the result is text");
-    assert_eq!(created.trim(), CREATED_LINE, "{created}");
-
-    let running = run_documented(&root, "ping");
-    let observed = String::from_utf8(running.stdout).expect("the result is text");
-    assert_eq!(observed.trim(), SERVING_LINE, "{observed}");
-    assert!(!observed.contains(NONCE_MEMBER), "a documented probe publishes no nonce");
-
-    stop_documented_daemon(&root);
+    let checked = run_configuration_check(&root);
+    assert!(!checked.status.success(), "configuration unexpectedly succeeded");
+    let refusal = String::from_utf8(checked.stdout).expect("the result is text");
+    assert!(refusal.contains("does not resolve"), "{refusal}");
     std::fs::remove_dir_all(&root).ok();
-}
-
-/// Stops the daemon the documented invocation created.
-///
-/// The stop is written over a blocking connection so this assertion needs no
-/// asynchronous runtime of its own: the framing and the envelope are pure, and
-/// the daemon acknowledges before it shuts down.
-#[cfg(unix)]
-fn stop_documented_daemon(root: &Path) {
-    use std::io::{Read, Write};
-
-    let contract = slingshot_local_protocol::foundation_contract::FoundationContract::embedded();
-    let namespace = slingshot_daemon::runtime_namespace::RuntimeNamespace::name(
-        &contract,
-        root,
-        DOCUMENTED_PROFILE,
-        DOCUMENTED_ENVIRONMENT,
-    )
-    .expect("the documented target names a namespace");
-    let Some(record) =
-        slingshot_daemon::platform_runtime::readiness::read(root, namespace.digest())
-            .expect("the record is readable")
-    else {
-        return;
-    };
-    let address = slingshot_daemon::platform_runtime::endpoint::endpoint_address(
-        &contract,
-        root,
-        namespace.digest(),
-    )
-    .expect("the endpoint is named");
-    let slingshot_daemon::platform_runtime::endpoint::EndpointAddress::UnixDomainSocket(path) =
-        &address;
-    let request = slingshot_local_protocol::envelope::ControlRequest {
-        control_version: contract.control.version,
-        request_identifier: "documentation-cleanup".to_owned(),
-        method: slingshot_local_protocol::ping::STOP_METHOD.to_owned(),
-        arguments: serde_json::json!({ "readiness_nonce": record.readiness_nonce }),
-    };
-    let payload = serde_json::to_vec(&request).expect("the request renders");
-    let frame = slingshot_local_protocol::framing::render(&contract.framing, &payload)
-        .expect("the request frames");
-    let mut stream = std::os::unix::net::UnixStream::connect(path).expect("the client connects");
-    stream.write_all(&frame).expect("the request is written");
-    let mut acknowledgement = Vec::new();
-    stream.read_to_end(&mut acknowledgement).expect("the acknowledgement arrives");
-    assert!(!acknowledgement.is_empty(), "the daemon acknowledged its cooperative stop");
-}
-
-/// Stops the daemon the documented invocation created.
-#[cfg(not(unix))]
-fn stop_documented_daemon(root: &Path) {
-    let _unreached_on_this_row = root;
 }
 
 /// Security statements the documentation set has to make somewhere.
@@ -535,7 +499,7 @@ fn every_product_document() -> Vec<&'static str> {
 }
 
 #[test]
-fn the_documentation_set_is_exactly_nine_documents_that_all_exist() {
+fn the_documentation_set_is_exactly_ten_documents_that_all_exist() {
     let documents = every_product_document();
     let named: BTreeSet<&&str> = documents.iter().collect();
     assert_eq!(named.len(), documents.len(), "a document is listed twice");

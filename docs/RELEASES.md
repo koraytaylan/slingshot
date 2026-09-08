@@ -13,6 +13,7 @@ There is one archive for every row in
 | --- | --- | --- |
 | `x86_64-unknown-linux-gnu` | the native `slingshot-*.tar.gz` archive | `attestation.jsonl` and `evidence.toml` |
 | `aarch64-apple-darwin` | the native `slingshot-*.tar.gz` archive | `attestation.jsonl` and `evidence.toml` |
+| `x86_64-pc-windows-msvc` | the native `slingshot-*.zip` archive | `attestation.jsonl` and `evidence.toml` |
 
 The archive contains the executable, `LICENSE`, and `SHA256SUMS`. The
 `attestation.jsonl` bundle is the provider's signed statement about the exact
@@ -42,4 +43,3 @@ bundle first, and then checks the archive and evidence. It does not contact a
 Git remote, the provider, an operating-system trust store, or an ambient
 cache. If any required file or value is absent, or any check refuses, the
 archive is not verified.
-

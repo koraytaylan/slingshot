@@ -255,6 +255,12 @@ fn check_source_policy(
     output: &mut dyn Write,
 ) -> Result<(), RepositoryCommandFailure> {
     let workspace_root = slingshot_development::locate_workspace_root(working_directory)?;
+    let policy = source_policy::LoadedPolicy::load(&workspace_root).map_err(|failure| {
+        RepositoryCommandFailure::ToolFailed {
+            program: SOURCE_POLICY_COMMAND.to_owned(),
+            reason: failure.to_string(),
+        }
+    })?;
     let violations = source_policy::check_repository(&workspace_root).map_err(|failure| {
         RepositoryCommandFailure::ToolFailed {
             program: SOURCE_POLICY_COMMAND.to_owned(),
@@ -266,7 +272,11 @@ fn check_source_policy(
             .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()))?;
     }
     if violations.is_empty() {
-        return writeln!(output, "the repository follows every source policy rule")
+        return writeln!(
+            output,
+            "the repository follows every source policy rule ({} reviewed baseline diagnostics excluded)",
+            policy.baseline.len()
+        )
             .map_err(|failure| RepositoryCommandFailure::OutputUnavailable(failure.to_string()));
     }
     Err(RepositoryCommandFailure::ToolFailed {

@@ -1,0 +1,55 @@
+#!/bin/sh
+# Seed and compile the exact native row's all-target/all-feature graph before
+# the offline native gate.
+#
+# Hosted native jobs start with a fresh Cargo home. The gate itself is
+# intentionally offline, so this is the explicit network-enabled boundary
+# shared by CI and the local fresh-runner harness.
+
+set -eu
+
+if [ "$#" -ne 0 ]; then
+    printf 'native dependency preparation: this command takes no arguments\n' >&2
+    exit 1
+fi
+
+row=${SLINGSHOT_AUTOMATION_ROW:-}
+if [ -z "$row" ]; then
+    printf 'native dependency preparation: SLINGSHOT_AUTOMATION_ROW is unset\n' >&2
+    exit 1
+fi
+
+# Cargo metadata in the all-target test inventory resolves target-specific
+# packages for every supported row, not only the host row. Fetch all of the
+# committed rows so the later offline metadata and test commands cannot depend
+# on which runner happened to populate a shared cache first.
+targets=$(sed -n 's/^triple = "\([^"]*\)"$/\1/p' support/platforms.toml)
+if [ -z "$targets" ]; then
+    printf 'native dependency preparation: support/platforms.toml names no targets\n' >&2
+    exit 1
+fi
+if ! printf '%s\n' "$targets" | grep -Fxq "$row"; then
+    printf 'native dependency preparation: %s is not a committed target row\n' "$row" >&2
+    exit 1
+fi
+for target in $targets; do
+    cargo fetch --locked --target "$target"
+done
+
+# The quality gate separately audits the fuzz workspace with its own lockfile.
+# Seed that graph at the same network-enabled boundary so its later offline
+# cargo-deny invocation cannot discover a package such as libfuzzer-sys only
+# after the network has been disabled.
+cargo fetch --locked --manifest-path fuzz/Cargo.toml
+
+# One repository test asks Cargo for the unfiltered workspace graph. Resolve
+# that exact metadata view while the network boundary is still open; otherwise
+# target-independent local builds can pass while its later offline child
+# command discovers a foreign-target package for the first time.
+cargo metadata --locked --format-version 1 >/dev/null
+
+# `cargo fetch` does not resolve every dev/feature-only package that the
+# subsequent `--all-targets --all-features` test command can select. Compiling
+# without running tests is the portable way to force Cargo to materialize that
+# exact graph while the network boundary is still open.
+cargo test --locked --workspace --all-targets --all-features --no-run

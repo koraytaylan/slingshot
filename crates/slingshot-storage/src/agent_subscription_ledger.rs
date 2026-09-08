@@ -828,7 +828,7 @@ impl AgentSubscriptionLedger {
         recorded_at_unix_milliseconds: u64,
     ) -> Result<LedgerOutcome, AgentRepositoryFailure> {
         let held = read_subscription(
-            &transaction,
+            transaction,
             author_target_identity_digest,
             daemon_subscription_identifier,
         )?
@@ -839,7 +839,7 @@ impl AgentSubscriptionLedger {
             return Ok(LedgerOutcome::GenerationMismatch);
         }
         Self::require_reconciled(
-            &transaction,
+            transaction,
             author_target_identity_digest,
             daemon_subscription_identifier,
             &held,

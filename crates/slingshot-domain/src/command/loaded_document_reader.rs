@@ -1,6 +1,6 @@
 //! Incremental closed loaded-resource validation; completed subtrees are dropped.
 
-use super::canonical_json_reader::{Bounds, Reader, Refusal};
+use super::canonical_json_reader::{Bounds, MAXIMUM_READER_DEPTH, Reader, Refusal};
 use super::load_content_as_javascript_object_notation::{
     DECLARED_PROPERTY_TYPES, LoadContentAsJavaScriptObjectNotationCommand,
     maximum_load_document_bytes, read_scalar,
@@ -12,6 +12,10 @@ use std::io::Read;
 /// scalar values and request-relative tree semantics without collecting child
 /// or property-value arrays. Only the current scalar and ancestor path/order
 /// state are retained. The source must separately prove artifact length/digest.
+///
+/// # Errors
+///
+/// Returns [`Refusal`] for malformed, non-canonical, or oversized documents.
 pub fn require_loaded_document_reader(
     source: impl Read,
     command: &LoadContentAsJavaScriptObjectNotationCommand,
@@ -22,7 +26,7 @@ pub fn require_loaded_document_reader(
         Bounds {
             bytes: maximum,
             token_bytes: usize::try_from(maximum).map_err(|_| Refusal)?,
-            depth: 128,
+            depth: MAXIMUM_READER_DEPTH,
         },
     );
     let path = resource(&mut reader, 0, command.resolved_depth().edges())?;
@@ -32,14 +36,14 @@ pub fn require_loaded_document_reader(
     Ok(())
 }
 
-fn field<R: Read>(reader: &mut Reader<R>, name: &str) -> Result<(), Refusal> {
+fn field<Source: Read>(reader: &mut Reader<Source>, name: &str) -> Result<(), Refusal> {
     if reader.string()? != name {
         return Err(Refusal);
     }
     reader.expect(b':')
 }
 
-fn boolean<R: Read>(reader: &mut Reader<R>) -> Result<bool, Refusal> {
+fn boolean<Source: Read>(reader: &mut Reader<Source>) -> Result<bool, Refusal> {
     let (spelling, value): (&[u8], bool) = match reader.peek()? {
         Some(b't') => (b"true", true),
         Some(b'f') => (b"false", false),
@@ -51,8 +55,8 @@ fn boolean<R: Read>(reader: &mut Reader<R>) -> Result<bool, Refusal> {
     Ok(value)
 }
 
-fn resource<R: Read>(
-    reader: &mut Reader<R>,
+fn resource<Source: Read>(
+    reader: &mut Reader<Source>,
     depth: u64,
     maximum: u64,
 ) -> Result<RepositoryPath, Refusal> {
@@ -75,9 +79,10 @@ fn resource<R: Read>(
             let segments = child.segments();
             let segment = segments.last().ok_or(Refusal)?;
             let index = match segment.as_text().rsplit_once('[') {
-                Some((_, suffix)) => {
-                    suffix.strip_suffix(']').and_then(|n| n.parse::<u64>().ok()).ok_or(Refusal)?
-                }
+                Some((_, suffix)) => suffix
+                    .strip_suffix(']')
+                    .and_then(|number| number.parse::<u64>().ok())
+                    .ok_or(Refusal)?,
                 None => 1,
             };
             let key = (segment.name().as_text().to_owned(), index);
@@ -110,7 +115,7 @@ fn resource<R: Read>(
     Ok(path)
 }
 
-fn properties<R: Read>(reader: &mut Reader<R>) -> Result<(), Refusal> {
+fn properties<Source: Read>(reader: &mut Reader<Source>) -> Result<(), Refusal> {
     reader.expect(b'{')?;
     let mut previous: Option<String> = None;
     if reader.peek()? != Some(b'}') {
@@ -132,7 +137,7 @@ fn properties<R: Read>(reader: &mut Reader<R>) -> Result<(), Refusal> {
     reader.expect(b'}')
 }
 
-fn property<R: Read>(reader: &mut Reader<R>) -> Result<(), Refusal> {
+fn property<Source: Read>(reader: &mut Reader<Source>) -> Result<(), Refusal> {
     reader.expect(b'{')?;
     field(reader, "cardinality")?;
     let cardinality = reader.string()?;
@@ -166,7 +171,7 @@ fn property<R: Read>(reader: &mut Reader<R>) -> Result<(), Refusal> {
     reader.expect(b'}')
 }
 
-fn scalar<R: Read>(reader: &mut Reader<R>, property_type: &str) -> Result<(), Refusal> {
+fn scalar<Source: Read>(reader: &mut Reader<Source>, property_type: &str) -> Result<(), Refusal> {
     let value = match reader.peek()? {
         Some(b'"') => serde_json::Value::String(reader.string()?),
         Some(b't' | b'f') => serde_json::Value::Bool(boolean(reader)?),

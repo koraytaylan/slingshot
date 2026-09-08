@@ -31,7 +31,7 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "cargo clippy $CARGO_GATE_SCOPE -- -D warnings",
     "cargo test $CARGO_GATE_SCOPE",
     "RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --all-features --no-deps",
-    "shellcheck --shell=sh scripts/*",
+    "shellcheck scripts/*",
     "dependency-direction",
     "source-policy",
     "rustsec-advisory-pin",
@@ -150,7 +150,7 @@ fn the_gate_runs_every_required_command_over_the_whole_graph() {
     // A stage that names one script reports on the file a reader has just read
     // and leaves the release path unlinted, so naming one is itself the defect.
     assert!(
-        !gate.contains("shellcheck --shell=sh scripts/quality"),
+        !gate.contains("shellcheck scripts/quality"),
         "the scripts stage lints one script rather than every script"
     );
 }
@@ -221,7 +221,10 @@ fn hosted_quality_installs_and_rechecks_every_manifest_tool_before_the_gate() {
     let gate = workflow.find("scripts/quality").expect("quality step");
     assert!(install < gate, "the hosted gate must install its pinned tools first");
     for hardcoded in ["cargo-deny 0.18.6", "shellcheck 0.11.0", "gh version 2.97.0"] {
-        assert!(!installer.contains(hardcoded), "the installer repeats a version outside the manifest: {hardcoded}");
+        assert!(
+            !installer.contains(hardcoded),
+            "the installer repeats a version outside the manifest: {hardcoded}"
+        );
     }
 }
 

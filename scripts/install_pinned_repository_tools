@@ -85,7 +85,7 @@ curl --silent --show-error --fail --location --output "$WORKING/$DENY_ARCHIVE" \
     "https://static.crates.io/crates/$CARGO_DENY/$DENY_ARCHIVE"
 verify_archive "$WORKING/$DENY_ARCHIVE" "$DENY_DIGEST"
 mkdir "$WORKING/$CARGO_DENY-$DENY_VERSION"
-tar -xzf "$WORKING/$DENY_ARCHIVE" -C "$WORKING/$CARGO_DENY-$DENY_VERSION"
+tar -xzf "$WORKING/$DENY_ARCHIVE" -C "$WORKING"
 cargo install --locked --path "$WORKING/$CARGO_DENY-$DENY_VERSION"
 require_reported_version "cargo-deny" "$CARGO_DENY $DENY_VERSION"
 

@@ -7,6 +7,12 @@
 
 format = "slingshot.source-policy/1"
 
+# Diagnostics already present when the operational command surface landed are
+# recorded in policy/source-policy-baseline.tsv. The checker still scans the
+# complete repository and fails on every new diagnostic; its source-policy test
+# also refuses a stale baseline entry, so the debt cannot silently grow or hide
+# a rule that has since been fixed.
+
 # Largest physical line count of any repository-owned code file, whether Rust,
 # a build manifest, a workflow, an executable script, or a migration.
 maximum-code-file-lines = 1_000

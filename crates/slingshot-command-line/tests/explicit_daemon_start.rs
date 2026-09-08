@@ -1,3 +1,5 @@
+#![cfg(not(windows))]
+
 //! Assertions for explicit daemon start and existing-only ping.
 //!
 //! Every assertion runs against real detached daemon processes inside an
@@ -22,6 +24,7 @@ use slingshot_daemon::runtime_namespace::RuntimeNamespace;
 use slingshot_local_protocol::envelope::{ControlRequest, ResponseOutcome};
 use slingshot_local_protocol::foundation_contract::FoundationContract;
 use slingshot_local_protocol::ping::STOP_METHOD;
+use slingshot_test_support::runtime_harness::runtime_root_path;
 
 /// Profile the assertions name their target with.
 const PROFILE: &str = "local";
@@ -45,7 +48,7 @@ fn product_executable() -> PathBuf {
 /// The name is short because a Unix domain socket address is bounded and the
 /// namespace digest takes most of that bound.
 fn temporary_runtime_root(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("x{}{name}", std::process::id()));
+    let root = runtime_root_path(name);
     std::fs::remove_dir_all(&root).ok();
     root
 }
@@ -120,6 +123,7 @@ async fn start(target: &TargetRuntime, identifier: &str) -> StartReport {
     .expect("the start converges")
 }
 
+#[cfg(target_os = "linux")]
 #[tokio::test(flavor = "multi_thread")]
 async fn an_already_responsive_daemon_is_joined_by_start_and_reported_by_ping() {
     let root = temporary_runtime_root("a");
@@ -148,6 +152,7 @@ async fn an_already_responsive_daemon_is_joined_by_start_and_reported_by_ping() 
     std::fs::remove_dir_all(&root).ok();
 }
 
+#[cfg(target_os = "linux")]
 #[tokio::test(flavor = "multi_thread")]
 async fn concurrent_starts_against_absence_create_one_daemon_and_share_one_nonce() {
     let root = temporary_runtime_root("c");
@@ -195,6 +200,7 @@ async fn a_probe_against_absence_creates_nothing_and_takes_no_election_lock() {
     assert!(!root.exists(), "a probe against absence creates no runtime state");
 }
 
+#[cfg(target_os = "linux")]
 #[tokio::test(flavor = "multi_thread")]
 async fn a_successor_starts_one_daemon_once_an_abandoned_election_is_released() {
     let contract = FoundationContract::embedded();

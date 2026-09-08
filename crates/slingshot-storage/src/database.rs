@@ -638,8 +638,6 @@ impl PhysicalInventory {
 
     /// Sums the closed set of SQLite object bytes, refusing undeclared names and links.
     fn measured_bytes(&self) -> Result<u64, DatabaseFailure> {
-        use std::os::unix::fs::MetadataExt as _;
-
         let parent = self.main.parent().ok_or_else(|| {
             DatabaseFailure::PhysicalInventoryRefused(
                 "the pinned database has no parent".to_owned(),
@@ -680,7 +678,7 @@ impl PhysicalInventory {
             let metadata = std::fs::symlink_metadata(entry.path()).map_err(|failure| {
                 DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
             })?;
-            if !metadata.is_file() || metadata.nlink() != 1 {
+            if !is_private_regular_file(&metadata) {
                 return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
                     "{name} is not one private regular SQLite object"
                 )));
@@ -693,6 +691,23 @@ impl PhysicalInventory {
         }
         Ok(total)
     }
+}
+
+/// Returns whether metadata describes one regular file with no additional
+/// hard links on platforms that expose that evidence.
+#[cfg(unix)]
+fn is_private_regular_file(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+
+    metadata.is_file() && metadata.nlink() == 1
+}
+
+/// Windows has no stable standard-library hard-link count accessor. It still
+/// refuses non-regular objects here; the Windows handle-bound policy performs
+/// the stronger identity checks available through its safe API.
+#[cfg(not(unix))]
+fn is_private_regular_file(metadata: &std::fs::Metadata) -> bool {
+    metadata.is_file()
 }
 
 /// A database pathname resolved through an open, verified state-root directory.
