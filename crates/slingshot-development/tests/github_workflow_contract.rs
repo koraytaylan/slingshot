@@ -454,6 +454,19 @@ fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
         }),
         "Windows staging must preserve native runner paths"
     );
+    let windows_build = steps
+        .iter()
+        .find(|step| {
+            step["name"].as_str() == Some("build this row twice and compare the bytes (Windows)")
+        })
+        .expect("the Windows build row is explicit");
+    assert_eq!(windows_build["shell"].as_str(), Some("pwsh"));
+    assert_eq!(windows_build["if"].as_str(), Some("runner.os == 'Windows'"));
+    assert!(windows_build["run"].as_str().is_some_and(|run| {
+        run.contains("$env:RUNNER_TEMP/cache")
+            && run.contains("$env:RUNNER_TEMP/release")
+            && run.contains("$env:RUNNER_TEMP/review")
+    }));
     let rows = named
         .iter()
         .find(|(name, _)| name == ATTESTATION_JOB)
@@ -471,10 +484,25 @@ fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
     }
     let copy = steps
         .iter()
-        .find(|step| step["run"].as_str().is_some_and(|run| run.contains("attestation.jsonl")))
-        .and_then(|step| step["run"].as_str())
-        .expect("the bundle is copied into the row");
-    assert!(copy.contains("$RUNNER_TEMP/release/attestation.jsonl"));
+        .find(|step| {
+            step["name"].as_str() == Some("keep the attestation beside what it attests (Unix)")
+        })
+        .expect("the Unix bundle is copied into the row");
+    assert!(
+        copy["run"]
+            .as_str()
+            .is_some_and(|run| run.contains("$RUNNER_TEMP/release/attestation.jsonl"))
+    );
+    let windows_copy = steps
+        .iter()
+        .find(|step| {
+            step["name"].as_str() == Some("keep the attestation beside what it attests (Windows)")
+        })
+        .expect("the Windows bundle is copied into the row");
+    assert_eq!(windows_copy["shell"].as_str(), Some("pwsh"));
+    assert!(windows_copy["run"].as_str().is_some_and(|run| {
+        run.contains("$env:RUNNER_TEMP") && run.contains("Copy-Item -LiteralPath")
+    }));
     let upload = steps
         .iter()
         .find(|step| {
