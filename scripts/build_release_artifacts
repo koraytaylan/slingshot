@@ -38,6 +38,22 @@ require_absolute() {
     esac
 }
 
+# Git Bash can name a Windows path as /c/... while native Rust processes need
+# C:\\.... Keep shell tools on their POSIX paths, but translate every path that
+# crosses into cargo/rustup so the packager and its output agree on one place.
+native_path() {
+    case "$1" in
+        /*)
+            if command -v cygpath >/dev/null 2>&1; then
+                cygpath -w "$1"
+            else
+                printf '%s\n' "$1"
+            fi
+            ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --row) ROW=$2; shift "$OPTION_AND_VALUE" ;;
@@ -60,6 +76,10 @@ require_absolute "$OUTPUT_DIRECTORY"
 [ -f "$REVIEW_RECORD" ] || report_refusal "$REVIEW_RECORD is not a file"
 [ ! -e "$OUTPUT_DIRECTORY" ] || report_refusal "$OUTPUT_DIRECTORY already exists"
 
+NATIVE_CACHE_SET=$(native_path "$CACHE_SET")
+NATIVE_REVIEW_RECORD=$(native_path "$REVIEW_RECORD")
+NATIVE_OUTPUT_DIRECTORY=$(native_path "$OUTPUT_DIRECTORY")
+
 report_stage 'the automation authority'
 cargo run --locked --quiet -p slingshot-development -- github-automation-authority
 
@@ -80,9 +100,9 @@ build_once() {
     target_root=$2
     git archive --format=tar "$SOURCE_COMMIT" | ( mkdir -p "$export_root" && tar -x -C "$export_root" )
     ( cd "$export_root" && \
-        CARGO_HOME="$CACHE_SET" \
+        CARGO_HOME="$NATIVE_CACHE_SET" \
         CARGO_INCREMENTAL=0 \
-        CARGO_TARGET_DIR="$target_root" \
+        CARGO_TARGET_DIR="$(native_path "$target_root")" \
         RUSTFLAGS="--remap-path-prefix=$export_root=/slingshot" \
         SOURCE_DATE_EPOCH=0 \
         cargo build --locked --frozen --offline --release --target "$ROW" \
@@ -106,10 +126,10 @@ cargo run --locked --quiet -p slingshot-development -- \
     package-release-artifacts \
     --row "$ROW" \
     --executable "$FIRST" \
-    --cache-set "$CACHE_SET" \
+    --cache-set "$NATIVE_CACHE_SET" \
     --source-commit "$SOURCE_COMMIT" \
     --source-tree "$SOURCE_TREE" \
-    --rustsec-owner-review-record "$REVIEW_RECORD" \
-    --output-directory "$OUTPUT_DIRECTORY"
+    --rustsec-owner-review-record "$NATIVE_REVIEW_RECORD" \
+    --output-directory "$NATIVE_OUTPUT_DIRECTORY"
 
 printf '\n== the archive is built ==\n'
