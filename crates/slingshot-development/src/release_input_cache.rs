@@ -26,7 +26,7 @@
 //! the same limits is a second document that can disagree with the first, and
 //! the disagreement would be discovered by a release rather than by a gate.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -234,16 +234,27 @@ fn collect_entries(
             )));
         }
         let relative = path.strip_prefix(cache).unwrap_or(&path);
-        let Some(named) = relative.to_str() else {
-            return Err(CacheRefusal::Unreadable(format!(
-                "{} is not a path a manifest can name",
-                relative.display()
-            )));
-        };
+        let mut named_components = Vec::new();
+        for component in relative.components() {
+            let Component::Normal(component) = component else {
+                return Err(CacheRefusal::Changed(format!(
+                    "{} is not a relative cache member",
+                    relative.display()
+                )));
+            };
+            let Some(component) = component.to_str() else {
+                return Err(CacheRefusal::Unreadable(format!(
+                    "{} is not a path a manifest can name",
+                    relative.display()
+                )));
+            };
+            named_components.push(component);
+        }
+        let named = named_components.join("/");
         if named == CACHE_MANIFEST {
             continue;
         }
-        collected.push(named.to_owned());
+        collected.push(named);
     }
     Ok(())
 }
