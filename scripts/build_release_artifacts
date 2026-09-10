@@ -98,12 +98,20 @@ mkdir -p "$OUTPUT_DIRECTORY"
 build_once() {
     export_root=$1
     target_root=$2
+    rustflags="--remap-path-prefix=$export_root=/slingshot"
+    case "$ROW" in
+        *-apple-darwin)
+            # Mach-O's linker UUID is machine-generated unless explicitly
+            # disabled, so two otherwise identical links would differ.
+            rustflags="$rustflags -C link-arg=-Wl,-no_uuid"
+            ;;
+    esac
     git archive --format=tar "$SOURCE_COMMIT" | ( mkdir -p "$export_root" && tar -x -C "$export_root" )
     ( cd "$export_root" && \
         CARGO_HOME="$NATIVE_CACHE_SET" \
         CARGO_INCREMENTAL=0 \
         CARGO_TARGET_DIR="$(native_path "$target_root")" \
-        RUSTFLAGS="--remap-path-prefix=$export_root=/slingshot" \
+        RUSTFLAGS="$rustflags" \
         SOURCE_DATE_EPOCH=0 \
         cargo build --locked --frozen --offline --release --target "$ROW" \
             -p slingshot-command-line )
