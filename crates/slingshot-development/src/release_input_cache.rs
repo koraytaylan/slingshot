@@ -39,6 +39,8 @@ pub const DECLARATION_PATH: &str = "support/release-input-cache.toml";
 /// Where the lockfile a release builds from lives.
 pub const LOCKFILE_PATH: &str = "Cargo.lock";
 
+const CRLF_PAIR_BYTES: usize = 2;
+
 /// Where the manifest schema lives.
 pub const SCHEMA_PATH: &str = "schemas/release/locked-source-cache.schema.json";
 
@@ -166,7 +168,7 @@ fn digest_lockfile_bytes(bytes: &[u8]) -> String {
     while index < bytes.len() {
         if bytes[index] == b'\r' && bytes.get(index + 1) == Some(&b'\n') {
             normalized.push(b'\n');
-            index += 2;
+            index += CRLF_PAIR_BYTES;
         } else {
             normalized.push(bytes[index]);
             index += 1;
