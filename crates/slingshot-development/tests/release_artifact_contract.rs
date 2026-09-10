@@ -405,6 +405,14 @@ fn the_builder_builds_twice_and_compares_before_it_packages() {
     for ambient in ["CARGO_INCREMENTAL=0", "--frozen --offline", "--remap-path-prefix"] {
         assert!(build.contains(ambient), "the build does not fix {ambient}");
     }
-    assert!(build.contains("CARGO_HOME=\"$CACHE_SET\""), "the verified cache is the Cargo home");
+    assert!(
+        build.contains("CARGO_HOME=\"$NATIVE_CACHE_SET\""),
+        "the verified cache is the Cargo home"
+    );
+    assert!(build.contains("native_path"), "native Rust boundaries normalize Windows paths");
+    assert!(
+        build.contains("NATIVE_OUTPUT_DIRECTORY"),
+        "the packager receives the same native output directory the shell prepared"
+    );
     assert!(build.contains("git diff --quiet HEAD"), "and a dirty tree is refused before a build");
 }
