@@ -183,20 +183,24 @@ jobs:
           SLINGSHOT_ROW: ${{ matrix.triple }}
           SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
         run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
-      - name: stage the archive for provider discovery
+      - name: stage the archive for provider discovery (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         env:
           SLINGSHOT_ARCHIVE: slingshot-${{ matrix.triple }}.${{ matrix.archive_profile }}
         run: |
-          if command -v cygpath >/dev/null 2>&1; then
-            runner_temp=$(cygpath -u "$RUNNER_TEMP")
-            github_workspace=$(cygpath -u "$GITHUB_WORKSPACE")
-          else
-            runner_temp=$RUNNER_TEMP
-            github_workspace=$GITHUB_WORKSPACE
-          fi
-          mkdir -p "$github_workspace/release-subject"
-          cp "$runner_temp/release/$SLINGSHOT_ARCHIVE" "$github_workspace/release-subject/$SLINGSHOT_ARCHIVE"
+          mkdir -p "$GITHUB_WORKSPACE/release-subject"
+          cp "$RUNNER_TEMP/release/$SLINGSHOT_ARCHIVE" "$GITHUB_WORKSPACE/release-subject/$SLINGSHOT_ARCHIVE"
+      - name: stage the archive for provider discovery (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SLINGSHOT_ARCHIVE: slingshot-${{ matrix.triple }}.${{ matrix.archive_profile }}
+        run: |
+          $destination = Join-Path $env:GITHUB_WORKSPACE 'release-subject'
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          $source = Join-Path $env:RUNNER_TEMP (Join-Path 'release' $env:SLINGSHOT_ARCHIVE)
+          Copy-Item -LiteralPath $source -Destination (Join-Path $destination $env:SLINGSHOT_ARCHIVE) -Force
       # The provenance is the provider's own statement about this build, not a
       # document this repository writes. The attestation policy reads the
       # builder identity and the workflow this ran as out of it, and only the

@@ -424,14 +424,35 @@ fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
     );
     let stage = steps
         .iter()
-        .find(|step| step["name"].as_str() == Some("stage the archive for provider discovery"))
-        .expect("the archive is staged for provider discovery");
-    assert_eq!(stage["shell"].as_str(), Some("bash"), "staging is portable across runners");
+        .find(|step| {
+            step["name"].as_str() == Some("stage the archive for provider discovery (Unix)")
+        })
+        .expect("the Unix archive is staged for provider discovery");
+    assert_eq!(stage["shell"].as_str(), Some("bash"), "Unix staging uses Bash");
+    assert_eq!(stage["if"].as_str(), Some("runner.os != 'Windows'"));
     assert!(
-        stage["run"]
-            .as_str()
-            .is_some_and(|run| { run.contains("release-subject") && run.contains("cygpath -u") }),
-        "the staged subject has a stable workspace-relative location"
+        stage["run"].as_str().is_some_and(|run| {
+            run.contains("release-subject") && run.contains("$RUNNER_TEMP/release")
+        }),
+        "Unix staging uses the workspace-relative subject and native temp path"
+    );
+    let windows_stage = steps
+        .iter()
+        .find(|step| {
+            step["name"].as_str() == Some("stage the archive for provider discovery (Windows)")
+        })
+        .expect("the Windows archive is staged for provider discovery");
+    assert_eq!(
+        windows_stage["shell"].as_str(),
+        Some("pwsh"),
+        "Windows staging uses native PowerShell"
+    );
+    assert_eq!(windows_stage["if"].as_str(), Some("runner.os == 'Windows'"));
+    assert!(
+        windows_stage["run"].as_str().is_some_and(|run| {
+            run.contains("Join-Path $env:RUNNER_TEMP") && run.contains("Copy-Item -LiteralPath")
+        }),
+        "Windows staging must preserve native runner paths"
     );
     let rows = named
         .iter()
