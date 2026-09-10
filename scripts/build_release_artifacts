@@ -105,6 +105,11 @@ build_once() {
             # disabled, so two otherwise identical links would differ.
             rustflags="$rustflags -C link-arg=-Wl,-no_uuid"
             ;;
+        *-pc-windows-msvc)
+            # MSVC's linker otherwise writes a build-time PE timestamp.  The
+            # reproducible-link switch removes that machine-generated value.
+            rustflags="$rustflags -C link-arg=/Brepro"
+            ;;
     esac
     git archive --format=tar "$SOURCE_COMMIT" | ( mkdir -p "$export_root" && tar -x -C "$export_root" )
     ( cd "$export_root" && \

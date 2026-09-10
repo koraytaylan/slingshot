@@ -410,6 +410,10 @@ fn the_builder_builds_twice_and_compares_before_it_packages() {
         "Apple links must not inject a machine-generated Mach-O UUID"
     );
     assert!(
+        build.contains("-C link-arg=/Brepro"),
+        "MSVC links must not inject a machine-generated PE timestamp"
+    );
+    assert!(
         build.contains("CARGO_HOME=\"$NATIVE_CACHE_SET\""),
         "the verified cache is the Cargo home"
     );
