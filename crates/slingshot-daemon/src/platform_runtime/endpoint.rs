@@ -5,7 +5,9 @@
 //! never collide. The address type is platform-specific and typed, so a Unix
 //! socket path can never be passed where a Windows pipe name is expected.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 
 use slingshot_local_protocol::foundation_contract::FoundationContract;
 
