@@ -463,9 +463,10 @@ fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
     assert_eq!(windows_build["shell"].as_str(), Some("bash"));
     assert_eq!(windows_build["if"].as_str(), Some("runner.os == 'Windows'"));
     assert!(windows_build["run"].as_str().is_some_and(|run| {
-        run.contains("$RUNNER_TEMP/cache")
-            && run.contains("$RUNNER_TEMP/release")
-            && run.contains("$RUNNER_TEMP/review")
+        run.contains("$runner_temp/cache")
+            && run.contains("$runner_temp/release")
+            && run.contains("$runner_temp/review")
+            && run.contains("runner_temp=$(cygpath -u \"$RUNNER_TEMP\")")
     }));
     let rows = named
         .iter()
