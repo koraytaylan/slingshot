@@ -418,7 +418,25 @@ fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
         .find(|step| step["uses"].as_str().is_some_and(|uses| uses.starts_with(ATTESTING_ACTION)))
         .expect("the archive attestation step");
     let subject = attest["with"]["subject-path"].as_str().expect("a subject path");
-    assert!(subject.contains("release/*.tar.gz"), "the attestation names only row archives");
+    assert_eq!(
+        subject, "${{ runner.temp }}/release/*.${{ matrix.archive_profile }}",
+        "the attestation names the archive profile selected by each row"
+    );
+    let rows = named
+        .iter()
+        .find(|(name, _)| name == ATTESTATION_JOB)
+        .and_then(|(_, job)| job["strategy"]["matrix"]["include"].as_sequence())
+        .expect("the attestation job declares native rows");
+    for row in rows {
+        let triple = row["triple"].as_str().expect("each row names a target");
+        let profile = row["archive_profile"].as_str().expect("each row names an archive profile");
+        let expected = match triple {
+            "x86_64-pc-windows-msvc" => "zip",
+            "aarch64-apple-darwin" | "x86_64-unknown-linux-gnu" => "tar.gz",
+            other => panic!("the workflow declares an unsupported release row: {other}"),
+        };
+        assert_eq!(profile, expected, "the row profile must match its archive format");
+    }
     let copy = steps
         .iter()
         .find(|step| step["run"].as_str().is_some_and(|run| run.contains("attestation.jsonl")))
