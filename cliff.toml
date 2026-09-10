@@ -12,7 +12,7 @@
 #
 # Generate a release with the version it is tagged as:
 #
-#     git cliff --tag v0.1.0 --output CHANGELOG.md
+#     git cliff --tag v0.2.0 --output CHANGELOG.md
 
 [changelog]
 header = """

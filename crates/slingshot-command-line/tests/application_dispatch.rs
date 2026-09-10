@@ -76,7 +76,7 @@ const NAMESPACE: &str = "local/author";
 const ENDPOINT: &str = "/scenario/endpoint";
 
 /// The version the scenario daemon reports.
-const PRODUCT_VERSION: &str = "0.1.0";
+const PRODUCT_VERSION: &str = "0.2.0";
 
 /// The operation-protocol version every side of a scenario speaks.
 const SPOKEN_VERSION: u32 = 1;

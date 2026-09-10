@@ -57,7 +57,7 @@ fn an_invalid_later_attestation_stops_before_any_release_upload() {
 
     let output = Command::new(workspace_root().join("scripts/publish_release"))
         .current_dir(workspace_root())
-        .args(["--tag", "v0.1.0", "--evidence"])
+        .args(["--tag", "v0.2.0", "--evidence"])
         .arg(&evidence)
         .env("PATH", path)
         .env("FAKE_PROVIDER_LOG", &log)

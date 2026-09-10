@@ -336,6 +336,32 @@ fn the_native_matrix_is_exactly_the_rows_the_authority_maps() {
     );
 }
 
+#[test]
+fn native_rows_have_the_repository_gate_timeout_budget() {
+    let native = workflow(".github/workflows/platform-runtime.yml");
+    let native_jobs = jobs(&native);
+    let (_, native_job) = native_jobs.first().expect("the native workflow declares a job");
+    let native_timeout =
+        native_job["timeout-minutes"].as_i64().expect("the native job declares a timeout");
+
+    let quality = workflow(".github/workflows/quality.yml");
+    let (_, gate) = jobs(&quality)
+        .into_iter()
+        .find(|(name, _)| name == "gate")
+        .expect("the quality workflow declares its repository gate");
+    let gate_timeout =
+        gate["timeout-minutes"].as_i64().expect("the repository gate declares a timeout");
+
+    assert_eq!(
+        native_timeout, gate_timeout,
+        "native rows and the repository gate must have the same cold-run budget"
+    );
+    assert!(
+        native_timeout >= 30,
+        "the all-target/all-feature gate needs enough budget for a cold hosted runner"
+    );
+}
+
 /// The action that attests, which composes the provenance itself.
 const ATTESTING_ACTION: &str = "actions/attest-build-provenance@";
 

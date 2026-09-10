@@ -1554,7 +1554,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slingshot-agent-connection"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -1587,7 +1587,7 @@ dependencies = [
 
 [[package]]
 name = "slingshot-agent-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "slingshot-command-line"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytes",
  "clap",
@@ -1631,7 +1631,7 @@ dependencies = [
 
 [[package]]
 name = "slingshot-configuration"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "directories",
@@ -1656,7 +1656,7 @@ dependencies = [
 
 [[package]]
 name = "slingshot-daemon"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -1684,7 +1684,7 @@ dependencies = [
 
 [[package]]
 name = "slingshot-domain"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "secrecy",
@@ -1712,7 +1712,7 @@ dependencies = [
 
 [[package]]
 name = "slingshot-local-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytes",
  "serde",
@@ -1723,7 +1723,7 @@ dependencies = [
 
 [[package]]
 name = "slingshot-storage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fs4",
  "hex",

@@ -24,21 +24,21 @@ fn run(reference: Option<&str>, tag: Option<&str>) -> std::process::Output {
 
 #[test]
 fn the_declared_release_tag_is_accepted() {
-    let output = run(Some("tag"), Some("v0.1.0"));
+    let output = run(Some("tag"), Some("v0.2.0"));
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert!(String::from_utf8_lossy(&output.stdout).contains("both name 0.1.0"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("both name 0.2.0"));
 }
 
 #[test]
 fn a_tag_for_another_version_is_refused_before_release_work() {
-    let output = run(Some("tag"), Some("v0.2.0"));
+    let output = run(Some("tag"), Some("v0.1.0"));
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("declares 0.1.0"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("declares 0.2.0"));
 }
 
 #[test]
 fn the_release_prefix_is_part_of_the_contract() {
-    let output = run(Some("tag"), Some("0.1.0"));
+    let output = run(Some("tag"), Some("0.2.0"));
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("does not begin with v"));
 }
@@ -47,7 +47,7 @@ fn the_release_prefix_is_part_of_the_contract() {
 fn a_manual_run_reports_the_declared_version_without_inventing_a_tag() {
     let output = run(Some("branch"), None);
     assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stdout).contains("publishes 0.1.0"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("publishes 0.2.0"));
 }
 
 #[test]

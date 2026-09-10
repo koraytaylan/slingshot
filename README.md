@@ -5,7 +5,7 @@ Manager from one place. This commit contains the workspace, its enforceable
 engineering contract, and one proven local process boundary. No Adobe
 Experience Manager behavior exists here yet.
 
-Version 0.1.0.
+Version 0.2.0.
 
 ## What this commit does
 

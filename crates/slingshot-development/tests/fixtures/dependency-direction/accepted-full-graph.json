@@ -2,7 +2,7 @@
   "packages": [
     {
       "name": "slingshot-agent-connection",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -13,23 +13,23 @@
         {
           "name": "slingshot-domain",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-configuration",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-agent-protocol",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         }
       ]
     },
     {
       "name": "slingshot-agent-protocol",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -40,13 +40,13 @@
         {
           "name": "slingshot-domain",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         }
       ]
     },
     {
       "name": "slingshot-command-line",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -57,28 +57,28 @@
         {
           "name": "slingshot-local-protocol",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-configuration",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-daemon",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-test-support",
           "kind": "dev",
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         }
       ]
     },
     {
       "name": "slingshot-configuration",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -89,13 +89,13 @@
         {
           "name": "slingshot-domain",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         }
       ]
     },
     {
       "name": "slingshot-daemon",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -106,43 +106,43 @@
         {
           "name": "slingshot-domain",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-configuration",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-agent-protocol",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-local-protocol",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-agent-connection",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-storage",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-test-support",
           "kind": "dev",
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         }
       ]
     },
     {
       "name": "slingshot-development",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -153,23 +153,23 @@
         {
           "name": "slingshot-domain",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-command-line",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-test-support",
           "kind": "dev",
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         }
       ]
     },
     {
       "name": "slingshot-domain",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -181,7 +181,7 @@
     },
     {
       "name": "slingshot-local-protocol",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -192,13 +192,13 @@
         {
           "name": "slingshot-domain",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         }
       ]
     },
     {
       "name": "slingshot-storage",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -209,13 +209,13 @@
         {
           "name": "slingshot-domain",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         }
       ]
     },
     {
       "name": "slingshot-test-support",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": null,
       "dependencies": [
         {
@@ -226,22 +226,22 @@
         {
           "name": "slingshot-domain",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-agent-protocol",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-local-protocol",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         },
         {
           "name": "slingshot-storage",
           "kind": null,
-          "req": "^0.1.0"
+          "req": "^0.2.0"
         }
       ]
     },

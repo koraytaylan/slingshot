@@ -30,7 +30,11 @@ jobs:
             triple: aarch64-apple-darwin
           - runner: windows-2022
             triple: x86_64-pc-windows-msvc
-    timeout-minutes: 15
+    # The native gate includes a clean all-target/all-feature compile and the
+    # full integration suite. Keep its ceiling aligned with quality.yml's
+    # repository-local gate so a cold hosted cache cannot be mistaken for a
+    # test failure.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
