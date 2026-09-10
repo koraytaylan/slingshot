@@ -178,11 +178,19 @@ jobs:
           path: ${{ runner.temp }}/cache
       - name: validate the committed authority against what this run reports
         run: cargo run --locked --quiet -p slingshot-development -- github-automation-authority
-      - name: build this row twice and compare the bytes
+      - name: build this row twice and compare the bytes (Unix)
+        if: runner.os != 'Windows'
         env:
           SLINGSHOT_ROW: ${{ matrix.triple }}
           SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
         run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
+      - name: build this row twice and compare the bytes (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SLINGSHOT_ROW: ${{ matrix.triple }}
+          SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
+        run: scripts/build_release_artifacts --row "$env:SLINGSHOT_ROW" --cache-set "$env:RUNNER_TEMP/cache" --source-commit "$env:SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$env:RUNNER_TEMP/review/review-record.json" --output-directory "$env:RUNNER_TEMP/release"
       - name: stage the archive for provider discovery (Unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -215,10 +223,17 @@ jobs:
       # asking anyone. Left where the action wrote it, it would be reachable
       # only by asking the provider for it later, which is the one thing
       # offline verification must not have to do.
-      - name: keep the attestation beside what it attests
+      - name: keep the attestation beside what it attests (Unix)
+        if: runner.os != 'Windows'
         env:
           SLINGSHOT_ATTESTATION_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
         run: cp "$SLINGSHOT_ATTESTATION_BUNDLE" "$RUNNER_TEMP/release/attestation.jsonl"
+      - name: keep the attestation beside what it attests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SLINGSHOT_ATTESTATION_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: Copy-Item -LiteralPath $env:SLINGSHOT_ATTESTATION_BUNDLE -Destination (Join-Path $env:RUNNER_TEMP 'release/attestation.jsonl') -Force
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: release-${{ matrix.triple }}
