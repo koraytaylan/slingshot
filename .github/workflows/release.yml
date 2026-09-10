@@ -190,7 +190,9 @@ jobs:
         env:
           SLINGSHOT_ROW: ${{ matrix.triple }}
           SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
-        run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
+        run: |
+          runner_temp=$(cygpath -u "$RUNNER_TEMP")
+          scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$runner_temp/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$runner_temp/review/review-record.json" --output-directory "$runner_temp/release"
       - name: stage the archive for provider discovery (Unix)
         if: runner.os != 'Windows'
         shell: bash
