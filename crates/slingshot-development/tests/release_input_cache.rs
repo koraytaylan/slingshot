@@ -75,6 +75,21 @@ fn lock_digest() -> String {
     lockfile_digest(&workspace_root()).expect("the workspace has a lockfile")
 }
 
+#[test]
+fn lockfile_digest_ignores_checkout_line_endings() {
+    let root = std::env::temp_dir().join(format!("release-lockfile-digest-{}", std::process::id()));
+    std::fs::remove_dir_all(&root).ok();
+    std::fs::create_dir_all(&root).expect("the temporary workspace is created");
+    std::fs::write(root.join("Cargo.lock"), b"package\nname = \"slingshot\"\n")
+        .expect("the LF lockfile is written");
+    let lf = lockfile_digest(&root).expect("the LF lockfile digests");
+    std::fs::write(root.join("Cargo.lock"), b"package\r\nname = \"slingshot\"\r\n")
+        .expect("the CRLF lockfile is written");
+    let crlf = lockfile_digest(&root).expect("the CRLF lockfile digests");
+    assert_eq!(lf, crlf, "checkout line endings do not change the cache binding");
+    std::fs::remove_dir_all(&root).ok();
+}
+
 /// Builds a cache holding [`ENTRIES`], with no manifest yet.
 fn cache_built(named: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("release-cache-{named}-{}", std::process::id()));
