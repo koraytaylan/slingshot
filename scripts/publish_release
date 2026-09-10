@@ -135,6 +135,9 @@ set --
 for ROW in "$EVIDENCE_DIRECTORY"/*; do
     [ -d "$ROW" ] || continue
     TRIPLE=${ROW#"$EVIDENCE_DIRECTORY/release-"}
+    case "$TRIPLE" in
+        notes|acceptance) continue ;;
+    esac
     ARCHIVE_SUFFIX=$(archive_suffix_for "$TRIPLE")
     ARCHIVE=$(find "$ROW" -maxdepth 1 -type f -name "*$ARCHIVE_SUFFIX" | head -n 1)
     [ -n "$ARCHIVE" ] || continue
