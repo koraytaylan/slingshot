@@ -460,12 +460,12 @@ fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
             step["name"].as_str() == Some("build this row twice and compare the bytes (Windows)")
         })
         .expect("the Windows build row is explicit");
-    assert_eq!(windows_build["shell"].as_str(), Some("pwsh"));
+    assert_eq!(windows_build["shell"].as_str(), Some("bash"));
     assert_eq!(windows_build["if"].as_str(), Some("runner.os == 'Windows'"));
     assert!(windows_build["run"].as_str().is_some_and(|run| {
-        run.contains("$env:RUNNER_TEMP/cache")
-            && run.contains("$env:RUNNER_TEMP/release")
-            && run.contains("$env:RUNNER_TEMP/review")
+        run.contains("$RUNNER_TEMP/cache")
+            && run.contains("$RUNNER_TEMP/release")
+            && run.contains("$RUNNER_TEMP/review")
     }));
     let rows = named
         .iter()
