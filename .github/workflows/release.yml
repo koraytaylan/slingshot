@@ -183,6 +183,13 @@ jobs:
           SLINGSHOT_ROW: ${{ matrix.triple }}
           SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
         run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
+      - name: stage the archive for provider discovery
+        shell: bash
+        env:
+          SLINGSHOT_ARCHIVE: slingshot-${{ matrix.triple }}.${{ matrix.archive_profile }}
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/release-subject"
+          cp "$RUNNER_TEMP/release/$SLINGSHOT_ARCHIVE" "$GITHUB_WORKSPACE/release-subject/$SLINGSHOT_ARCHIVE"
       # The provenance is the provider's own statement about this build, not a
       # document this repository writes. The attestation policy reads the
       # builder identity and the workflow this ran as out of it, and only the
@@ -192,7 +199,7 @@ jobs:
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         id: provenance
         with:
-          subject-path: ${{ runner.temp }}/release/*.${{ matrix.archive_profile }}
+          subject-path: release-subject/*.${{ matrix.archive_profile }}
       # The bundle is what lets somebody authenticate this archive without
       # asking anyone. Left where the action wrote it, it would be reachable
       # only by asking the provider for it later, which is the one thing
