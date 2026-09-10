@@ -348,6 +348,7 @@ fn the_preparation_command_names_every_input_it_is_given() {
 fn the_verifier_neither_fetches_nor_repairs_what_it_is_checking() {
     let held = read_repository_file("scripts/verify_locked_source_cache");
     assert!(held.contains("--cache-set"), "it is given the cache explicitly");
+    assert!(held.contains("native_path"), "native Rust boundaries normalize Windows paths");
     for reaching in ["cargo fetch", "cargo update", "cargo install"] {
         assert!(
             !held.contains(reaching),

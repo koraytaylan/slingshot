@@ -20,6 +20,19 @@ report_refusal() {
     exit 1
 }
 
+native_path() {
+    case "$1" in
+        /*)
+            if command -v cygpath >/dev/null 2>&1; then
+                cygpath -w "$1"
+            else
+                printf '%s\n' "$1"
+            fi
+            ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --cache-set)
@@ -41,5 +54,7 @@ esac
 [ -d "$CACHE_SET" ] || report_refusal "$CACHE_SET is not a directory"
 [ -f "$CACHE_SET/cache.json" ] || report_refusal 'the cache holds no manifest'
 
+NATIVE_CACHE_SET=$(native_path "$CACHE_SET")
+
 cargo run --locked --quiet -p slingshot-development -- \
-    verify-locked-source-cache --cache-set "$CACHE_SET"
+    verify-locked-source-cache --cache-set "$NATIVE_CACHE_SET"
