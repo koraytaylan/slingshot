@@ -90,6 +90,7 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 [workspace.lints.rust]
 missing_docs = "deny"
 unsafe_code = "deny"
+warnings = "deny"
 
 [workspace.lints.clippy]
 # The workspace keeps deliberately explicit protocol/storage boundaries whose

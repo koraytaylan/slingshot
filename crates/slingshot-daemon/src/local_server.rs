@@ -8,6 +8,7 @@
 //! connection that has finished a frame and gone quiet has no incomplete-frame
 //! deadline, because nothing is incomplete.
 
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;

@@ -162,6 +162,7 @@ pub struct OperationDatabase {
     /// The named SQLite objects and physical byte limit for this file-backed database.
     physical_inventory: Option<PhysicalInventory>,
     /// The main-file identity captured when this connection was opened.
+    #[cfg(unix)]
     opened_file: Option<FileSnapshot>,
 }
 
@@ -242,6 +243,7 @@ impl OperationDatabase {
             connection,
             _state_root: Some(state_root),
             physical_inventory: Some(physical_inventory),
+            #[cfg(unix)]
             opened_file: Some(file_snapshot(&pinned_path)?),
         };
         database.require_compile_options()?;
@@ -270,8 +272,13 @@ impl OperationDatabase {
     pub fn open_in_memory(settings: RequiredSettings) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let connection = Connection::open_in_memory().map_err(refused)?;
-        let database =
-            Self { connection, _state_root: None, physical_inventory: None, opened_file: None };
+        let database = Self {
+            connection,
+            _state_root: None,
+            physical_inventory: None,
+            #[cfg(unix)]
+            opened_file: None,
+        };
         database.require_compile_options()?;
         database.apply_valued(settings)?;
         database.set_pragma("foreign_keys", "1")?;

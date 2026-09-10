@@ -224,7 +224,6 @@ impl AccountResolver for OperatingSystemAccountResolver {
 #[cfg(windows)]
 impl AccountResolver for OperatingSystemAccountResolver {
     fn resolve(&self) -> Result<AccountProfile, ConfigurationRootFailure> {
-        use winsafe::prelude::*;
         use winsafe::{HPROCESS, TokenInfo, co};
 
         let unavailable = || {
