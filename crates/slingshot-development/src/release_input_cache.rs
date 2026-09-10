@@ -151,7 +151,28 @@ pub fn parse_declaration(text: &str) -> Result<CacheDeclaration, CacheRefusal> {
 pub fn lockfile_digest(workspace_root: &Path) -> Result<String, CacheRefusal> {
     let held = std::fs::read(workspace_root.join(LOCKFILE_PATH))
         .map_err(|failure| CacheRefusal::Unreadable(failure.to_string()))?;
-    Ok(hex::encode(sha2::Sha256::digest(&held)))
+    Ok(digest_lockfile_bytes(&held))
+}
+
+/// Returns a checkout-independent digest for lockfile bytes.
+///
+/// Git may materialize the same committed text with CRLF line endings on a
+/// Windows checkout and LF line endings on a Unix checkout. The lockfile's
+/// declared graph is the text, not that checkout detail, so normalize the
+/// one line-ending conversion Git performs before binding a cache to it.
+fn digest_lockfile_bytes(bytes: &[u8]) -> String {
+    let mut normalized = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'\r' && bytes.get(index + 1) == Some(&b'\n') {
+            normalized.push(b'\n');
+            index += 2;
+        } else {
+            normalized.push(bytes[index]);
+            index += 1;
+        }
+    }
+    hex::encode(sha2::Sha256::digest(normalized))
 }
 
 /// Returns where a cache keeps its manifest.
