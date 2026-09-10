@@ -419,8 +419,17 @@ fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
         .expect("the archive attestation step");
     let subject = attest["with"]["subject-path"].as_str().expect("a subject path");
     assert_eq!(
-        subject, "${{ runner.temp }}/release/*.${{ matrix.archive_profile }}",
-        "the attestation names the archive profile selected by each row"
+        subject, "release-subject/*.${{ matrix.archive_profile }}",
+        "the attestation uses a workspace-relative archive subject"
+    );
+    let stage = steps
+        .iter()
+        .find(|step| step["name"].as_str() == Some("stage the archive for provider discovery"))
+        .expect("the archive is staged for provider discovery");
+    assert_eq!(stage["shell"].as_str(), Some("bash"), "staging is portable across runners");
+    assert!(
+        stage["run"].as_str().is_some_and(|run| run.contains("$GITHUB_WORKSPACE/release-subject")),
+        "the staged subject has a stable workspace-relative location"
     );
     let rows = named
         .iter()
