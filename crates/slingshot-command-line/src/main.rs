@@ -5,7 +5,9 @@
 //! process status. Every decision, every effect, and every byte written belongs
 //! to something that can be driven without a process.
 
-use std::io::{self, IsTerminal};
+use std::io;
+#[cfg(unix)]
+use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use slingshot_command_line::command_line;

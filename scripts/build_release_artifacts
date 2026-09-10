@@ -98,7 +98,7 @@ mkdir -p "$OUTPUT_DIRECTORY"
 build_once() {
     export_root=$1
     target_root=$2
-    rustflags="--remap-path-prefix=$export_root=/slingshot"
+    rustflags="--remap-path-prefix=$export_root=/slingshot -D warnings"
     case "$ROW" in
         *-apple-darwin)
             # Mach-O's linker UUID is machine-generated unless explicitly

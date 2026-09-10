@@ -402,7 +402,9 @@ fn the_builder_builds_twice_and_compares_before_it_packages() {
     let compare = build.find("cmp -s").expect("it compares the two");
     let package = build.find("package-release-artifacts").expect("it packages");
     assert!(compare < package, "an archive built before the comparison would prove nothing");
-    for ambient in ["CARGO_INCREMENTAL=0", "--frozen --offline", "--remap-path-prefix"] {
+    for ambient in
+        ["CARGO_INCREMENTAL=0", "--frozen --offline", "--remap-path-prefix", "-D warnings"]
+    {
         assert!(build.contains(ambient), "the build does not fix {ambient}");
     }
     assert!(
