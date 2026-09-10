@@ -188,8 +188,15 @@ jobs:
         env:
           SLINGSHOT_ARCHIVE: slingshot-${{ matrix.triple }}.${{ matrix.archive_profile }}
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/release-subject"
-          cp "$RUNNER_TEMP/release/$SLINGSHOT_ARCHIVE" "$GITHUB_WORKSPACE/release-subject/$SLINGSHOT_ARCHIVE"
+          if command -v cygpath >/dev/null 2>&1; then
+            runner_temp=$(cygpath -u "$RUNNER_TEMP")
+            github_workspace=$(cygpath -u "$GITHUB_WORKSPACE")
+          else
+            runner_temp=$RUNNER_TEMP
+            github_workspace=$GITHUB_WORKSPACE
+          fi
+          mkdir -p "$github_workspace/release-subject"
+          cp "$runner_temp/release/$SLINGSHOT_ARCHIVE" "$github_workspace/release-subject/$SLINGSHOT_ARCHIVE"
       # The provenance is the provider's own statement about this build, not a
       # document this repository writes. The attestation policy reads the
       # builder identity and the workflow this ran as out of it, and only the
