@@ -186,11 +186,11 @@ jobs:
         run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
       - name: build this row twice and compare the bytes (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: bash
         env:
           SLINGSHOT_ROW: ${{ matrix.triple }}
           SLINGSHOT_SOURCE_COMMIT: ${{ github.sha }}
-        run: scripts/build_release_artifacts --row "$env:SLINGSHOT_ROW" --cache-set "$env:RUNNER_TEMP/cache" --source-commit "$env:SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$env:RUNNER_TEMP/review/review-record.json" --output-directory "$env:RUNNER_TEMP/release"
+        run: scripts/build_release_artifacts --row "$SLINGSHOT_ROW" --cache-set "$RUNNER_TEMP/cache" --source-commit "$SLINGSHOT_SOURCE_COMMIT" --rustsec-owner-review-record "$RUNNER_TEMP/review/review-record.json" --output-directory "$RUNNER_TEMP/release"
       - name: stage the archive for provider discovery (Unix)
         if: runner.os != 'Windows'
         shell: bash
