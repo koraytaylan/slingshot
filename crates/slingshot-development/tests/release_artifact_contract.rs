@@ -406,6 +406,10 @@ fn the_builder_builds_twice_and_compares_before_it_packages() {
         assert!(build.contains(ambient), "the build does not fix {ambient}");
     }
     assert!(
+        build.contains("-C link-arg=-Wl,-no_uuid"),
+        "Apple links must not inject a machine-generated Mach-O UUID"
+    );
+    assert!(
         build.contains("CARGO_HOME=\"$NATIVE_CACHE_SET\""),
         "the verified cache is the Cargo home"
     );
