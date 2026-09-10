@@ -428,7 +428,9 @@ fn every_attested_archive_keeps_its_bundle_in_the_uploaded_row() {
         .expect("the archive is staged for provider discovery");
     assert_eq!(stage["shell"].as_str(), Some("bash"), "staging is portable across runners");
     assert!(
-        stage["run"].as_str().is_some_and(|run| run.contains("$GITHUB_WORKSPACE/release-subject")),
+        stage["run"]
+            .as_str()
+            .is_some_and(|run| { run.contains("release-subject") && run.contains("cygpath -u") }),
         "the staged subject has a stable workspace-relative location"
     );
     let rows = named
