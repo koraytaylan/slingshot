@@ -93,6 +93,7 @@ const NORMALIZED_ROOT: &str = "<runtime-root>";
 const PROMPT_DEADLINE: Duration = Duration::from_secs(30);
 
 /// How long an interrupted session waits for its child to notice.
+#[cfg(target_os = "linux")]
 const SIGNAL_DEADLINE: Duration = Duration::from_secs(10);
 
 /// The exits the compiled surface reaches, and therefore the ones pinned here.
@@ -133,9 +134,11 @@ struct Session {
 const AGAINST_ABSENCE: &str = "local";
 
 /// The kind of session that runs against one real daemon, in order.
+#[cfg(target_os = "linux")]
 const AGAINST_A_DAEMON: &str = "owned";
 
 /// The kind of session that is interrupted while it waits.
+#[cfg(target_os = "linux")]
 const AGAINST_SILENCE: &str = "interrupted";
 
 /// The kind of session whose answer depends on this account's configuration.
