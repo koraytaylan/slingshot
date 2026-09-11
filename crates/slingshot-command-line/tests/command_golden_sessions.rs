@@ -31,6 +31,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 #[path = "support/runtime_fixture.rs"]
+#[cfg(target_os = "linux")]
 mod runtime_fixture;
 
 use slingshot_command_line::exit_classification::LOCAL_FAILURE;
@@ -38,15 +39,22 @@ use slingshot_command_line::exit_classification::{
     EVERY_EXIT, INTERRUPTED, SUCCESS, UNAVAILABLE, USAGE,
 };
 use slingshot_command_line::invocation::{LOCAL_LEAVES, METADATA_ONLY_LEAVES};
+#[cfg(target_os = "linux")]
 use slingshot_daemon::platform_runtime::endpoint::{self, EndpointAddress};
 use slingshot_daemon::platform_runtime::locks::OwnerLock;
+#[cfg(target_os = "linux")]
 use slingshot_daemon::runtime_namespace::RuntimeNamespace;
 use slingshot_domain::command::catalog::CommandCatalog;
+#[cfg(target_os = "linux")]
 use slingshot_local_protocol::foundation_contract::FoundationContract;
+#[cfg(target_os = "linux")]
+use slingshot_test_support::process_harness::DeliverableSignal;
 use slingshot_test_support::process_harness::{
-    CapturedProcess, DeliverableSignal, ExecutablePath, ProcessHarness, ProcessRequest,
+    CapturedProcess, ExecutablePath, ProcessHarness, ProcessRequest,
 };
-use slingshot_test_support::runtime_harness::{TemporaryRuntimeRoot, wait_until};
+use slingshot_test_support::runtime_harness::TemporaryRuntimeRoot;
+#[cfg(target_os = "linux")]
+use slingshot_test_support::runtime_harness::wait_until;
 
 /// Where the scenario sources and their expected bytes live.
 const FIXTURE_DIRECTORY: &str = "../slingshot-test-support/fixtures/command-golden-sessions";
@@ -65,9 +73,11 @@ const REVIEW_COMMAND: &str = "SLINGSHOT_REVIEW_COMMAND_GOLDEN_SESSIONS=1 \
      cargo test -p slingshot-command-line --features runtime-test-host --test command_golden_sessions";
 
 /// Profile every session names.
+#[cfg(target_os = "linux")]
 const PROFILE: &str = "local";
 
 /// Environment every session names.
+#[cfg(target_os = "linux")]
 const ENVIRONMENT: &str = "author";
 
 /// The one value a transcript replaces, because it moves between runs.
@@ -234,6 +244,7 @@ fn takes_a_root(arguments: &[String]) -> bool {
 const METADATA_OPTIONS: &[&str] = &["--version", "--help"];
 
 /// Returns the target words every session that names one carries.
+#[cfg(target_os = "linux")]
 fn addressing(environment: &str) -> Vec<String> {
     vec![
         "--profile".to_owned(),
@@ -319,17 +330,20 @@ fn the_sessions_reach_every_exit_this_surface_produces() {
 }
 
 /// Returns whether nothing owns one namespace.
+#[cfg(target_os = "linux")]
 fn owner_is_free(root: &Path, digest: &str) -> bool {
     OwnerLock::acquire(root, digest).expect("the lock file opens").is_some()
 }
 
 /// Returns the namespace one environment names under a root.
+#[cfg(target_os = "linux")]
 fn namespace_of(root: &Path, environment: &str) -> RuntimeNamespace {
     RuntimeNamespace::name(&FoundationContract::embedded(), root, PROFILE, environment)
         .expect("the target names a namespace")
 }
 
 /// Sends one nonce-bound stop and reports whether the daemon accepted it.
+#[cfg(target_os = "linux")]
 fn stop_quoting(address: &EndpointAddress, nonce: &str) -> bool {
     let contract = FoundationContract::embedded();
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -414,6 +428,7 @@ fn a_stale_nonce_never_stops_the_replacement_that_followed_it() {
 }
 
 /// Returns the nonce the daemon owning one namespace published.
+#[cfg(target_os = "linux")]
 fn published_nonce(root: &Path, namespace: &RuntimeNamespace) -> Option<String> {
     slingshot_daemon::platform_runtime::readiness::read(root, namespace.digest())
         .expect("the record is readable")
@@ -421,8 +436,10 @@ fn published_nonce(root: &Path, namespace: &RuntimeNamespace) -> Option<String> 
 }
 
 /// Stops the fixture's current owner before its root is removed, even on panic.
+#[cfg(target_os = "linux")]
 struct OwnedDaemonCleanup(PathBuf);
 
+#[cfg(target_os = "linux")]
 impl Drop for OwnedDaemonCleanup {
     fn drop(&mut self) {
         let contract = FoundationContract::embedded();
@@ -480,6 +497,7 @@ fn an_unresponsive_owned_child_ends_through_its_retained_handle() {
 /// A daemon that is there and silent is what makes an interrupt observable: the
 /// run gets past connecting and is waiting for an answer when the signal
 /// arrives, which is the phase the account it prints describes.
+#[cfg(target_os = "linux")]
 fn silent_endpoint(
     address: &EndpointAddress,
 ) -> (std::thread::JoinHandle<()>, std::sync::mpsc::Receiver<()>) {
@@ -503,6 +521,7 @@ fn silent_endpoint(
 }
 
 /// Runs one invocation against a silent endpoint and interrupts it.
+#[cfg(target_os = "linux")]
 fn interrupted_session(
     root: &Path,
     arguments: &[String],
@@ -541,9 +560,11 @@ fn interrupted_session(
 /// claim about a caller's patience; a suite running the whole workspace at once
 /// is not that caller, and borrowing the number would turn a loaded machine
 /// into a failing invariant.
+#[cfg(target_os = "linux")]
 const SCENARIO_PATIENCE: Duration = Duration::from_secs(120);
 
 /// How long a session waits to be sure a child is blocked rather than done.
+#[cfg(target_os = "linux")]
 const SETTLING_DEADLINE: Duration = Duration::from_millis(400);
 
 #[test]
