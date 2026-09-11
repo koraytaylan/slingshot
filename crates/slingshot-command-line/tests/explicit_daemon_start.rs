@@ -8,21 +8,29 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(target_os = "linux")]
 use std::time::Duration;
 
+#[cfg(target_os = "linux")]
 #[path = "support/runtime_fixture.rs"]
 mod runtime_fixture;
 
 use slingshot_command_line::command_line::{EXIT_SUCCESS, EXIT_TARGET_UNUSABLE};
+#[cfg(target_os = "linux")]
 use slingshot_command_line::daemon_connection;
-use slingshot_command_line::explicit_daemon_start::{
-    self, StartDisposition, StartReport, TargetRuntime,
-};
+use slingshot_command_line::explicit_daemon_start::{self, TargetRuntime};
+#[cfg(target_os = "linux")]
+use slingshot_command_line::explicit_daemon_start::{StartDisposition, StartReport};
+#[cfg(target_os = "linux")]
 use slingshot_daemon::platform_runtime::endpoint;
+#[cfg(target_os = "linux")]
 use slingshot_daemon::platform_runtime::locks::{OwnerLock, StartupElectionLock};
+#[cfg(target_os = "linux")]
 use slingshot_daemon::runtime_namespace::RuntimeNamespace;
+#[cfg(target_os = "linux")]
 use slingshot_local_protocol::envelope::{ControlRequest, ResponseOutcome};
 use slingshot_local_protocol::foundation_contract::FoundationContract;
+#[cfg(target_os = "linux")]
 use slingshot_local_protocol::ping::STOP_METHOD;
 use slingshot_test_support::runtime_harness::runtime_root_path;
 
@@ -33,9 +41,11 @@ const PROFILE: &str = "local";
 const ENVIRONMENT: &str = "author";
 
 /// Number of clients one convergence assertion releases at once.
+#[cfg(target_os = "linux")]
 const CONVERGING_CLIENT_COUNT: usize = 12;
 
 /// Interval between two polls while waiting for a real condition.
+#[cfg(target_os = "linux")]
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Returns the product executable this assertion drives.
@@ -63,6 +73,7 @@ fn target(root: &Path, environment: &str) -> TargetRuntime {
 }
 
 /// Stops the daemon that owns one target, if one is running.
+#[cfg(target_os = "linux")]
 async fn stop_daemon(target: &TargetRuntime) {
     let contract = FoundationContract::embedded();
     let Ok(report) = explicit_daemon_start::existing_only_ping(&contract, target, "cleanup").await
@@ -100,6 +111,7 @@ async fn stop_daemon(target: &TargetRuntime) {
 }
 
 /// Waits until a condition holds or the deadline elapses.
+#[cfg(target_os = "linux")]
 async fn wait_until(deadline: Duration, mut condition: impl FnMut() -> bool) -> bool {
     let started = tokio::time::Instant::now();
     while started.elapsed() < deadline {
@@ -112,6 +124,7 @@ async fn wait_until(deadline: Duration, mut condition: impl FnMut() -> bool) -> 
 }
 
 /// Starts one daemon and returns the report the caller received.
+#[cfg(target_os = "linux")]
 async fn start(target: &TargetRuntime, identifier: &str) -> StartReport {
     explicit_daemon_start::explicit_start(
         &FoundationContract::embedded(),
