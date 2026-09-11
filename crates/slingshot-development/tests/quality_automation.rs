@@ -4,6 +4,7 @@
 //! it end to end: they prove its contract from its committed text and from the
 //! two refusals it reaches before any check runs.
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -107,13 +108,73 @@ fn read_repository_file(relative: &str) -> String {
 
 /// Runs the gate and returns what it produced.
 fn run_gate(arguments: &[&str], advisory: Option<&str>) -> std::process::Output {
+    run_gate_with_path(arguments, advisory, None)
+}
+
+/// Runs the gate with an optional path prefix.  The refusal test uses a
+/// deterministic set of pinned-tool stand-ins so a clean hosted runner cannot
+/// fail for the unrelated reason that its image happens to lack cargo-deny,
+/// shellcheck, or gh.
+fn run_gate_with_path(
+    arguments: &[&str],
+    advisory: Option<&str>,
+    path_prefix: Option<&OsString>,
+) -> std::process::Output {
     let mut command = Command::new(workspace_root().join(GATE_PATH));
     command.current_dir(workspace_root()).args(arguments);
+    if let Some(path) = path_prefix {
+        command.env("PATH", path);
+    }
     match advisory {
         Some(checkout) => command.env(ADVISORY_VARIABLE, checkout),
         None => command.env_remove(ADVISORY_VARIABLE),
     };
     command.output().expect("the gate runs")
+}
+
+/// Creates platform-native stand-ins that report exactly the manifest pins.
+fn fake_repository_tools() -> (tempfile::TempDir, OsString) {
+    let directory = tempfile::tempdir().expect("the fake tool directory is created");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        for (name, body) in [
+            (
+                "cargo",
+                "#!/bin/sh\nif [ \"$1\" = \"deny\" ] && [ \"$2\" = \"--version\" ]; then\n  printf '%s\\n' 'cargo-deny 0.18.6'\n  exit 0\nfi\nexit 1\n",
+            ),
+            ("shellcheck", "#!/bin/sh\nprintf '%s\\n' 'version: 0.11.0'\n"),
+            ("gh", "#!/bin/sh\nprintf '%s\\n' 'gh version 2.97.0'\n"),
+        ] {
+            let path = directory.path().join(name);
+            std::fs::write(&path, body).expect("the fake Unix tool is written");
+            let mut permissions =
+                std::fs::metadata(&path).expect("the fake tool is readable").permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&path, permissions).expect("the fake tool is executable");
+        }
+    }
+    #[cfg(windows)]
+    {
+        for (name, body) in [
+            (
+                "cargo.cmd",
+                "@echo off\nif \"%~1\"==\"deny\" if \"%~2\"==\"--version\" echo cargo-deny 0.18.6\n",
+            ),
+            ("shellcheck.cmd", "@echo off\necho version: 0.11.0\n"),
+            ("gh.cmd", "@echo off\necho gh version 2.97.0\n"),
+        ] {
+            std::fs::write(directory.path().join(name), body)
+                .expect("the fake Windows tool is written");
+        }
+    }
+    let mut path = OsString::from(directory.path());
+    if let Some(existing) = std::env::var_os("PATH") {
+        path.push(if cfg!(windows) { ";" } else { ":" });
+        path.push(existing);
+    }
+    (directory, path)
 }
 
 #[test]
@@ -157,7 +218,8 @@ fn the_gate_runs_every_required_command_over_the_whole_graph() {
 
 #[test]
 fn the_gate_refuses_an_unnamed_advisory_checkout_before_any_check() {
-    let refused = run_gate(&[], None);
+    let (_tools, path) = fake_repository_tools();
+    let refused = run_gate_with_path(&[], None, Some(&path));
     assert!(!refused.status.success(), "an unnamed checkout is refused");
     let diagnostic = String::from_utf8_lossy(&refused.stderr);
     assert!(diagnostic.contains(ADVISORY_VARIABLE), "{diagnostic}");

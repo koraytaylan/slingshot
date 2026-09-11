@@ -59,9 +59,11 @@ async fn shutdown_joins_idle_connections_before_releasing_namespace_ownership() 
     for connected in [1, CONNECTION_CAPACITY as usize] {
         let root = TemporaryRuntimeRoot::create("l").unwrap();
         let contract = FoundationContract::embedded();
-        let namespace =
-            RuntimeNamespace::name(&contract, &root.path().join("runtime"), "test", "test")
-                .unwrap();
+        // Keep this child deliberately short: the endpoint includes a fixed
+        // digest and suffix, so a descriptive component can cross the Unix
+        // socket limit even when the temporary root itself fits.
+        let runtime_root = root.path().join("r");
+        let namespace = RuntimeNamespace::name(&contract, &runtime_root, "test", "test").unwrap();
         namespace.create_runtime_directory().unwrap();
         let Acquisition::Owned(owner) =
             DaemonOwnership::acquire(&contract, namespace.clone()).unwrap()

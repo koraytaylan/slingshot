@@ -242,7 +242,7 @@ jobs:
           path: ${{ runner.temp }}/release
   release-acceptance:
     name: the acceptance matrix
-    needs: release-binary-provenance
+    needs: [release-binary-provenance, release-quality, release-platform-runtime]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -275,3 +275,21 @@ jobs:
         with:
           name: release-acceptance
           path: ${{ runner.temp }}/acceptance
+
+  # A release is not eligible merely because its archives built. These two
+  # reusable workflows are the exact repository and native gates that protect
+  # ordinary changes; making acceptance depend on them closes the gap where a
+  # red platform-runtime run could previously coexist with a published tag.
+  release-quality:
+    name: the repository-local quality gate
+    needs: release-version
+    uses: ./.github/workflows/quality.yml
+    permissions:
+      contents: read
+
+  release-platform-runtime:
+    name: the native platform matrix
+    needs: release-version
+    uses: ./.github/workflows/platform-runtime.yml
+    permissions:
+      contents: read

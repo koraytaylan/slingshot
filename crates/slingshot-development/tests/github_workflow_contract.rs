@@ -336,6 +336,67 @@ fn the_native_matrix_is_exactly_the_rows_the_authority_maps() {
     );
 }
 
+#[test]
+fn native_rows_have_the_repository_gate_timeout_budget() {
+    let native = workflow(".github/workflows/platform-runtime.yml");
+    let native_jobs = jobs(&native);
+    let (_, native_job) = native_jobs.first().expect("the native workflow declares a job");
+    let native_timeout =
+        native_job["timeout-minutes"].as_i64().expect("the native job declares a timeout");
+
+    let quality = workflow(".github/workflows/quality.yml");
+    let (_, gate) = jobs(&quality)
+        .into_iter()
+        .find(|(name, _)| name == "gate")
+        .expect("the quality workflow declares its repository gate");
+    let gate_timeout =
+        gate["timeout-minutes"].as_i64().expect("the repository gate declares a timeout");
+
+    assert_eq!(
+        native_timeout, gate_timeout,
+        "native rows and the repository gate must have the same cold-run budget"
+    );
+    assert!(
+        native_timeout >= 30,
+        "the all-target/all-feature gate needs enough budget for a cold hosted runner"
+    );
+}
+
+#[test]
+fn the_release_cannot_accept_without_the_full_repository_and_native_gates() {
+    let release = workflow(".github/workflows/release.yml");
+    let named = jobs(&release);
+    let (_, acceptance) = named
+        .iter()
+        .find(|(name, _)| name == "release-acceptance")
+        .expect("the release declares its acceptance job");
+    let needs = acceptance["needs"].as_sequence().expect("acceptance names every prerequisite");
+    for required in ["release-binary-provenance", "release-quality", "release-platform-runtime"] {
+        assert!(
+            needs.iter().any(|need| need.as_str() == Some(required)),
+            "acceptance does not wait for {required}"
+        );
+    }
+    for (job, workflow_path) in [
+        ("release-quality", "./.github/workflows/quality.yml"),
+        ("release-platform-runtime", "./.github/workflows/platform-runtime.yml"),
+    ] {
+        let (_, caller) =
+            named.iter().find(|(name, _)| name == job).expect("the release gate caller exists");
+        assert_eq!(caller["uses"].as_str(), Some(workflow_path), "{job} calls the full workflow");
+        assert_eq!(caller["permissions"]["contents"].as_str(), Some(READ_CONTENT), "{job}");
+    }
+    for relative in [".github/workflows/quality.yml", ".github/workflows/platform-runtime.yml"] {
+        let document = workflow(relative);
+        assert!(
+            document["on"]
+                .as_mapping()
+                .is_some_and(|triggers| triggers.contains_key("workflow_call")),
+            "{relative} is callable by the release workflow"
+        );
+    }
+}
+
 /// The action that attests, which composes the provenance itself.
 const ATTESTING_ACTION: &str = "actions/attest-build-provenance@";
 
