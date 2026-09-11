@@ -14,9 +14,9 @@ use std::time::Duration;
 
 use serde_json::Value;
 use slingshot_command_line::model_context_protocol::standard_stream_transport::maximum_line_bytes;
-use slingshot_test_support::process_harness::{
-    DeliverableSignal, ExecutablePath, ProcessHarness, ProcessRequest,
-};
+#[cfg(target_os = "linux")]
+use slingshot_test_support::process_harness::DeliverableSignal;
+use slingshot_test_support::process_harness::{ExecutablePath, ProcessHarness, ProcessRequest};
 
 /// Where the sentinels live.
 const FIXTURES: &str =
@@ -32,6 +32,7 @@ const PROMPT_DEADLINE: Duration = Duration::from_secs(30);
 const SHUTDOWN_DEADLINE: Duration = Duration::from_secs(30);
 
 /// How long a case waits to be sure a server is waiting rather than finished.
+#[cfg(target_os = "linux")]
 const SETTLING_DEADLINE: Duration = Duration::from_millis(400);
 
 /// How many requests a flooding case sends.
