@@ -362,6 +362,41 @@ fn native_rows_have_the_repository_gate_timeout_budget() {
     );
 }
 
+#[test]
+fn the_release_cannot_accept_without_the_full_repository_and_native_gates() {
+    let release = workflow(".github/workflows/release.yml");
+    let named = jobs(&release);
+    let (_, acceptance) = named
+        .iter()
+        .find(|(name, _)| name == "release-acceptance")
+        .expect("the release declares its acceptance job");
+    let needs = acceptance["needs"].as_sequence().expect("acceptance names every prerequisite");
+    for required in ["release-binary-provenance", "release-quality", "release-platform-runtime"] {
+        assert!(
+            needs.iter().any(|need| need.as_str() == Some(required)),
+            "acceptance does not wait for {required}"
+        );
+    }
+    for (job, workflow_path) in [
+        ("release-quality", "./.github/workflows/quality.yml"),
+        ("release-platform-runtime", "./.github/workflows/platform-runtime.yml"),
+    ] {
+        let (_, caller) =
+            named.iter().find(|(name, _)| name == job).expect("the release gate caller exists");
+        assert_eq!(caller["uses"].as_str(), Some(workflow_path), "{job} calls the full workflow");
+        assert_eq!(caller["permissions"]["contents"].as_str(), Some(READ_CONTENT), "{job}");
+    }
+    for relative in [".github/workflows/quality.yml", ".github/workflows/platform-runtime.yml"] {
+        let document = workflow(relative);
+        assert!(
+            document["on"]
+                .as_mapping()
+                .is_some_and(|triggers| triggers.contains_key("workflow_call")),
+            "{relative} is callable by the release workflow"
+        );
+    }
+}
+
 /// The action that attests, which composes the provenance itself.
 const ATTESTING_ACTION: &str = "actions/attest-build-provenance@";
 

@@ -3,8 +3,8 @@
 Slingshot is a command line and a local daemon for driving Adobe Experience
 Manager from one place. This workspace contains the client-side AEM command
 contracts, transport, daemon orchestration, and one proven local process
-boundary. No Adobe Experience Manager-side agent or runtime is included here:
-commands are executed inside AEM by an external agent.
+boundary. No Adobe Experience Manager behavior exists here yet: commands are
+executed inside AEM by an external agent.
 
 Version 0.2.0.
 

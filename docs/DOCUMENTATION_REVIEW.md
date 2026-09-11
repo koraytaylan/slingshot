@@ -75,7 +75,7 @@ cannot inherit this review without an explicit renewed record.
 
 | Document | SHA-256 |
 |---|---|
-| `README.md` | `b2d28dd39f82d56a3f62ce9f72227c9f60ee898bc58dde2aadd022a4fb4cb1fa` |
+| `README.md` | `bdf7f219dd17955eac0b8c8c807c4c60bed343a79c3715b1ff984a9abdbe5ad5` |
 | `CONTRIBUTING.md` | `97e3f1a0bd8723865cc4b858606e3a25dafe75d18039e99d49a2eafde2c7be0d` |
 | `ARCHITECTURE.md` | `acaa53946f9299d0f11f32a67969ef2c77e7bcbe93955c34d225cc3b63e4b7aa` |
 | `docs/AGENT_PROTOCOL.md` | `ece5eae8453303b299635ede39026267888f13749ca718f0a1a528f4ef738806` |
