@@ -198,6 +198,12 @@ mod current_row {
     /// Builds a configuration tree below one temporary home.
     fn build_tree() -> (tempfile::TempDir, UnixConfigurationFilesystem) {
         let home = tempfile::tempdir().expect("a temporary home is created");
+        // macOS may attach an inherited ACL to a newly-created temporary
+        // directory. The production policy intentionally refuses that state,
+        // so make the fixture's account home explicit before validating it.
+        std::fs::set_permissions(home.path(), PermissionsExt::from_mode(OWNER_ONLY_DIRECTORY))
+            .expect("the temporary home is protected");
+        clear_inherited_extended_access_control_list(home.path());
         let mut root = home.path().to_path_buf();
         for component in ConfigurationRoot::root_components() {
             root.push(component);
