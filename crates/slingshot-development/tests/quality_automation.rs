@@ -22,6 +22,9 @@ const DEPENDENCY_POLICY_PATH: &str = "deny.toml";
 /// Environment variable that names the advisory checkout.
 const ADVISORY_VARIABLE: &str = "SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY";
 
+/// Permission mode used for the fake Unix tools installed by this test.
+const EXECUTABLE_MODE: u32 = 0o755;
+
 /// Scope every Rust graph gate is run over.
 const GATE_SCOPE: &str = "--locked --workspace --all-targets --all-features";
 
@@ -151,7 +154,7 @@ fn fake_repository_tools() -> (tempfile::TempDir, OsString) {
             std::fs::write(&path, body).expect("the fake Unix tool is written");
             let mut permissions =
                 std::fs::metadata(&path).expect("the fake tool is readable").permissions();
-            permissions.set_mode(0o755);
+            permissions.set_mode(EXECUTABLE_MODE);
             std::fs::set_permissions(&path, permissions).expect("the fake tool is executable");
         }
     }
@@ -200,6 +203,7 @@ fn the_gate_runs_every_required_command_over_the_whole_graph() {
         assert!(gate.contains(command), "the gate does not run {command}");
     }
     assert!(gate.contains(&format!("CARGO_GATE_SCOPE='{GATE_SCOPE}'")), "the scope drifted");
+    assert!(gate.contains("export RUSTFLAGS=\"${RUSTFLAGS:-} -D warnings\""));
     for part in GATE_SCOPE.split(' ') {
         assert!(gate.contains(part), "the scope omits {part}");
     }

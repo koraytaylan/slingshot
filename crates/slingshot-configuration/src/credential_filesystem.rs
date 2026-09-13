@@ -41,7 +41,6 @@ impl CredentialFilesystemFailure {
     pub fn at(code: ConfigurationFailureCode, structural_location: &'static str) -> Self {
         Self { code, structural_location }
     }
-
     /// Returns the failure a source that failed the safety policy produces.
     #[must_use]
     pub fn unsafe_file(structural_location: &'static str) -> Self {
@@ -537,7 +536,6 @@ mod unix_policy {
         let nanoseconds: i128 = nanoseconds.try_into().unwrap_or(i128::MAX);
         seconds * NANOSECONDS_PER_SECOND + nanoseconds
     }
-
     /// The two Unix rows keep that state in different places, so each asks its
     /// own platform's question. Asking the other's is not merely useless: the
     /// kernel refuses a name outside the namespaces it knows, and that refusal
@@ -555,7 +553,6 @@ mod unix_policy {
         }
         refuse_widened_list(object, DEFAULT_LIST_ATTRIBUTE, EVERY_PERMISSION, location)
     }
-
     /// Refuses an object whose access-control state widens it beyond its owner.
     ///
     /// This row's semantic version accepts no extended entry at all, so a
@@ -566,10 +563,14 @@ mod unix_policy {
         _directory: bool,
         location: &'static str,
     ) -> Result<(), CredentialFilesystemFailure> {
-        match object.get_xattr(EXTENDED_LIST_ATTRIBUTE) {
-            Ok(None) => Ok(()),
-            _ => Err(CredentialFilesystemFailure::unsafe_file(location)),
+        let extended = object
+            .list_xattr()
+            .map_err(|_| CredentialFilesystemFailure::unsafe_file(location))?
+            .any(|name| name == std::ffi::OsStr::new(EXTENDED_LIST_ATTRIBUTE));
+        if extended {
+            return Err(CredentialFilesystemFailure::unsafe_file(location));
         }
+        Ok(())
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -583,7 +584,6 @@ mod unix_policy {
             location,
         ))
     }
-
     /// Refuses an object whose access-control list widens it beyond its owner.
     ///
     /// `refused` names the permission bits a non-owner entry may not hold once

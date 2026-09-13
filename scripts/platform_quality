@@ -30,6 +30,11 @@ if [ ! -d "$native_tmpdir" ] || [ ! -w "$native_tmpdir" ]; then
     refuse "TMPDIR is not a writable directory: $native_tmpdir"
 fi
 
+# Make ordinary rustc warnings fatal in both compilation and test builds, not
+# only in the clippy stage. This keeps the native gate identical to release
+# compilation's warning policy.
+export RUSTFLAGS="${RUSTFLAGS:-} -D warnings"
+
 # Compile all targets and features before testing them.  The integration test
 # below contains the macOS-only sentinel; `--all-targets` therefore prevents a
 # native PR row from silently proving only platform_runtime_contract.

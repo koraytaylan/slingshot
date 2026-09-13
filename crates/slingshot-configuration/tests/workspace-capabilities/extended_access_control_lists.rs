@@ -17,9 +17,9 @@ fn a_credential_descriptor_reports_its_extended_access_control_evidence() {
     let file =
         File::create(directory.path().join("credentials.json")).expect("the credential is created");
 
-    let evidence = file.get_xattr(EXTENDED_LIST_ATTRIBUTE).expect("the descriptor is readable");
-    assert_eq!(evidence, None, "a freshly created credential carries no extended list");
-
+    // macOS 26 intentionally rejects `getxattr` for every `com.apple.system.*`
+    // name, including absent names.  The production row therefore uses the
+    // list operation and only tests for presence of the ACL attribute.
     let names: Vec<String> = file
         .list_xattr()
         .expect("the descriptor lists its attributes")
