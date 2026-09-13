@@ -2055,16 +2055,16 @@ crates/slingshot-storage/src/agent_subscription_ledger.rs	763	declared-name-is-n
 crates/slingshot-storage/src/agent_subscription_ledger.rs	1137	numeric-value-carries-no-name	0x20
 crates/slingshot-storage/src/agent_subscription_ledger.rs	1137	numeric-value-carries-no-name	0x7f
 crates/slingshot-storage/src/agent_subscription_ledger.rs	1240	file-is-longer-than-the-ceiling	1240 lines
-crates/slingshot-storage/src/artifact_store.rs	624	declared-name-is-not-spelled-in-full	fmt
-crates/slingshot-storage/src/artifact_store.rs	632	fallible-interface-omits-its-failure-section	write_chunk
-crates/slingshot-storage/src/artifact_store.rs	651	fallible-interface-omits-its-failure-section	finish
-crates/slingshot-storage/src/artifact_store.rs	702	declared-name-is-not-spelled-in-full	fmt
-crates/slingshot-storage/src/artifact_store.rs	716	fallible-interface-omits-its-failure-section	open_verified
-crates/slingshot-storage/src/artifact_store.rs	730	fallible-interface-omits-its-failure-section	publish
-crates/slingshot-storage/src/artifact_store.rs	755	fallible-interface-omits-its-failure-section	recover_abandoned_stages
-crates/slingshot-storage/src/artifact_store.rs	882	fallible-interface-omits-its-failure-section	stage_verified
-crates/slingshot-storage/src/artifact_store.rs	896	fallible-interface-omits-its-failure-section	begin_verified
-crates/slingshot-storage/src/artifact_store.rs	1429	file-is-longer-than-the-ceiling	1429 lines
+crates/slingshot-storage/src/artifact_store.rs	636	declared-name-is-not-spelled-in-full	fmt
+crates/slingshot-storage/src/artifact_store.rs	644	fallible-interface-omits-its-failure-section	write_chunk
+crates/slingshot-storage/src/artifact_store.rs	663	fallible-interface-omits-its-failure-section	finish
+crates/slingshot-storage/src/artifact_store.rs	714	declared-name-is-not-spelled-in-full	fmt
+crates/slingshot-storage/src/artifact_store.rs	728	fallible-interface-omits-its-failure-section	open_verified
+crates/slingshot-storage/src/artifact_store.rs	742	fallible-interface-omits-its-failure-section	publish
+crates/slingshot-storage/src/artifact_store.rs	768	fallible-interface-omits-its-failure-section	recover_abandoned_stages
+crates/slingshot-storage/src/artifact_store.rs	895	fallible-interface-omits-its-failure-section	stage_verified
+crates/slingshot-storage/src/artifact_store.rs	909	fallible-interface-omits-its-failure-section	begin_verified
+crates/slingshot-storage/src/artifact_store.rs	1451	file-is-longer-than-the-ceiling	1451 lines
 crates/slingshot-storage/src/artifact_store/maintenance_content.rs	34	declared-name-is-not-spelled-in-full	fmt
 crates/slingshot-storage/src/artifact_store/maintenance_content.rs	164	numeric-value-carries-no-name	2
 crates/slingshot-storage/src/artifact_store/maintenance_content.rs	165	numeric-value-carries-no-name	2
@@ -2104,8 +2104,8 @@ crates/slingshot-storage/src/installation_state.rs	78	fallible-interface-omits-i
 crates/slingshot-storage/src/installation_state.rs	83	fallible-interface-omits-its-failure-section	replace
 crates/slingshot-storage/src/installation_state.rs	102	fallible-interface-omits-its-failure-section	transaction
 crates/slingshot-storage/src/installation_state.rs	240	numeric-value-carries-no-name	0o600
+crates/slingshot-storage/src/installation_state.rs	322	numeric-value-carries-no-name	0o400
 crates/slingshot-storage/src/installation_state.rs	322	numeric-value-carries-no-name	0o400_000
-crates/slingshot-storage/src/installation_state.rs	322	numeric-value-carries-no-name	0x0010_0000
 crates/slingshot-storage/src/maintenance.rs	387	function-branches-too-many-ways	remove_and_record reaches 13
 crates/slingshot-storage/src/maintenance.rs	549	numeric-value-carries-no-name	2
 crates/slingshot-storage/src/maintenance.rs	554	numeric-value-carries-no-name	2
