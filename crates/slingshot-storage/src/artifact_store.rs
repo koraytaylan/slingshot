@@ -166,6 +166,16 @@ pub enum ArtifactFailure {
 }
 
 /// Returns a filesystem refusal as this module's failure.
+/// A filesystem failure that names the object it was about.
+fn refused_at(what: &str, path: &Path, failure: ArtifactFailure) -> ArtifactFailure {
+    ArtifactFailure::FilesystemRefused(format!("{what} {}: {failure}", path.display()))
+}
+
+/// A filesystem failure that names the object it was about.
+fn refused_io(what: &str, path: &Path, failure: std::io::Error) -> ArtifactFailure {
+    ArtifactFailure::FilesystemRefused(format!("{what} {}: {failure}", path.display()))
+}
+
 fn refused(failure: std::io::Error) -> ArtifactFailure {
     ArtifactFailure::FilesystemRefused(failure.to_string())
 }
@@ -466,7 +476,8 @@ fn publish_staged_no_replace(
     let staging_name = staging.file_name().ok_or_else(|| {
         ArtifactFailure::FilesystemRefused("the staging path has no file name".to_owned())
     })?;
-    let held = std::fs::File::open(content).map_err(refused)?;
+    let held = std::fs::File::open(content)
+        .map_err(|failure| refused_io("content directory", content, failure))?;
     let staged = openat(
         &held,
         staging_name,
@@ -533,7 +544,8 @@ fn publish_staged_no_replace(
     let staging_name = staging.file_name().ok_or_else(|| {
         ArtifactFailure::FilesystemRefused("the staging path has no file name".to_owned())
     })?;
-    let held = std::fs::File::open(content).map_err(refused)?;
+    let held = std::fs::File::open(content)
+        .map_err(|failure| refused_io("content directory", content, failure))?;
     let opened = openat(
         &held,
         staging_name,
@@ -728,7 +740,8 @@ impl StagedArtifact<'_> {
     /// Publishes verified content without replacing an existing digest object.
     /// This does not commit a database association or release caller capacity.
     pub fn publish(self) -> Result<ArtifactMetadata, ArtifactFailure> {
-        let file = open_without_following(&self.stage.path)?;
+        let file = open_without_following(&self.stage.path)
+            .map_err(|failure| refused_at("reopened stage", &self.stage.path, failure))?;
         if HandleSnapshot::of(&file)? != self.stage.identity {
             return Err(ArtifactFailure::FilesystemRefused("the private stage changed".to_owned()));
         }
@@ -918,7 +931,12 @@ impl ArtifactStore {
             return Err(ArtifactFailure::ContentTooLong { actual: allowed, allowed: maximum });
         }
         let path = self.content.join(format!("{}{STAGING_SUFFIX}", uuid::Uuid::new_v4()));
-        let file = create_private(&path)?;
+        let file = create_private(&path).map_err(|failure| match failure {
+            ArtifactFailure::FilesystemRefused(reason) => {
+                ArtifactFailure::FilesystemRefused(format!("stage {}: {reason}", path.display()))
+            }
+            failure => failure,
+        })?;
         let stage = PrivateStage { path, identity: HandleSnapshot::of(&file)? };
         Ok(ArtifactStageWriter {
             store: self,
@@ -964,7 +982,10 @@ impl ArtifactStore {
         expected: HandleSnapshot,
     ) -> Result<(), ArtifactFailure> {
         let destination = self.content.join(content_digest);
-        if destination.symlink_metadata().is_ok() {
+        let arrival = destination
+            .symlink_metadata()
+            .map_err(|failure| refused_io("arrival", &destination, failure));
+        if arrival.is_ok() {
             self.require_existing(&destination, content_digest, byte_length)?;
             std::fs::remove_file(staging).map_err(refused)?;
             return Ok(());
@@ -987,7 +1008,8 @@ impl ArtifactStore {
         content_digest: &str,
         byte_length: u64,
     ) -> Result<(), ArtifactFailure> {
-        let mut existing = open_without_following(destination)?;
+        let mut existing = open_without_following(destination)
+            .map_err(|failure| refused_at("recorded content", destination, failure))?;
         HandleSnapshot::of(&existing)?;
         let (digest, length) = measure(&mut (&mut existing).take(byte_length.saturating_add(1)))?;
         if length != byte_length {
