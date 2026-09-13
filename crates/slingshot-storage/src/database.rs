@@ -215,7 +215,12 @@ impl OperationDatabase {
     ) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let (state_root, pinned_path) = PinnedDatabasePath::open(path)?;
-        let physical_inventory = PhysicalInventory::new(pinned_path.clone())?;
+        let physical_inventory = PhysicalInventory {
+            state_root: Some(state_root.try_clone().map_err(|failure| {
+                DatabaseFailure::Refused(failure.to_string())
+            })?.into()),
+            ..PhysicalInventory::new(pinned_path.clone())?
+        };
         physical_inventory.require_within_budget()?;
         let inspected = inspect_existing_schema(&pinned_path, !startup)?;
         if let Some(binding) = binding {
@@ -502,7 +507,22 @@ impl OperationDatabase {
     fn install_authorizer(&self) -> Result<(), DatabaseFailure> {
         use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 
-        let physical_inventory = self.physical_inventory.clone();
+        let physical_inventory = self.physical_inventory.as_ref().map(|inventory| {
+            let mut copied = PhysicalInventory {
+                state_root: None,
+                ..PhysicalInventory::new(inventory.main.clone())
+                    .expect("the same contract formula is read twice")
+            };
+            copied.maximum_bytes = inventory.maximum_bytes;
+            if let Some(state_root) = &inventory.state_root {
+                copied.state_root = Some(
+                    state_root
+                        .try_clone()
+                        .map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?,
+                );
+            }
+            Ok(copied)
+        }).transpose()?;
         self.connection
             .authorizer(Some(move |context: AuthContext<'_>| match context.action {
                 AuthAction::Insert { .. } | AuthAction::Update { .. } | AuthAction::Delete { .. }
@@ -596,11 +616,16 @@ fn configure_sqlite() -> Result<(), DatabaseFailure> {
     Ok(())
 }
 
-/// The fixed SQLite object names that share one physical byte budget.
-#[derive(Debug, Clone)]
+/// One database's named SQLite objects and the bound their combined bytes stay under.
+#[derive(Debug)]
 struct PhysicalInventory {
     /// The SQLite main database path resolved through the retained directory descriptor.
     main: std::path::PathBuf,
+    /// The verified state-root directory, kept open so its entries are read through
+    /// the descriptor rather than through the pinned pathname again. On macOS the
+    /// descriptor namespace is not directory-scannable by pathname, so the inventory
+    /// reads through the descriptor itself.
+    state_root: Option<std::os::fd::OwnedFd>,
     /// The largest combined main, WAL, and shared-memory footprint the contract permits.
     maximum_bytes: u64,
 }
@@ -615,7 +640,7 @@ impl PhysicalInventory {
                 "the runtime contract names no SQLite physical byte budget".to_owned(),
             ));
         }
-        Ok(Self { main, maximum_bytes })
+        Ok(Self { main, state_root: None, maximum_bytes })
     }
 
     /// Requires all SQLite-named objects to be private regular files within the byte budget.
@@ -662,29 +687,72 @@ impl PhysicalInventory {
             format!("{main_name}.replacement"),
         ];
         let mut total = 0_u64;
-        for entry in std::fs::read_dir(parent)
-            .map_err(|failure| DatabaseFailure::PhysicalInventoryRefused(failure.to_string()))?
-        {
-            let entry = entry.map_err(|failure| {
-                DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-            })?;
-            let name = entry.file_name();
-            let name = name.to_str().ok_or_else(|| {
-                DatabaseFailure::PhysicalInventoryRefused(
-                    "the database directory has a non-UTF-8 SQLite object name".to_owned(),
-                )
-            })?;
+        let entries: Vec<(String, std::fs::Metadata)> = match &self.state_root {
+            Some(state_root) => {
+                // Read the verified directory through its own descriptor. The pinned
+                // pathname's parent is a descriptor namespace that a path-based
+                // read_dir cannot scan everywhere this build runs.
+                let reader = rustix::fs::Dir::read_from(state_root).map_err(|failure| {
+                    DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+                })?;
+                let mut named = Vec::new();
+                for entry in reader {
+                    let entry = entry.map_err(|failure| {
+                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+                    })?;
+                    let name = match entry.file_name().to_str() {
+                        Ok(name) => name,
+                        Err(_) => {
+                            return Err(DatabaseFailure::PhysicalInventoryRefused(
+                                "the database directory has a non-UTF-8 SQLite object name"
+                                    .to_owned(),
+                            ))
+                        }
+                    };
+                    let metadata = std::fs::symlink_metadata(
+                        self.main.parent().unwrap().join(name),
+                    )
+                    .map_err(|failure| {
+                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+                    })?;
+                    named.push((name.to_owned(), metadata));
+                }
+                named
+            }
+            None => {
+                let mut named = Vec::new();
+                for entry in std::fs::read_dir(parent)
+                    .map_err(|failure| {
+                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+                    })?
+                {
+                    let entry = entry.map_err(|failure| {
+                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+                    })?;
+                    let metadata = entry.metadata().map_err(|failure| {
+                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+                    })?;
+                    let name = entry.file_name();
+                    let name = name.to_str().ok_or_else(|| {
+                        DatabaseFailure::PhysicalInventoryRefused(
+                            "the database directory has a non-UTF-8 SQLite object name"
+                                .to_owned(),
+                        )
+                    })?;
+                    named.push((name.to_owned(), metadata));
+                }
+                named
+            }
+        };
+        for (name, metadata) in entries {
             if !name.starts_with(main_name) {
                 continue;
             }
-            if !permitted.iter().any(|permitted| permitted == name) {
+            if !permitted.contains(&name.to_owned()) {
                 return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
                     "{name} is not a permitted SQLite object"
                 )));
             }
-            let metadata = std::fs::symlink_metadata(entry.path()).map_err(|failure| {
-                DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-            })?;
             if !is_private_regular_file(&metadata) {
                 return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
                     "{name} is not one private regular SQLite object"
