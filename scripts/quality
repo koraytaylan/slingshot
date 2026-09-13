@@ -89,6 +89,10 @@ prepare_advisory_configuration() {
 }
 
 run_rust_gates() {
+    # Treat every warning emitted by repository code as a hard gate failure.
+    # Clippy already denies its own diagnostics; this also covers ordinary
+    # rustc warnings during check and test compilation.
+    export RUSTFLAGS="${RUSTFLAGS:-} -D warnings"
     report_stage 'the minimum supported version'
     scripts/check_minimum_supported_rust_version
     report_stage 'formatting'
