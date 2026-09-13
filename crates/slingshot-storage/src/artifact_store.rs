@@ -564,7 +564,7 @@ fn publish_staged_no_replace(
     staged.sync_all().map_err(refused)?;
     let resolved = getpath(&staged)
         .map_err(|failure| ArtifactFailure::FilesystemRefused(failure.to_string()))?;
-    match linkat(CWD, resolved.as_c_str(), CWD, content_digest, AtFlags::empty()) {
+    match linkat(CWD, resolved.as_c_str(), &held, content_digest, AtFlags::empty()) {
         Ok(()) => {}
         Err(rustix::io::Errno::EXIST) => {
             return Err(ArtifactFailure::ContentAlreadyPresent(content_digest.to_owned()));
