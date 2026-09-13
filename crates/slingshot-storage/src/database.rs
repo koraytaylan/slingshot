@@ -685,6 +685,7 @@ impl PhysicalInventory {
 
     /// Sums the closed set of SQLite object bytes, refusing undeclared names and links.
     fn measured_bytes(&self) -> Result<u64, DatabaseFailure> {
+        #[cfg(not(unix))]
         let parent = self.main.parent().ok_or_else(|| {
             DatabaseFailure::PhysicalInventoryRefused(
                 "the pinned database has no parent".to_owned(),
@@ -703,7 +704,7 @@ impl PhysicalInventory {
         ];
         let mut total = 0_u64;
         #[cfg(unix)]
-        let entries: Vec<(String, std::fs::Metadata)> = match &self.state_root {
+        let entries: Vec<(String, rustix::fs::Stat)> = match &self.state_root {
             Some(state_root) => {
                 // Read the verified directory through its own descriptor. The pinned
                 // pathname's parent is a descriptor namespace that a path-based
@@ -725,37 +726,38 @@ impl PhysicalInventory {
                             ));
                         }
                     };
-                    let metadata = std::fs::symlink_metadata(
-                        parent.join(entry.file_name().to_str().unwrap_or("")),
-                    )
-                    .map_err(|failure| {
-                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                    })?;
+                    let metadata =
+                        rustix::fs::statat(state_root, name, rustix::fs::AtFlags::SYMLINK_NOFOLLOW)
+                            .map_err(|failure| {
+                                DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+                            })?;
                     named.push((name.to_owned(), metadata));
                 }
                 named
             }
-            None => {
-                let mut named = Vec::new();
-                for entry in std::fs::read_dir(parent).map_err(|failure| {
+            None => Vec::new(),
+        };
+        #[cfg(not(unix))]
+        let entries: Vec<(String, std::fs::Metadata)> = {
+            let mut named = Vec::new();
+            for entry in std::fs::read_dir(parent)
+                .map_err(|failure| DatabaseFailure::PhysicalInventoryRefused(failure.to_string()))?
+            {
+                let entry = entry.map_err(|failure| {
                     DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                })? {
-                    let entry = entry.map_err(|failure| {
-                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                    })?;
-                    let metadata = entry.metadata().map_err(|failure| {
-                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                    })?;
-                    let name = entry.file_name();
-                    let name = name.to_str().ok_or_else(|| {
-                        DatabaseFailure::PhysicalInventoryRefused(
-                            "the database directory has a non-UTF-8 SQLite object name".to_owned(),
-                        )
-                    })?;
-                    named.push((name.to_owned(), metadata));
-                }
-                named
+                })?;
+                let metadata = entry.metadata().map_err(|failure| {
+                    DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+                })?;
+                let name = entry.file_name();
+                let name = name.to_str().ok_or_else(|| {
+                    DatabaseFailure::PhysicalInventoryRefused(
+                        "the database directory has a non-UTF-8 SQLite object name".to_owned(),
+                    )
+                })?;
+                named.push((name.to_owned(), metadata));
             }
+            named
         };
         for (name, metadata) in entries {
             if !name.starts_with(main_name) {
@@ -766,28 +768,40 @@ impl PhysicalInventory {
                     "{name} is not a permitted SQLite object"
                 )));
             }
-            if !is_private_regular_file(&metadata) {
-                return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
-                    "{name} is not one private regular SQLite object"
-                )));
+            #[cfg(unix)]
+            {
+                if metadata.st_nlink != 1
+                    || rustix::fs::FileType::from_raw_mode(metadata.st_mode)
+                        != rustix::fs::FileType::RegularFile
+                {
+                    return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
+                        "{name} is not one private regular SQLite object"
+                    )));
+                }
+                total = total
+                    .checked_add(u64::try_from(metadata.st_size).unwrap_or(u64::MAX))
+                    .ok_or_else(|| {
+                        DatabaseFailure::PhysicalInventoryRefused(
+                            "SQLite object lengths overflow".to_owned(),
+                        )
+                    })?;
             }
-            total = total.checked_add(metadata.len()).ok_or_else(|| {
-                DatabaseFailure::PhysicalInventoryRefused(
-                    "SQLite object lengths overflow".to_owned(),
-                )
-            })?;
+            #[cfg(not(unix))]
+            {
+                if !is_private_regular_file(&metadata) {
+                    return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
+                        "{name} is not one private regular SQLite object"
+                    )));
+                }
+                total = total.checked_add(metadata.len()).ok_or_else(|| {
+                    DatabaseFailure::PhysicalInventoryRefused(
+                        "SQLite object lengths overflow".to_owned(),
+                    )
+                })?;
+            }
         }
         Ok(total)
     }
-}
-
-/// Returns whether metadata describes one regular file with no additional
-/// hard links on platforms that expose that evidence.
-#[cfg(unix)]
-fn is_private_regular_file(metadata: &std::fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt as _;
-
-    metadata.is_file() && metadata.nlink() == 1
 }
 
 /// Windows has no stable standard-library hard-link count accessor. It still
