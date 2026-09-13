@@ -716,7 +716,7 @@ impl PhysicalInventory {
                         }
                     };
                     let metadata = std::fs::symlink_metadata(
-                        self.main.parent().unwrap().join(name),
+                        parent.join(entry.file_name().to_str().unwrap_or("")),
                     )
                     .map_err(|failure| {
                         DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
