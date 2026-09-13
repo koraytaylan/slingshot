@@ -502,7 +502,7 @@ fn publish_staged_no_replace(
 }
 
 /// Refuses platforms that cannot prove atomic no-replace publication.
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(unix))]
 fn publish_staged_no_replace(
     _content: &Path,
     _staging: &Path,
@@ -512,6 +512,61 @@ fn publish_staged_no_replace(
     Err(ArtifactFailure::FilesystemRefused(
         "this platform has no verified no-replace publication primitive".to_owned(),
     ))
+}
+
+/// Links verified staged bytes into a digest name without replacing an arrival.
+///
+/// macOS offers no rename that refuses an existing destination, but a plain
+/// hard link refuses one atomically. The verified open stage object is linked
+/// under its own resolved name — the descriptor namespace there cannot be
+/// traversed by path — and the private stage is then removed.
+#[cfg(target_os = "macos")]
+fn publish_staged_no_replace(
+    content: &Path,
+    staging: &Path,
+    content_digest: &str,
+    expected: HandleSnapshot,
+) -> Result<(), ArtifactFailure> {
+    use rustix::fs::{AtFlags, CWD, Mode, OFlags, getpath, linkat, openat};
+    use std::os::unix::fs::MetadataExt as _;
+
+    let staging_name = staging.file_name().ok_or_else(|| {
+        ArtifactFailure::FilesystemRefused("the staging path has no file name".to_owned())
+    })?;
+    let held = std::fs::File::open(content).map_err(refused)?;
+    let opened = openat(
+        &held,
+        staging_name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|failure| ArtifactFailure::FilesystemRefused(failure.to_string()))?;
+    let staged = std::fs::File::from(opened);
+    let snapshot = HandleSnapshot::of(&staged)?;
+    if snapshot != expected {
+        return Err(ArtifactFailure::FilesystemRefused("the private stage changed".to_owned()));
+    }
+    if staged.metadata().map_err(refused)?.nlink() != 1 {
+        return Err(ArtifactFailure::NotPrivate);
+    }
+    staged.sync_all().map_err(refused)?;
+    let resolved = getpath(&staged)
+        .map_err(|failure| ArtifactFailure::FilesystemRefused(failure.to_string()))?;
+    match linkat(CWD, resolved.as_c_str(), CWD, content_digest, AtFlags::empty()) {
+        Ok(()) => {}
+        Err(rustix::io::Errno::EXIST) => {
+            return Err(ArtifactFailure::ContentAlreadyPresent(content_digest.to_owned()));
+        }
+        Err(failure) => return Err(ArtifactFailure::FilesystemRefused(failure.to_string())),
+    }
+    let still_staged = std::fs::symlink_metadata(staging).is_ok_and(|current| {
+        let (device, number) = file_identity(&current);
+        current.is_file() && device == snapshot.device && number == snapshot.number
+    });
+    if still_staged {
+        std::fs::remove_file(staging).map_err(refused)?;
+    }
+    Ok(())
 }
 
 /// The artifact store, rooted at one directory.
