@@ -31,7 +31,7 @@ fn the_declared_release_tag_is_accepted() {
 
 #[test]
 fn a_tag_for_another_version_is_refused_before_release_work() {
-    let output = run(Some("tag"), Some("v0.0.0"));
+    let output = run(Some("tag"), Some("v0.0.1"));
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("declares 0.0.0"));
 }
