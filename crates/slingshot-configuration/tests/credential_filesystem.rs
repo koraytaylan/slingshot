@@ -183,6 +183,11 @@ mod current_row {
     /// Removes host-inherited macOS ACL metadata from a fixture entry.
     #[cfg(target_os = "macos")]
     fn clear_inherited_extended_access_control_list(path: &std::path::Path) {
+        // ACLs are not ordinary xattrs on macOS: removing the visible xattr
+        // name does not reliably remove the inherited ACL entry. `chmod -N`
+        // is the platform ACL API exposed by the system tool and clears the
+        // fixture before the production authority inspects it.
+        let _ = std::process::Command::new("chmod").arg("-N").arg(path).status();
         let names: Vec<_> =
             xattr::list(path).map(|attributes| attributes.collect()).unwrap_or_default();
         for name in names {
