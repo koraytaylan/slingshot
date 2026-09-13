@@ -319,7 +319,7 @@ fn open_without_following(path: &Path) -> Result<std::fs::File, std::io::Error> 
 /// Returns the platform's open flag that refuses the target of a symbolic link.
 #[cfg(unix)]
 const fn no_follow() -> i32 {
-    if cfg!(target_os = "linux") { 0o400_000 } else { 0x0010_0000 }
+    if cfg!(target_os = "linux") { 0o400_000 } else { 0o400 }
 }
 
 /// Opens one record on platforms without Unix link semantics.

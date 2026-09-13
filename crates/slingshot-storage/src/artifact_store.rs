@@ -436,10 +436,10 @@ fn open_without_following(path: &Path) -> Result<std::fs::File, ArtifactFailure>
 const fn libc_no_follow() -> i32 {
     /// The value `O_NOFOLLOW` has on Linux.
     const LINUX: i32 = 0o400_000;
-    /// The value `O_NOFOLLOW` has on the Apple platforms.
-    const DARWIN: i32 = 0x0010_0000;
+    /// The value `O_NOFOLLOW` has on the Apple and other BSD platforms.
+    const APPLE: i32 = 0o400;
 
-    if cfg!(target_os = "linux") { LINUX } else { DARWIN }
+    if cfg!(target_os = "linux") { LINUX } else { APPLE }
 }
 
 /// Opens one file for reading without following a link to it.
