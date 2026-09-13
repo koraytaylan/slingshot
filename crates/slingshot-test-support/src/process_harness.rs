@@ -29,10 +29,6 @@ use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
 /// How often a timed wait asks the operating system again.
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
-/// How much terminal output one read asks for.
-#[cfg(unix)]
-const TERMINAL_READ_CHUNK: usize = 4096;
-
 /// One executable named by path alone.
 ///
 /// The value carries no build, provenance, or ownership meaning. Whoever
@@ -506,7 +502,7 @@ pub struct RetainedChild {
     #[cfg(target_os = "linux")]
     instance: InstanceHandle,
     #[cfg(unix)]
-    controller: Option<OwnedFd>,
+    terminal: Option<std::thread::JoinHandle<String>>,
     #[cfg(not(unix))]
     controller: Option<()>,
     identifier: u32,
@@ -628,8 +624,9 @@ impl RetainedChild {
     /// Reads everything the child wrote to its terminal.
     ///
     /// Answers only for a child on a pseudo-terminal, and only once it has
-    /// finished: the follower end closes with the child, and the read that
-    /// follows returns the buffered bytes and then the end of the stream.
+    /// finished. The master end is drained on a thread of its own from the
+    /// moment the child starts, because a platform may discard what a
+    /// pseudo-terminal buffered once every follower end has closed.
     ///
     /// # Errors
     ///
@@ -638,45 +635,20 @@ impl RetainedChild {
     pub fn terminal_output(&mut self) -> Result<String, HarnessFailure> {
         #[cfg(not(unix))]
         {
-            let _ = self.controller.take();
+            let _ = self.terminal.take();
             return Err(HarnessFailure::Unusable(
                 "this platform has no portable pseudo-terminal API".to_owned(),
             ));
         }
         #[cfg(unix)]
         {
-            let controller = self
-                .controller
+            let terminal = self
+                .terminal
                 .take()
                 .ok_or_else(|| HarnessFailure::Unusable("this child has no terminal".to_owned()))?;
-            let mut reader = std::fs::File::from(controller);
-            let mut collected = Vec::new();
-            let mut chunk = vec![0_u8; TERMINAL_READ_CHUNK];
-            // A pseudo-terminal master answers its last read with the
-            // platform's end-of-slaves refusal once every follower end has
-            // closed; Linux refuses with EIO and other platforms close the
-            // stream. Collect what arrived before that, and name a refusal
-            // that arrived before anything did, because a read that stops for
-            // an undocumented reason is a fact the caller must see.
-            let mut last_refusal = None;
-            loop {
-                match reader.read(&mut chunk) {
-                    Ok(0) => break,
-                    Ok(read) => collected.extend_from_slice(&chunk[..read]),
-                    Err(failure) => {
-                        last_refusal = Some(failure.to_string());
-                        break;
-                    }
-                }
-            }
-            if collected.is_empty() {
-                if let Some(refusal) = last_refusal {
-                    return Err(HarnessFailure::Unusable(format!(
-                        "the terminal answered nothing: {refusal}"
-                    )));
-                }
-            }
-            Ok(String::from_utf8_lossy(&collected).into_owned())
+            terminal
+                .join()
+                .map_err(|_| HarnessFailure::Unusable("the terminal reader stopped".to_owned()))
         }
     }
 }
@@ -706,28 +678,31 @@ impl ProcessHarness {
         request: &ProcessRequest,
     ) -> Result<RetainedChild, HarnessFailure> {
         let mut command = command_for(executable, request);
-        let controller = self.attach_terminal(&mut command, request)?;
+        let terminal = self.attach_terminal(&mut command, request)?;
         let child = command.spawn().map_err(unusable)?;
         let identifier = child.id();
         #[cfg(target_os = "linux")]
         let instance = retain_instance(&child)?;
         #[cfg(target_os = "linux")]
-        let mut retained = RetainedChild { child, instance, controller, identifier, reaped: false };
+        let mut retained = RetainedChild { child, instance, terminal, identifier, reaped: false };
         #[cfg(not(target_os = "linux"))]
-        let mut retained = RetainedChild { child, controller, identifier, reaped: false };
+        let mut retained = RetainedChild { child, terminal, identifier, reaped: false };
         if !request.input.is_empty() {
             write_and_close(&mut retained, &request.input)?;
         }
         Ok(retained)
     }
 
-    /// Points one command's three streams at a fresh pseudo-terminal.
+    /// Points one command's three streams at a fresh pseudo-terminal and
+    /// returns the thread already draining that master end, because a
+    /// pseudo-terminal may drop what it buffered when the last follower end
+    /// closes and the only reader that survives that moment started first.
     #[cfg(unix)]
     fn attach_terminal(
         &self,
         command: &mut Command,
         request: &ProcessRequest,
-    ) -> Result<Option<OwnedFd>, HarnessFailure> {
+    ) -> Result<Option<std::thread::JoinHandle<String>>, HarnessFailure> {
         if request.attachment == StreamAttachment::Redirected {
             return Ok(None);
         }
@@ -735,7 +710,8 @@ impl ProcessHarness {
         let input = follower.try_clone().map_err(unusable)?;
         let error = follower.try_clone().map_err(unusable)?;
         command.stdin(Stdio::from(input)).stdout(Stdio::from(follower)).stderr(Stdio::from(error));
-        Ok(Some(controller))
+        let master = std::fs::File::from(controller);
+        Ok(Some(drain_on_thread(master)))
     }
 
     #[cfg(not(unix))]
