@@ -216,9 +216,12 @@ impl OperationDatabase {
         initialize_sqlite()?;
         let (state_root, pinned_path) = PinnedDatabasePath::open(path)?;
         let physical_inventory = PhysicalInventory {
-            state_root: Some(state_root.try_clone().map_err(|failure| {
-                DatabaseFailure::Refused(failure.to_string())
-            })?.into()),
+            state_root: Some(
+                state_root
+                    .try_clone()
+                    .map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?
+                    .into(),
+            ),
             ..PhysicalInventory::new(pinned_path.clone())?
         };
         physical_inventory.require_within_budget()?;
@@ -507,22 +510,25 @@ impl OperationDatabase {
     fn install_authorizer(&self) -> Result<(), DatabaseFailure> {
         use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 
-        let physical_inventory = self.physical_inventory.as_ref().map(|inventory| {
-            let mut copied = PhysicalInventory {
-                state_root: None,
-                ..PhysicalInventory::new(inventory.main.clone())
-                    .expect("the same contract formula is read twice")
-            };
-            copied.maximum_bytes = inventory.maximum_bytes;
-            if let Some(state_root) = &inventory.state_root {
-                copied.state_root = Some(
-                    state_root
-                        .try_clone()
-                        .map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?,
-                );
-            }
-            Ok(copied)
-        }).transpose()?;
+        let physical_inventory =
+            self.physical_inventory
+                .as_ref()
+                .map(|inventory| {
+                    let mut copied = PhysicalInventory {
+                        state_root: None,
+                        ..PhysicalInventory::new(inventory.main.clone())
+                            .expect("the same contract formula is read twice")
+                    };
+                    copied.maximum_bytes = inventory.maximum_bytes;
+                    if let Some(state_root) = &inventory.state_root {
+                        copied.state_root =
+                            Some(state_root.try_clone().map_err(|failure| {
+                                DatabaseFailure::Refused(failure.to_string())
+                            })?);
+                    }
+                    Ok(copied)
+                })
+                .transpose()?;
         self.connection
             .authorizer(Some(move |context: AuthContext<'_>| match context.action {
                 AuthAction::Insert { .. } | AuthAction::Update { .. } | AuthAction::Delete { .. }
@@ -706,7 +712,7 @@ impl PhysicalInventory {
                             return Err(DatabaseFailure::PhysicalInventoryRefused(
                                 "the database directory has a non-UTF-8 SQLite object name"
                                     .to_owned(),
-                            ))
+                            ));
                         }
                     };
                     let metadata = std::fs::symlink_metadata(
@@ -721,11 +727,9 @@ impl PhysicalInventory {
             }
             None => {
                 let mut named = Vec::new();
-                for entry in std::fs::read_dir(parent)
-                    .map_err(|failure| {
-                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                    })?
-                {
+                for entry in std::fs::read_dir(parent).map_err(|failure| {
+                    DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
+                })? {
                     let entry = entry.map_err(|failure| {
                         DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
                     })?;
@@ -735,8 +739,7 @@ impl PhysicalInventory {
                     let name = entry.file_name();
                     let name = name.to_str().ok_or_else(|| {
                         DatabaseFailure::PhysicalInventoryRefused(
-                            "the database directory has a non-UTF-8 SQLite object name"
-                                .to_owned(),
+                            "the database directory has a non-UTF-8 SQLite object name".to_owned(),
                         )
                     })?;
                     named.push((name.to_owned(), metadata));
