@@ -130,6 +130,11 @@ operation key. A command that may omit one gets one invented, once: the same
 identifier is reused for every reconnect and retry of that request, because a
 second identifier would turn a retry into a second operation.
 
+The current process boundary publishes each tool's `inputSchema`. It does not
+publish `outputSchema` until the corresponding call path can return the same
+validated document in `structuredContent`; advertising a result schema without
+that member makes strict MCP clients reject otherwise valid calls.
+
 ## Resources
 
 <!-- generated: resource-templates -->
