@@ -123,7 +123,12 @@ fn every_refused_vector_names_the_one_thing_that_is_wrong() {
 
 #[test]
 fn the_parser_names_nothing_that_could_reach_outside_the_arguments() {
-    let source = std::fs::read_to_string("src/invocation.rs").expect("the parser is readable");
+    // The path is resolved from this file's location because a sibling test
+    // removes the process working directory while tests run in parallel.
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/invocation.rs"),
+    )
+    .expect("the parser is readable");
     for boundary in BOUNDARY_PATHS {
         assert!(
             !source.contains(boundary),
