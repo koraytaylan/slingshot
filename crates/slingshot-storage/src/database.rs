@@ -215,6 +215,7 @@ impl OperationDatabase {
     ) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let (state_root, pinned_path) = PinnedDatabasePath::open(path)?;
+        #[cfg(unix)]
         let physical_inventory = PhysicalInventory {
             state_root: Some(
                 state_root
@@ -224,6 +225,8 @@ impl OperationDatabase {
             ),
             ..PhysicalInventory::new(pinned_path.clone())?
         };
+        #[cfg(not(unix))]
+        let physical_inventory = PhysicalInventory::new(pinned_path.clone())?;
         physical_inventory.require_within_budget()?;
         let inspected = inspect_existing_schema(&pinned_path, !startup)?;
         if let Some(binding) = binding {
@@ -631,6 +634,7 @@ struct PhysicalInventory {
     /// the descriptor rather than through the pinned pathname again. On macOS the
     /// descriptor namespace is not directory-scannable by pathname, so the inventory
     /// reads through the descriptor itself.
+    #[cfg(unix)]
     state_root: Option<std::os::fd::OwnedFd>,
     /// The largest combined main, WAL, and shared-memory footprint the contract permits.
     maximum_bytes: u64,
@@ -646,7 +650,12 @@ impl PhysicalInventory {
                 "the runtime contract names no SQLite physical byte budget".to_owned(),
             ));
         }
-        Ok(Self { main, state_root: None, maximum_bytes })
+        Ok(Self {
+            main,
+            #[cfg(unix)]
+            state_root: None,
+            maximum_bytes,
+        })
     }
 
     /// Requires all SQLite-named objects to be private regular files within the byte budget.
@@ -693,6 +702,7 @@ impl PhysicalInventory {
             format!("{main_name}.replacement"),
         ];
         let mut total = 0_u64;
+        #[cfg(unix)]
         let entries: Vec<(String, std::fs::Metadata)> = match &self.state_root {
             Some(state_root) => {
                 // Read the verified directory through its own descriptor. The pinned
