@@ -503,8 +503,6 @@ pub struct RetainedChild {
     instance: InstanceHandle,
     #[cfg(unix)]
     terminal: Option<std::thread::JoinHandle<String>>,
-    #[cfg(not(unix))]
-    controller: Option<()>,
     identifier: u32,
     reaped: bool,
 }
@@ -635,7 +633,6 @@ impl RetainedChild {
     pub fn terminal_output(&mut self) -> Result<String, HarnessFailure> {
         #[cfg(not(unix))]
         {
-            let _ = self.terminal.take();
             return Err(HarnessFailure::Unusable(
                 "this platform has no portable pseudo-terminal API".to_owned(),
             ));
@@ -678,6 +675,7 @@ impl ProcessHarness {
         request: &ProcessRequest,
     ) -> Result<RetainedChild, HarnessFailure> {
         let mut command = command_for(executable, request);
+        #[cfg(unix)]
         let terminal = self.attach_terminal(&mut command, request)?;
         let child = command.spawn().map_err(unusable)?;
         let identifier = child.id();
@@ -685,8 +683,17 @@ impl ProcessHarness {
         let instance = retain_instance(&child)?;
         #[cfg(target_os = "linux")]
         let mut retained = RetainedChild { child, instance, terminal, identifier, reaped: false };
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(all(unix, not(target_os = "linux")))]
         let mut retained = RetainedChild { child, terminal, identifier, reaped: false };
+        #[cfg(not(unix))]
+        let mut retained = {
+            if request.attachment == StreamAttachment::Terminal {
+                return Err(HarnessFailure::Unusable(
+                    "this platform has no portable pseudo-terminal API".to_owned(),
+                ));
+            }
+            RetainedChild { child, identifier, reaped: false }
+        };
         if !request.input.is_empty() {
             write_and_close(&mut retained, &request.input)?;
         }
@@ -712,21 +719,6 @@ impl ProcessHarness {
         command.stdin(Stdio::from(input)).stdout(Stdio::from(follower)).stderr(Stdio::from(error));
         let master = std::fs::File::from(controller);
         Ok(Some(drain_on_thread(master)))
-    }
-
-    #[cfg(not(unix))]
-    fn attach_terminal(
-        &self,
-        _command: &mut Command,
-        request: &ProcessRequest,
-    ) -> Result<Option<()>, HarnessFailure> {
-        if request.attachment == StreamAttachment::Terminal {
-            Err(HarnessFailure::Unusable(
-                "this platform has no portable pseudo-terminal API".to_owned(),
-            ))
-        } else {
-            Ok(None)
-        }
     }
 
     /// Runs one process to completion inside `deadline`, draining as it goes.
