@@ -833,7 +833,6 @@ impl PinnedDatabasePath {
     /// Opens the containing directory without following it and returns its pinned child path.
     fn open(path: &std::path::Path) -> Result<(File, std::path::PathBuf), DatabaseFailure> {
         use rustix::fs::{Mode, OFlags, open};
-        use std::os::fd::AsRawFd as _;
         use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 
         let root = path.parent().ok_or_else(|| {
@@ -871,18 +870,36 @@ impl PinnedDatabasePath {
                 "the state-root directory could not be made private".to_owned(),
             ));
         }
-        let descriptor = root.as_raw_fd();
-        Ok((root, std::path::PathBuf::from(format!("{DESCRIPTOR_DIRECTORY}/{descriptor}/{name}"))))
+        #[cfg(target_os = "linux")]
+        let pinned = {
+            use std::os::fd::AsRawFd as _;
+            let descriptor = root.as_raw_fd();
+            std::path::PathBuf::from(format!("{DESCRIPTOR_DIRECTORY}/{descriptor}/{name}"))
+        };
+        // macOS's descriptor namespace resolves one descriptor at a time and
+        // cannot traverse beneath a directory descriptor, so SQLite would
+        // refuse a pinned child path there. The verified descriptor still
+        // pins the directory; the name handed to SQLite is the descriptor's
+        // own resolved name, which names the same directory without
+        // reopening it.
+        #[cfg(target_os = "macos")]
+        let pinned = {
+            let resolved = rustix::fs::getpath(&root)
+                .map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?;
+            let resolved = resolved.to_str().map_err(|_| {
+                DatabaseFailure::Refused(
+                    "the state-root directory name is not valid UTF-8".to_owned(),
+                )
+            })?;
+            std::path::PathBuf::from(resolved).join(name)
+        };
+        Ok((root, pinned))
     }
 }
 
 /// The operating system's stable directory-descriptor namespace.
 #[cfg(target_os = "linux")]
 const DESCRIPTOR_DIRECTORY: &str = "/proc/self/fd";
-
-/// The operating system's stable directory-descriptor namespace.
-#[cfg(target_os = "macos")]
-const DESCRIPTOR_DIRECTORY: &str = "/dev/fd";
 
 #[cfg(not(unix))]
 struct PinnedDatabasePath;
