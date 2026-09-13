@@ -513,15 +513,18 @@ impl OperationDatabase {
     fn install_authorizer(&self) -> Result<(), DatabaseFailure> {
         use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 
-        let physical_inventory =
-            self.physical_inventory
-                .as_ref()
-                .map(|inventory| {
-                    let mut copied = PhysicalInventory {
-                        state_root: None,
-                        ..PhysicalInventory::new(inventory.main.clone())
-                            .expect("the same contract formula is read twice")
-                    };
+        let physical_inventory = self
+            .physical_inventory
+            .as_ref()
+            .map(|inventory| {
+                #[cfg(unix)]
+                let mut copied = PhysicalInventory {
+                    state_root: None,
+                    ..PhysicalInventory::new(inventory.main.clone())
+                        .expect("the same contract formula is read twice")
+                };
+                #[cfg(unix)]
+                {
                     copied.maximum_bytes = inventory.maximum_bytes;
                     if let Some(state_root) = &inventory.state_root {
                         copied.state_root =
@@ -529,9 +532,13 @@ impl OperationDatabase {
                                 DatabaseFailure::Refused(failure.to_string())
                             })?);
                     }
-                    Ok(copied)
-                })
-                .transpose()?;
+                }
+                #[cfg(not(unix))]
+                let copied = PhysicalInventory::new(inventory.main.clone())
+                    .expect("the same contract formula is read twice");
+                Ok(copied)
+            })
+            .transpose()?;
         self.connection
             .authorizer(Some(move |context: AuthContext<'_>| match context.action {
                 AuthAction::Insert { .. } | AuthAction::Update { .. } | AuthAction::Delete { .. }
