@@ -652,11 +652,29 @@ impl RetainedChild {
             let mut reader = std::fs::File::from(controller);
             let mut collected = Vec::new();
             let mut chunk = vec![0_u8; TERMINAL_READ_CHUNK];
-            while let Ok(read) = reader.read(&mut chunk) {
-                if read == 0 {
-                    break;
+            // A pseudo-terminal master answers its last read with the
+            // platform's end-of-slaves refusal once every follower end has
+            // closed; Linux refuses with EIO and other platforms close the
+            // stream. Collect what arrived before that, and name a refusal
+            // that arrived before anything did, because a read that stops for
+            // an undocumented reason is a fact the caller must see.
+            let mut last_refusal = None;
+            loop {
+                match reader.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(read) => collected.extend_from_slice(&chunk[..read]),
+                    Err(failure) => {
+                        last_refusal = Some(failure.to_string());
+                        break;
+                    }
                 }
-                collected.extend_from_slice(&chunk[..read]);
+            }
+            if collected.is_empty() {
+                if let Some(refusal) = last_refusal {
+                    return Err(HarnessFailure::Unusable(format!(
+                        "the terminal answered nothing: {refusal}"
+                    )));
+                }
             }
             Ok(String::from_utf8_lossy(&collected).into_owned())
         }
