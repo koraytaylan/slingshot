@@ -1,1 +1,1 @@
-{"error":{"code":-32601,"message":"this server offers no tools/invent"},"id":"one"}
+{"error":{"code":-32601,"message":"this server offers no tools/invent"},"id":"one","jsonrpc":"2.0"}

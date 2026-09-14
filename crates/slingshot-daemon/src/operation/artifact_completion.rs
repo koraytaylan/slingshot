@@ -976,13 +976,17 @@ pub fn decode_retained_result(
         submitted_command_digest: submission.submitted_command_digest.clone(),
         wire_name: held.command_wire_name,
     };
-    decode_bound_result(body, &expectation, &command, &held.installation_identifier, identity)
+    decode_bound_result(body, &expectation, &command, identity)
 }
 
 /// Validates actual result bytes and binds any remote artifact to the same
 /// deterministic identity used by the local artifact store. `command` and the
 /// expected submission digest must come from the retained operation, not the
 /// remote response. This function performs no transfer or state mutation.
+///
+/// The artifact is bound to this operation, target, slot, and media type by the
+/// daemon's own derivation at staging time; the agent-supplied identifier is
+/// opaque provenance and is never trusted as the local name.
 ///
 /// # Errors
 ///
@@ -992,7 +996,6 @@ pub fn decode_bound_result(
     body: &[u8],
     expectation: &slingshot_agent_connection::structured_job_result::ResultExpectation,
     command: &slingshot_domain::command::catalog::Command,
-    installation: &slingshot_domain::installation::InstallationIdentifier,
     identity: &slingshot_domain::operation_executor::ExecutionIdentity,
 ) -> Result<
     slingshot_agent_connection::structured_job_result::ValidatedResult,
@@ -1013,17 +1016,6 @@ pub fn decode_bound_result(
         return Err(TerminalResultDecodeRefusal);
     }
     let result = decode_result_for_command(body, expectation, command)?;
-    if let Some(artifact) = &result.remote_artifact {
-        let expected = slingshot_storage::artifact_store::ArtifactIdentifier::derive(
-            installation,
-            &identity.author_target_identity_digest,
-            &identity.operation_identifier,
-            artifact.slot.as_text(),
-        );
-        if artifact.identifier.as_text() != expected.as_text() {
-            return Err(TerminalResultDecodeRefusal);
-        }
-    }
     Ok(result)
 }
 

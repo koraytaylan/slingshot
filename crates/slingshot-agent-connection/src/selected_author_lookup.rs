@@ -582,7 +582,7 @@ impl SelectedAuthorTransport {
         submission: &'a Submission,
         physical: Option<&'a str>,
         current_generation: Option<u64>,
-    ) -> Result<([&'static str; 4], [(&'static str, &'a str); 1]), SnapshotLookupRefusal> {
+    ) -> Result<(Vec<&'static str>, [(&'static str, &'a str); 1]), SnapshotLookupRefusal> {
         self.require_submission(identity, submission).map_err(|_| SnapshotLookupRefusal)?;
         if current_generation == Some(0) {
             return Err(SnapshotLookupRefusal);
@@ -590,10 +590,13 @@ impl SelectedAuthorTransport {
         let (segments, query) = if let Some(identifier) = physical {
             slingshot_domain::remote_job::AgentJobIdentifier::new(identifier)
                 .map_err(|_| SnapshotLookupRefusal)?;
-            (["bin", "slingshot-agent", "jobs", "snapshot"], [("sling_job_identifier", identifier)])
+            (
+                ["bin", "slingshot", "agent", "jobs"].to_vec(),
+                [("sling_job_identifier", identifier)],
+            )
         } else {
             (
-                ["bin", "slingshot-agent", "operations", "lookup"],
+                ["bin", "slingshot", "agent", "snapshot"].to_vec(),
                 [(
                     "agent_operation_identifier",
                     submission.operation.agent_operation_identifier.as_str(),

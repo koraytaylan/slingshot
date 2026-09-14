@@ -1,2 +1,2 @@
-{"id":"one","result":{"resultType":"complete"}}
-{"id":"one","result":{"resultType":"complete"}}
+{"id":"one","jsonrpc":"2.0","result":{"resultType":"complete"}}
+{"id":"one","jsonrpc":"2.0","result":{"resultType":"complete"}}

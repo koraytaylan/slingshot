@@ -157,7 +157,7 @@ fn every_route_is_built_here_and_every_segment_is_encoded_once() {
         assert_eq!(
             artifact_route(AUTHOR_BASE, operation, slot).expect("canonical route"),
             format!(
-                "{AUTHOR_BASE}{ARTIFACT_ROUTE}/{}/artifacts/{}",
+                "{AUTHOR_BASE}{ARTIFACT_ROUTE}?agent_operation_identifier={}&artifact_slot={}",
                 vector["encoded_operation"].as_str().expect("an encoding"),
                 vector["encoded_slot"].as_str().expect("an encoding")
             ),

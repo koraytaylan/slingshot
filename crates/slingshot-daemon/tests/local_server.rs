@@ -15,6 +15,9 @@ use slingshot_local_protocol::foundation_contract::FoundationContract;
 /// Connections this daemon serves at once, from the foundation contract.
 const CONNECTION_CAPACITY: u32 = 64;
 
+/// Deadline used while observing the server's bounded shutdown behavior.
+const SERVER_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
 #[tokio::test]
 #[cfg(unix)]
 async fn listener_drop_removes_only_its_own_socket_and_bind_preserves_other_objects() {
@@ -55,7 +58,7 @@ async fn shutdown_joins_idle_connections_before_releasing_namespace_ownership() 
     };
     use slingshot_test_support::runtime_harness::TemporaryRuntimeRoot;
     use std::sync::Arc;
-    use tokio::time::{Duration, timeout};
+    use tokio::time::timeout;
     for connected in [1, CONNECTION_CAPACITY as usize] {
         let root = TemporaryRuntimeRoot::create("l").unwrap();
         let contract = FoundationContract::embedded();
@@ -82,7 +85,7 @@ async fn shutdown_joins_idle_connections_before_releasing_namespace_ownership() 
         for _ in 0..connected {
             sockets.push(tokio::net::UnixStream::connect(path).await.unwrap());
         }
-        timeout(Duration::from_secs(2), async {
+        timeout(SERVER_TEST_TIMEOUT, async {
             loop {
                 if observed.strong_count() > connected {
                     break;
@@ -93,7 +96,7 @@ async fn shutdown_joins_idle_connections_before_releasing_namespace_ownership() 
         .await
         .unwrap();
         stop.cancel();
-        timeout(Duration::from_secs(2), server).await.unwrap().unwrap().unwrap();
+        timeout(SERVER_TEST_TIMEOUT, server).await.unwrap().unwrap().unwrap();
         assert!(
             observed.upgrade().is_none(),
             "idle connection retained the service after shutdown"

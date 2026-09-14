@@ -20,6 +20,7 @@
 //! taking a path somebody forgot to guard.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
@@ -94,6 +95,11 @@ const NO_SHARED_VERSION: &str =
 /// arriving before its status is read still names a revision a caller can
 /// quote, and quoting it finds the operation rather than nothing.
 const ADMITTED_REVISION: u64 = 1;
+
+/// The maximum number of bounded observations a live verification makes after
+/// admission. A receipt is not a result, and an indefinitely polling harness
+/// would turn a slow author into a hung release check.
+const LIVE_WAIT_ATTEMPTS: usize = 128;
 
 /// The first line of the help this build prints.
 const HELP_HEADING: &str = "slingshot - one command line over one daemon";
@@ -756,7 +762,7 @@ impl CommandLineApplication<'_> {
                 .map_err(|refusal| RunRefusal::Usage(refusal.to_string()))?;
             let identifier = self.request_identifier();
             let asked = exercise_invocation(command, &enablement, &identifier);
-            let completion = self.run(&asked);
+            let completion = self.live_terminal_completion(self.run(&asked), &asked);
             let observed = live_report(command, &identifier, facts, completion.exit);
             rendered.push_str(&observed.rendered());
             diagnostics.extend(completion.diagnostics);
@@ -765,6 +771,76 @@ impl CommandLineApplication<'_> {
             }
         }
         Ok(Completion { answer: Answer::Text(rendered), diagnostics, exit })
+    }
+
+    /// Turns a live submission receipt into a terminal observation.
+    ///
+    /// Submission deliberately returns an admission receipt for ordinary
+    /// callers. The live verification leaf has a stronger obligation: it must
+    /// not call that receipt a successful read while the remote operation is
+    /// still pending or requires recovery. It therefore uses the same public
+    /// wait and result leaves until the operation is terminal, recovery is
+    /// reported, or a bounded observation budget is exhausted.
+    fn live_terminal_completion(
+        &self,
+        submitted: Completion,
+        invocation: &Invocation,
+    ) -> Completion {
+        let operation_identifier = match &submitted.answer {
+            Answer::Envelope(envelope) => match envelope.as_ref() {
+                MachineOutcomeEnvelope::OperationReceipt { operation_identifier, .. } => {
+                    Some(operation_identifier.clone())
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(operation_identifier) = operation_identifier else {
+            return submitted;
+        };
+
+        let mut diagnostics = submitted.diagnostics;
+        for _ in 0..LIVE_WAIT_ATTEMPTS {
+            let waited = self.run(&live_operation_invocation(
+                "operation-wait",
+                invocation,
+                &operation_identifier,
+            ));
+            diagnostics.extend(waited.diagnostics);
+            match &waited.answer {
+                Answer::Envelope(envelope) => match envelope.as_ref() {
+                    MachineOutcomeEnvelope::OperationResult { .. }
+                    | MachineOutcomeEnvelope::OperationTerminalError { .. }
+                    | MachineOutcomeEnvelope::OperationRecoveryRequired { .. } => {
+                        return Completion { diagnostics, ..waited };
+                    }
+                    MachineOutcomeEnvelope::OperationStatus { state, .. }
+                        if state == "terminal" || state == "recovery_required" =>
+                    {
+                        let result = self.run(&live_operation_invocation(
+                            "operation-result",
+                            invocation,
+                            &operation_identifier,
+                        ));
+                        diagnostics.extend(result.diagnostics);
+                        return Completion { diagnostics, ..result };
+                    }
+                    MachineOutcomeEnvelope::OperationStatus { .. } => {}
+                    _ => return Completion { diagnostics, ..waited },
+                },
+                _ => return Completion { diagnostics, ..waited },
+            }
+            std::thread::yield_now();
+        }
+
+        Completion {
+            answer: Answer::Refusal(
+                "live verification did not reach a terminal operation result within its observation budget"
+                    .to_owned(),
+            ),
+            diagnostics,
+            exit: exit_classification::INDETERMINATE,
+        }
     }
 
     /// Submits one catalog command and reports what the daemon admitted.
@@ -924,6 +1000,28 @@ impl CommandLineApplication<'_> {
             runtime_contract_digest: self.provenance.daemon_runtime_contract_digest.clone(),
             selected_environment_revision: expected_revision(invocation, hello),
         }
+    }
+}
+
+/// Builds the observation invocation used by the live verification loop.
+///
+/// The operation leaves have their own option boundary; carrying the original
+/// command's path or phrase into them would make the observation accidentally
+/// depend on arguments those leaves do not own.
+fn live_operation_invocation(
+    verb: &str,
+    submitted: &Invocation,
+    operation_identifier: &str,
+) -> Invocation {
+    let mut arguments = BTreeMap::new();
+    arguments.insert(OPERATION_IDENTIFIER_OPTION.to_owned(), operation_identifier.to_owned());
+    Invocation {
+        arguments,
+        detached: false,
+        operation_key: None,
+        output: Some(crate::invocation::OutputForm::Machine),
+        selection: submitted.selection.clone(),
+        verb: verb.to_owned(),
     }
 }
 

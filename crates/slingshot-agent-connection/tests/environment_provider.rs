@@ -371,8 +371,8 @@ fn author_connection_is_a_frozen_target_bound_boundary_without_a_publisher() {
         provider.snapshot().author().is_protected()
     );
     assert_eq!(
-        connection.endpoint(&["bin", "slingshot-agent", "jobs"]),
-        provider.author_endpoint(&["bin", "slingshot-agent", "jobs"]),
+        connection.endpoint(&["bin", "slingshot", "agent", "jobs"]),
+        provider.author_endpoint(&["bin", "slingshot", "agent", "jobs"]),
     );
     connection
         .require_target(&provider.snapshot().target().to_string())
@@ -450,7 +450,7 @@ fn http2_request_heads_share_selected_origin_query_and_authentication_boundaries
     let head = transport
         .encode_http2_request_head(
             http::Method::POST,
-            &["bin", "slingshot-agent", "jobs"],
+            &["bin", "slingshot", "agent", "submit"],
             &[("q", "é /%")],
             &authentication,
             &fields,
@@ -476,7 +476,7 @@ fn http2_request_heads_share_selected_origin_query_and_authentication_boundaries
         (0, ":method", "POST"),
         (1, ":scheme", "http"),
         (2, ":authority", "127.0.0.1:4502"),
-        (3, ":path", "/aem/bin/slingshot-agent/jobs?q=%C3%A9%20%2F%25"),
+        (3, ":path", "/aem/bin/slingshot/agent/submit?q=%C3%A9%20%2F%25"),
         (4, "accept-encoding", "identity"),
         (5, "content-length", "2"),
     ] {
@@ -584,6 +584,13 @@ async fn selected_event_attachments_preserve_context_query_cursor_and_preflight_
         selected_environment_revision: provider.snapshot().revision().to_string(),
         operation_identifier: "local".into(),
     };
+    let operation = slingshot_agent_protocol::identity::WireOperationIdentity::of(
+        &identity.author_target_identity_digest,
+        &identity.selected_environment_revision,
+        &identity.operation_identifier,
+        slingshot_domain::agent_identity::AgentEventStoreGeneration::of(7),
+    )
+    .agent_operation_identifier;
     let resolver = |_: &str| -> Result<OperationStreamExpectation, StreamRefusal> {
         panic!("heartbeat invoked terminal resolver");
     };
@@ -663,8 +670,14 @@ async fn selected_event_attachments_preserve_context_query_cursor_and_preflight_
         let mut block = vec![0; length];
         stream.read_exact(&mut block).await.unwrap();
         for expected in [
-            b"/aem/bin/slingshot-agent/events?agent_event_store_generation=7&daemon_subscription_identifier=sub%20%2F%3F".as_slice(),
-            b"last-event-id", b"cursor/one", b"authorization", b"text/event-stream",
+            format!(
+                "/aem/bin/slingshot/agent/events?agent_event_store_generation=7&agent_operation_identifier={operation}&daemon_subscription_identifier=sub%20%2F%3F"
+            )
+            .into_bytes(),
+            b"last-event-id".to_vec(),
+            b"cursor/one".to_vec(),
+            b"authorization".to_vec(),
+            b"text/event-stream".to_vec(),
         ] { assert!(block.windows(expected.len()).any(|bytes| bytes == expected)); }
         authentication.lend_value_bytes(|value| {
             assert!(block.windows(value.len()).any(|bytes| bytes == value))
@@ -703,7 +716,12 @@ async fn selected_event_attachments_preserve_context_query_cursor_and_preflight_
                 request.push(stream.read_u8().await.unwrap());
                 assert!(request.len() <= 8192);
             }
-            assert!(request.starts_with(b"GET /aem/bin/slingshot-agent/events?agent_event_store_generation=7&daemon_subscription_identifier=sub%20%2F%3F HTTP/1.1\r\n"));
+            assert!(request.starts_with(
+                format!(
+                    "GET /aem/bin/slingshot/agent/events?agent_event_store_generation=7&agent_operation_identifier={operation}&daemon_subscription_identifier=sub%20%2F%3F HTTP/1.1\r\n"
+                )
+                .as_bytes()
+            ));
             for header in
                 [b"last-event-id: cursor/one\r\n".as_slice(), b"accept: text/event-stream\r\n"]
             {
@@ -794,6 +812,13 @@ async fn selected_event_attachments_preserve_context_query_cursor_and_preflight_
             selected_environment_revision: provider.snapshot().revision().to_string(),
             ..identity.clone()
         };
+        let operation = slingshot_agent_protocol::identity::WireOperationIdentity::of(
+            &identity.author_target_identity_digest,
+            &identity.selected_environment_revision,
+            &identity.operation_identifier,
+            slingshot_domain::agent_identity::AgentEventStoreGeneration::of(7),
+        )
+        .agent_operation_identifier;
         let tls = if mode >= 3 {
             let version = if mode == 3 { &rustls::version::TLS12 } else { &rustls::version::TLS13 };
             let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
@@ -879,7 +904,13 @@ async fn selected_event_attachments_preserve_context_query_cursor_and_preflight_
                 authentication.lend_value_bytes(|value| {
                     assert!(request.windows(value.len()).any(|bytes| bytes == value))
                 });
-                for expected in [b"/aem/bin/slingshot-agent/events?agent_event_store_generation=7&daemon_subscription_identifier=sub%20%2F%3F".as_slice(),b"cursor/one"] {
+                for expected in [
+                    format!(
+                        "/aem/bin/slingshot/agent/events?agent_event_store_generation=7&agent_operation_identifier={operation}&daemon_subscription_identifier=sub%20%2F%3F"
+                    )
+                    .into_bytes(),
+                    b"cursor/one".to_vec(),
+                ] {
                     assert!(request.windows(expected.len()).any(|bytes|bytes==expected));
                 }
                 if http2 {
@@ -1217,6 +1248,7 @@ async fn selected_high_water_captures_are_authenticated_bound_and_never_status_o
             SelectedAuthorTransport::new(provider.snapshot().author_connection()).unwrap();
         let source = CountingSource { exchanges: Cell::new(0) };
         let (authentication, _) = provider.authenticate(&endpoint, READING, &source).unwrap();
+        let authentication = &authentication;
         let identity = ExecutionIdentity {
             attempt: 1,
             author_target_identity_digest: provider.snapshot().target().to_string(),
@@ -1282,122 +1314,217 @@ async fn selected_high_water_captures_are_authenticated_bound_and_never_status_o
             (410, ""),
             (401, ""),
         ] {
-            let body = if defect == "bare" || status == 410 || status == 401 {
-                b"{}".to_vec()
-            } else {
-                let mut value = serde_json::json!({
+            let peer = async {
+                trait Peer: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin {}
+                impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin> Peer for T {}
+                let accept_stream = || async {
+                    let (stream, _) = listener.accept().await.unwrap();
+                    let stream: Box<dyn Peer> = if mode >= 3 {
+                        let version = if mode == 3 {
+                            &rustls::version::TLS12
+                        } else {
+                            &rustls::version::TLS13
+                        };
+                        let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
+                            rustls::crypto::ring::default_provider(),
+                        ))
+                        .with_protocol_versions(&[version])
+                        .unwrap()
+                        .with_no_client_auth()
+                        .with_single_cert(
+                            vec![
+                                CertificateDer::from_pem_slice(include_bytes!(
+                                    "fixtures/selected-author-tls/leaf.pem"
+                                ))
+                                .unwrap(),
+                            ],
+                            PrivateKeyDer::from_pem_slice(include_bytes!(
+                                "fixtures/selected-author-tls/test-only-private-key.pem"
+                            ))
+                            .unwrap(),
+                        )
+                        .unwrap();
+                        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+                        let stream = tokio_rustls::TlsAcceptor::from(Arc::new(config))
+                            .accept(stream)
+                            .await
+                            .unwrap();
+                        assert_eq!(stream.get_ref().1.alpn_protocol(), Some(b"h2".as_slice()));
+                        Box::new(stream)
+                    } else {
+                        Box::new(stream)
+                    };
+                    stream
+                };
+                let read_request =
+                    |mut stream: Box<dyn Peer>, body_expected: bool| async move {
+                    let mut request = Vec::new();
+                    if http2 {
+                        let mut preface = [0; 39];
+                        stream.read_exact(&mut preface).await.unwrap();
+                        assert_eq!(&preface[..24], b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
+                        stream.write_all(&[0, 0, 0, 4, 0, 0, 0, 0, 0]).await.unwrap();
+                        let mut header = [0; 9];
+                        stream.read_exact(&mut header).await.unwrap();
+                        assert_eq!(header, [0, 0, 0, 4, 1, 0, 0, 0, 0]);
+                        stream.write_all(&header).await.unwrap();
+                        stream.read_exact(&mut header).await.unwrap();
+                        assert_eq!(header[3], 1);
+                        assert_eq!(header[4] & 1 != 0, !body_expected);
+                        let length = usize::from(header[0]) << 16
+                            | usize::from(header[1]) << 8
+                            | usize::from(header[2]);
+                        assert!(length <= 16384);
+                        request.resize(length, 0);
+                        stream.read_exact(&mut request).await.unwrap();
+                    } else {
+                        while !request.ends_with(b"\r\n\r\n") {
+                            request.push(stream.read_u8().await.unwrap());
+                            assert!(request.len() <= 8192);
+                        }
+                        if body_expected {
+                            assert!(request.starts_with(b"POST "));
+                        } else {
+                            assert!(request.starts_with(b"GET "));
+                        }
+                    }
+                    if body_expected && !http2 {
+                        let length_start = request
+                            .to_ascii_lowercase()
+                            .windows(b"content-length:".len())
+                            .position(|bytes| bytes == b"content-length:")
+                            .expect("a POST declares its length");
+                        let tail = &request[length_start + b"content-length:".len()..];
+                        let end = tail.iter().position(|byte| *byte == b'\r').unwrap();
+                        let length: usize = std::str::from_utf8(&tail[..end])
+                            .unwrap()
+                            .trim()
+                            .parse()
+                            .unwrap();
+                        let mut body_bytes = vec![0; length];
+                        stream.read_exact(&mut body_bytes).await.unwrap();
+                        request.extend_from_slice(&body_bytes);
+                    }
+                    for expected in [
+                        if body_expected {
+                            &b"/aem/bin/slingshot/agent/subscriptions/high-water"[..]
+                        } else {
+                            &b"/aem/libs/granite/csrf/token.json"[..]
+                        },
+                        if http2 { b"authorization" } else { b"Authorization" },
+                    ] {
+                        assert!(request.windows(expected.len()).any(|bytes| bytes == expected), "mode={mode} body={body_expected} http2={http2} missing fixed route/header {}", String::from_utf8_lossy(expected));
+                    }
+                    if body_expected {
+                        assert!(request.windows(b"application/json".len()).any(|bytes| bytes == b"application/json"), "mode={mode} http2={http2} the POST does not ask for or declare JSON");
+                    }
+                    assert!(
+                        !request.windows(b"last-event-id".len()).any(|bytes| bytes == b"last-event-id")
+                    );
+                    if body_expected {
+                        assert!(
+                            request
+                                .windows(b"authorization".len())
+                                .any(|bytes| bytes == b"authorization")
+                                || request
+                                    .windows(b"Authorization".len())
+                                    .any(|bytes| bytes == b"Authorization"),
+                            "mode={mode} http2={http2} the POST carries no credential header"
+                        );
+                        authentication.lend_value_bytes(|value| {
+                            assert!(
+                                request.windows(value.len()).any(|bytes| bytes == value),
+                                "mode={mode} http2={http2} the POST presents another credential"
+                            );
+                        });
+                    }
+                    (stream, request)
+                };
+                let serve_json = |mut stream: Box<dyn Peer>,
+                                  status: u16,
+                                  body_bytes: Vec<u8>,
+                                  allow_truncation: bool| async move {
+                    let body = body_bytes.as_slice();
+                    let payload =
+                        if defect == "truncated" && allow_truncation { &body[..body.len() - 1] } else { body };
+                    if http2 {
+                        let mut block = Vec::new();
+                        for (name, value) in [
+                            (":status", status.to_string()),
+                            ("content-type", "application/json".into()),
+                            ("content-length", body.len().to_string()),
+                        ] {
+                            block.extend_from_slice(&[0, name.len() as u8]);
+                            block.extend_from_slice(name.as_bytes());
+                            block.push(value.len() as u8);
+                            block.extend_from_slice(value.as_bytes());
+                        }
+                        let encode = |kind: u8, flags: u8, payload: &[u8]| {
+                            let length = (payload.len() as u32).to_be_bytes();
+                            let mut frame =
+                                vec![length[1], length[2], length[3], kind, flags, 0, 0, 0, 1];
+                            frame.extend_from_slice(payload);
+                            frame
+                        };
+                        stream.write_all(&encode(1, 4, &block)).await.unwrap();
+                        stream.write_all(&encode(0, 1, payload)).await.unwrap();
+                        let mut close = Vec::new();
+                        let _ = stream.read_to_end(&mut close).await;
+                    } else {
+                        stream.write_all(format!("HTTP/1.1 {status} Response\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+                        stream.write_all(payload).await.unwrap();
+                    }
+                    stream.shutdown().await.unwrap();
+                };
+                // The capture is a POST, so the author first serves the token
+                // the write must present, then reads the write itself.
+                let stream = accept_stream().await;
+                let (stream, _) =
+                    read_request(stream, false).await;
+                serve_json(stream, 200, b"{\"token\":\"test-csrf\"}".to_vec(), false).await;
+                let stream = accept_stream().await;
+                let (stream, request) =
+                    read_request(stream, true).await;
+                if http2 {
+                    // The HPACK header block is literal-encoded here, so the
+                    // POST's headers are visible in the request bytes; the
+                    // body itself arrives in DATA frames read separately.
+                    assert!(
+                        request
+                            .windows(b"csrf-token".len())
+                            .any(|bytes| bytes == b"csrf-token" as &[u8]),
+                        "the POST presents the token it fetched"
+                    );
+                    assert!(
+                        request
+                            .windows(b"application/json".len())
+                            .any(|bytes| bytes == b"application/json"),
+                        "the POST declares its JSON content type"
+                    );
+                } else {
+                    let head = String::from_utf8_lossy(&request).to_ascii_lowercase();
+                    assert!(head.contains("csrf-token: test-csrf\r\n"));
+                    assert!(head.contains("content-type: application/json\r\n"));
+                }
+
+                let body = if defect == "bare" || status == 410 || status == 401 {
+                    b"{}".to_vec()
+                } else {
+                    let mut value = serde_json::json!({
                     "format":"slingshot.agent/1",
                     "transport_contract_digest":slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded_digest(),
                     "daemon_subscription_identifier":"sub /?",
                     "agent_event_store_generation":if status == 409 || defect == "generation" {8} else {7},
                     "high_water_cursor":"captured-position",
                 });
-                if status == 409 {
-                    value["requested_agent_event_store_generation"] = serde_json::json!(7);
-                    value["requested_last_event_identifier"] = serde_json::Value::Null;
-                    value["reason"] = serde_json::json!("generation_changed");
-                }
-                serde_json::to_vec(&value).unwrap()
-            };
-            let peer = async {
-                let (stream, _) = listener.accept().await.unwrap();
-                trait Peer: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin {}
-                impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin> Peer for T {}
-                let mut stream: Box<dyn Peer> = if mode >= 3 {
-                    let version =
-                        if mode == 3 { &rustls::version::TLS12 } else { &rustls::version::TLS13 };
-                    let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
-                        rustls::crypto::ring::default_provider(),
-                    ))
-                    .with_protocol_versions(&[version])
-                    .unwrap()
-                    .with_no_client_auth()
-                    .with_single_cert(
-                        vec![
-                            CertificateDer::from_pem_slice(include_bytes!(
-                                "fixtures/selected-author-tls/leaf.pem"
-                            ))
-                            .unwrap(),
-                        ],
-                        PrivateKeyDer::from_pem_slice(include_bytes!(
-                            "fixtures/selected-author-tls/test-only-private-key.pem"
-                        ))
-                        .unwrap(),
-                    )
-                    .unwrap();
-                    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-                    let stream = tokio_rustls::TlsAcceptor::from(Arc::new(config))
-                        .accept(stream)
-                        .await
-                        .unwrap();
-                    assert_eq!(stream.get_ref().1.alpn_protocol(), Some(b"h2".as_slice()));
-                    Box::new(stream)
-                } else {
-                    Box::new(stream)
+                    if status == 409 {
+                        value["requested_agent_event_store_generation"] = serde_json::json!(7);
+                        value["requested_last_event_identifier"] = serde_json::Value::Null;
+                        value["reason"] = serde_json::json!("generation_changed");
+                    }
+                    serde_json::to_vec(&value).unwrap()
                 };
-                let mut request = Vec::new();
-                if http2 {
-                    let mut preface = [0; 39];
-                    stream.read_exact(&mut preface).await.unwrap();
-                    assert_eq!(&preface[..24], b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
-                    stream.write_all(&[0, 0, 0, 4, 0, 0, 0, 0, 0]).await.unwrap();
-                    let mut header = [0; 9];
-                    stream.read_exact(&mut header).await.unwrap();
-                    assert_eq!(header, [0, 0, 0, 4, 1, 0, 0, 0, 0]);
-                    stream.write_all(&header).await.unwrap();
-                    stream.read_exact(&mut header).await.unwrap();
-                    assert_eq!((header[3], header[4]), (1, 5));
-                    let length = usize::from(header[0]) << 16
-                        | usize::from(header[1]) << 8
-                        | usize::from(header[2]);
-                    assert!(length <= 16384);
-                    request.resize(length, 0);
-                    stream.read_exact(&mut request).await.unwrap();
-                } else {
-                    while !request.ends_with(b"\r\n\r\n") {
-                        request.push(stream.read_u8().await.unwrap());
-                        assert!(request.len() <= 8192);
-                    }
-                    assert!(request.starts_with(b"GET "));
-                }
-                for expected in [b"/aem/bin/slingshot-agent/events/high-water?agent_event_store_generation=7&daemon_subscription_identifier=sub%20%2F%3F".as_slice(), b"application/json", if http2 { b"authorization" } else { b"Authorization" }] {
-                    assert!(request.windows(expected.len()).any(|bytes| bytes == expected), "http2={http2} missing fixed route/header {}", String::from_utf8_lossy(expected));
-                }
-                assert!(
-                    !request.windows(b"last-event-id".len()).any(|bytes| bytes == b"last-event-id")
-                );
-                authentication.lend_value_bytes(|value| {
-                    assert!(request.windows(value.len()).any(|bytes| bytes == value))
-                });
-                let payload = if defect == "truncated" { &body[..body.len() - 1] } else { &body };
-                if http2 {
-                    let mut block = Vec::new();
-                    for (name, value) in [
-                        (":status", status.to_string()),
-                        ("content-type", "application/json".into()),
-                        ("content-length", body.len().to_string()),
-                    ] {
-                        block.extend_from_slice(&[0, name.len() as u8]);
-                        block.extend_from_slice(name.as_bytes());
-                        block.push(value.len() as u8);
-                        block.extend_from_slice(value.as_bytes());
-                    }
-                    let encode = |kind: u8, flags: u8, payload: &[u8]| {
-                        let length = (payload.len() as u32).to_be_bytes();
-                        let mut frame =
-                            vec![length[1], length[2], length[3], kind, flags, 0, 0, 0, 1];
-                        frame.extend_from_slice(payload);
-                        frame
-                    };
-                    stream.write_all(&encode(1, 4, &block)).await.unwrap();
-                    stream.write_all(&encode(0, 1, payload)).await.unwrap();
-                    let mut close = Vec::new();
-                    let _ = stream.read_to_end(&mut close).await;
-                } else {
-                    stream.write_all(format!("HTTP/1.1 {status} Response\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
-                    stream.write_all(payload).await.unwrap();
-                }
-                stream.shutdown().await.unwrap();
+                serve_json(stream, status, body, true).await;
             };
             let request = async {
                 if mode == 6 {
@@ -1524,7 +1651,7 @@ async fn selected_author_transport_dials_the_profile_selected_loopback_author() 
     let author = Arc::new(FakeAuthor::following(
         Script::of(vec![ScriptedExchange {
             response: ScriptedResponse::Respond { body: b"{}".to_vec(), status: OK_STATUS },
-            route: "/bin/slingshot-agent/jobs".to_owned(),
+            route: "/bin/slingshot/agent/submit".to_owned(),
         }])
         .expect("the submit route is scriptable"),
         CredentialPolicy::Basic,
@@ -1547,7 +1674,7 @@ async fn selected_author_transport_dials_the_profile_selected_loopback_author() 
     let receipt = transport
         .finite_http1(
             http::Method::POST,
-            &["bin", "slingshot-agent", "jobs"],
+            &["bin", "slingshot", "agent", "submit"],
             &authentication,
             &http::HeaderMap::new(),
             b"",
@@ -1587,7 +1714,7 @@ async fn selected_ipv6_author_uses_bare_socket_host_and_bracketed_wire_authority
             head.push(socket.read_u8().await.unwrap());
         }
         let head = String::from_utf8(head).unwrap();
-        assert!(head.starts_with("GET /aem/bin/slingshot-agent/capabilities HTTP/1.1\r\n"));
+        assert!(head.starts_with("GET /aem/bin/slingshot/agent/capabilities HTTP/1.1\r\n"));
         assert!(head.contains(&format!("Host: {}\r\n", listener.local_addr().unwrap())));
         socket
             .write_all(
@@ -1601,7 +1728,7 @@ async fn selected_ipv6_author_uses_bare_socket_host_and_bracketed_wire_authority
         tokio::join!(
             transport.finite_http1(
                 http::Method::GET,
-                &["bin", "slingshot-agent", "capabilities"],
+                &["bin", "slingshot", "agent", "capabilities"],
                 &authentication,
                 &fields,
                 b""
@@ -1743,7 +1870,7 @@ async fn selected_author_tls_authenticates_versions_roots_and_hostnames_before_h
                     }
                     assert!(trusted && matching_host, "a rejected certificate received HTTP bytes");
                     assert!(
-                        head.starts_with(b"GET /bin/slingshot-agent/capabilities HTTP/1.1\r\n")
+                        head.starts_with(b"GET /bin/slingshot/agent/capabilities HTTP/1.1\r\n")
                     );
                     socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await.unwrap();
                     socket.shutdown().await.unwrap();
@@ -1755,7 +1882,7 @@ async fn selected_author_tls_authenticates_versions_roots_and_hostnames_before_h
                         transport
                             .finite_negotiated_query(
                                 http::Method::GET,
-                                &["bin", "slingshot-agent", "capabilities"],
+                                &["bin", "slingshot", "agent", "capabilities"],
                                 &[],
                                 &authentication,
                                 &headers,
@@ -1766,7 +1893,7 @@ async fn selected_author_tls_authenticates_versions_roots_and_hostnames_before_h
                         transport
                             .finite_http1(
                                 http::Method::GET,
-                                &["bin", "slingshot-agent", "capabilities"],
+                                &["bin", "slingshot", "agent", "capabilities"],
                                 &authentication,
                                 &headers,
                                 b"",
@@ -2257,10 +2384,17 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
                     0
                 } else if scenario == "post-token401" {
                     if cloud { 2 } else { 0 }
+                } else if scenario == "high-water" {
+                    // One token fetch (preceded by a 401 refresh when cloud)
+                    // plus the POST itself.
+                    usize::from(cloud) + 1
                 } else {
                     usize::from(retries || post)
                 };
                 for attempt in 0..=last {
+                    let high_water_token_attempts = usize::from(cloud) + 1;
+                    let high_water_posting =
+                        scenario == "high-water" && attempt >= high_water_token_attempts;
                     let posting =
                         post && attempt == if scenario == "post-token401" { 2 } else { 1 };
                     let (socket, _) = listener.accept().await.unwrap();
@@ -2275,32 +2409,58 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
                         assert!(
                             head.to_ascii_lowercase().contains("last-event-id: cursor-before\r\n")
                         );
-                        "GET /bin/slingshot-agent/events?agent_event_store_generation=7&daemon_subscription_identifier=subscription-one HTTP/1.1\r\n".into()
+                        format!(
+                            "GET /bin/slingshot/agent/events?agent_event_store_generation=7&agent_operation_identifier={}&daemon_subscription_identifier=subscription-one HTTP/1.1\r\n",
+                            submission.operation.agent_operation_identifier
+                        )
                     } else if scenario == "physical-lookup" {
-                        "GET /bin/slingshot-agent/jobs/snapshot?sling_job_identifier=job-one HTTP/1.1\r\n".into()
+                        "GET /bin/slingshot/agent/jobs?sling_job_identifier=job-one HTTP/1.1\r\n".into()
+                    } else if high_water_posting {
+                        assert!(!head.to_ascii_lowercase().contains("last-event-id:"));
+                        "POST /bin/slingshot/agent/subscriptions/high-water HTTP/1.1\r\n".into()
                     } else if scenario == "high-water" {
                         assert!(!head.to_ascii_lowercase().contains("last-event-id:"));
-                        "GET /bin/slingshot-agent/events/high-water?agent_event_store_generation=7&daemon_subscription_identifier=subscription-one HTTP/1.1\r\n".into()
+                        "GET /libs/granite/csrf/token.json HTTP/1.1\r\n".into()
                     } else if artifact {
                         format!(
-                            "GET /bin/slingshot-agent/operations/{}/artifacts/content_package HTTP/1.1\r\n",
+                            "GET /bin/slingshot/agent/artifact?agent_operation_identifier={}&artifact_slot=content_package HTTP/1.1\r\n",
                             submission.operation.agent_operation_identifier
                         )
                     } else if post {
                         if !posting {
                             "GET /libs/granite/csrf/token.json HTTP/1.1\r\n".into()
                         } else {
-                            "POST /bin/slingshot-agent/jobs HTTP/1.1\r\n".into()
+                            "POST /bin/slingshot/agent/submit HTTP/1.1\r\n".into()
                         }
                     } else if scenario == "logical-lookup" {
                         format!(
-                            "GET /bin/slingshot-agent/operations/lookup?agent_operation_identifier={} HTTP/1.1\r\n",
+                            "GET /bin/slingshot/agent/snapshot?agent_operation_identifier={} HTTP/1.1\r\n",
                             submission.operation.agent_operation_identifier
                         )
                     } else {
-                        "GET /bin/slingshot-agent/capabilities?probe=one%20two HTTP/1.1\r\n".into()
+                        "GET /bin/slingshot/agent/capabilities?probe=one%20two HTTP/1.1\r\n".into()
                     };
                     assert!(head.starts_with(&expected_route));
+                    if high_water_posting {
+                        let lower = head.to_ascii_lowercase();
+                        let at = lower
+                            .as_bytes()
+                            .windows(b"content-length:".len())
+                            .position(|bytes| bytes == b"content-length:")
+                            .expect("a POST declares its length");
+                        let tail = head[at + b"content-length:".len()..].as_bytes();
+                        let end = tail.iter().position(|byte| *byte == b'\r').unwrap();
+                        let declared: usize =
+                            std::str::from_utf8(&tail[..end]).unwrap().trim().parse().unwrap();
+                        let mut sent = vec![0; declared];
+                        socket.read_exact(&mut sent).await.unwrap();
+                        assert!(sent.windows(b"daemon_subscription_identifier".len())
+                            .any(|bytes| bytes == b"daemon_subscription_identifier" as &[u8]));
+                        assert!(sent.windows(b"agent_event_store_generation".len())
+                            .any(|bytes| bytes == b"agent_event_store_generation" as &[u8]));
+                        assert!(head.to_ascii_lowercase().contains("csrf-token: test-csrf\r\n"));
+                        assert!(head.to_ascii_lowercase().contains("content-type: application/json\r\n"));
+                    }
                     if posting {
                         let expected = submission.wire_body().unwrap();
                         let mut body = vec![0; expected.len()];
@@ -2315,6 +2475,8 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
                     } else if cloud {
                         let generation = if scenario == "post-token401" {
                             if attempt == 0 { 1 } else { 2 }
+                        } else if high_water_posting {
+                            usize::from(cloud) + 1
                         } else if post {
                             1
                         } else {
@@ -2326,7 +2488,7 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
                         assert!(head.contains("Basic "));
                         head
                     };
-                    if !post {
+                    if !post && scenario != "high-water" {
                         if let Some(previous) = &previous {
                             assert_eq!(&normalized, previous);
                         }
@@ -2340,8 +2502,14 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
                         }
                     } else if scenario == "physical-lookup" && attempt == 1 {
                         404
-                    } else if scenario == "high-water" && attempt == 1 {
-                        200
+                    } else if scenario == "high-water" {
+                        if attempt < high_water_token_attempts {
+                            if cloud && attempt == 0 { 401 } else { 200 }
+                        } else if cloud {
+                            200
+                        } else {
+                            401
+                        }
                     } else if artifact {
                         if scenario == "artifact-short" || (scenario == "artifact" && attempt == 1)
                         {
@@ -2379,12 +2547,18 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
                     "kind":"missing", "format":"slingshot.agent/1", "transport_contract_digest":submission.provenance.transport_contract_digest,
                     "agent_event_store_generation":8, "sling_job_identifier":"job-one",
                 }).to_string()
-                    } else if scenario == "high-water" && status == 200 {
-                        serde_json::json!({
+                    } else if scenario == "high-water" && high_water_posting {
+                        if cloud {
+                            serde_json::json!({
                     "format":"slingshot.agent/1", "transport_contract_digest":submission.provenance.transport_contract_digest,
                     "daemon_subscription_identifier":"subscription-one", "agent_event_store_generation":7,
                     "high_water_cursor":"captured-position",
                 }).to_string()
+                        } else {
+                            "{}".into()
+                        }
+                    } else if scenario == "high-water" {
+                        r#"{"token":"test-csrf"}"#.into()
                     } else if artifact && status == 200 {
                         if scenario == "artifact-short" { "ab".into() } else { "abc".into() }
                     } else if scenario == "post-token-invalid" {
@@ -2500,7 +2674,7 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
                         .map_err(|_| AuthenticatedReadFailure::Transport(slingshot_agent_connection::selected_author_http::FiniteHttpFailure::Head))
                 } else {
                     transport.authenticated_finite_get(&provider, &source, READING,
-                        &["bin", "slingshot-agent", "capabilities"], &[("probe", "one two")], &fields).await
+                        &["bin", "slingshot", "agent", "capabilities"], &[("probe", "one two")], &fields).await
                         .map(|receipt| (receipt.response.status,receipt.elapsed_milliseconds))
                 }
             }, peer)
@@ -2623,7 +2797,7 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
     }
 }
 
-/// Full selected-author HTTP/2 exchanges require a clean protocol/transport end.
+/// Full selected-author HTTP/2 exchanges complete at the response stream end.
 #[tokio::test]
 async fn selected_http2_finite_exchange_uses_exact_request_over_cleartext_and_tls() {
     use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
@@ -2631,16 +2805,12 @@ async fn selected_http2_finite_exchange_uses_exact_request_over_cleartext_and_tl
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::time::{Duration, timeout};
 
-    for (automatic, version, clean_end) in [
-        (false, None, true),
-        (false, Some(&rustls::version::TLS12), true),
-        (false, Some(&rustls::version::TLS13), true),
-        (false, Some(&rustls::version::TLS12), false),
-        (false, Some(&rustls::version::TLS13), false),
-        (true, Some(&rustls::version::TLS12), true),
-        (true, Some(&rustls::version::TLS13), true),
-        (true, Some(&rustls::version::TLS12), false),
-        (true, Some(&rustls::version::TLS13), false),
+    for (automatic, version) in [
+        (false, None),
+        (false, Some(&rustls::version::TLS12)),
+        (false, Some(&rustls::version::TLS13)),
+        (true, Some(&rustls::version::TLS12)),
+        (true, Some(&rustls::version::TLS13)),
     ] {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!(
@@ -2674,7 +2844,7 @@ async fn selected_http2_finite_exchange_uses_exact_request_over_cleartext_and_tl
         let source = CountingSource { exchanges: Cell::new(0) };
         let (authentication, _) = provider.authenticate(&endpoint, READING, &source).unwrap();
         let headers = http::HeaderMap::new();
-        let path = ["bin", "slingshot-agent", "jobs"];
+        let path = ["bin", "slingshot", "agent", "jobs"];
         let query = [("q", "é /%")];
         let expected_head: Vec<u8> = transport
             .encode_http2_request_head(
@@ -2751,9 +2921,6 @@ async fn selected_http2_finite_exchange_uses_exact_request_over_cleartext_and_tl
             socket.read_exact(&mut shutdown).await.unwrap();
             assert_eq!(shutdown, [0, 0, 8, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
             assert_eq!(socket.read(&mut [0; 1]).await.unwrap(), 0);
-            if clean_end {
-                socket.shutdown().await.unwrap();
-            }
         };
         let request = async {
             if automatic {
@@ -2782,15 +2949,11 @@ async fn selected_http2_finite_exchange_uses_exact_request_over_cleartext_and_tl
         };
         let (receipt, ()) =
             timeout(Duration::from_secs(5), async { tokio::join!(request, peer) }).await.unwrap();
-        assert_eq!(receipt.is_ok(), clean_end);
+        assert!(receipt.is_ok());
         assert!(
             timeout(Duration::from_millis(10), listener.accept()).await.is_err(),
             "negotiated request reconnected or retried"
         );
-        if !clean_end {
-            assert!(receipt.unwrap_err().request_may_have_reached_author());
-            continue;
-        }
         let receipt = receipt.unwrap();
         assert_eq!(receipt.response.body, b"{}");
         assert_eq!(receipt.response.status, 200);
@@ -3023,8 +3186,8 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                         head.resize(length, 0);
                         socket.read_exact(&mut head).await.unwrap();
                         assert!(
-                            head.windows(b"/aem/bin/slingshot-agent/capabilities".len())
-                                .any(|part| part == b"/aem/bin/slingshot-agent/capabilities")
+                            head.windows(b"/aem/bin/slingshot/agent/capabilities".len())
+                                .any(|part| part == b"/aem/bin/slingshot/agent/capabilities")
                         );
                         authentication.lend_value_bytes(|value| {
                             assert!(head.windows(value.len()).any(|part| part == value))
@@ -3063,7 +3226,7 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                     }
                     let head = String::from_utf8(head).unwrap();
                     assert!(
-                        head.starts_with("GET /aem/bin/slingshot-agent/capabilities HTTP/1.1\r\n")
+                        head.starts_with("GET /aem/bin/slingshot/agent/capabilities HTTP/1.1\r\n")
                     );
                     assert!(head.contains("Authorization: Basic "));
                     socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{}\r\n{document}", document.len(), if location {"Location: /elsewhere\r\n"} else {""}).as_bytes()).await.unwrap();
@@ -3232,12 +3395,12 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                         head.push(socket.read_u8().await.unwrap());
                     }
                     let head = String::from_utf8(head).unwrap();
-                    assert!(head.starts_with("POST /aem/bin/slingshot-agent/jobs HTTP/1.1\r\n"));
+                    assert!(head.starts_with("POST /aem/bin/slingshot/agent/submit HTTP/1.1\r\n"));
                     assert!(head.contains(&format!("referer: {endpoint}/\r\n")));
                     assert!(head.contains("csrf-token: csrf-test-value\r\n"));
                     assert!(head.contains(&format!(
                         "idempotency-key: {}\r\n",
-                        submission.operation.agent_operation_identifier
+                        submission.submitted_command_digest
                     )));
                     assert!(head.contains("Authorization: Basic "));
                     let length: usize = head
@@ -3448,17 +3611,17 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                         let mut head = vec![0; length];
                         socket.read_exact(&mut head).await.unwrap();
                         let lookup_route = format!(
-                            "/aem/bin/slingshot-agent/operations/lookup?agent_operation_identifier={}",
+                            "/aem/bin/slingshot/agent/snapshot?agent_operation_identifier={}",
                             submission.operation.agent_operation_identifier
                         );
                         let route = if stage == 2 {
                             lookup_route.as_bytes()
                         } else if stage < 0 {
-                            b"/aem/bin/slingshot-agent/capabilities".as_slice()
+                            b"/aem/bin/slingshot/agent/capabilities".as_slice()
                         } else if stage == 0 {
                             b"/aem/libs/granite/csrf/token.json".as_slice()
                         } else {
-                            b"/aem/bin/slingshot-agent/jobs".as_slice()
+                            b"/aem/bin/slingshot/agent/submit".as_slice()
                         };
                         assert!(head.windows(route.len()).any(|part| part == route));
                         authentication.lend_value_bytes(|value| {
@@ -3469,7 +3632,7 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                         } else {
                             for value in [
                                 "csrf-test-value",
-                                submission.operation.agent_operation_identifier.as_str(),
+                                submission.submitted_command_digest.as_str(),
                                 &format!("{endpoint}/"),
                             ] {
                                 assert!(
@@ -3635,7 +3798,7 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                     bytes.push(socket.read_u8().await.unwrap());
                 }
                 let prefix = format!(
-                    "GET /aem/bin/slingshot-agent/operations/lookup?agent_operation_identifier={} HTTP/1.1\r\n",
+                    "GET /aem/bin/slingshot/agent/snapshot?agent_operation_identifier={} HTTP/1.1\r\n",
                     submission.operation.agent_operation_identifier
                 );
                 assert!(bytes.starts_with(prefix.as_bytes()));
@@ -3877,7 +4040,7 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                             }
                             assert!(request.starts_with(b"GET "));
                         }
-                        let route = b"/aem/bin/slingshot-agent/jobs/snapshot?sling_job_identifier=job%20%2F%3F%C3%A9";
+                        let route = b"/aem/bin/slingshot/agent/jobs?sling_job_identifier=job%20%2F%3F%C3%A9";
                         assert!(request.windows(route.len()).any(|bytes| bytes == route));
                         authentication.lend_value_bytes(|value| {
                             assert!(request.windows(value.len()).any(|bytes| bytes == value))
@@ -4030,7 +4193,7 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                             bytes.push(socket.read_u8().await.unwrap());
                         }
                         assert!(bytes.starts_with(
-                        b"GET /aem/bin/slingshot-agent/operations/lookup?agent_operation_identifier="
+                        b"GET /aem/bin/slingshot/agent/snapshot?agent_operation_identifier="
                     ));
                         let response = format!(
                             "HTTP/1.1 {status} Absent\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
@@ -4118,7 +4281,7 @@ async fn selected_lookup_query_is_bounded_ordered_and_encoded_once() {
     let (authentication, _) =
         provider.authenticate(provider.snapshot().author().as_text(), READING, &source).unwrap();
     let fields = http::HeaderMap::new();
-    let route = &["bin", "slingshot-agent", "operations", "lookup"];
+    let route = &["bin", "slingshot", "agent", "snapshot"];
     let huge = "x".repeat(8193);
     for query in [vec![("id", "one"), ("id", "two")], vec![("id", huge.as_str())]] {
         assert!(
@@ -4135,7 +4298,7 @@ async fn selected_lookup_query_is_bounded_ordered_and_encoded_once() {
         while !bytes.ends_with(b"\r\n\r\n") {
             bytes.push(stream.read_u8().await.unwrap());
         }
-        assert!(bytes.starts_with(b"GET /aem/bin/slingshot-agent/operations/lookup?agent_operation_identifier=a%20%26%252F%C3%A9 HTTP/1.1\r\n"));
+        assert!(bytes.starts_with(b"GET /aem/bin/slingshot/agent/snapshot?agent_operation_identifier=a%20%26%252F%C3%A9 HTTP/1.1\r\n"));
         stream
             .write_all(
                 b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}",
@@ -4264,7 +4427,7 @@ async fn selected_artifact_stream_requires_complete_verified_message() {
                 request.push(stream.read_u8().await.unwrap());
             }
             assert!(String::from_utf8(request).unwrap().starts_with(&format!(
-                "GET /aem/bin/slingshot-agent/operations/{}/artifacts/content_package HTTP/1.1\r\n",
+                "GET /aem/bin/slingshot/agent/artifact?agent_operation_identifier={}&artifact_slot=content_package HTTP/1.1\r\n",
                 submission.operation.agent_operation_identifier
             )));
             let _ = stream
@@ -4464,7 +4627,7 @@ async fn selected_artifact_stream_requires_complete_verified_message() {
                         request.push(stream.read_u8().await.unwrap());
                     }
                     let route = format!(
-                        "GET /aem/bin/slingshot-agent/operations/{}/artifacts/content_package HTTP/1.1\r\n",
+                        "GET /aem/bin/slingshot/agent/artifact?agent_operation_identifier={}&artifact_slot=content_package HTTP/1.1\r\n",
                         submission.operation.agent_operation_identifier
                     );
                     assert!(request.starts_with(route.as_bytes()));
@@ -4493,7 +4656,7 @@ async fn selected_artifact_stream_requires_complete_verified_message() {
                 let mut request = vec![0; length];
                 stream.read_exact(&mut request).await.unwrap();
                 let route = format!(
-                    "/aem/bin/slingshot-agent/operations/{}/artifacts/content_package",
+                    "/aem/bin/slingshot/agent/artifact?agent_operation_identifier={}&artifact_slot=content_package",
                     submission.operation.agent_operation_identifier
                 );
                 assert!(request.windows(route.len()).any(|bytes| bytes == route.as_bytes()));

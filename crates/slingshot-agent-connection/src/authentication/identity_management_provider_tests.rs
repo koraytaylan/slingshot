@@ -144,7 +144,7 @@ async fn owned_provider_signs_refreshes_and_reuses_one_cache_without_source_inje
         let second = vectors()["sampled_second"].as_u64().unwrap();
         let utc = Utc(AtomicU64::new(second));
         let clock = Clock(AtomicU64::new(0));
-        let endpoint = provider.author_endpoint(&["bin", "slingshot-agent", "capabilities"]);
+        let endpoint = provider.author_endpoint(&["bin", "slingshot", "agent", "capabilities"]);
         assert!(provider.authenticate("https://publish.example.com", &clock, &utc).await.is_err());
         assert_eq!(clock.0.load(Ordering::SeqCst), 0);
         assert_eq!(utc.0.load(Ordering::SeqCst), second);
@@ -204,7 +204,7 @@ async fn author_extension_cannot_authorize_provider_owned_ims_exchange() {
     let second = vectors()["sampled_second"].as_u64().unwrap();
     let utc = Utc(AtomicU64::new(second));
     let clock = Clock(AtomicU64::new(0));
-    let endpoint = provider.author_endpoint(&["bin", "slingshot-agent", "capabilities"]);
+    let endpoint = provider.author_endpoint(&["bin", "slingshot", "agent", "capabilities"]);
     let peer = async {
         let (socket, _) = listener.accept().await.unwrap();
         if let Ok(mut peer) = acceptor.accept(socket).await {
@@ -241,7 +241,7 @@ async fn cancelled_owned_provider_refresh_fails_joiners_and_requires_a_new_excha
         let second = vectors()["sampled_second"].as_u64().unwrap();
         let utc = Utc(AtomicU64::new(second));
         let clock = Clock(AtomicU64::new(0));
-        let endpoint = provider.author_endpoint(&["bin", "slingshot-agent", "capabilities"]);
+        let endpoint = provider.author_endpoint(&["bin", "slingshot", "agent", "capabilities"]);
         let (sent, ready) = tokio::sync::oneshot::channel();
         let request = async {
             let (_, lease) = provider.authenticate(&endpoint, &clock, &utc).await.unwrap();

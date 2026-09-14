@@ -178,15 +178,11 @@ impl SelectedAuthorTransport {
         let request = encode_request(
             self,
             Method::GET,
+            &["bin", "slingshot", "agent", "artifact"],
             &[
-                "bin",
-                "slingshot-agent",
-                "operations",
-                &submission.operation.agent_operation_identifier,
-                "artifacts",
-                &expected.artifact_slot,
+                ("agent_operation_identifier", &submission.operation.agent_operation_identifier),
+                ("artifact_slot", &expected.artifact_slot),
             ],
-            &[],
             authentication,
             &HeaderMap::new(),
             b"",

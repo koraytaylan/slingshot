@@ -793,7 +793,7 @@ impl Submission {
         let mut headers = vec![
             (CONTENT_TYPE_HEADER.to_owned(), SUBMISSION_MEDIA_TYPE.to_owned()),
             (REFERER_HEADER.to_owned(), format!("{origin}/")),
-            (IDEMPOTENCY_KEY_HEADER.to_owned(), self.operation.agent_operation_identifier.clone()),
+            (IDEMPOTENCY_KEY_HEADER.to_owned(), self.submitted_command_digest.clone()),
         ];
         if let Some((name, value)) =
             header_for(SUBMISSION_METHOD, held_token, origin, now_unix_milliseconds)?

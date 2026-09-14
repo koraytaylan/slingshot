@@ -7,7 +7,7 @@ use crate::selected_author_exchange::SelectedAuthorFiniteResponse;
 use crate::selected_author_http::FiniteHttpFailure;
 use crate::selected_author_transport::SelectedAuthorTransport;
 use crate::server_sent_event_decoder::{DecoderBounds, EventStreamCursor};
-use http::{HeaderValue, Method};
+use http::{HeaderMap, HeaderValue, Method};
 use slingshot_agent_protocol::subscription_high_water::SubscriptionHighWater;
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
 
@@ -52,6 +52,29 @@ impl ValidatedHighWater {
     }
 }
 
+/// Returns the canonical POST body one high-water capture carries.
+///
+/// The two members are percent-encoded exactly once inside the JSON value, so
+/// the request names one subscription no matter what separators it contains.
+pub(crate) fn high_water_body(
+    subscription: &str,
+    generation: u64,
+) -> Result<Vec<u8>, HighWaterRefusal> {
+    let contract = AuthorAgentTransportContract::embedded();
+    if subscription.is_empty()
+        || subscription.len() as u64
+            > contract.limit("maximum_daemon_subscription_identifier_bytes")
+        || generation == 0
+    {
+        return Err(HighWaterRefusal);
+    }
+    let document = serde_json::json!({
+        "daemon_subscription_identifier": subscription,
+        "agent_event_store_generation": generation,
+    });
+    serde_json::to_vec(&document).map_err(|_| HighWaterRefusal)
+}
+
 /// A high-water route result, with reset truth separate from generic statuses.
 #[derive(Debug)]
 pub enum HighWaterOutcome {
@@ -67,6 +90,22 @@ pub enum HighWaterOutcome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("the author high-water capture is not verified")]
 pub struct HighWaterRefusal;
+
+use std::str::FromStr as _;
+
+/// Returns the wall-clock reading a token freshness check uses.
+///
+/// The token is fetched immediately before the POST, so the reading that
+/// matters is the instant the request is built, taken from the process clock.
+fn now_unix_milliseconds(
+    receipt: &crate::selected_author_http::FiniteHttpReceipt,
+) -> u64 {
+    let _ = receipt;
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| u64::try_from(since.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(u64::MAX)
+}
 
 /// Validates a complete selected-author response against independent request
 /// values. A matching body cannot substitute another subscription/generation.
@@ -148,7 +187,7 @@ impl SelectedAuthorTransport {
         self.capture_high_water(identity, subscription, generation, authentication, None).await
     }
     /// Captures with request-scoped provider authentication. Only a validated
-    /// Cloud 401 allows one identical GET; neither attempt installs a cursor.
+    /// Cloud 401 allows one identical repeat; neither attempt installs a cursor.
     pub async fn capture_high_water_authenticated(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -158,26 +197,60 @@ impl SelectedAuthorTransport {
         source: &dyn crate::authentication::access_token_cache::AccessTokenSource,
         reading: u64,
     ) -> Result<HighWaterOutcome, FiniteHttpFailure> {
-        let mut fields = crate::selected_author_events::request_fields(
+        let (mut fields, _operation) = crate::selected_author_events::request_fields(
             self,
             identity,
             subscription,
             generation,
             None,
         )?;
-        fields.insert("accept", HeaderValue::from_static("application/json"));
-        let generation_text = generation.to_string();
+        let body = high_water_body(subscription, generation)
+            .map_err(|_| FiniteHttpFailure::Request)?;
+        let token_receipt = self
+            .fresh_token_authenticated(provider, source, reading)
+            .await
+            .map_err(|error| match error {
+                crate::selected_author_authenticated_read::AuthenticatedReadFailure::Transport(
+                    failure,
+                ) => failure,
+                _ => FiniteHttpFailure::Request,
+            })?;
+        let token = self.decode_fresh_token(&token_receipt)
+            .map_err(|_| FiniteHttpFailure::Request)?;
+        let origin = self.origin();
+        let (name, value) = crate::author_cross_site_request_forgery_protection::header_for(
+            "POST",
+            Some(&token),
+            &origin,
+            now_unix_milliseconds(&token_receipt),
+        )
+        .map_err(|_| FiniteHttpFailure::Request)?
+        .expect("a POST always presents a held token");
+        fields.insert(
+            http::HeaderName::from_static("accept"),
+            HeaderValue::from_static("application/json"),
+        );
+        fields.insert(
+            http::HeaderName::from_static("content-type"),
+            HeaderValue::from_static("application/json"),
+        );
+        fields.insert(
+            http::HeaderName::from_static("referer"),
+            HeaderValue::from_str(&format!("{origin}/")).map_err(|_| FiniteHttpFailure::Request)?,
+        );
+        fields.insert(
+            http::HeaderName::from_str(name).map_err(|_| FiniteHttpFailure::Request)?,
+            HeaderValue::from_str(value).map_err(|_| FiniteHttpFailure::Request)?,
+        );
         let receipt = self
-            .authenticated_finite_get(
+            .authenticated_finite_post(
                 provider,
                 source,
                 reading,
-                &["bin", "slingshot-agent", "events", "high-water"],
-                &[
-                    ("agent_event_store_generation", generation_text.as_str()),
-                    ("daemon_subscription_identifier", subscription),
-                ],
+                &["bin", "slingshot", "agent", "subscriptions", "high-water"],
+                &[],
                 &fields,
+                &body,
             )
             .await
             .map_err(|error| match error {
@@ -191,7 +264,7 @@ impl SelectedAuthorTransport {
 
     /// Captures through the selected provider's asynchronous credential exchange.
     /// Selection checks run before authentication; response validation and the
-    /// single refreshed-GET policy are shared with the other transports.
+    /// single refreshed-repeat policy are shared with the other transports.
     pub async fn capture_high_water_authenticated_async<Clock, Utc>(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -205,26 +278,60 @@ impl SelectedAuthorTransport {
         Clock: crate::authentication::identity_management_exchange::MonotonicClock + Sync,
         Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
     {
-        let mut fields = crate::selected_author_events::request_fields(
+        let (mut fields, _operation) = crate::selected_author_events::request_fields(
             self,
             identity,
             subscription,
             generation,
             None,
         )?;
-        fields.insert("accept", HeaderValue::from_static("application/json"));
-        let generation_text = generation.to_string();
+        let body = high_water_body(subscription, generation)
+            .map_err(|_| FiniteHttpFailure::Request)?;
+        let token_receipt = self
+            .fresh_token_authenticated_async(provider, clock, utc)
+            .await
+            .map_err(|error| match error {
+                crate::selected_author_authenticated_read::AuthenticatedReadFailure::Transport(
+                    failure,
+                ) => failure,
+                _ => FiniteHttpFailure::Request,
+            })?;
+        let token = self.decode_fresh_token(&token_receipt)
+            .map_err(|_| FiniteHttpFailure::Request)?;
+        let origin = self.origin();
+        let (name, value) = crate::author_cross_site_request_forgery_protection::header_for(
+            "POST",
+            Some(&token),
+            &origin,
+            now_unix_milliseconds(&token_receipt),
+        )
+        .map_err(|_| FiniteHttpFailure::Request)?
+        .expect("a POST always presents a held token");
+        fields.insert(
+            http::HeaderName::from_static("accept"),
+            HeaderValue::from_static("application/json"),
+        );
+        fields.insert(
+            http::HeaderName::from_static("content-type"),
+            HeaderValue::from_static("application/json"),
+        );
+        fields.insert(
+            http::HeaderName::from_static("referer"),
+            HeaderValue::from_str(&format!("{origin}/")).map_err(|_| FiniteHttpFailure::Request)?,
+        );
+        fields.insert(
+            http::HeaderName::from_str(name).map_err(|_| FiniteHttpFailure::Request)?,
+            HeaderValue::from_str(value).map_err(|_| FiniteHttpFailure::Request)?,
+        );
         let receipt = self
-            .authenticated_finite_get_async(
+            .authenticated_finite_post_async(
                 provider,
                 clock,
                 utc,
-                &["bin", "slingshot-agent", "events", "high-water"],
-                &[
-                    ("agent_event_store_generation", generation_text.as_str()),
-                    ("daemon_subscription_identifier", subscription),
-                ],
+                &["bin", "slingshot", "agent", "subscriptions", "high-water"],
+                &[],
                 &fields,
+                &body,
             )
             .await
             .map_err(|error| match error {
@@ -244,35 +351,89 @@ impl SelectedAuthorTransport {
         authentication: &RequestAuthentication,
         http2: Option<bool>,
     ) -> Result<HighWaterOutcome, FiniteHttpFailure> {
-        let mut fields = crate::selected_author_events::request_fields(
+        let (mut fields, _operation) = crate::selected_author_events::request_fields(
             self,
             identity,
             subscription,
             generation,
             None,
         )?;
-        fields.insert("accept", HeaderValue::from_static("application/json"));
-        let generation_text = generation.to_string();
-        let segments = ["bin", "slingshot-agent", "events", "high-water"];
-        let query = [
-            ("agent_event_store_generation", generation_text.as_str()),
-            ("daemon_subscription_identifier", subscription),
-        ];
-        let receipt = if http2.is_none() {
+        let body =
+            high_water_body(subscription, generation).map_err(|_| FiniteHttpFailure::Request)?;
+        let token_receipt = if http2.is_none() {
             self.finite_negotiated_query(
                 Method::GET,
+                &["libs", "granite", "csrf", "token.json"],
+                &[],
+                authentication,
+                &HeaderMap::new(),
+                b"",
+            )
+            .await
+        } else if http2 == Some(true) {
+            self.finite_http2_query(
+                Method::GET,
+                &["libs", "granite", "csrf", "token.json"],
+                &[],
+                authentication,
+                &HeaderMap::new(),
+                b"",
+            )
+            .await
+        } else {
+            self.finite_http1_query(
+                Method::GET,
+                &["libs", "granite", "csrf", "token.json"],
+                &[],
+                authentication,
+                &HeaderMap::new(),
+                b"",
+            )
+            .await
+        }?;
+        let token = self.decode_fresh_token(&token_receipt)
+            .map_err(|_| FiniteHttpFailure::Request)?;
+        let origin = self.origin();
+        let (name, value) = crate::author_cross_site_request_forgery_protection::header_for(
+            "POST",
+            Some(&token),
+            &origin,
+            now_unix_milliseconds(&token_receipt),
+        )
+        .map_err(|_| FiniteHttpFailure::Request)?
+        .expect("a POST always presents a held token");
+        fields.insert(
+            http::HeaderName::from_static("accept"),
+            HeaderValue::from_static("application/json"),
+        );
+        fields.insert(
+            http::HeaderName::from_static("content-type"),
+            HeaderValue::from_static("application/json"),
+        );
+        fields.insert(
+            http::HeaderName::from_static("referer"),
+            HeaderValue::from_str(&format!("{origin}/")).map_err(|_| FiniteHttpFailure::Request)?,
+        );
+        fields.insert(
+            http::HeaderName::from_str(name).map_err(|_| FiniteHttpFailure::Request)?,
+            HeaderValue::from_str(value).map_err(|_| FiniteHttpFailure::Request)?,
+        );
+        let segments = ["bin", "slingshot", "agent", "subscriptions", "high-water"];
+        let receipt = if http2.is_none() {
+            self.finite_negotiated_query(
+                Method::POST,
                 &segments,
-                &query,
+                &[],
                 authentication,
                 &fields,
-                b"",
+                &body,
             )
             .await?
         } else if http2 == Some(true) {
-            self.finite_http2_query(Method::GET, &segments, &query, authentication, &fields, b"")
+            self.finite_http2_query(Method::POST, &segments, &[], authentication, &fields, &body)
                 .await?
         } else {
-            self.finite_http1_query(Method::GET, &segments, &query, authentication, &fields, b"")
+            self.finite_http1_query(Method::POST, &segments, &[], authentication, &fields, &body)
                 .await?
         };
         Self::decode_high_water_response(receipt.response, subscription, generation)

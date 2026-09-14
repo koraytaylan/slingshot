@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug)]
 enum ServiceLifetime {
     Control(DaemonOwnership),
-    Runtime(Box<std::sync::Mutex<DurableRuntime>>),
+    Runtime(std::sync::Arc<std::sync::Mutex<DurableRuntime>>),
 }
 
 /// Version of the product this daemon was built from.
@@ -70,6 +70,8 @@ pub struct DaemonService {
             slingshot_storage::maintenance::TerminalMaintenanceManifest,
         >,
     >,
+    scheduler_started: std::sync::atomic::AtomicBool,
+    scheduler: std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl DaemonService {
@@ -81,6 +83,8 @@ impl DaemonService {
             lifetime: ServiceLifetime::Control(ownership),
             diagnostics: None,
             reviewed_maintenance: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+            scheduler_started: std::sync::atomic::AtomicBool::new(false),
+            scheduler: std::sync::Mutex::new(None),
         }
     }
 
@@ -103,9 +107,36 @@ impl DaemonService {
         let diagnostics = runtime.diagnostics().clone();
         Self {
             contract,
-            lifetime: ServiceLifetime::Runtime(Box::new(std::sync::Mutex::new(runtime))),
+            lifetime: ServiceLifetime::Runtime(std::sync::Arc::new(std::sync::Mutex::new(runtime))),
             diagnostics: Some(diagnostics),
             reviewed_maintenance: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+            scheduler_started: std::sync::atomic::AtomicBool::new(false),
+            scheduler: std::sync::Mutex::new(None),
+        }
+    }
+
+    /// Starts the durable operation worker for a serving runtime. Admission is
+    /// intentionally separate from execution: the worker claims queued rows
+    /// through the persisted scheduler fence before invoking the author port.
+    pub fn start_scheduler(self: &std::sync::Arc<Self>, shutdown: CancellationToken) {
+        if self.scheduler_started.swap(true, std::sync::atomic::Ordering::AcqRel) {
+            return;
+        }
+        let ServiceLifetime::Runtime(runtime) = &self.lifetime else { return };
+        let runtime = std::sync::Arc::clone(runtime);
+        let handle =
+            tokio::task::spawn_local(async move { scheduler_loop(runtime, shutdown).await });
+        *self.scheduler.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(handle);
+    }
+
+    /// Waits for the scheduler to release its runtime before ownership is
+    /// withdrawn. This keeps shutdown deterministic and permits final
+    /// readiness cleanup to take exclusive access to the runtime.
+    pub async fn join_scheduler(&self) {
+        let handle =
+            self.scheduler.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+        if let Some(handle) = handle {
+            let _ = handle.await;
         }
     }
 
@@ -135,9 +166,11 @@ impl DaemonService {
     pub fn ownership_mut(&mut self) -> &mut DaemonOwnership {
         match &mut self.lifetime {
             ServiceLifetime::Control(ownership) => ownership,
-            ServiceLifetime::Runtime(runtime) => {
-                runtime.get_mut().unwrap_or_else(std::sync::PoisonError::into_inner).ownership_mut()
-            }
+            ServiceLifetime::Runtime(runtime) => std::sync::Arc::get_mut(runtime)
+                .expect("runtime is not shared before readiness")
+                .get_mut()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .ownership_mut(),
         }
     }
 
@@ -664,10 +697,148 @@ fn unix_milliseconds() -> u64 {
         .unwrap_or(u64::MAX)
 }
 
+/// Runs one process-local scheduler over the durable queue. The runtime mutex
+/// is held while an invocation runs because its SQLite connections are
+/// intentionally non-shareable; this preserves the single-owner invariant and
+/// still lets the local server acknowledge admission immediately.
+async fn scheduler_loop(
+    runtime: std::sync::Arc<std::sync::Mutex<DurableRuntime>>,
+    shutdown: CancellationToken,
+) {
+    static NEXT_FENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let interval = std::time::Duration::from_millis(50);
+    loop {
+        if shutdown.is_cancelled() {
+            return;
+        }
+        let fence = NEXT_FENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed).max(1);
+        let now = unix_milliseconds();
+        let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let lease = now.saturating_add(
+            slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded()
+                .limit("worker_execution_lease_milliseconds"),
+        );
+        let claim = match guard.claim_next_scheduled_operation(fence, lease, now) {
+            Ok(claim) => claim,
+            Err(_) => {
+                let _ = guard.diagnostics().record("scheduler claim failed");
+                drop(guard);
+                tokio::time::sleep(interval).await;
+                continue;
+            }
+        };
+        let Some(claim) = claim else {
+            drop(guard);
+            tokio::time::sleep(interval).await;
+            continue;
+        };
+        let target = guard.context().target();
+        let input = match guard.operations().read_execution_input(
+            &target.author_target_identity_digest,
+            &claim.operation_identifier,
+        ) {
+            Ok(Some(input)) => input,
+            _ => {
+                let _ = guard.diagnostics().record("scheduler input read failed");
+                drop(guard);
+                continue;
+            }
+        };
+        let attempt = input
+            .summary
+            .record
+            .outstanding_recovery
+            .as_ref()
+            .map_or(1, |recovery| recovery.attempt_count.saturating_add(1));
+        let identity = slingshot_domain::operation_executor::ExecutionIdentity {
+            attempt,
+            author_target_identity_digest: input.summary.author_target_identity_digest.clone(),
+            selected_environment_revision: input.summary.selected_environment_revision.clone(),
+            operation_identifier: input.summary.operation_identifier.clone(),
+        };
+        let generation = slingshot_domain::agent_identity::AgentEventStoreGeneration::first();
+        let subscription = slingshot_domain::agent_identity::DaemonSubscriptionIdentifier::derive(
+            guard.installation().as_text(),
+            &identity.author_target_identity_digest,
+            &identity.selected_environment_revision,
+            generation,
+        );
+        let _ = guard.subscriptions().open_subscription(
+            &identity.author_target_identity_digest,
+            subscription.as_text(),
+            generation.value(),
+            now,
+        );
+        let expected = slingshot_agent_protocol::wire_contract::ExpectedProvenance {
+            canonical_json_contract_digest:
+                slingshot_domain::command::schema::canonical_contract_digest(),
+            command_contract:
+                match slingshot_domain::selected_command_contract_identity::SelectedCommandContractIdentity::installed(
+                    &input.summary.command_wire_name,
+                ) {
+                    Ok(contract) => contract,
+                    Err(_) => {
+                        drop(guard);
+                        continue;
+                    }
+                },
+            transport_contract_digest:
+                slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded_digest(),
+        };
+        let operation = slingshot_agent_protocol::identity::WireOperationIdentity::of(
+            &identity.author_target_identity_digest,
+            &identity.selected_environment_revision,
+            &identity.operation_identifier,
+            generation,
+        );
+        let Ok(submission) = slingshot_agent_connection::command_submission::Submission::build(
+            &expected,
+            operation,
+            subscription.as_text(),
+            &input.canonical_command,
+            slingshot_agent_connection::command_submission::ExpectedArtifactManifest::empty(),
+        ) else {
+            drop(guard);
+            continue;
+        };
+        struct NoopProgress;
+        impl slingshot_domain::operation_executor::ProgressPort for NoopProgress {
+            fn report(&self, _detail: &str) {}
+        }
+        let outcome = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => return,
+            outcome = guard.execute_retained_with_claim(&identity, submission, &NoopProgress, fence, now) => outcome,
+        };
+        if let Ok(outcome) = outcome {
+            let _settled = guard
+                .operations()
+                .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+                .ok()
+                .flatten()
+                .map_or(Err(slingshot_storage::operation_repository::RepositoryFailure::NoSuchOperation {
+                    identifier: identity.operation_identifier.clone(),
+                }), |current| {
+                    guard.settle_execution_with_scheduler_fence(
+                        &current,
+                        &outcome,
+                        unix_milliseconds(),
+                        fence,
+                    )
+                });
+        } else {
+            let _ = guard.diagnostics().record("scheduler execution refused");
+        }
+        drop(guard);
+    }
+}
+
 impl Drop for DaemonService {
     fn drop(&mut self) {
         // Stop advertising before SQLite, transport and the lock are released.
         // Ownership's drop remains a second best-effort cleanup on failure.
-        let _ = self.ownership_mut().withdraw_readiness();
+        if matches!(self.lifetime, ServiceLifetime::Control(_)) {
+            let _ = self.ownership_mut().withdraw_readiness();
+        }
     }
 }

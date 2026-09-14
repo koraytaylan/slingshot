@@ -232,7 +232,7 @@ async fn concrete_basic_discovery_is_author_only_and_refusals_never_redirect_or_
                 }
                 let head = String::from_utf8(head).unwrap();
                 assert!(
-                    head.starts_with("GET /context/bin/slingshot-agent/capabilities HTTP/1.1\r\n")
+                    head.starts_with("GET /context/bin/slingshot/agent/capabilities HTTP/1.1\r\n")
                 );
                 assert!(
                     head.contains("Authorization: Basic YWRtaW46bm90LWEtcmVhbC1wYXNzd29yZA==\r\n")

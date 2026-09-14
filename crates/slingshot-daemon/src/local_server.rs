@@ -110,6 +110,24 @@ impl LocalListener {
         let EndpointAddress::UnixDomainSocket(path) = address;
         let unbindable =
             |reason: String| ServerFailure::Unbindable { address: address.display(), reason };
+        // Endpoint paths are deliberately rooted under a short, hashed `/tmp`
+        // directory rather than the caller's configuration path. Create that
+        // directory lazily here (the client side must remain read-only), and
+        // refuse a pre-existing directory that is not owner-only.
+        if path
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .is_some_and(|name| name.to_string_lossy().starts_with("slingshot-"))
+        {
+            let parent = path.parent().expect("a prefixed endpoint has a parent");
+            crate::platform_runtime::current_user::create_owner_only_directory(parent)
+                .map_err(|failure| unbindable(failure.to_string()))?;
+            if !crate::platform_runtime::current_user::is_owner_only(parent)
+                .map_err(|failure| unbindable(failure.to_string()))?
+            {
+                return Err(unbindable("the endpoint directory is not owner-only".to_owned()));
+            }
+        }
         match std::fs::symlink_metadata(path) {
             Ok(metadata) if metadata.file_type().is_socket() => {
                 std::fs::remove_file(path).map_err(|failure| unbindable(failure.to_string()))?;
@@ -464,6 +482,10 @@ where
 
 /// Serves one connection with a root shutdown token that also cancels a
 /// long-lived wait observer.
+///
+/// # Errors
+///
+/// Returns [`ConnectionFailure`] when the connection cannot be served.
 pub async fn serve_connection_with_shutdown<Stream>(
     service: &DaemonService,
     stream: &mut Stream,

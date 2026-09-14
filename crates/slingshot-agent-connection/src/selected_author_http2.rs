@@ -68,6 +68,9 @@ pub(crate) trait ResponseConsumer {
     type Output;
     fn head_complete(&self) -> bool;
     fn stream_ended(&self) -> bool;
+    fn stream_end_is_terminal(&self) -> bool {
+        false
+    }
     fn accept(
         &mut self,
         frame: &ResponseFrame,
@@ -76,6 +79,14 @@ pub(crate) trait ResponseConsumer {
         self,
         end: crate::selected_author_http2_frames::TransportEnd,
     ) -> Result<Self::Output, crate::selected_author_http2_response::ResponseRefusal>;
+    fn finish_at_stream_end(
+        self,
+    ) -> Result<Self::Output, crate::selected_author_http2_response::ResponseRefusal>
+    where
+        Self: Sized,
+    {
+        Err(crate::selected_author_http2_response::ResponseRefusal)
+    }
     fn body_deadlines(&self, defaults: ExchangeDeadlines) -> (u64, u64) {
         (defaults.finite_total_milliseconds, defaults.finite_idle_milliseconds)
     }
@@ -95,6 +106,9 @@ impl ResponseConsumer for FiniteResponse {
     fn stream_ended(&self) -> bool {
         self.stream_ended()
     }
+    fn stream_end_is_terminal(&self) -> bool {
+        true
+    }
     fn accept(
         &mut self,
         frame: &ResponseFrame,
@@ -106,6 +120,11 @@ impl ResponseConsumer for FiniteResponse {
         end: crate::selected_author_http2_frames::TransportEnd,
     ) -> Result<Self::Output, crate::selected_author_http2_response::ResponseRefusal> {
         self.finish_at_transport_end(end)
+    }
+    fn finish_at_stream_end(
+        self,
+    ) -> Result<Self::Output, crate::selected_author_http2_response::ResponseRefusal> {
+        FiniteResponse::finish_at_stream_end(self)
     }
 }
 
@@ -387,6 +406,36 @@ async fn read<R: ResponseConsumer>(
                         .map_err(|_| timeout_failure)?
                         .map_err(|_| failure)?;
                     finish_sent = true;
+                    if response.stream_end_is_terminal() {
+                        // END_STREAM completes this response without requiring
+                        // peer EOF. Drain anything already available in the
+                        // frame reader, however, so a trailing response frame
+                        // on stream 1 is never silently published.
+                        loop {
+                            let next = frames.read_next(&mut input);
+                            tokio::pin!(next);
+                            let next = tokio::select! {
+                                biased;
+                                result = &mut next => Some(result.map_err(|_| failure)?),
+                                _ = tokio::task::yield_now() => None,
+                            };
+                            let Some(next) = next else {
+                                return response.finish_at_stream_end().map_err(|_| failure);
+                            };
+                            match next {
+                                FrameRead::End(_) => {
+                                    return response.finish_at_stream_end().map_err(|_| failure);
+                                }
+                                FrameRead::Frame(frame)
+                                    if frame.stream_identifier == 1
+                                        && matches!(frame.kind, 0 | 1 | 9) =>
+                                {
+                                    return Err(failure);
+                                }
+                                FrameRead::Frame(_) => {}
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -694,7 +743,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn end_stream_without_peer_eof_is_not_a_finite_receipt() {
+    async fn end_stream_without_peer_eof_completes_finite_receipt() {
         let (stream, mut peer) = tokio::io::duplex(1024);
         let mut limits = deadlines();
         limits.finite_idle_milliseconds = 10;
@@ -708,7 +757,7 @@ pub(crate) mod tests {
             sleep(Duration::from_millis(20)).await;
         };
         let (result, ()) = tokio::join!(client(stream, b"", limits), server);
-        assert_eq!(result.unwrap_err(), FiniteHttpFailure::Body);
+        assert!(result.is_ok());
     }
 
     #[tokio::test(start_paused = true)]

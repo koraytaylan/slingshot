@@ -296,7 +296,7 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
                 provider,
                 source,
                 reading,
-                &["bin", "slingshot-agent", "capabilities"],
+                &["bin", "slingshot", "agent", "capabilities"],
                 &[],
                 &http::HeaderMap::new(),
             )
@@ -332,7 +332,7 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
                 provider,
                 clock,
                 utc,
-                &["bin", "slingshot-agent", "capabilities"],
+                &["bin", "slingshot", "agent", "capabilities"],
                 &[],
                 &http::HeaderMap::new(),
             )
@@ -360,7 +360,7 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         let receipt = if http2.is_none() {
             self.finite_negotiated_query(
                 http::Method::GET,
-                &["bin", "slingshot-agent", "capabilities"],
+                &["bin", "slingshot", "agent", "capabilities"],
                 &[],
                 authentication,
                 &http::HeaderMap::new(),
@@ -370,7 +370,7 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         } else if http2 == Some(true) {
             self.finite_http2_query(
                 http::Method::GET,
-                &["bin", "slingshot-agent", "capabilities"],
+                &["bin", "slingshot", "agent", "capabilities"],
                 &[],
                 authentication,
                 &http::HeaderMap::new(),
@@ -380,7 +380,7 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         } else {
             self.finite_http1(
                 http::Method::GET,
-                &["bin", "slingshot-agent", "capabilities"],
+                &["bin", "slingshot", "agent", "capabilities"],
                 authentication,
                 &http::HeaderMap::new(),
                 b"",

@@ -352,7 +352,7 @@ impl SelectedAuthorTransport {
         request_fields(self, identity, subscription, generation, committed_cursor)?;
         self.require_provider(provider).map_err(|_| FiniteHttpFailure::Request)?;
         let (authentication, lease) = provider
-            .authenticate(&self.endpoint(&["bin", "slingshot-agent", "events"]), reading, source)
+            .authenticate(&self.endpoint(&["bin", "slingshot", "agent", "events"]), reading, source)
             .map_err(|_| FiniteHttpFailure::Request)?;
         let mut outcome = self
             .events_negotiated(
@@ -408,7 +408,7 @@ impl SelectedAuthorTransport {
         request_fields(self, identity, subscription, generation, committed_cursor)?;
         self.require_provider(provider).map_err(|_| FiniteHttpFailure::Request)?;
         let (authentication, lease) = provider
-            .authenticate(&self.endpoint(&["bin", "slingshot-agent", "events"]), clock, utc)
+            .authenticate(&self.endpoint(&["bin", "slingshot", "agent", "events"]), clock, utc)
             .await
             .map_err(|_| FiniteHttpFailure::Request)?;
         let mut outcome = self
@@ -456,13 +456,15 @@ impl SelectedAuthorTransport {
         consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
         automatic: bool,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
-        let fields = request_fields(self, identity, subscription, generation, committed_cursor)?;
+        let (fields, operation) =
+            request_fields(self, identity, subscription, generation, committed_cursor)?;
         let generation_text = generation.to_string();
         let head = self.encode_http2_request_head(
             Method::GET,
-            &["bin", "slingshot-agent", "events"],
+            &["bin", "slingshot", "agent", "events"],
             &[
                 ("agent_event_store_generation", &generation_text),
+                ("agent_operation_identifier", &operation),
                 ("daemon_subscription_identifier", subscription),
             ],
             authentication,
@@ -473,9 +475,10 @@ impl SelectedAuthorTransport {
             Some(crate::selected_author_http::encode_request(
                 self,
                 Method::GET,
-                &["bin", "slingshot-agent", "events"],
+                &["bin", "slingshot", "agent", "events"],
                 &[
                     ("agent_event_store_generation", &generation_text),
+                    ("agent_operation_identifier", &operation),
                     ("daemon_subscription_identifier", subscription),
                 ],
                 authentication,

@@ -13,6 +13,9 @@
 
 const DIGEST_HEX_CHARACTERS: usize = 64;
 
+/// Admission limit used by the retained-operation fixture.
+const RETAINED_OPERATION_ADMISSION_LIMIT: u64 = 1000;
+
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
@@ -259,7 +262,13 @@ fn compiled_startup_publishes_selected_durable_identity() {
         }
     }
     cooperatively_stop(&root, ENVIRONMENT);
-    assert!(child.wait().unwrap().success());
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "compiled daemon exited with {}; stderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
     let identity = record.identity.unwrap();
     assert_eq!(identity.retained_control_version, FoundationContract::embedded().control.version);
     assert_eq!(
@@ -369,6 +378,7 @@ fn compiled_startup_refusals_leave_no_readiness_or_owner() {
                     target.digest(),
                 )
                 .unwrap();
+                std::fs::create_dir_all(path.parent().expect("the endpoint has a parent")).unwrap();
                 std::fs::write(path, b"preserved endpoint obstacle").unwrap();
             }
             "foreign-revision" => {
@@ -406,7 +416,7 @@ fn compiled_startup_refusals_leave_no_readiness_or_owner() {
                             selected_environment_revision: revision,
                             workflow_correlation_identifier: None,
                         },
-                        1000,
+                        RETAINED_OPERATION_ADMISSION_LIMIT,
                     )
                     .unwrap();
             }

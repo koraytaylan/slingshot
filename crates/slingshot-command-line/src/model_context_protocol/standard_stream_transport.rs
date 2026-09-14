@@ -189,7 +189,11 @@ pub enum Message {
     /// A request, which is answered exactly once.
     Request {
         /// What the answer is correlated by.
-        identifier: String,
+        ///
+        /// JSON-RPC permits either a string or a number.  Keep the decoded
+        /// value rather than normalizing it to text so the response preserves
+        /// the request's identifier type exactly.
+        identifier: Value,
         /// What is being asked.
         method: String,
         /// What it is being asked with.
@@ -207,7 +211,7 @@ pub enum Message {
 impl Message {
     /// Returns the identifier this message is answered under, when it has one.
     #[must_use]
-    pub fn identifier(&self) -> Option<&str> {
+    pub fn identifier(&self) -> Option<&Value> {
         match self {
             Self::Request { identifier, .. } => Some(identifier),
             Self::Notification { .. } => None,
@@ -265,12 +269,16 @@ pub fn read_message(line: &[u8]) -> Result<Message, MessageRefusal> {
     let parameters = object.get("params").cloned().unwrap_or(Value::Null);
     match object.get("id") {
         None => Ok(Message::Notification { method, parameters }),
-        Some(Value::String(identifier)) => {
-            Ok(Message::Request { identifier: identifier.clone(), method, parameters })
-        }
-        Some(Value::Number(identifier)) => {
-            Ok(Message::Request { identifier: identifier.to_string(), method, parameters })
-        }
+        Some(Value::String(identifier)) => Ok(Message::Request {
+            identifier: Value::String(identifier.clone()),
+            method,
+            parameters,
+        }),
+        Some(Value::Number(identifier)) => Ok(Message::Request {
+            identifier: Value::Number(identifier.clone()),
+            method,
+            parameters,
+        }),
         Some(_) => Err(MessageRefusal::UnknownDirection),
     }
 }

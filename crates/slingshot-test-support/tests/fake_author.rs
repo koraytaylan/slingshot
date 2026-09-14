@@ -25,7 +25,7 @@ use slingshot_test_support::fake_author::server::{
 };
 
 /// The route these fixtures submit to.
-const SUBMIT: &str = "/bin/slingshot-agent/jobs";
+const SUBMIT: &str = "/bin/slingshot/agent/submit";
 
 /// A route a publisher would serve and this author never does.
 const PUBLISHER: &str = "/content/dam/something";
@@ -186,7 +186,7 @@ async fn the_loopback_server_speaks_the_script_without_recording_credentials() {
     let mut client = tokio::net::TcpStream::connect(address).await.expect("the listener accepts");
     client
         .write_all(
-            b"POST /bin/slingshot-agent/jobs HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer a-test-secret\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+            b"POST /bin/slingshot/agent/submit HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer a-test-secret\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
         )
         .await
         .expect("the request writes");
@@ -212,7 +212,7 @@ async fn stopping_the_loopback_author_closes_accepted_connections() {
     let server = author.serve_loopback().await.expect("bind loopback");
     let address = server.endpoint().strip_prefix("http://").expect("HTTP endpoint");
     let mut socket = tokio::net::TcpStream::connect(address).await.expect("connect");
-    socket.write_all(b"GET /bin/slingshot-agent/jobs HTTP/1.1\r\nHost: localhost\r\nAuthorization: Basic dGVzdA==\r\n\r\n")
+    socket.write_all(b"GET /bin/slingshot/agent/submit HTTP/1.1\r\nHost: localhost\r\nAuthorization: Basic dGVzdA==\r\n\r\n")
         .await.expect("send request");
     timeout(Duration::from_secs(5), async {
         let mut received = Vec::new();

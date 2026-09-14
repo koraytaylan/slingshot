@@ -85,7 +85,7 @@ impl SelectedAuthorTransport {
         let started = Instant::now();
         let (authentication, lease) = provider
             .authenticate(
-                &self.endpoint(&["bin", "slingshot-agent", "operations"]),
+                &self.endpoint(&["bin", "slingshot", "agent", "artifact"]),
                 reading,
                 source,
             )
@@ -152,7 +152,7 @@ impl SelectedAuthorTransport {
         self.require_provider(provider).map_err(|_| FiniteHttpFailure::Request)?;
         let started = Instant::now();
         let (authentication, lease) = provider
-            .authenticate(&self.endpoint(&["bin", "slingshot-agent", "operations"]), clock, utc)
+            .authenticate(&self.endpoint(&["bin", "slingshot", "agent", "artifact"]), clock, utc)
             .await
             .map_err(|_| FiniteHttpFailure::Request)?;
         let mut outcome = self
@@ -235,18 +235,17 @@ impl SelectedAuthorTransport {
         automatic: bool,
     ) -> Result<ArtifactHttpOutcome, FiniteHttpFailure> {
         self.require_artifact_request(identity, submission, expected, artifact_identifier)?;
-        let segments = [
-            "bin",
-            "slingshot-agent",
-            "operations",
-            &submission.operation.agent_operation_identifier,
-            "artifacts",
-            &expected.artifact_slot,
+        let operation = submission.operation.agent_operation_identifier.as_str();
+        let slot_text = expected.artifact_slot.as_str();
+        let segments = ["bin", "slingshot", "agent", "artifact"];
+        let query = [
+            ("agent_operation_identifier", operation),
+            ("artifact_slot", slot_text),
         ];
         let head = self.encode_http2_request_head(
             Method::GET,
             &segments,
-            &[],
+            &query,
             authentication,
             &HeaderMap::new(),
             b"",
@@ -256,7 +255,7 @@ impl SelectedAuthorTransport {
                 self,
                 Method::GET,
                 &segments,
-                &[],
+                &query,
                 authentication,
                 &HeaderMap::new(),
                 b"",

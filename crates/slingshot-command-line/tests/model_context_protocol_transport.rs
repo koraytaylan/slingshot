@@ -127,7 +127,9 @@ fn every_declared_line_is_read_the_way_the_fixture_says() {
                 let Ok(Message::Request { identifier, .. }) = read else {
                     panic!("{} is a request: {read:?}", case.name)
                 };
-                assert_eq!(identifier, case.detail, "{}", case.name);
+                let expected = serde_json::from_str(&case.detail)
+                    .unwrap_or(serde_json::Value::String(case.detail));
+                assert_eq!(identifier, expected, "{}", case.name);
             }
             "notification" => {
                 assert!(matches!(read, Ok(Message::Notification { .. })), "{}", case.name);
@@ -142,6 +144,13 @@ fn every_declared_line_is_read_the_way_the_fixture_says() {
             }
         }
     }
+}
+
+#[test]
+fn numeric_json_rpc_ids_are_retained_as_numbers() {
+    let message = read_message(br#"{"id":1,"method":"ping"}"#).expect("the request reads");
+    let Message::Request { identifier, .. } = message else { panic!("a request was expected") };
+    assert_eq!(identifier, serde_json::json!(1));
 }
 
 #[test]

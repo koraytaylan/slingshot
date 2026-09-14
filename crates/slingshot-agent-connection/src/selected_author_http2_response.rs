@@ -172,12 +172,22 @@ impl FiniteResponse {
         Ok(())
     }
 
-    /// Requires the frame reader's clean transport-end proof as well as a
-    /// complete validated response. END_STREAM alone cannot finish a response.
+    /// Completes a fully received finite response. The response is complete
+    /// once END_STREAM has been validated; the peer may keep the TLS
+    /// connection open after that point.
     pub fn finish_at_transport_end(
         self,
         _end: crate::selected_author_http2_frames::TransportEnd,
     ) -> Result<SelectedAuthorFiniteResponse, ResponseRefusal> {
+        self.finish_complete()
+    }
+
+    /// Completes a finite response immediately after a validated END_STREAM.
+    pub fn finish_at_stream_end(self) -> Result<SelectedAuthorFiniteResponse, ResponseRefusal> {
+        self.finish_complete()
+    }
+
+    fn finish_complete(self) -> Result<SelectedAuthorFiniteResponse, ResponseRefusal> {
         if !self.stream_ended() || self.block.is_some() {
             return Err(ResponseRefusal);
         }

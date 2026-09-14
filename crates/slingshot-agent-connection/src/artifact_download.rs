@@ -36,7 +36,7 @@ use crate::author_hypertext_transfer_protocol_policy::{ResponseHead, ResponseRef
 use crate::structured_job_result::STRUCTURED_RESULT_SLOT;
 
 /// The fixed route artifacts are fetched from, beneath the author's base.
-pub const ARTIFACT_ROUTE: &str = "/bin/slingshot-agent/operations";
+pub const ARTIFACT_ROUTE: &str = "/bin/slingshot/agent/artifact";
 
 /// Characters a route segment keeps as itself.
 const UNRESERVED: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
@@ -239,10 +239,10 @@ pub fn artifact_route(
     }
     require_remote_slot(artifact_slot)?;
     Ok(format!(
-        "{}{ARTIFACT_ROUTE}/{}/artifacts/{}",
+        "{}{ARTIFACT_ROUTE}?agent_operation_identifier={}&artifact_slot={}",
         author_base.trim_end_matches('/'),
-        encoded_segment(agent_operation_identifier),
-        encoded_segment(artifact_slot)
+        crate::job_snapshot_reconciliation::encoded_once(agent_operation_identifier),
+        crate::job_snapshot_reconciliation::encoded_once(artifact_slot)
     ))
 }
 

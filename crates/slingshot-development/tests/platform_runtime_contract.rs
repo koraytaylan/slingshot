@@ -370,11 +370,25 @@ fn the_current_environment_proves_its_own_row_and_reports_it_as_untrusted() {
         assert!(current_user::is_owner_only(&root).expect("the directory is inspectable"));
         let address = endpoint::endpoint_address(&contract, &root, PROBE_NAMESPACE_DIGEST)
             .expect("the endpoint address is within its bound");
-        assert!(address.display().contains(PROBE_NAMESPACE_DIGEST));
+        assert!(address.display().ends_with(".socket"));
         assert!(
             address.display().len() <= contract.namespace.unix_socket_address_bytes as usize
                 || !matches!(address, endpoint::EndpointAddress::UnixDomainSocket(_)),
             "the endpoint address stays inside its operating-system bound"
+        );
+        let long_root = PathBuf::from(
+            "/Users/a-long-account-name/Library/Application Support/Slingshot/Configuration/.config/slingshot/runtime",
+        );
+        let long_address = endpoint::endpoint_address(&contract, &long_root, PROBE_NAMESPACE_DIGEST)
+            .expect("endpoint naming does not depend on the configuration-root path");
+        assert!(
+            long_address.display().len()
+                <= contract.namespace.unix_socket_address_bytes as usize,
+            "a long macOS home/configuration path must not consume socket-name budget"
+        );
+        assert!(
+            !long_address.display().contains(long_root.to_string_lossy().as_ref()),
+            "the endpoint path must not embed the caller-selected root"
         );
         let oversized = "f".repeat(contract.namespace.unix_socket_address_bytes as usize);
         assert!(matches!(
@@ -451,10 +465,10 @@ fn the_current_environment_proves_its_own_row_and_reports_it_as_untrusted() {
 
 /// Returns a fresh runtime root for one real probe.
 ///
-/// The name is short on purpose. A Unix domain socket address is bounded by the
-/// operating system and the foundation contract records that bound, so a
-/// runtime root that leaves no room for the namespace digest is a real defect
-/// rather than a test inconvenience.
+/// The endpoint itself is rooted in the platform's short endpoint namespace;
+/// keeping this probe under `/tmp` makes the durable runtime state independent
+/// of the runner's temporary path while the long-root assertion above proves
+/// the endpoint no longer embeds that path.
 fn probe_root(name: &str) -> PathBuf {
     // The endpoint address bound is an operating-system limit of about a
     // hundred bytes, and a per-user temporary directory is long enough on some

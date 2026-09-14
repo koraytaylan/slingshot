@@ -1,8 +1,8 @@
-//! Request-scoped authentication for finite, read-only selected-author exchanges.
+//! Request-scoped authentication for finite selected-author exchanges.
 //!
 //! Only a completely framed Cloud 401 permits one refresh and one identical
-//! GET. This API deliberately cannot submit a body or choose a write method.
-//! Route-specific response interpretation remains the caller's responsibility.
+//! repeat of the bounded request, whatever its method. Route-specific response
+//! interpretation remains the caller's responsibility.
 
 use http::{HeaderMap, Method};
 use std::future::Future;
@@ -106,10 +106,48 @@ impl SelectedAuthorTransport {
             >,
         >,
     {
+        self.finite_with_authentication(
+            Method::GET,
+            segments,
+            query,
+            fields,
+            b"",
+            initial,
+            refresh,
+        )
+        .await
+    }
+
+    /// Sends one request with the given method and body, refreshing Cloud
+    /// credentials once after a validated 401. The same request, byte for
+    /// byte, is repeated on that refresh; nothing else ever retries it.
+    pub(crate) async fn finite_with_authentication<Lease, Refresh>(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, &str)],
+        fields: &HeaderMap,
+        body: &[u8],
+        initial: impl Future<
+            Output = Result<
+                (crate::authentication::environment_provider::RequestAuthentication, Option<Lease>),
+                ProviderFailure,
+            >,
+        >,
+        refresh: impl FnOnce(Lease) -> Refresh,
+    ) -> Result<FiniteHttpReceipt, AuthenticatedReadFailure>
+    where
+        Refresh: Future<
+            Output = Result<
+                (crate::authentication::environment_provider::RequestAuthentication, Lease),
+                ProviderFailure,
+            >,
+        >,
+    {
         let started = Instant::now();
         let (authentication, lease) = initial.await?;
         let mut receipt = self
-            .finite_negotiated_query(Method::GET, segments, query, &authentication, fields, &[])
+            .finite_negotiated_query(method.clone(), segments, query, &authentication, fields, body)
             .await?;
         drop(authentication);
         if receipt.response.status == 401 {
@@ -117,12 +155,12 @@ impl SelectedAuthorTransport {
                 let (authentication, _) = refresh(lease).await?;
                 receipt = self
                     .finite_negotiated_query(
-                        Method::GET,
+                        method,
                         segments,
                         query,
                         &authentication,
                         fields,
-                        &[],
+                        body,
                     )
                     .await?;
             }
@@ -130,5 +168,104 @@ impl SelectedAuthorTransport {
         receipt.elapsed_milliseconds =
             u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
         Ok(receipt)
+    }
+
+    /// Fetches one fresh cross-site request forgery token from the selected
+    /// author, through the provider with the same one-refresh-on-401 policy as
+    /// any other bounded read. The token's only lifetime is the immediately
+    /// following write it protects; it is never cached or returned onward.
+    pub(crate) async fn fresh_token_authenticated(
+        &self,
+        provider: &EnvironmentAuthenticationProvider,
+        source: &dyn AccessTokenSource,
+        reading: u64,
+    ) -> Result<FiniteHttpReceipt, AuthenticatedReadFailure> {
+        self.authenticated_finite_get(
+            provider,
+            source,
+            reading,
+            &["libs", "granite", "csrf", "token.json"],
+            &[],
+            &HeaderMap::new(),
+        )
+        .await
+    }
+
+    /// Fetches one fresh cross-site request forgery token through the async
+    /// provider, with the same one-refresh-on-401 policy as any other read.
+    pub(crate) async fn fresh_token_authenticated_async<Clock, Utc>(
+        &self,
+        provider: &crate::authentication::environment_provider::AsyncEnvironmentAuthenticationProvider,
+        clock: &Clock,
+        utc: &Utc,
+    ) -> Result<FiniteHttpReceipt, AuthenticatedReadFailure>
+    where
+        Clock: crate::authentication::identity_management_exchange::MonotonicClock + Sync,
+        Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
+    {
+        self.authenticated_finite_get_async(
+            provider,
+            clock,
+            utc,
+            &["libs", "granite", "csrf", "token.json"],
+            &[],
+            &HeaderMap::new(),
+        )
+        .await
+    }
+
+    /// Sends one POST, refreshing Cloud credentials once after a validated 401
+    /// and repeating the identical request on that refresh alone.
+    pub(crate) async fn authenticated_finite_post(
+        &self,
+        provider: &EnvironmentAuthenticationProvider,
+        source: &dyn AccessTokenSource,
+        reading: u64,
+        segments: &[&str],
+        query: &[(&str, &str)],
+        fields: &HeaderMap,
+        body: &[u8],
+    ) -> Result<FiniteHttpReceipt, AuthenticatedReadFailure> {
+        self.require_provider(provider)?;
+        self.finite_with_authentication(
+            Method::POST,
+            segments,
+            query,
+            fields,
+            body,
+            async { provider.authenticate(&provider.author_endpoint(segments), reading, source) },
+            |lease| async move { provider.refresh_after_unauthorized(lease, source) },
+        )
+        .await
+    }
+
+    /// Sends one POST through the async provider, with the same one-refresh
+    /// policy. The identical request is repeated on that refresh alone.
+    pub(crate) async fn authenticated_finite_post_async<Clock, Utc>(
+        &self,
+        provider: &crate::authentication::environment_provider::AsyncEnvironmentAuthenticationProvider,
+        clock: &Clock,
+        utc: &Utc,
+        segments: &[&str],
+        query: &[(&str, &str)],
+        fields: &HeaderMap,
+        body: &[u8],
+    ) -> Result<FiniteHttpReceipt, AuthenticatedReadFailure>
+    where
+        Clock: crate::authentication::identity_management_exchange::MonotonicClock + Sync,
+        Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
+    {
+        self.require_provider(provider)?;
+        let endpoint = provider.author_endpoint(segments);
+        self.finite_with_authentication(
+            Method::POST,
+            segments,
+            query,
+            fields,
+            body,
+            provider.authenticate(&endpoint, clock, utc),
+            |lease| provider.refresh_after_unauthorized(lease, clock, utc),
+        )
+        .await
     }
 }
