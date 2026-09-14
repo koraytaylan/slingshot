@@ -322,7 +322,7 @@ async fn owned_cloud_discovery_refresh_and_refusals_use_only_the_selected_tls_pe
                 let request = head(&mut peer).await;
                 assert!(
                     request
-                        .starts_with("GET /context/bin/slingshot-agent/capabilities HTTP/1.1\r\n")
+                        .starts_with("GET /context/bin/slingshot/agent/capabilities HTTP/1.1\r\n")
                 );
                 assert!(
                     request
@@ -450,7 +450,7 @@ async fn author_extension_accepts_author_tls_but_cannot_authorize_ims() {
     .await
     .unwrap();
     let clock = Clock(AtomicU64::new(0));
-    let endpoint = provider.author_endpoint(&["bin", "slingshot-agent", "capabilities"]);
+    let endpoint = provider.author_endpoint(&["bin", "slingshot", "agent", "capabilities"]);
     let (result, ()) = timeout(Duration::from_secs(10), async {
         tokio::join!(provider.authenticate(&endpoint, &clock, &Utc), async {
             if let Ok(mut peer) = server(true).accept(ims.accept().await.unwrap().0).await {
@@ -530,7 +530,7 @@ async fn rotated_secret_is_loaded_only_by_a_new_provider_and_never_shares_its_ca
         selected_environment_revision: old.snapshot().revision().to_string(),
     };
     let clock = Clock(AtomicU64::new(0));
-    let token_endpoint = old.author_endpoint(&["bin", "slingshot-agent", "capabilities"]);
+    let token_endpoint = old.author_endpoint(&["bin", "slingshot", "agent", "capabilities"]);
     let requests = async {
         let mut transcript = String::new();
         for (index, provider) in [&old, &new, &old, &old, &new].into_iter().enumerate() {
@@ -609,7 +609,7 @@ async fn rotated_secret_is_loaded_only_by_a_new_provider_and_never_shares_its_ca
             let mut peer = server(false).accept(author.accept().await.unwrap().0).await.unwrap();
             let request = head(&mut peer).await;
             assert!(
-                request.starts_with("GET /rotation/bin/slingshot-agent/capabilities HTTP/1.1\r\n")
+                request.starts_with("GET /rotation/bin/slingshot/agent/capabilities HTTP/1.1\r\n")
             );
             assert!(request.contains(&format!("Authorization: Bearer rotation-token-{token}\r\n")));
             reply(&mut peer, 200, &body, "", false).await;
@@ -756,7 +756,7 @@ async fn pending_cloud_exchange_does_not_block_or_contaminate_basic_and_caches_s
             let mut peer = basic_author.accept().await.unwrap().0;
             let request = head(&mut peer).await;
             assert!(
-                request.starts_with("GET /basic/bin/slingshot-agent/capabilities HTTP/1.1\r\n")
+                request.starts_with("GET /basic/bin/slingshot/agent/capabilities HTTP/1.1\r\n")
             );
             assert!(
                 request.contains("Authorization: Basic YWRtaW46bm90LWEtcmVhbC1wYXNzd29yZA==\r\n")
@@ -771,7 +771,7 @@ async fn pending_cloud_exchange_does_not_block_or_contaminate_basic_and_caches_s
                 server(false).accept(cloud_author.accept().await.unwrap().0).await.unwrap();
             let request = head(&mut peer).await;
             assert!(
-                request.starts_with("GET /cloud/bin/slingshot-agent/capabilities HTTP/1.1\r\n")
+                request.starts_with("GET /cloud/bin/slingshot/agent/capabilities HTTP/1.1\r\n")
             );
             assert!(request.contains("Authorization: Bearer isolated-cloud-token\r\n"));
             assert!(!request.contains("Basic"));

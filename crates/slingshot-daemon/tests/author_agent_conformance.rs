@@ -89,10 +89,10 @@ const BEARER_CREDENTIAL: &str = "Bearer a-token-value-nothing-records";
 const SUBSTITUTED_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 /// The capabilities route the author serves.
-const CAPABILITIES_ROUTE: &str = "/bin/slingshot-agent/capabilities";
+const CAPABILITIES_ROUTE: &str = "/bin/slingshot/agent/capabilities";
 
 /// The submission route the author serves.
-const SUBMIT_ROUTE: &str = "/bin/slingshot-agent/jobs";
+const SUBMIT_ROUTE: &str = "/bin/slingshot/agent/submit";
 
 /// What one event was at its position.
 const EVENT_CONTENTS: &str = "contents-of-this-position";

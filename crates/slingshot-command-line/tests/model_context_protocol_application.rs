@@ -61,9 +61,23 @@ fn one_request_produces_one_answer_and_releases_one_reservation() {
         &mut server,
         &format!(r#"{{"id":"one","method":"ping","params":{{"protocolVersion":"{CURRENT}"}}}}"#),
     );
+    assert_eq!(answer["jsonrpc"].as_str(), Some("2.0"));
     assert_eq!(answer["id"].as_str(), Some("one"));
     assert_eq!(answer["result"][COMPLETE_MEMBER].as_str(), Some("complete"));
     assert_eq!(server.active(), 0, "an answered request holds nothing");
+}
+
+#[test]
+fn json_rpc_numeric_ids_and_protocol_version_are_preserved_in_responses() {
+    let mut server = ServerApplication::new();
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"jsonrpc":"2.0","id":1,"method":"ping","params":{{"protocolVersion":"{CURRENT}"}}}}"#
+        ),
+    );
+    assert_eq!(answer["jsonrpc"].as_str(), Some("2.0"));
+    assert_eq!(answer["id"].as_i64(), Some(1));
 }
 
 #[test]
@@ -93,6 +107,8 @@ fn a_notification_is_answered_never() {
 fn an_unreadable_line_is_a_parse_error_and_a_readable_one_that_is_not_a_request_is_not() {
     let mut server = ServerApplication::new();
     let unreadable = answered(&mut server, r#"{"id":"one","#);
+    assert_eq!(unreadable["jsonrpc"].as_str(), Some("2.0"));
+    assert!(unreadable["id"].is_null(), "parse errors carry a JSON-RPC null id");
     assert_eq!(unreadable["error"]["code"].as_i64(), Some(PARSE_ERROR));
     let directionless = answered(&mut server, r#"{"params":{}}"#);
     assert_eq!(directionless["error"]["code"].as_i64(), Some(INVALID_REQUEST_ERROR));
@@ -154,6 +170,7 @@ fn tools_and_resource_templates_project_the_installed_surface() {
     let listed = tools["result"]["tools"].as_array().expect("a tool list");
     assert!(!listed.is_empty());
     assert!(listed.iter().all(|tool| tool["inputSchema"].is_object()));
+    assert!(listed.iter().all(|tool| tool.get("outputSchema").is_none()));
     let templates = answered(
         &mut server,
         &format!(

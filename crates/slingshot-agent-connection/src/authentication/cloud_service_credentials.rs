@@ -283,6 +283,13 @@ struct IntegrationDocument {
     private_key: String,
     #[serde(rename = "publicKey")]
     public_key: String,
+    /// Certificate metadata emitted by current Developer Console exports.
+    ///
+    /// Slingshot does not use this value for authentication; it is retained in
+    /// the source document only so an otherwise valid Adobe export is not
+    /// rejected for carrying its certificate-expiration annotation.
+    #[serde(rename = "certificateExpirationDate", default)]
+    _certificate_expiration_date: Option<String>,
 }
 
 /// Its technical-account object exactly as it is spelled.

@@ -6,7 +6,7 @@
 # a failure rather than a quiet agreement.
 
 format = "slingshot.identity-vectors/1"
-contract_digest = "a6efcd67bb969fbad3204e6c85145593e436169142114e257612c02c0705c05b"
+contract_digest = "c6f35b255b37d6898b13c7a25e6e8de424bcf3b730e18bbb5cbc9dff3ef9eff8"
 
 [principal]
 basic = "7f1a2d38b172052f2f772566d5621a3ffc7bd27576e123052c06aa89a358b739"
@@ -19,11 +19,11 @@ author_two_roots = "f4c884864a0674efeedc29eaccf5c6b1eae9a66646bbd1c08b210b59dfa1
 author_two_roots_and_one_additional = "980206895cedfb5c9e846054303b2cab6b4489272e9ed2cd72b8420aaf4b045e"
 
 [target]
-cloud = "14170d50b1bb08c76df80de3efb08aa16f67cfa8f90c357daff5b1fab71b39df"
+cloud = "5e58c9a0f31c5e8e225e34d54847639ae56d3238d001fdd0f651e5658e6a72ce"
 
 [revision]
-base = "3b198f6ea1bc836bfb053a997ab51daa5eebff78c351c4e6f3213b8f1bf30041"
-reordered_metascopes = "3b198f6ea1bc836bfb053a997ab51daa5eebff78c351c4e6f3213b8f1bf30041"
-extended_author_trust = "069eb2329b16bf172796b6cb3ba0e51e8876ccca7dc577fe3387a01058607447"
-permitted_cleartext = "f470124781ab5e52c54a8bf6d9131be0c931f0fbbaff9e6fa3a9189dec6c44c7"
-without_selection = "3befd93d0e051ef6c0cb6bd475db23d40c400722c70390be7c9b5abc282f1bfc"
+base = "de7c85e06fe5ddb13203bcf060517ab8dcdf98db0cef00d537627674fb4340dc"
+reordered_metascopes = "de7c85e06fe5ddb13203bcf060517ab8dcdf98db0cef00d537627674fb4340dc"
+extended_author_trust = "6fa94a05442600ce673fe20b63c5b17d8492579a25dee4713c67e4b10632efb4"
+permitted_cleartext = "d92f55e064bb7f0adf9b069396388edc670efe4a77913118eee6ffc9b0365eee"
+without_selection = "46b89c2309424681fca0870ec4b306010ecc752127da0259777445bfe37bf914"

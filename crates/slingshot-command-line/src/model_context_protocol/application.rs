@@ -161,10 +161,11 @@ impl ServerApplication {
                 self.legacy.initialized();
             }
             "notifications/cancelled" => {
-                if let Some(identifier) = parameters["requestId"].as_str() {
-                    self.progress.cancel(identifier);
-                    self.active.cancelling(identifier);
-                    self.active.cancelled(identifier);
+                if let Some(identifier) = parameters.get("requestId") {
+                    let identifier = identifier_key(identifier);
+                    self.progress.cancel(&identifier);
+                    self.active.cancelling(&identifier);
+                    self.active.cancelled(&identifier);
                 }
             }
             other => {
@@ -174,8 +175,9 @@ impl ServerApplication {
     }
 
     /// Answers one request, exactly once.
-    fn requested(&mut self, identifier: &str, method: &str, parameters: &Value) -> String {
-        if let Err(refusal) = self.active.reserve(identifier) {
+    fn requested(&mut self, identifier: &Value, method: &str, parameters: &Value) -> String {
+        let key = identifier_key(identifier);
+        if let Err(refusal) = self.active.reserve(&key) {
             let code = match refusal {
                 AdmissionRefusal::Duplicate(_) => INVALID_REQUEST_ERROR,
                 AdmissionRefusal::Saturated => RESOURCE_EXHAUSTED_ERROR,
@@ -183,7 +185,7 @@ impl ServerApplication {
             return rendered_error(Some(identifier), code, &refusal.to_string());
         }
         let answered = self.answer(method, parameters);
-        self.active.answered(identifier);
+        self.active.answered(&key);
         let line = match answered {
             Ok(result) => rendered_result(identifier, result),
             Err(refusal) => {
@@ -191,7 +193,7 @@ impl ServerApplication {
                 rendered_error_value(identifier, rendered)
             }
         };
-        self.enqueue_response(identifier, &line);
+        self.enqueue_response(&key, &line);
         line
     }
 
@@ -277,7 +279,6 @@ impl ServerApplication {
                         "title": &tool.title,
                         "description": &tool.description,
                         "inputSchema": schema_projection::input_schema(tool).ok()?,
-                        "outputSchema": schema_projection::output_schema(tool),
                         "annotations": {
                             "readOnlyHint": tool.read_only_hint,
                             "destructiveHint": tool.destructive_hint,
@@ -304,16 +305,25 @@ fn requested_revision(parameters: &Value) -> &str {
 }
 
 /// Returns one rendered result line.
-fn rendered_result(identifier: &str, result: Value) -> String {
-    json!({ "id": identifier, "result": result }).to_string()
+fn rendered_result(identifier: &Value, result: Value) -> String {
+    json!({ "jsonrpc": "2.0", "id": identifier, "result": result }).to_string()
 }
 
 /// Returns one rendered error line.
-fn rendered_error(identifier: Option<&str>, code: i64, message: &str) -> String {
-    json!({ "id": identifier, "error": { "code": code, "message": message } }).to_string()
+fn rendered_error(identifier: Option<&Value>, code: i64, message: &str) -> String {
+    json!({ "jsonrpc": "2.0", "id": identifier, "error": { "code": code, "message": message } })
+        .to_string()
 }
 
 /// Returns one rendered error line carrying an already-built error object.
-fn rendered_error_value(identifier: &str, error: Value) -> String {
-    json!({ "id": identifier, "error": error }).to_string()
+fn rendered_error_value(identifier: &Value, error: Value) -> String {
+    json!({ "jsonrpc": "2.0", "id": identifier, "error": error }).to_string()
+}
+
+/// Returns a type-preserving registry key for one JSON-RPC identifier.
+///
+/// String and numeric identifiers with the same human spelling are distinct
+/// JSON-RPC ids, so the serialized value (including its JSON type) is the key.
+fn identifier_key(identifier: &Value) -> String {
+    serde_json::to_string(identifier).unwrap_or_else(|_| "null".to_owned())
 }

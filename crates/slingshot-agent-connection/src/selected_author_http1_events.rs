@@ -34,14 +34,16 @@ impl SelectedAuthorTransport {
         resolver: R,
         consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
-        let fields = request_fields(self, identity, subscription, generation, committed_cursor)?;
+        let (fields, operation) =
+            request_fields(self, identity, subscription, generation, committed_cursor)?;
         let generation_text = generation.to_string();
         let request = encode_request(
             self,
             Method::GET,
-            &["bin", "slingshot-agent", "events"],
+            &["bin", "slingshot", "agent", "events"],
             &[
                 ("agent_event_store_generation", &generation_text),
+                ("agent_operation_identifier", &operation),
                 ("daemon_subscription_identifier", subscription),
             ],
             authentication,

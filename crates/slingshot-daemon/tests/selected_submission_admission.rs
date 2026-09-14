@@ -1043,7 +1043,7 @@ async fn selected_live_events_commit_only_the_believed_prefix() {
                             assert!(request.len() <= 8192);
                         }
                     }
-                    let route = "/aem/bin/slingshot-agent/events?agent_event_store_generation=7&daemon_subscription_identifier=subscription-one";
+                    let route = "/aem/bin/slingshot/agent/events?agent_event_store_generation=7&daemon_subscription_identifier=subscription-one";
                     assert!(request.windows(route.len()).any(|bytes| bytes == route.as_bytes()));
                     authentication.lend_value_bytes(|value| {
                         assert!(request.windows(value.len()).any(|bytes| bytes == value))
@@ -1399,10 +1399,10 @@ async fn selected_live_events_commit_only_the_believed_prefix() {
                             return;
                         }
                         for (route, document) in [
-                            ("/aem/bin/slingshot-agent/capabilities".to_owned(), capabilities),
+                            ("/aem/bin/slingshot/agent/capabilities".to_owned(), capabilities),
                             (
                                 format!(
-                                    "/aem/bin/slingshot-agent/operations/lookup?agent_operation_identifier={}",
+                                    "/aem/bin/slingshot/agent/snapshot?agent_operation_identifier={}",
                                     submission.operation.agent_operation_identifier
                                 ),
                                 snapshot,
@@ -2362,14 +2362,14 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                         assert!(request.starts_with(b"GET "));
                     }
                     let route = if stage == 0 {
-                        "/aem/bin/slingshot-agent/events/high-water?agent_event_store_generation=7&daemon_subscription_identifier=subscription-one".into()
+                        "/aem/bin/slingshot/agent/subscriptions/high-water?agent_event_store_generation=7&daemon_subscription_identifier=subscription-one".into()
                     } else if defect.starts_with("generation-") {
                         format!(
-                            "/aem/bin/slingshot-agent/jobs/snapshot?sling_job_identifier=job-{stage}"
+                            "/aem/bin/slingshot/agent/jobs?sling_job_identifier=job-{stage}"
                         )
                     } else {
                         format!(
-                            "/aem/bin/slingshot-agent/operations/lookup?agent_operation_identifier={}",
+                            "/aem/bin/slingshot/agent/snapshot?agent_operation_identifier={}",
                             submissions[stage - 1].operation.agent_operation_identifier
                         )
                     };
@@ -3952,10 +3952,10 @@ async fn retained_artifact_completion_case(
         });
         let peer = async {
             for (route, payload) in [
-                ("/bin/slingshot-agent/capabilities".to_owned(), capabilities),
+                ("/bin/slingshot/agent/capabilities".to_owned(), capabilities),
                 (
                     format!(
-                        "/bin/slingshot-agent/operations/lookup?agent_operation_identifier={}",
+                        "/bin/slingshot/agent/snapshot?agent_operation_identifier={}",
                         submission.operation.agent_operation_identifier
                     ),
                     snapshot,
@@ -4189,7 +4189,7 @@ async fn retained_artifact_completion_case(
                 while !head.ends_with(b"\r\n\r\n") {
                     head.push(socket.read_u8().await.unwrap());
                 }
-                assert!(head.starts_with(b"GET /bin/slingshot-agent/capabilities HTTP/1.1\r\n"));
+                assert!(head.starts_with(b"GET /bin/slingshot/agent/capabilities HTTP/1.1\r\n"));
                 if attempt == 0 {
                     competing
                         .apply(
@@ -4435,7 +4435,7 @@ async fn retained_artifact_completion_case(
                 assert!(
                     String::from_utf8(head)
                         .unwrap()
-                        .starts_with("GET /bin/slingshot-agent/operations/")
+                        .starts_with("GET /bin/slingshot/agent/snapshot?")
                 );
                 socket.write_all(format!("HTTP/1.1 {status} Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{unavailable}", unavailable.len()).as_bytes()).await.unwrap();
             };
@@ -4584,10 +4584,10 @@ async fn retained_artifact_completion_case(
                     "attempt":1,"progress":COMPLETE_PROGRESS_PERCENT,"sequence":2,"kind":"succeeded","terminal_result":document,
                 }).to_string();
                 for (route, payload) in [
-                    ("/bin/slingshot-agent/capabilities".to_owned(), capabilities),
+                    ("/bin/slingshot/agent/capabilities".to_owned(), capabilities),
                     (
                         format!(
-                            "/bin/slingshot-agent/operations/lookup?agent_operation_identifier={}",
+                            "/bin/slingshot/agent/snapshot?agent_operation_identifier={}",
                             submission.operation.agent_operation_identifier
                         ),
                         found,
@@ -4619,7 +4619,7 @@ async fn retained_artifact_completion_case(
             if accepted && http2 {
                 let head = http2_request(&mut socket).await;
                 let route = format!(
-                    "/bin/slingshot-agent/operations/{}/artifacts/{slot}",
+                    "/bin/slingshot/agent/artifact?agent_operation_identifier={}&artifact_slot={slot}",
                     submission.operation.agent_operation_identifier
                 );
                 assert!(head.windows(route.len()).any(|bytes| bytes == route.as_bytes()));
@@ -4635,7 +4635,7 @@ async fn retained_artifact_completion_case(
                 head.push(socket.read_u8().await.unwrap());
             }
             assert!(String::from_utf8(head).unwrap().starts_with(&format!(
-                "GET /bin/slingshot-agent/operations/{}/artifacts/{slot} HTTP/1.1",
+                "GET /bin/slingshot/agent/artifact?agent_operation_identifier={}&artifact_slot={slot} HTTP/1.1",
                 submission.operation.agent_operation_identifier
             )));
             if race {
@@ -4976,7 +4976,7 @@ async fn remote_staging_reserves_first_and_never_publishes_unproved_bytes() {
                 assert!(head.windows(value.len()).any(|bytes| bytes == value))
             });
             let route = format!(
-                "/bin/slingshot-agent/operations/{}/artifacts/{}",
+                "/bin/slingshot/agent/artifact?agent_operation_identifier={}&artifact_slot={}",
                 submission.operation.agent_operation_identifier, expected.artifact_slot
             );
             assert!(head.windows(route.len()).any(|bytes| bytes == route.as_bytes()));
@@ -5674,7 +5674,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                     head.push(socket.read_u8().await.unwrap());
                 }
                 let head = String::from_utf8(head).unwrap();
-                assert!(head.starts_with("GET /aem/bin/slingshot-agent/capabilities HTTP/1.1\r\n"));
+                assert!(head.starts_with("GET /aem/bin/slingshot/agent/capabilities HTTP/1.1\r\n"));
                 assert!(head.contains("Authorization: Basic "));
                 socket
             .write_all(
@@ -6001,9 +6001,9 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                         );
                     }
                     let route = match stage {
-                        0 | 1 => "/aem/bin/slingshot-agent/capabilities",
+                        0 | 1 => "/aem/bin/slingshot/agent/capabilities",
                         2 => "/aem/libs/granite/csrf/token.json",
-                        _ => "/aem/bin/slingshot-agent/jobs",
+                        _ => "/aem/bin/slingshot/agent/submit",
                     };
                     assert!(head.windows(route.len()).any(|part| part == route.as_bytes()));
                     if stage == 2 && stale_before_post {
@@ -6100,7 +6100,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                     0 | 1 => {
                         assert!(
                             head.starts_with(
-                                "GET /aem/bin/slingshot-agent/capabilities HTTP/1.1\r\n"
+                                "GET /aem/bin/slingshot/agent/capabilities HTTP/1.1\r\n"
                             )
                         );
                         (capability.as_str(), 200)
@@ -6126,7 +6126,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                     }
                     _ => {
                         assert!(
-                            head.starts_with("POST /aem/bin/slingshot-agent/jobs HTTP/1.1\r\n")
+                            head.starts_with("POST /aem/bin/slingshot/agent/submit HTTP/1.1\r\n")
                         );
                         assert!(head.contains("csrf-token: one-use-token\r\n"));
                         assert!(head.contains(&format!(
@@ -6323,12 +6323,12 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                     let body = if stage == 0 {
                         assert!(
                             head.starts_with(
-                                "GET /aem/bin/slingshot-agent/capabilities HTTP/1.1\r\n"
+                                "GET /aem/bin/slingshot/agent/capabilities HTTP/1.1\r\n"
                             )
                         );
                         &capability
                     } else {
-                        assert!(head.starts_with(&format!("GET /aem/bin/slingshot-agent/operations/lookup?agent_operation_identifier={} HTTP/1.1\r\n", submission.operation.agent_operation_identifier)));
+                        assert!(head.starts_with(&format!("GET /aem/bin/slingshot/agent/snapshot?agent_operation_identifier={} HTTP/1.1\r\n", submission.operation.agent_operation_identifier)));
                         if revision == 1 {
                             writer.apply(&identity.author_target_identity_digest, &identity.operation_identifier, 1,
                                 &OperationFact::Recovery { recovery: RecoveryFact {
@@ -6441,7 +6441,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                         assert!(
                             String::from_utf8(head)
                                 .unwrap()
-                                .starts_with("GET /aem/bin/slingshot-agent/")
+                                .starts_with("GET /aem/bin/slingshot/agent/")
                         );
                         socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
                     }
@@ -6800,7 +6800,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                         assert!(
                             String::from_utf8(head)
                                 .unwrap()
-                                .starts_with("GET /aem/bin/slingshot-agent/")
+                                .starts_with("GET /aem/bin/slingshot/agent/")
                         );
                         if stage == 1 && concurrent_event {
                             let child = event_writer
@@ -6953,7 +6953,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                         head.push(socket.read_u8().await.unwrap());
                     }
                     let head = String::from_utf8(head).unwrap();
-                    assert!(head.starts_with("GET /aem/bin/slingshot-agent/"));
+                    assert!(head.starts_with("GET /aem/bin/slingshot/agent/"));
                     let (status, body) =
                         if stage == 0 { (200, &capability) } else { (410, &retired) };
                     if stage == 1 && concurrent_change {

@@ -610,8 +610,8 @@ fn the_idempotency_key_is_derived_so_a_restart_arrives_at_the_same_submission() 
         .find(|(name, _)| name == IDEMPOTENCY_KEY_HEADER)
         .expect("a submission carries an idempotency key");
     assert_eq!(
-        key.1, first.operation.agent_operation_identifier,
-        "the protocol binds retries to the same logical operation, not only equal command bytes"
+        key.1, first.submitted_command_digest,
+        "the agent derives its key from the submission's own bytes, so the key sent is the one it derives"
     );
     assert!(headers.iter().any(|(name, value)| name == TOKEN_HEADER && value == TOKEN_VALUE));
     assert!(

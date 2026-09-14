@@ -39,7 +39,7 @@ use slingshot_command_line::exit_classification::{
     EVERY_EXIT, INTERRUPTED, SUCCESS, UNAVAILABLE, USAGE,
 };
 use slingshot_command_line::invocation::{LOCAL_LEAVES, METADATA_ONLY_LEAVES};
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use slingshot_daemon::platform_runtime::endpoint::{self, EndpointAddress};
 use slingshot_daemon::platform_runtime::locks::OwnerLock;
 #[cfg(target_os = "linux")]
@@ -151,6 +151,9 @@ const AGAINST_SILENCE: &str = "interrupted";
 /// every diagnostic.
 const AGAINST_THIS_ACCOUNT: &str = "shaped";
 
+/// Number of characters in a hyphenated UUID invented by the process.
+const UUID_IDENTIFIER_LENGTH: usize = 36;
+
 /// Returns every declared session.
 fn declared_sessions() -> Vec<Session> {
     let path = fixtures().join(SESSION_SOURCE);
@@ -180,6 +183,9 @@ fn transcript(root: &Path, captured: &CapturedProcess) -> String {
 /// Returns one stream with the two values that move between runs replaced.
 fn normalized(root: &Path, stream: &str) -> String {
     let stream = stream.replace(&root.to_string_lossy().into_owned(), NORMALIZED_ROOT);
+    #[cfg(unix)]
+    let stream = stream
+        .replace(&endpoint::endpoint_root(root).to_string_lossy().into_owned(), NORMALIZED_ROOT);
     let stream = stream.as_str();
     let mut written = String::new();
     let mut scanning = stream;
@@ -187,12 +193,12 @@ fn normalized(root: &Path, stream: &str) -> String {
         let (before, after) = scanning.split_at(position);
         written.push_str(before);
         let suffix = &after[INVENTED_IDENTIFIER_PREFIX.len()..];
-        if let Some(identifier) = suffix.get(..36)
+        if let Some(identifier) = suffix.get(..UUID_IDENTIFIER_LENGTH)
             && uuid::Uuid::parse_str(identifier)
                 .is_ok_and(|value| value.hyphenated().to_string() == identifier)
         {
             written.push_str(NORMALIZED_IDENTIFIER);
-            scanning = &suffix[36..];
+            scanning = &suffix[UUID_IDENTIFIER_LENGTH..];
         } else {
             written.push_str(INVENTED_IDENTIFIER_PREFIX);
             scanning = suffix;

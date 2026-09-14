@@ -534,16 +534,45 @@ fn artifact_identity_is_derived_from_local_context_not_trusted_from_the_result()
     };
     let body = serde_json::to_vec(&document).unwrap();
     let checked =
-        decode_bound_result(&body, &expected, &command, &installation, &identity).unwrap();
+        decode_bound_result(&body, &expected, &command, &identity).unwrap();
     assert_eq!(
         checked.remote_artifact.unwrap().identifier.as_text(),
         artifact_identifier.as_text()
     );
-    let other_installation =
-        InstallationIdentifier::parse(&"6".repeat(DIGEST_HEX_CHARACTERS)).unwrap();
-    assert!(
-        decode_bound_result(&body, &expected, &command, &other_installation, &identity).is_err()
+    // The daemon now treats the identifier as opaque. Any well-formed name is accepted.
+    let opaque_name = "remote-artifact-name";
+    let mut opaque_payload = payload.clone();
+    opaque_payload["artifact"]["identifier"] = opaque_name.into();
+    let mut opaque_document = document.clone();
+    opaque_document.canonical_result = write_canonical(&opaque_payload).unwrap();
+    let opaque_body = serde_json::to_vec(&opaque_document).unwrap();
+    let checked_opaque =
+        decode_bound_result(&opaque_body, &expected, &command, &identity).unwrap();
+    assert_eq!(
+        checked_opaque.remote_artifact.unwrap().identifier.as_text(),
+        opaque_name
     );
+    let hex_name = "a".repeat(DIGEST_HEX_CHARACTERS);
+    let mut hex_payload = payload.clone();
+    hex_payload["artifact"]["identifier"] = hex_name.clone().into();
+    let mut hex_document = document.clone();
+    hex_document.canonical_result = write_canonical(&hex_payload).unwrap();
+    let hex_body = serde_json::to_vec(&hex_document).unwrap();
+    let checked_hex =
+        decode_bound_result(&hex_body, &expected, &command, &identity).unwrap();
+    assert_eq!(
+        checked_hex.remote_artifact.unwrap().identifier.as_text(),
+        hex_name
+    );
+    // Invalid identifiers (e.g. too long or non-printable) should still be refused by the type.
+    let invalid_name = "x".repeat(129);
+    let mut invalid_payload = payload.clone();
+    invalid_payload["artifact"]["identifier"] = invalid_name.into();
+    let mut invalid_document = document.clone();
+    invalid_document.canonical_result = write_canonical(&invalid_payload).unwrap();
+    let invalid_body = serde_json::to_vec(&invalid_document).unwrap();
+    assert!(decode_bound_result(&invalid_body, &expected, &command, &identity).is_err());
+    // Operation identity checks must still be refused.
     for change_target in [true, false] {
         let mut moved = identity.clone();
         if change_target {
@@ -551,19 +580,6 @@ fn artifact_identity_is_derived_from_local_context_not_trusted_from_the_result()
         } else {
             moved.operation_identifier = "another-operation".to_owned();
         }
-        assert!(decode_bound_result(&body, &expected, &command, &installation, &moved).is_err());
+        assert!(decode_bound_result(&body, &expected, &command, &moved).is_err());
     }
-    let mut changed = document;
-    let mut payload = payload;
-    payload["artifact"]["identifier"] = "private-canary".into();
-    changed.canonical_result = write_canonical(&payload).unwrap();
-    let refusal = decode_bound_result(
-        &serde_json::to_vec(&changed).unwrap(),
-        &expected,
-        &command,
-        &installation,
-        &identity,
-    )
-    .unwrap_err();
-    assert!(!format!("{refusal:?} {refusal}").contains("private-canary"));
 }

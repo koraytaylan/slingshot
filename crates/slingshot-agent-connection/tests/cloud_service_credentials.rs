@@ -74,6 +74,21 @@ fn the_documented_shape_is_accepted_and_keeps_its_two_identities_apart() {
 }
 
 #[test]
+fn current_developer_console_exports_may_carry_certificate_expiration_metadata() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CREDENTIAL_FIXTURES).join("valid.json");
+    let bytes = std::fs::read(path).expect("the valid credential fixture is readable");
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&bytes).expect("the valid credential fixture is JSON");
+    document["integration"]["certificateExpirationDate"] =
+        serde_json::Value::String("2036-08-26T17:36:13Z".to_owned());
+    let rendered = serde_json::to_vec(&document).expect("the augmented fixture renders");
+
+    CloudServiceCredentials::parse(&SensitiveConfigurationDocument::from_bytes(rendered))
+        .expect("Adobe's certificate metadata does not change authentication material");
+}
+
+#[test]
 fn rotating_the_key_pair_leaves_the_principal_where_it_was() {
     let before = parsed("valid.json");
     let after = parsed("rotated-key.json");

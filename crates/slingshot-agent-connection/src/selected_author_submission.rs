@@ -153,7 +153,7 @@ impl SelectedAuthorTransport {
             u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
         let (authentication, lease) = provider
             .authenticate(
-                &self.endpoint(&["bin", "slingshot-agent", "jobs"]),
+                &self.endpoint(&["bin", "slingshot", "agent", "submit"]),
                 reading.saturating_add(elapsed),
                 source,
             )
@@ -210,7 +210,7 @@ impl SelectedAuthorTransport {
             .map_err(|_| SubmissionSendRefusal::Request)?;
         let token = self.decode_fresh_token(&receipt)?;
         let (authentication, lease) = provider
-            .authenticate(&self.endpoint(&["bin", "slingshot-agent", "jobs"]), clock, utc)
+            .authenticate(&self.endpoint(&["bin", "slingshot", "agent", "submit"]), clock, utc)
             .await
             .map_err(|_| SubmissionSendRefusal::Request)?;
         before_post()?;
@@ -287,7 +287,7 @@ impl SelectedAuthorTransport {
         .await
     }
 
-    fn decode_fresh_token(
+    pub(crate) fn decode_fresh_token(
         &self,
         receipt: &crate::selected_author_http::FiniteHttpReceipt,
     ) -> Result<CrossSiteRequestForgeryToken, SubmissionSendRefusal> {
@@ -379,7 +379,7 @@ impl SelectedAuthorTransport {
         let exchange = if http2.is_none() {
             self.finite_negotiated_query(
                 Method::POST,
-                &["bin", "slingshot-agent", "jobs"],
+                &["bin", "slingshot", "agent", "submit"],
                 &[],
                 authentication,
                 &fields,
@@ -389,7 +389,7 @@ impl SelectedAuthorTransport {
         } else if http2 == Some(true) {
             self.finite_http2_query(
                 Method::POST,
-                &["bin", "slingshot-agent", "jobs"],
+                &["bin", "slingshot", "agent", "submit"],
                 &[],
                 authentication,
                 &fields,
@@ -399,7 +399,7 @@ impl SelectedAuthorTransport {
         } else {
             self.finite_http1(
                 Method::POST,
-                &["bin", "slingshot-agent", "jobs"],
+                &["bin", "slingshot", "agent", "submit"],
                 authentication,
                 &fields,
                 &body,

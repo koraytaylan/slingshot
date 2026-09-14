@@ -1,4 +1,5 @@
-//! Bounded IMS HTTP/2 assembly. END_STREAM alone never yields a token response.
+//! Bounded IMS HTTP/2 assembly. A validated END_STREAM completes the response;
+//! transport EOF is not required when the peer keeps the connection open.
 
 use super::{
     identity_management_exchange::{DecodedHead, DecodedResponse, ExchangeFailure, accept_media},
@@ -203,6 +204,24 @@ impl IdentityManagementHttp2Response {
         mut self,
         _end: TransportEnd,
     ) -> Result<DecodedResponse, ExchangeFailure> {
+        if let Some(failure) = self.failure {
+            return Err(failure);
+        }
+        if !self.stream_ended() {
+            return Err(malformed());
+        }
+        Ok(DecodedResponse {
+            informational: Vec::new(),
+            head: self.head.take().ok_or_else(malformed)?,
+            body: std::mem::take(&mut self.body),
+            trailer: None,
+        })
+    }
+
+    /// Consumes a complete HTTP/2 END_STREAM proof. HTTP/2 streams may end
+    /// while the TLS connection remains reusable; transport EOF is not part
+    /// of the response boundary.
+    pub fn finish_at_stream_end(mut self) -> Result<DecodedResponse, ExchangeFailure> {
         if let Some(failure) = self.failure {
             return Err(failure);
         }

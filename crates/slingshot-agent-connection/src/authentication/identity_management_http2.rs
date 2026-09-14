@@ -226,7 +226,6 @@ async fn read<R: AsyncRead + Unpin>(
     let mut input = IdleRead::new(input);
     let mut response = IdentityManagementHttp2Response::new();
     let mut body_end = None;
-    let mut finished = false;
     loop {
         let result = {
             let next = frames.read_next(&mut input);
@@ -340,12 +339,12 @@ async fn read<R: AsyncRead + Unpin>(
                         .map_err(|_| fail(expired))?
                         .map_err(|_| malformed())?;
                 }
-                if response.stream_ended() && !finished {
+                if response.stream_ended() {
                     timeout_at(end, commands.send(Command::Finish))
                         .await
                         .map_err(|_| fail(expired))?
                         .map_err(|_| malformed())?;
-                    finished = true;
+                    return Ok((response.finish_at_stream_end()?, clock.reading_milliseconds()));
                 }
             }
         }

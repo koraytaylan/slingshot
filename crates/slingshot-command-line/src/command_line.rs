@@ -389,7 +389,10 @@ fn serve(options: &[String], diagnostics: &mut dyn Write) -> i32 {
             return i32::from(EXIT_RUNTIME_UNUSABLE);
         }
     };
-    match runtime.block_on(daemon_entry::run_daemon_entry(&contract, &entry, shutdown)) {
+    let local = tokio::task::LocalSet::new();
+    match runtime
+        .block_on(local.run_until(daemon_entry::run_daemon_entry(&contract, &entry, shutdown)))
+    {
         Ok(DaemonEntryOutcome::Served) => i32::from(EXIT_SUCCESS),
         Ok(DaemonEntryOutcome::AlreadyOwned) => i32::from(EXIT_ALREADY_OWNED),
         Err(failure) => {

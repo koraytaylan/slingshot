@@ -318,6 +318,7 @@ fn the_native_matrix_is_exactly_the_rows_the_authority_maps() {
     for required in [
         "cargo check --locked --offline --workspace --all-targets --all-features",
         "cargo test --locked --offline --workspace --all-targets --all-features",
+        "export RUSTFLAGS=\"${RUSTFLAGS:-} -D warnings\"",
         "this gate takes no arguments",
     ] {
         assert!(gate.contains(required), "the native gate omits {required}");

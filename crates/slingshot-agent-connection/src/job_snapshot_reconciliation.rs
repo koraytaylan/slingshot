@@ -37,13 +37,13 @@ use slingshot_domain::remote_job::{
 };
 
 /// The one route a logical operation is looked up on.
-pub const LOOKUP_ROUTE: &str = "/bin/slingshot-agent/operations/lookup";
+pub const LOOKUP_ROUTE: &str = "/bin/slingshot/agent/snapshot";
 
 /// The one route a physical Sling job is looked up on.
-pub const PHYSICAL_JOB_ROUTE: &str = "/bin/slingshot-agent/jobs/snapshot";
+pub const PHYSICAL_JOB_ROUTE: &str = "/bin/slingshot/agent/jobs";
 
 /// The one route a subscription's high-water position is captured on.
-pub const HIGH_WATER_ROUTE: &str = "/bin/slingshot-agent/events/high-water";
+pub const HIGH_WATER_ROUTE: &str = "/bin/slingshot/agent/subscriptions/high-water";
 
 /// The query member naming which logical operation is wanted.
 pub const OPERATION_QUERY_MEMBER: &str = "agent_operation_identifier";
@@ -513,18 +513,13 @@ pub fn physical_job_routes(
 
 /// Returns the route one subscription's high-water position is captured on.
 ///
-/// The same two members the event route carries, in the same canonical order,
-/// because the reset is about exactly the stream the events came from.
+/// The capture is a POST carrying the same two members the event route names,
+/// in the same canonical order, because the reset is about exactly the stream
+/// the events came from. The body names them so no query string can leak the
+/// subscription into a log or cache.
 #[must_use]
-pub fn high_water_route(
-    daemon_subscription_identifier: &str,
-    agent_event_store_generation: u64,
-) -> String {
-    format!(
-        "{HIGH_WATER_ROUTE}?agent_event_store_generation={agent_event_store_generation}\
-         &daemon_subscription_identifier={}",
-        encoded_once(daemon_subscription_identifier)
-    )
+pub fn high_water_route() -> String {
+    HIGH_WATER_ROUTE.to_owned()
 }
 
 /// Requires one query value to fit its bound.

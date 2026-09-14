@@ -850,13 +850,10 @@ fn the_lookup_and_reset_routes_are_fixed_and_carry_only_what_they_must() {
         lookup_route(&"a".repeat(allowed as usize + 1)),
         Err(ReconciliationRefusal::IdentifierTooLong { .. })
     ));
-    let reset = high_water_route(SUBSCRIPTION, GENERATION);
+    let reset = high_water_route();
     assert_eq!(
         reset,
-        format!(
-            "{HIGH_WATER_ROUTE}?agent_event_store_generation={GENERATION}\
-             &daemon_subscription_identifier={SUBSCRIPTION}"
-        ),
+        HIGH_WATER_ROUTE,
         "the reset asks about exactly the stream the events came from"
     );
 }

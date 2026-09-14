@@ -80,13 +80,13 @@ AgentEventStoreGeneration is a persisted nonzero unsigned 64-bit generation numb
 The contract format is `slingshot.agent/1`. Every route below is appended beneath the immutable selected snapshot's typed normalized author context prefix rather than reconstructed from opaque AuthorTargetIdentity bytes or resolved from the bare origin. The author exposes:
 
 - GET `/libs/granite/csrf/token.json` for the Adobe Experience Manager cross-site request-forgery token;
-- GET `/bin/slingshot-agent/capabilities`;
-- POST `/bin/slingshot-agent/jobs`;
-- GET `/bin/slingshot-agent/events` for the filtered Server-Sent Event stream;
-- GET `/bin/slingshot-agent/events/high-water` for an authenticated stable reset boundary;
-- GET `/bin/slingshot-agent/operations/lookup?agent_operation_identifier=...` for lookup and snapshot;
-- GET `/bin/slingshot-agent/jobs/snapshot?sling_job_identifier=...` for bounded snapshot recovery when an event-store generation no longer retains operation lookup;
-- GET `/bin/slingshot-agent/operations/{agent_operation_identifier}/artifacts/{artifact_slot}` for a declared terminal artifact.
+- GET `/bin/slingshot/agent/capabilities`;
+- POST `/bin/slingshot/agent/submit`;
+- GET `/bin/slingshot/agent/events` for the filtered Server-Sent Event stream;
+- GET `/bin/slingshot/agent/subscriptions/high-water` for an authenticated stable reset boundary;
+- GET `/bin/slingshot/agent/operations/lookup?agent_operation_identifier=...` for lookup and snapshot;
+- GET `/bin/slingshot/agent/snapshot?sling_job_identifier=...` for bounded snapshot recovery when an event-store generation no longer retains operation lookup;
+- GET `/bin/slingshot/agent/operations/{agent_operation_identifier}/artifacts/{artifact_slot}` for a declared terminal artifact.
 
 The event-stream and high-water requests carry exactly two canonically ordered query members, `daemon_subscription_identifier` and `agent_event_store_generation`. Operation lookup and Sling Job snapshot requests carry exactly their one named query member above. Query values use UTF-8 bytes with RFC 3986 unreserved bytes literal and every other byte encoded once as uppercase `%HH`; space never uses `+`. Pair order is the written route order. The parser rejects malformed escapes, lowercase hexadecimal, encoded unreserved bytes, duplicate/missing/surplus pairs, a second decode that would change the value, and decoded values outside their named bounds. AgentOperationIdentifier and ArtifactSlot have canonical nonempty ASCII wire forms containing only lowercase letters, decimal digits, hyphen, and underscore, so each artifact placeholder is exactly one safe path segment; unknown or noncanonical segments fail before lookup. A reconnect additionally carries the standard `Last-Event-ID` header only after that exact subscription/generation ledger cursor has committed. The high-water response echoes both values and one captured cursor from the same atomic generation view. Cross-partition or mismatched query/header values fail closed; no server-provided stream, lookup, snapshot, high-water, or artifact location is accepted.
 

@@ -20,7 +20,7 @@ fn response_head(status: &[u8]) -> Vec<u8> {
 }
 
 #[tokio::test]
-async fn exact_post_waits_for_credit_and_finishes_only_after_peer_eof() {
+async fn exact_post_finishes_at_stream_end_before_peer_eof() {
     let clock = Clock(AtomicU64::new(0));
     let (client, mut peer) = tokio::io::duplex(256);
     let body = vec![b'x'; 20_000];
@@ -52,7 +52,7 @@ async fn exact_post_waits_for_credit_and_finishes_only_after_peer_eof() {
         assert_eq!(received, body);
         peer.write_all(&response_head(b"200")).await.unwrap();
         peer.write_all(&frame(0, 1, 1, b"{}")).await.unwrap();
-        close(&mut peer).await;
+        assert_eq!(receive(&mut peer).await.kind, 7, "client closes its stream with GOAWAY");
     };
     let (result, ()) = tokio::join!(exchange_http2(client, &body, &clock), server);
     assert_eq!(result.unwrap().response.body, b"{}");

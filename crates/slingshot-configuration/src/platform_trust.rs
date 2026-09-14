@@ -132,6 +132,20 @@ impl PlatformTrustSnapshot {
 /// Requires one retained anchor to be an authority that may authenticate a
 /// server, so accepted bytes fully represent the decision they came with.
 fn require_eligible_anchor(der: &[u8]) -> Result<(), ConfigurationDiagnostic> {
+    if anchor_is_eligible(der)? {
+        return Ok(());
+    }
+    Err(refusal())
+}
+
+/// Returns whether one valid certificate is an eligible trust anchor.
+///
+/// A platform trust directory can contain valid end-entity certificates (for
+/// example, a host's generated snake-oil certificate) beside its CA anchors.
+/// Those are not trust records and are ignored when reading a directory. A
+/// malformed certificate remains an error so corrupted provider data cannot be
+/// silently accepted.
+fn anchor_is_eligible(der: &[u8]) -> Result<bool, ConfigurationDiagnostic> {
     let (remainder, certificate) = X509Certificate::from_der(der).map_err(|_| refusal())?;
     if !remainder.is_empty() {
         return Err(refusal());
@@ -141,16 +155,13 @@ fn require_eligible_anchor(der: &[u8]) -> Result<(), ConfigurationDiagnostic> {
         .map_err(|_| refusal())?
         .is_some_and(|extension| extension.value.ca);
     if !authority {
-        return Err(refusal());
+        return Ok(false);
     }
     let authenticates_servers = certificate
         .extended_key_usage()
         .map_err(|_| refusal())?
         .is_none_or(|extension| extension.value.server_auth || extension.value.any);
-    if authenticates_servers {
-        return Ok(());
-    }
-    Err(refusal())
+    Ok(authenticates_servers)
 }
 
 /// Returns the one diagnostic a platform snapshot failure reports.
@@ -189,8 +200,14 @@ impl PlatformTrustSource for OperatingSystemTrustSource {
         let limits = &ProfileAuthenticationContract::embedded().limits;
         let mut aggregate = 0_u64;
         for path in candidates {
+            let directory = path.is_dir();
             read_bundle(&path, |source| {
-                for der in parse_platform_bundle(source)? {
+                let parsed = if directory {
+                    parse_platform_directory_bundle(source)?
+                } else {
+                    parse_platform_bundle(source)?
+                };
+                for der in parsed {
                     if roots.insert(der.clone()) {
                         aggregate = aggregate.checked_add(der.len() as u64).ok_or_else(refusal)?;
                         if roots.len() as u64 > limits.maximum_platform_trust_authorities
@@ -215,6 +232,27 @@ impl PlatformTrustSource for OperatingSystemTrustSource {
 
 #[cfg(target_os = "linux")]
 fn parse_platform_bundle(source: &[u8]) -> Result<Vec<Vec<u8>>, ConfigurationDiagnostic> {
+    let roots = parse_platform_bundle_raw(source)?;
+    for der in &roots {
+        require_eligible_anchor(der)?;
+    }
+    Ok(roots)
+}
+
+#[cfg(target_os = "linux")]
+fn parse_platform_directory_bundle(source: &[u8]) -> Result<Vec<Vec<u8>>, ConfigurationDiagnostic> {
+    Ok(parse_platform_bundle_raw(source)?
+        .into_iter()
+        .filter_map(|der| match anchor_is_eligible(&der) {
+            Ok(true) => Some(Ok(der)),
+            Ok(false) => None,
+            Err(failure) => Some(Err(failure)),
+        })
+        .collect::<Result<Vec<_>, _>>()?)
+}
+
+#[cfg(target_os = "linux")]
+fn parse_platform_bundle_raw(source: &[u8]) -> Result<Vec<Vec<u8>>, ConfigurationDiagnostic> {
     let limits = &ProfileAuthenticationContract::embedded().limits;
     if source.len() as u64
         > limits.maximum_identity_management_trust_canonical_bytes.saturating_mul(2)
@@ -235,7 +273,6 @@ fn parse_platform_bundle(source: &[u8]) -> Result<Vec<Vec<u8>>, ConfigurationDia
         if der.len() as u64 > limits.maximum_platform_trust_authority_der_bytes {
             return Err(refusal());
         }
-        require_eligible_anchor(der)?;
     }
     Ok(roots)
 }
@@ -274,6 +311,17 @@ mod linux_bundle_tests {
         ] {
             assert!(parse_platform_bundle(source.as_bytes()).is_err());
         }
+        assert!(
+            parse_platform_directory_bundle(
+                include_str!(
+                    "../../slingshot-test-support/fixtures/additional-certificate-authority/end-entity.pem"
+                )
+                .as_bytes(),
+            )
+            .expect("a valid end-entity certificate is parseable")
+            .is_empty(),
+            "a directory source retained a non-CA certificate"
+        );
         let too_many = AUTHORITY.repeat(
             ProfileAuthenticationContract::embedded().limits.maximum_platform_trust_authorities
                 as usize

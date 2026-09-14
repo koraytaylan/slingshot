@@ -53,7 +53,7 @@ pub(crate) fn request_fields(
     subscription: &str,
     generation: u64,
     cursor: Option<&EventStreamCursor>,
-) -> Result<HeaderMap, FiniteHttpFailure> {
+) -> Result<(HeaderMap, String), FiniteHttpFailure> {
     transport.require_execution(identity).map_err(|_| FiniteHttpFailure::Request)?;
     let maximum =
         slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded()
@@ -61,6 +61,16 @@ pub(crate) fn request_fields(
     if generation == 0 || subscription.is_empty() || subscription.len() as u64 > maximum {
         return Err(FiniteHttpFailure::Request);
     }
+    // The agent's event stream is opened per operation; the canonical
+    // operation identifier is required in the query alongside the generation.
+    let operation = slingshot_domain::agent_identity::AgentOperationIdentifier::derive(
+        &identity.author_target_identity_digest,
+        &identity.selected_environment_revision,
+        &identity.operation_identifier,
+        slingshot_domain::agent_identity::AgentEventStoreGeneration::of(generation),
+    )
+    .as_text()
+    .to_owned();
     let mut fields = HeaderMap::new();
     fields.insert("accept", HeaderValue::from_static("text/event-stream"));
     if let Some(cursor) = cursor {
@@ -76,7 +86,7 @@ pub(crate) fn request_fields(
             HeaderValue::from_str(cursor.as_text()).map_err(|_| FiniteHttpFailure::Request)?,
         );
     }
-    Ok(fields)
+    Ok((fields, operation))
 }
 
 pub(crate) struct EventDelivery<R, C> {

@@ -28,13 +28,14 @@ fn main() -> std::process::ExitCode {
             .enable_all()
             .build()
             .expect("test runtime builds");
-        match runtime.block_on(daemon_entry::run_daemon_entry_for_test(
+        let local = tokio::task::LocalSet::new();
+        match runtime.block_on(local.run_until(daemon_entry::run_daemon_entry_for_test(
             &FoundationContract::embedded(),
             &entry,
             tokio_util::sync::CancellationToken::new(),
             root,
             runtime_root.join("state"),
-        )) {
+        ))) {
             Ok(DaemonEntryOutcome::Served) => command_line::EXIT_SUCCESS,
             Ok(DaemonEntryOutcome::AlreadyOwned) => command_line::EXIT_ALREADY_OWNED,
             Err(failure) => {

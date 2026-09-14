@@ -1967,7 +1967,7 @@ still permits active reconciliation. Generation-loss physical lookup and the
 remaining supervisor/startup/event composition are still outstanding.
 
 Selected transport now exposes physical Sling job snapshot retrieval over both
-HTTP/1.1 and HTTP/2 on the fixed `/bin/slingshot-agent/jobs/snapshot` route with
+HTTP/1.1 and HTTP/2 on the fixed `/bin/slingshot/agent/snapshot` route with
 only the canonically encoded `sling_job_identifier` query. It preserves the
 retained logical operation/generation, target, subscription, selected revision,
 contracts and submitted digest and additionally requires the queried physical

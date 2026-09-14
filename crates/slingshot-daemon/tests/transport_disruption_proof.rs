@@ -88,7 +88,7 @@ const ARGUMENTS: &str = "{\"path\":\"/content/one\"}";
 const CREDENTIAL: &str = "Basic dGhlLXNlY3JldC12YWx1ZQ==";
 
 /// The submission route the author serves.
-const SUBMIT_ROUTE: &str = "/bin/slingshot-agent/jobs";
+const SUBMIT_ROUTE: &str = "/bin/slingshot/agent/submit";
 
 /// A status this build never validated.
 const UNVALIDATED_STATUS: u16 = 418;

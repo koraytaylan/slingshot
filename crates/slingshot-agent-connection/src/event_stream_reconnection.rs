@@ -43,7 +43,7 @@ use crate::author_hypertext_transfer_protocol_policy::{
 use crate::server_sent_event_decoder::EventStreamCursor;
 
 /// The one route a filtered event stream is asked for on.
-pub const EVENT_ROUTE: &str = "/bin/slingshot-agent/events";
+pub const EVENT_ROUTE: &str = "/bin/slingshot/agent/events";
 
 /// The query member naming which subscription is wanted.
 pub const SUBSCRIPTION_QUERY_MEMBER: &str = "daemon_subscription_identifier";
