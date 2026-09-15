@@ -276,10 +276,17 @@ impl ServerApplication {
             // A call this server can run reaches the same daemon, the same
             // registry command and the same operation identity a command line
             // reaches, and what it answers is the document a command line
-            // writes for the same outcome. Without a runner there is nothing to
-            // run it on, and saying so is the truthful answer: the surface is
-            // there and the daemon is not.
-            let retry_identifier = identifier_key(identifier);
+            // writes for the same outcome. A call it cannot run is that same
+            // document with the local-failure tag: the protocol read the
+            // request and this build is what could not answer it, which is a
+            // tool result rather than a protocol error.
+            // The identifier a caller quotes is the one they sent, spelled the
+            // way they spelled it: a retry quoting a JSON string the protocol
+            // put quotes around would not match their own request.
+            let retry_identifier = identifier.as_str().map_or_else(
+                || identifier_key(identifier),
+                str::to_owned,
+            );
             let envelope = match self.runner_as_mut() {
                 None => MachineOutcomeEnvelope::LocalApplicationError {
                     interruption: local_interruption(&retry_identifier),
@@ -294,6 +301,25 @@ impl ServerApplication {
                     }
                 },
             };
+            // The projection suppresses the CLI-signal tags, because they
+            // describe a keystroke at a terminal this server does not have. A
+            // local failure is not one of those: it is this build failing to
+            // answer a call it accepted, and the document goes out whole.
+            let local_failure = envelope.tag() == "local_application_error";
+            if local_failure {
+                let text = crate::machine_readable_renderer::render(&envelope)
+                    .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
+                let structured_content =
+                    serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
+                return Ok(current_stateless_revision::decorated(
+                    method,
+                    json!({
+                        "content": [{ "type": "text", "text": text }],
+                        "structuredContent": structured_content,
+                        "isError": true,
+                    }),
+                ));
+            }
             let projected = result_projection::projected(&envelope, true, Vec::new())
                 .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
             return Ok(current_stateless_revision::decorated(
