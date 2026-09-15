@@ -214,13 +214,27 @@ pub fn expected_digest(invocation: &Invocation, hello: &HelloResult) -> String {
 }
 
 /// Returns the environment revision this invocation acts under.
+///
+/// The option names the operation revision on the one leaf that resumes a
+/// recovery, and the environment revision on every other leaf that accepts it.
+/// Reading it as both at once would make a resume compare its operation's
+/// revision against the environment's for the target check, which no resume
+/// could ever satisfy - so the leaf that owns the first meaning is answered from
+/// the daemon's own reading.
 pub fn expected_revision(invocation: &Invocation, hello: &HelloResult) -> String {
+    if invocation.verb == RESUME_LEAF {
+        return hello.selected_environment_revision.clone();
+    }
     invocation
         .arguments
         .get(EXPECTED_REVISION_OPTION)
         .cloned()
         .unwrap_or_else(|| hello.selected_environment_revision.clone())
 }
+
+/// The leaf that resumes one operation's recovery, and owns the option naming
+/// the revision it expects that operation to stand at.
+const RESUME_LEAF: &str = "operation-restart";
 
 /// Returns how large a chunk this build asks a transfer for.
 ///

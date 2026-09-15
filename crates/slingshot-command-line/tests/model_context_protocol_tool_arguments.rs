@@ -252,3 +252,53 @@ fn a_control_whose_leaf_insists_on_something_declares_that_something() {
         );
     }
 }
+
+#[test]
+fn an_expected_revision_option_does_not_become_the_environment_revision() {
+    // `--expected-revision` names two different things on two different leaves:
+    // the operation revision a resume expects on `operation-restart`, and the
+    // environment revision every other leaf expects its daemon to be serving.
+    // Reading it as the environment revision on the resume leaf makes the resume
+    // compare its operation's revision against the environment's, which no
+    // resume could satisfy - the tool would exist and never run.
+    use slingshot_command_line::daemon_request::expected_revision;
+    use slingshot_command_line::invocation::parse;
+    let hello = slingshot_local_protocol::control::HelloResult {
+        author_target_identity_digest: "target".to_owned(),
+        daemon_runtime_contract_digest: "runtime".to_owned(),
+        product_version: "0.0.0".to_owned(),
+        readiness_nonce: "nonce".to_owned(),
+        runtime_namespace: "slingshot-namespace".to_owned(),
+        selected_environment_revision: "environment-revision".to_owned(),
+        supported_operation_protocol_versions: vec![1],
+    };
+    let resume = parse(&[
+        "operation-restart".to_owned(),
+        "--operation".to_owned(),
+        "operation-one".to_owned(),
+        "--expected-revision".to_owned(),
+        "7".to_owned(),
+        "--expected-category".to_owned(),
+        "adapter_unavailable".to_owned(),
+    ])
+    .expect("a resume parses");
+    assert_eq!(
+        expected_revision(&resume, &hello),
+        "environment-revision",
+        "a resume's expected revision is its operation's, not the environment's"
+    );
+
+    let observation = parse(&[
+        "operation-artifact".to_owned(),
+        "--operation".to_owned(),
+        "operation-one".to_owned(),
+        "--artifact".to_owned(),
+        "artifact-one".to_owned(),
+    ])
+    .expect("an observation parses");
+    assert_eq!(
+        expected_revision(&observation, &hello),
+        "environment-revision",
+        "an observation that names no revision expects the one its daemon serves"
+    );
+}
