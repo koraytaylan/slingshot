@@ -106,16 +106,8 @@ impl SelectedAuthorTransport {
             >,
         >,
     {
-        self.finite_with_authentication(
-            Method::GET,
-            segments,
-            query,
-            fields,
-            b"",
-            initial,
-            refresh,
-        )
-        .await
+        self.finite_with_authentication(Method::GET, segments, query, fields, b"", initial, refresh)
+            .await
     }
 
     /// Sends one request with the given method and body, refreshing Cloud
@@ -154,14 +146,7 @@ impl SelectedAuthorTransport {
             if let Some(lease) = lease {
                 let (authentication, _) = refresh(lease).await?;
                 receipt = self
-                    .finite_negotiated_query(
-                        method,
-                        segments,
-                        query,
-                        &authentication,
-                        fields,
-                        body,
-                    )
+                    .finite_negotiated_query(method, segments, query, &authentication, fields, body)
                     .await?;
             }
         }

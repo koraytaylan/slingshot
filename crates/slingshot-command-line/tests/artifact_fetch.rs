@@ -30,8 +30,7 @@ use slingshot_command_line::daemon_connection::{
     ArtifactEvent, ArtifactStreamRefusal, ExchangeFailure,
 };
 use slingshot_command_line::invocation::{
-    DESTINATION_OPTION, EXPECTED_DIGEST_OPTION, Invocation, OPERATION_IDENTIFIER_OPTION,
-    Selection,
+    DESTINATION_OPTION, EXPECTED_DIGEST_OPTION, Invocation, OPERATION_IDENTIFIER_OPTION, Selection,
 };
 use slingshot_command_line::machine_outcome_envelope::MachineOutcomeEnvelope;
 use slingshot_command_line::target_selection::NamespacePair;
@@ -193,7 +192,11 @@ impl DaemonBoundary for Fakes {
         })
     }
 
-    fn stop(&self, _namespace: &NamespacePair, _readiness_nonce: &str) -> Result<(), ExchangeFailure> {
+    fn stop(
+        &self,
+        _namespace: &NamespacePair,
+        _readiness_nonce: &str,
+    ) -> Result<(), ExchangeFailure> {
         Ok(())
     }
 
@@ -219,37 +222,43 @@ impl DaemonBoundary for Fakes {
             Answering::Whole { bytes, chunk_bytes } => {
                 declared(take, bytes.len() as u64, &digest_of(bytes))?;
                 for chunk in bytes.chunks(*chunk_bytes) {
-                    take(ArtifactEvent::Chunk(chunk.to_vec())).map_err(ArtifactStreamRefusal::AbsorbRefused)?;
+                    take(ArtifactEvent::Chunk(chunk.to_vec()))
+                        .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 }
                 Ok(start_frame())
             }
             Answering::AnotherDigest { bytes, declared: named } => {
                 declared(take, bytes.len() as u64, named)?;
                 for chunk in bytes.chunks(16) {
-                    take(ArtifactEvent::Chunk(chunk.to_vec())).map_err(ArtifactStreamRefusal::AbsorbRefused)?;
+                    take(ArtifactEvent::Chunk(chunk.to_vec()))
+                        .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 }
                 Ok(start_frame())
             }
             Answering::Short { bytes, declared_length } => {
                 declared(take, *declared_length, &digest_of(bytes))?;
                 for chunk in bytes.chunks(16) {
-                    take(ArtifactEvent::Chunk(chunk.to_vec())).map_err(ArtifactStreamRefusal::AbsorbRefused)?;
+                    take(ArtifactEvent::Chunk(chunk.to_vec()))
+                        .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 }
                 Ok(start_frame())
             }
             Answering::Repeated { bytes } => {
                 declared(take, bytes.len() as u64, &digest_of(bytes))?;
                 for chunk in bytes.chunks(16) {
-                    take(ArtifactEvent::Chunk(chunk.to_vec())).map_err(ArtifactStreamRefusal::AbsorbRefused)?;
+                    take(ArtifactEvent::Chunk(chunk.to_vec()))
+                        .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 }
                 for chunk in bytes.chunks(16) {
-                    take(ArtifactEvent::Chunk(chunk.to_vec())).map_err(ArtifactStreamRefusal::AbsorbRefused)?;
+                    take(ArtifactEvent::Chunk(chunk.to_vec()))
+                        .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 }
                 Ok(start_frame())
             }
             Answering::EndedEarly { bytes } => {
                 declared(take, bytes.len() as u64, &digest_of(bytes))?;
-                take(ArtifactEvent::Chunk(bytes.clone())).map_err(ArtifactStreamRefusal::AbsorbRefused)?;
+                take(ArtifactEvent::Chunk(bytes.clone()))
+                    .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 Err(ArtifactStreamRefusal::EndedEarly)
             }
         }
@@ -345,9 +354,11 @@ fn staged_beside(root: &Path) -> Vec<PathBuf> {
         .expect("the root is readable")
         .filter_map(|entry| entry.ok().map(|held| held.path()))
         .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.contains("slingshot-partial") || name.contains("slingshot-record") || name.contains("slingshot-lock"))
+            path.file_name().and_then(|name| name.to_str()).is_some_and(|name| {
+                name.contains("slingshot-partial")
+                    || name.contains("slingshot-record")
+                    || name.contains("slingshot-lock")
+            })
         })
         .collect()
 }
@@ -355,7 +366,8 @@ fn staged_beside(root: &Path) -> Vec<PathBuf> {
 #[test]
 fn a_whole_transfer_publishes_exactly_the_bytes_the_daemon_declared() {
     let bytes = payload();
-    let (completion, root) = fetching_with("fetched.bin", Answering::Whole { bytes: bytes.clone(), chunk_bytes: 16 });
+    let (completion, root) =
+        fetching_with("fetched.bin", Answering::Whole { bytes: bytes.clone(), chunk_bytes: 16 });
     assert_eq!(completion.exit, 0, "a whole transfer succeeds: {:?}", completion.answer);
     let published = root.join("fetched.bin");
     assert_eq!(std::fs::read(&published).expect("the destination exists"), bytes);
@@ -373,11 +385,13 @@ fn a_whole_transfer_publishes_exactly_the_bytes_the_daemon_declared() {
 #[test]
 fn a_transfer_that_digests_to_something_else_leaves_nothing() {
     let bytes = payload();
-    let (completion, root) = fetching_with(
-        "fetched.bin",
-        Answering::AnotherDigest { bytes, declared: "00".repeat(32) },
+    let (completion, root) =
+        fetching_with("fetched.bin", Answering::AnotherDigest { bytes, declared: "00".repeat(32) });
+    assert!(
+        refused_with(&completion, "digest"),
+        "a digest that disagrees is refused: {:?}",
+        completion.answer
     );
-    assert!(refused_with(&completion, "digest"), "a digest that disagrees is refused: {:?}", completion.answer);
     assert!(!root.join("fetched.bin").exists(), "nothing is published");
     assert_eq!(staged_beside(&root), Vec::<PathBuf>::new(), "the staging files are removed");
 }
@@ -386,11 +400,13 @@ fn a_transfer_that_digests_to_something_else_leaves_nothing() {
 fn a_transfer_that_stops_short_leaves_nothing() {
     let bytes = payload();
     let length = bytes.len() as u64;
-    let (completion, root) = fetching_with(
-        "fetched.bin",
-        Answering::Short { bytes, declared_length: length + 16 },
+    let (completion, root) =
+        fetching_with("fetched.bin", Answering::Short { bytes, declared_length: length + 16 });
+    assert!(
+        refused_with(&completion, "holds"),
+        "a short transfer is refused: {:?}",
+        completion.answer
     );
-    assert!(refused_with(&completion, "holds"), "a short transfer is refused: {:?}", completion.answer);
     assert!(!root.join("fetched.bin").exists(), "nothing is published");
     assert_eq!(staged_beside(&root), Vec::<PathBuf>::new(), "the staging files are removed");
 }
@@ -399,7 +415,11 @@ fn a_transfer_that_stops_short_leaves_nothing() {
 fn more_bytes_than_the_daemon_declared_are_refused_before_they_are_published() {
     let bytes = payload();
     let (completion, root) = fetching_with("fetched.bin", Answering::Repeated { bytes });
-    assert!(refused_with(&completion, "arrived"), "a transfer longer than it declared is refused: {:?}", completion.answer);
+    assert!(
+        refused_with(&completion, "arrived"),
+        "a transfer longer than it declared is refused: {:?}",
+        completion.answer
+    );
     assert!(!root.join("fetched.bin").exists(), "nothing is published");
     assert_eq!(staged_beside(&root), Vec::<PathBuf>::new(), "the staging files are removed");
 }
@@ -408,7 +428,11 @@ fn more_bytes_than_the_daemon_declared_are_refused_before_they_are_published() {
 fn a_connection_that_ends_before_the_transfer_does_leaves_nothing() {
     let bytes = payload();
     let (completion, root) = fetching_with("fetched.bin", Answering::EndedEarly { bytes });
-    assert!(refused_with(&completion, "before it said"), "a transfer that ended early is refused: {:?}", completion.answer);
+    assert!(
+        refused_with(&completion, "before it said"),
+        "a transfer that ended early is refused: {:?}",
+        completion.answer
+    );
     assert!(!root.join("fetched.bin").exists(), "nothing is published");
     assert_eq!(staged_beside(&root), Vec::<PathBuf>::new(), "the staging files are removed");
 }
@@ -418,7 +442,11 @@ fn an_answer_that_is_not_a_transfer_is_rendered_as_that_answer() {
     let (completion, root) = fetching_with("fetched.bin", Answering::NotATransfer);
     // The daemon's own answer is the answer: a read that was not a transfer
     // still answered the question it was asked.
-    assert!(matches!(completion.answer, Answer::Refusal(_)), "an internal failure is a refusal: {:?}", completion.answer);
+    assert!(
+        matches!(completion.answer, Answer::Refusal(_)),
+        "an internal failure is a refusal: {:?}",
+        completion.answer
+    );
     assert!(!root.join("fetched.bin").exists(), "nothing is published");
 }
 
@@ -427,7 +455,12 @@ fn a_destination_that_already_exists_is_never_replaced() {
     let root = tempfile::tempdir().expect("a temporary root").keep();
     let destination = root.join("fetched.bin");
     std::fs::write(&destination, b"somebody else's bytes").unwrap();
-    let completion = fetch_into(&destination, Answering::Whole { bytes: payload(), chunk_bytes: 16 });
-    assert!(refused_with(&completion, "already exists"), "an occupied destination is refused: {:?}", completion.answer);
+    let completion =
+        fetch_into(&destination, Answering::Whole { bytes: payload(), chunk_bytes: 16 });
+    assert!(
+        refused_with(&completion, "already exists"),
+        "an occupied destination is refused: {:?}",
+        completion.answer
+    );
     assert_eq!(std::fs::read(&destination).unwrap(), b"somebody else's bytes");
 }

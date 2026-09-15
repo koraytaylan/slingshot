@@ -590,10 +590,7 @@ impl SelectedAuthorTransport {
         let (segments, query) = if let Some(identifier) = physical {
             slingshot_domain::remote_job::AgentJobIdentifier::new(identifier)
                 .map_err(|_| SnapshotLookupRefusal)?;
-            (
-                ["bin", "slingshot", "agent", "jobs"].to_vec(),
-                [("sling_job_identifier", identifier)],
-            )
+            (["bin", "slingshot", "agent", "jobs"].to_vec(), [("sling_job_identifier", identifier)])
         } else {
             (
                 ["bin", "slingshot", "agent", "snapshot"].to_vec(),

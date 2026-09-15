@@ -852,8 +852,7 @@ fn the_lookup_and_reset_routes_are_fixed_and_carry_only_what_they_must() {
     ));
     let reset = high_water_route();
     assert_eq!(
-        reset,
-        HIGH_WATER_ROUTE,
+        reset, HIGH_WATER_ROUTE,
         "the reset asks about exactly the stream the events came from"
     );
 }

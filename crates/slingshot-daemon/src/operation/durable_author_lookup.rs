@@ -705,12 +705,13 @@ async fn reconcile_retained_operation(
                 | Command::ListResourceMappings(_)
                 | Command::ListSlingJobQueues(_)
                 | Command::ListWorkflowModels(_) => {
-                    let failure = slingshot_agent_connection::terminal_failure::decode_read_failure(
-                        &body,
-                        &expectation,
-                        &command,
-                    )
-                    .map_err(|_| failed_exchange())?;
+                    let failure =
+                        slingshot_agent_connection::terminal_failure::decode_read_failure(
+                            &body,
+                            &expectation,
+                            &command,
+                        )
+                        .map_err(|_| failed_exchange())?;
                     (true, Some(failure.category().to_owned()), None, false)
                 }
                 Command::UpdatePage(_)
@@ -746,12 +747,13 @@ async fn reconcile_retained_operation(
                 | Command::UpdateOpenServiceGatewayInitiativeConfiguration(_)
                 | Command::DeleteOpenServiceGatewayInitiativeConfiguration(_)
                 | Command::SetOpenServiceGatewayInitiativeBundleState(_) => {
-                    let failure = slingshot_agent_connection::terminal_failure::decode_mutation_failure(
-                        &body,
-                        &expectation,
-                        &command,
-                    )
-                    .map_err(|_| failed_exchange())?;
+                    let failure =
+                        slingshot_agent_connection::terminal_failure::decode_mutation_failure(
+                            &body,
+                            &expectation,
+                            &command,
+                        )
+                        .map_err(|_| failed_exchange())?;
                     (failure.proves_no_effect(), Some(failure.category().to_owned()), None, false)
                 }
                 Command::ReplicateContent(_) => {
@@ -789,12 +791,13 @@ async fn reconcile_retained_operation(
                 | Command::FindPagesUsingComponents(_)
                 | Command::FindAssetsByMetadata(_)
                 | Command::FindAssetsReferencedByPage(_) => {
-                    let failure = slingshot_agent_connection::terminal_failure::decode_discovery_failure(
-                        &body,
-                        &expectation,
-                        &command,
-                    )
-                    .map_err(|_| failed_exchange())?;
+                    let failure =
+                        slingshot_agent_connection::terminal_failure::decode_discovery_failure(
+                            &body,
+                            &expectation,
+                            &command,
+                        )
+                        .map_err(|_| failed_exchange())?;
                     (true, Some(failure.category().to_owned()), None, false)
                 }
                 Command::DownloadContentPackage(_) => {

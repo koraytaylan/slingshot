@@ -97,9 +97,7 @@ use std::str::FromStr as _;
 ///
 /// The token is fetched immediately before the POST, so the reading that
 /// matters is the instant the request is built, taken from the process clock.
-fn now_unix_milliseconds(
-    receipt: &crate::selected_author_http::FiniteHttpReceipt,
-) -> u64 {
+fn now_unix_milliseconds(receipt: &crate::selected_author_http::FiniteHttpReceipt) -> u64 {
     let _ = receipt;
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -204,8 +202,8 @@ impl SelectedAuthorTransport {
             generation,
             None,
         )?;
-        let body = high_water_body(subscription, generation)
-            .map_err(|_| FiniteHttpFailure::Request)?;
+        let body =
+            high_water_body(subscription, generation).map_err(|_| FiniteHttpFailure::Request)?;
         let token_receipt = self
             .fresh_token_authenticated(provider, source, reading)
             .await
@@ -215,8 +213,8 @@ impl SelectedAuthorTransport {
                 ) => failure,
                 _ => FiniteHttpFailure::Request,
             })?;
-        let token = self.decode_fresh_token(&token_receipt)
-            .map_err(|_| FiniteHttpFailure::Request)?;
+        let token =
+            self.decode_fresh_token(&token_receipt).map_err(|_| FiniteHttpFailure::Request)?;
         let origin = self.origin();
         let (name, value) = crate::author_cross_site_request_forgery_protection::header_for(
             "POST",
@@ -285,8 +283,8 @@ impl SelectedAuthorTransport {
             generation,
             None,
         )?;
-        let body = high_water_body(subscription, generation)
-            .map_err(|_| FiniteHttpFailure::Request)?;
+        let body =
+            high_water_body(subscription, generation).map_err(|_| FiniteHttpFailure::Request)?;
         let token_receipt = self
             .fresh_token_authenticated_async(provider, clock, utc)
             .await
@@ -296,8 +294,8 @@ impl SelectedAuthorTransport {
                 ) => failure,
                 _ => FiniteHttpFailure::Request,
             })?;
-        let token = self.decode_fresh_token(&token_receipt)
-            .map_err(|_| FiniteHttpFailure::Request)?;
+        let token =
+            self.decode_fresh_token(&token_receipt).map_err(|_| FiniteHttpFailure::Request)?;
         let origin = self.origin();
         let (name, value) = crate::author_cross_site_request_forgery_protection::header_for(
             "POST",
@@ -391,8 +389,8 @@ impl SelectedAuthorTransport {
             )
             .await
         }?;
-        let token = self.decode_fresh_token(&token_receipt)
-            .map_err(|_| FiniteHttpFailure::Request)?;
+        let token =
+            self.decode_fresh_token(&token_receipt).map_err(|_| FiniteHttpFailure::Request)?;
         let origin = self.origin();
         let (name, value) = crate::author_cross_site_request_forgery_protection::header_for(
             "POST",

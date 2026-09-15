@@ -1356,8 +1356,7 @@ async fn selected_high_water_captures_are_authenticated_bound_and_never_status_o
                     };
                     stream
                 };
-                let read_request =
-                    |mut stream: Box<dyn Peer>, body_expected: bool| async move {
+                let read_request = |mut stream: Box<dyn Peer>, body_expected: bool| async move {
                     let mut request = Vec::new();
                     if http2 {
                         let mut preface = [0; 39];
@@ -1396,11 +1395,8 @@ async fn selected_high_water_captures_are_authenticated_bound_and_never_status_o
                             .expect("a POST declares its length");
                         let tail = &request[length_start + b"content-length:".len()..];
                         let end = tail.iter().position(|byte| *byte == b'\r').unwrap();
-                        let length: usize = std::str::from_utf8(&tail[..end])
-                            .unwrap()
-                            .trim()
-                            .parse()
-                            .unwrap();
+                        let length: usize =
+                            std::str::from_utf8(&tail[..end]).unwrap().trim().parse().unwrap();
                         let mut body_bytes = vec![0; length];
                         stream.read_exact(&mut body_bytes).await.unwrap();
                         request.extend_from_slice(&body_bytes);
@@ -1413,13 +1409,24 @@ async fn selected_high_water_captures_are_authenticated_bound_and_never_status_o
                         },
                         if http2 { b"authorization" } else { b"Authorization" },
                     ] {
-                        assert!(request.windows(expected.len()).any(|bytes| bytes == expected), "mode={mode} body={body_expected} http2={http2} missing fixed route/header {}", String::from_utf8_lossy(expected));
+                        assert!(
+                            request.windows(expected.len()).any(|bytes| bytes == expected),
+                            "mode={mode} body={body_expected} http2={http2} missing fixed route/header {}",
+                            String::from_utf8_lossy(expected)
+                        );
                     }
                     if body_expected {
-                        assert!(request.windows(b"application/json".len()).any(|bytes| bytes == b"application/json"), "mode={mode} http2={http2} the POST does not ask for or declare JSON");
+                        assert!(
+                            request
+                                .windows(b"application/json".len())
+                                .any(|bytes| bytes == b"application/json"),
+                            "mode={mode} http2={http2} the POST does not ask for or declare JSON"
+                        );
                     }
                     assert!(
-                        !request.windows(b"last-event-id".len()).any(|bytes| bytes == b"last-event-id")
+                        !request
+                            .windows(b"last-event-id".len())
+                            .any(|bytes| bytes == b"last-event-id")
                     );
                     if body_expected {
                         assert!(
@@ -1445,8 +1452,11 @@ async fn selected_high_water_captures_are_authenticated_bound_and_never_status_o
                                   body_bytes: Vec<u8>,
                                   allow_truncation: bool| async move {
                     let body = body_bytes.as_slice();
-                    let payload =
-                        if defect == "truncated" && allow_truncation { &body[..body.len() - 1] } else { body };
+                    let payload = if defect == "truncated" && allow_truncation {
+                        &body[..body.len() - 1]
+                    } else {
+                        body
+                    };
                     if http2 {
                         let mut block = Vec::new();
                         for (name, value) in [
@@ -1479,12 +1489,10 @@ async fn selected_high_water_captures_are_authenticated_bound_and_never_status_o
                 // The capture is a POST, so the author first serves the token
                 // the write must present, then reads the write itself.
                 let stream = accept_stream().await;
-                let (stream, _) =
-                    read_request(stream, false).await;
+                let (stream, _) = read_request(stream, false).await;
                 serve_json(stream, 200, b"{\"token\":\"test-csrf\"}".to_vec(), false).await;
                 let stream = accept_stream().await;
-                let (stream, request) =
-                    read_request(stream, true).await;
+                let (stream, request) = read_request(stream, true).await;
                 if http2 {
                     // The HPACK header block is literal-encoded here, so the
                     // POST's headers are visible in the request bytes; the
@@ -1511,12 +1519,12 @@ async fn selected_high_water_captures_are_authenticated_bound_and_never_status_o
                     b"{}".to_vec()
                 } else {
                     let mut value = serde_json::json!({
-                    "format":"slingshot.agent/1",
-                    "transport_contract_digest":slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded_digest(),
-                    "daemon_subscription_identifier":"sub /?",
-                    "agent_event_store_generation":if status == 409 || defect == "generation" {8} else {7},
-                    "high_water_cursor":"captured-position",
-                });
+                        "format":"slingshot.agent/1",
+                        "transport_contract_digest":slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded_digest(),
+                        "daemon_subscription_identifier":"sub /?",
+                        "agent_event_store_generation":if status == 409 || defect == "generation" {8} else {7},
+                        "high_water_cursor":"captured-position",
+                    });
                     if status == 409 {
                         value["requested_agent_event_store_generation"] = serde_json::json!(7);
                         value["requested_last_event_identifier"] = serde_json::Value::Null;
@@ -2414,7 +2422,8 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
                             submission.operation.agent_operation_identifier
                         )
                     } else if scenario == "physical-lookup" {
-                        "GET /bin/slingshot/agent/jobs?sling_job_identifier=job-one HTTP/1.1\r\n".into()
+                        "GET /bin/slingshot/agent/jobs?sling_job_identifier=job-one HTTP/1.1\r\n"
+                            .into()
                     } else if high_water_posting {
                         assert!(!head.to_ascii_lowercase().contains("last-event-id:"));
                         "POST /bin/slingshot/agent/subscriptions/high-water HTTP/1.1\r\n".into()
@@ -2454,12 +2463,19 @@ async fn authenticated_requests_refresh_reads_but_never_repeat_job_posts() {
                             std::str::from_utf8(&tail[..end]).unwrap().trim().parse().unwrap();
                         let mut sent = vec![0; declared];
                         socket.read_exact(&mut sent).await.unwrap();
-                        assert!(sent.windows(b"daemon_subscription_identifier".len())
-                            .any(|bytes| bytes == b"daemon_subscription_identifier" as &[u8]));
-                        assert!(sent.windows(b"agent_event_store_generation".len())
-                            .any(|bytes| bytes == b"agent_event_store_generation" as &[u8]));
+                        assert!(
+                            sent.windows(b"daemon_subscription_identifier".len())
+                                .any(|bytes| bytes == b"daemon_subscription_identifier" as &[u8])
+                        );
+                        assert!(
+                            sent.windows(b"agent_event_store_generation".len())
+                                .any(|bytes| bytes == b"agent_event_store_generation" as &[u8])
+                        );
                         assert!(head.to_ascii_lowercase().contains("csrf-token: test-csrf\r\n"));
-                        assert!(head.to_ascii_lowercase().contains("content-type: application/json\r\n"));
+                        assert!(
+                            head.to_ascii_lowercase()
+                                .contains("content-type: application/json\r\n")
+                        );
                     }
                     if posting {
                         let expected = submission.wire_body().unwrap();
@@ -4193,8 +4209,8 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                             bytes.push(socket.read_u8().await.unwrap());
                         }
                         assert!(bytes.starts_with(
-                        b"GET /aem/bin/slingshot/agent/snapshot?agent_operation_identifier="
-                    ));
+                            b"GET /aem/bin/slingshot/agent/snapshot?agent_operation_identifier="
+                        ));
                         let response = format!(
                             "HTTP/1.1 {status} Absent\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
                             body.len()
