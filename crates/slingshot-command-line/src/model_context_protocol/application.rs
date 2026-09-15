@@ -139,6 +139,17 @@ impl ServerApplication {
         self.diagnostics.dropped()
     }
 
+    /// Takes everything this server has to say about why, for the stream that
+    /// carries it.
+    ///
+    /// Standard output is protocol messages only, so a reason a call was not
+    /// answered belongs on the diagnostic stream, and this is what lets the
+    /// process holding that stream write it. Nothing here is part of an answer:
+    /// a caller reading only standard output sees exactly the protocol.
+    pub fn take_diagnostics(&mut self) -> Vec<String> {
+        self.diagnostics.take()
+    }
+
     /// Lets the sole standard-output writer drain queued complete responses.
     ///
     /// An active request is released only after its response has reached the

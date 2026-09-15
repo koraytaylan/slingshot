@@ -233,6 +233,7 @@ pub fn exercise_invocation(
         arguments.insert(PHRASE_OPTION.to_owned(), VERIFICATION_PHRASE.to_owned());
     }
     Invocation {
+        command: None,
         arguments,
         detached: false,
         operation_key: requires_operation_key(command).then(|| operation_key.to_owned()),

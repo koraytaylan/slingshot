@@ -36,6 +36,12 @@ pub const OPERATION_KEY_MEMBER: &str = "operation_key";
 /// The member a caller supplies to return without waiting.
 pub const DETACHED_MEMBER: &str = "detached";
 
+/// Returns whether the call asked to return without waiting.
+#[must_use]
+pub fn detached(arguments: &Value) -> bool {
+    arguments.get(DETACHED_MEMBER).and_then(Value::as_bool).unwrap_or(false)
+}
+
 /// The fewest bytes an operation key may carry.
 pub const LEAST_OPERATION_KEY_BYTES: u64 = 1;
 
@@ -146,6 +152,62 @@ const CONTROL_MEMBERS: &[(&str, &[&str])] = &[
     ("maintenance-preview", &["author_target_identity_digest"]),
     ("maintenance-apply", &["author_target_identity_digest", "reviewed_manifest_digest"]),
 ];
+
+/// Returns the option one declared control member fills.
+///
+/// A control's declared members are the protocol's vocabulary and the
+/// observation and maintenance leaves read the command line's, so the two have
+/// to meet somewhere. They meet here, once, rather than in a rename that a
+/// control and a command would each have to agree about separately.
+#[must_use]
+pub fn control_option(member: &str) -> Option<&'static str> {
+    match member {
+        "operation_identifier" => Some(crate::invocation::OPERATION_IDENTIFIER_OPTION),
+        "expected_recovery_category" => Some(crate::invocation::EXPECTED_CATEGORY_OPTION),
+        "artifact_identifier" => Some(crate::invocation::ARTIFACT_OPTION),
+        "author_target_identity_digest" => Some(crate::invocation::TARGET_DIGEST_OPTION),
+        "reviewed_manifest_digest" => Some(crate::invocation::REVIEWED_DIGEST_OPTION),
+        _ => None,
+    }
+}
+
+/// Returns the options one control's arguments fill, by option name.
+///
+/// Only the members the control declares are mapped: a member it does not
+/// declare is no part of it, and saying so is better than passing a spelling
+/// down to a leaf that would have to guess what it meant. Whether the result is
+/// complete is the leaf's own question, and it answers it in its own words.
+///
+/// # Errors
+///
+/// Returns what stopped the call, in words a caller can act on.
+pub fn control_options(
+    tool: &ToolDescriptor,
+    arguments: &Value,
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let held = arguments.as_object().ok_or_else(|| "a tool call carries an object".to_owned())?;
+    let declared: Vec<&str> = CONTROL_MEMBERS
+        .iter()
+        .filter(|(named, _)| named == &tool.name.as_str())
+        .flat_map(|(_, members)| members.iter().copied())
+        .collect();
+    let mut named = std::collections::BTreeMap::new();
+    for (member, value) in held {
+        if member == OPERATION_KEY_MEMBER || member == DETACHED_MEMBER {
+            continue;
+        }
+        if !declared.contains(&member.as_str()) {
+            return Err(format!("{} does not declare the argument {member}", tool.name));
+        }
+        let option = control_option(member)
+            .ok_or_else(|| format!("{} declares {member}, and no option carries it", tool.name))?;
+        let text = value.as_str().ok_or_else(|| {
+            format!("{} names {member} as {value}, which is not a value it takes", tool.name)
+        })?;
+        named.insert(option.to_owned(), text.to_owned());
+    }
+    Ok(named)
+}
 
 /// Returns the outcome tags one tool can answer with.
 #[must_use]

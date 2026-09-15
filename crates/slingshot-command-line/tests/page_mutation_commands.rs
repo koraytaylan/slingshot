@@ -328,6 +328,7 @@ fn a_document_that_redefines_what_the_command_sets_is_refused() {
 #[test]
 fn the_caller_key_is_checked_before_the_property_file_is_opened() {
     let keyless = Invocation {
+        command: None,
         arguments: [
             (PATH_OPTION.to_owned(), PARENT.to_owned()),
             (PROPERTIES_OPTION.to_owned(), ABSENT_FILE.to_owned()),

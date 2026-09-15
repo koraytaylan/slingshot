@@ -27,6 +27,7 @@ const KEY: &str = "an-operation-key";
 /// Returns one invocation of `leaf`, carrying a key and nothing else.
 fn invocation(leaf: &str) -> Invocation {
     Invocation {
+        command: None,
         arguments: std::collections::BTreeMap::new(),
         detached: false,
         operation_key: Some(KEY.to_owned()),

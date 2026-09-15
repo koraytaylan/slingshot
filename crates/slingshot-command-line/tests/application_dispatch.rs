@@ -126,6 +126,7 @@ fn families() -> Vec<String> {
 /// Returns one invocation of `leaf`, carrying whatever it insists on.
 fn invocation(leaf: &str) -> Invocation {
     Invocation {
+        command: None,
         arguments: std::collections::BTreeMap::new(),
         detached: false,
         operation_key: requires_operation_key(leaf).then(|| "operation-one".to_owned()),
@@ -479,6 +480,7 @@ fn greeting(target: &str, revision: &str) -> HelloResult {
 /// Returns the invocation one leaf and its arguments make.
 fn invoking(leaf: &str, arguments: &[(&str, &str)]) -> Invocation {
     Invocation {
+        command: None,
         arguments: arguments
             .iter()
             .map(|(named, value)| ((*named).to_owned(), (*value).to_owned()))

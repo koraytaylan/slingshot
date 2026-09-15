@@ -25,7 +25,7 @@
 
 use std::collections::BTreeMap;
 
-use slingshot_domain::command::catalog::CommandCatalog;
+use slingshot_domain::command::catalog::{Command, CommandCatalog};
 
 /// The option naming which profile to use.
 pub const PROFILE_OPTION: &str = "--profile";
@@ -448,6 +448,13 @@ pub struct Selection {
 pub struct Invocation {
     /// The options the leaf takes, by name.
     pub arguments: BTreeMap<String, String>,
+    /// The typed command this invocation already is, when one built it.
+    ///
+    /// A protocol tool call carries a command's own argument document rather
+    /// than a command line, so the command is built where its own schema is
+    /// known and carried here. A parsed command line leaves this empty: its
+    /// command is built from the options by the family that owns it.
+    pub command: Option<Command>,
     /// Whether it submits and returns without waiting.
     pub detached: bool,
     /// The caller's operation key, when the leaf takes one.
@@ -465,6 +472,12 @@ impl Invocation {
     #[must_use]
     pub fn is_metadata_only(&self) -> bool {
         METADATA_ONLY_LEAVES.contains(&self.verb.as_str())
+    }
+
+    /// Returns the command this invocation carries, when it carries one.
+    #[must_use]
+    pub fn carried_command(&self) -> Option<&Command> {
+        self.command.as_ref()
     }
 }
 
@@ -536,6 +549,7 @@ pub fn parse(arguments: &[String]) -> Result<Invocation, ParseRefusal> {
     require_known_leaf(leaf)?;
     let mut invocation = Invocation {
         arguments: BTreeMap::new(),
+        command: None,
         detached: false,
         operation_key: None,
         output: None,
