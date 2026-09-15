@@ -143,6 +143,145 @@ impl Transfer {
     }
 }
 
+/// One artifact arriving, verified and staged as it goes.
+///
+/// The destination appears only when this says it may: the bytes accumulate in
+/// a staging file beside it, each one is bounded and hashed as it arrives, and
+/// publication happens once the length and the digest both agree. Nothing
+/// before that moment is visible to anybody else.
+#[derive(Debug)]
+pub struct Arrival {
+    /// Where the bytes accumulate, beside the destination.
+    staging_path: std::path::PathBuf,
+    /// The file they accumulate in.
+    staging: std::fs::File,
+    /// Whether the daemon has said what is coming.
+    transfer: Option<Transfer>,
+    /// What the daemon declared, when it declared anything.
+    declared: Option<DeclaredArtifact>,
+    /// What the bytes have digested to so far.
+    hasher: sha2::Sha256,
+}
+
+/// What one artifact transfer declared before its bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeclaredArtifact {
+    /// Which artifact.
+    pub artifact_identifier: String,
+    /// How long it is.
+    pub byte_length: u64,
+    /// What it digests to.
+    pub content_digest: String,
+    /// What kind of bytes it holds.
+    pub media_type: String,
+}
+
+impl Arrival {
+    /// Begins one arrival, staging at `staging`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DownloadRefusal::DestinationUnusable`] when the staging file
+    /// cannot be created.
+    pub fn new(staging: std::path::PathBuf) -> Result<Self, DownloadRefusal> {
+        use sha2::Digest as _;
+        let file =
+            std::fs::File::create(&staging).map_err(|_| DownloadRefusal::DestinationUnusable)?;
+        Ok(Self {
+            staging_path: staging,
+            staging: file,
+            transfer: None,
+            declared: None,
+            hasher: sha2::Sha256::new(),
+        })
+    }
+
+    /// Takes one event from the daemon.
+    ///
+    /// # Errors
+    ///
+    /// Returns what is wrong with it as words a caller can act on: a chunk
+    /// before the daemon said what was coming, more bytes than it declared, or
+    /// a staging file that cannot be written.
+    pub fn take(&mut self, event: crate::daemon_connection::ArtifactEvent) -> Result<(), String> {
+        use sha2::Digest as _;
+        match event {
+            crate::daemon_connection::ArtifactEvent::Start {
+                artifact_identifier,
+                byte_length,
+                content_digest,
+                media_type,
+            } => {
+                if self.transfer.is_some() {
+                    return Err("the daemon declared the artifact twice".to_owned());
+                }
+                self.transfer = Some(Transfer::of(byte_length, &content_digest));
+                self.declared = Some(DeclaredArtifact {
+                    artifact_identifier,
+                    byte_length,
+                    content_digest,
+                    media_type,
+                });
+                Ok(())
+            }
+            crate::daemon_connection::ArtifactEvent::Chunk(bytes) => {
+                let held = self
+                    .transfer
+                    .as_mut()
+                    .ok_or_else(|| "the daemon sent bytes before saying what they are".to_owned())?;
+                held.absorb(bytes.len() as u64).map_err(|refusal| refusal.to_string())?;
+                self.hasher.update(&bytes);
+                std::io::Write::write_all(&mut self.staging, &bytes)
+                    .map_err(|failure| format!("the staged bytes could not be written: {failure}"))
+            }
+        }
+    }
+
+    /// Returns what the daemon declared, when it declared anything.
+    #[must_use]
+    pub fn declared(&self) -> Option<&DeclaredArtifact> {
+        self.declared.as_ref()
+    }
+
+    /// Publishes the staged bytes at `destination`, or says why it may not.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DownloadRefusal`] when the transfer is short, when the bytes
+    /// are not what the daemon described, or when the publication is refused.
+    pub fn publish(&mut self, destination: &std::path::Path) -> Result<(), DownloadRefusal> {
+        use sha2::Digest as _;
+        let transfer = self.transfer.take().ok_or(DownloadRefusal::DestinationUnusable)?;
+        let digest: String = self
+            .hasher
+            .clone()
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        if let Err(refusal) = transfer.require_publishable(&digest) {
+            self.discard();
+            return Err(refusal);
+        }
+        std::io::Write::flush(&mut self.staging).map_err(|_| DownloadRefusal::DestinationUnusable)?;
+        if let Err(refusal) = publish(&self.staging_path, destination) {
+            self.discard();
+            return Err(refusal);
+        }
+        Ok(())
+    }
+
+    /// Removes what a refused transfer staged.
+    ///
+    /// A partial file left beside the caller's name is worse than no file: the
+    /// next command that reads it has no way to tell it from a whole one, and
+    /// the fact that it is a resumable remnant is this build's private
+    /// knowledge rather than the caller's.
+    pub fn discard(&mut self) {
+        std::fs::remove_file(&self.staging_path).ok();
+    }
+}
+
 /// What a rerun found already done.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PriorWork {

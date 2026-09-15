@@ -4049,9 +4049,20 @@ async fn retained_artifact_completion_case(
                 }
             );
             let needs_maintenance = document.canonical_failure.contains("staging_cleanup_failed");
-            assert_eq!(failure.metadata.as_deref(), needs_maintenance.then_some(
-                slingshot_storage::agent_job_repository::RejectedAgentDiagnosis::PackageStagingCleanupRequired.as_text()
-            ));
+            // The category travels with the answer (docs/COMMANDS.md: "A category travels with the
+            // answer"), and the decoder has already checked it against the command's own registered
+            // set. It is read from the fixture's own refusal rather than restated here, so this
+            // assertion cannot agree with the daemon by naming a category the agent never sent. The
+            // package's own local diagnosis still wins where there is one, because it says something
+            // the category does not.
+            let declared: serde_json::Value =
+                serde_json::from_str(&document.canonical_failure).unwrap();
+            let expected_metadata = if needs_maintenance {
+                slingshot_storage::agent_job_repository::RejectedAgentDiagnosis::PackageStagingCleanupRequired.as_text().to_owned()
+            } else {
+                declared["failure"].as_str().expect("the fixture declares a category").to_owned()
+            };
+            assert_eq!(failure.metadata.as_deref(), Some(expected_metadata.as_str()));
             assert_eq!(
                 failure.disposition,
                 if partial {

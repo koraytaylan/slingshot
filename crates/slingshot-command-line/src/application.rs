@@ -28,13 +28,17 @@ use slingshot_domain::command::catalog::CommandCatalog;
 use slingshot_local_protocol::control::{HelloResult, operation_compatibility};
 use slingshot_local_protocol::message::{OperationEnvelope, OperationRequest, OperationResponse};
 
+use crate::artifact_download::{Arrival, DownloadRefusal};
+use crate::artifact_staging_lock;
+use crate::artifact_staging_metadata::StagedPayload;
 use crate::configuration_check::CheckReport;
 use crate::daemon_answer::{
     AccessContext, Admitted, Submission, maintained, observed, recovering, recovery_facts,
-    submitted,
+    submitted, succeeded,
 };
 use crate::daemon_connection::{
-    ExchangeFailure, ExpectedTarget, ObservedOwner, OwnerDisposition, classify_owner,
+    ArtifactEvent, ArtifactStreamRefusal, ExchangeFailure, ExpectedTarget, ObservedOwner,
+    OwnerDisposition, classify_owner,
 };
 use crate::daemon_process::DaemonExpectation;
 use crate::daemon_request::{
@@ -44,15 +48,15 @@ use crate::daemon_request::{
 use crate::exit_classification;
 use crate::interrupt::{self, Phase, SignalOutcome};
 use crate::invocation::{
-    EVERY_OPTION, Invocation, LIVE_AUTHOR_LEAF, LOCAL_LEAVES, METADATA_ONLY_LEAVES,
-    OPERATION_IDENTIFIER_OPTION, OPERATION_NAMING_LEAVES, SERVE_LEAF, Selection,
-    is_catalog_command,
+    ARTIFACT_OPTION, DESTINATION_OPTION, EVERY_OPTION, Invocation, LIVE_AUTHOR_LEAF, LOCAL_LEAVES,
+    METADATA_ONLY_LEAVES, OPERATION_IDENTIFIER_OPTION, OPERATION_NAMING_LEAVES, SERVE_LEAF,
+    Selection, is_catalog_command,
 };
 use crate::live_adobe_experience_manager::{
     Enablement, NO_SELECTED_AUTHOR, SUBMITTED_COMMANDS, exercise_invocation, live_report,
     require_admissible,
 };
-use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
+use crate::machine_outcome_envelope::{ArtifactAccess, MachineOutcomeEnvelope, artifact_uri};
 use crate::operation_submission;
 use crate::target_selection::{
     NAMESPACE_ONLY_LEAVES, NamespacePair, TargetRequirement, namespace_of, requirement_of,
@@ -61,6 +65,9 @@ use slingshot_configuration::profile_loader::ConfigurationDiagnostic;
 
 /// What this product is called wherever it names itself.
 const PRODUCT_NAME: &str = "slingshot";
+
+/// The leaf that fetches one operation's artifact.
+const ARTIFACT_LEAF_NAME: &str = "operation-artifact";
 
 /// The leaf that answers with this build's version.
 const VERSION_LEAF: &str = "version";
@@ -347,6 +354,27 @@ pub trait DaemonBoundary {
         namespace: &NamespacePair,
         envelope: &OperationEnvelope,
     ) -> Result<OperationResponse, ExchangeFailure>;
+
+    /// Sends one versioned operation request and reads its answer as a stream.
+    ///
+    /// An artifact read is answered with many frames on one connection, so this
+    /// is a separate way of asking rather than a variant of [`Self::operate`]:
+    /// the caller consumes events until the transfer ends, taking each as it
+    /// arrives so the bytes are bounded and verified while they move. A frame
+    /// that is not a transfer at all is returned, because it is the daemon's
+    /// answer to a request that was not an artifact read.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ArtifactStreamRefusal`] when the exchange fails, when the
+    /// daemon ends the transfer early, when it answers a frame an artifact
+    /// transfer may not carry, or when the caller refuses what arrived.
+    fn stream_artifact(
+        &self,
+        namespace: &NamespacePair,
+        envelope: &OperationEnvelope,
+        take: &mut dyn FnMut(ArtifactEvent) -> Result<(), String>,
+    ) -> Result<OperationResponse, ArtifactStreamRefusal>;
 }
 
 /// Inventing a collision-resistant identity for one command-line invocation.
@@ -972,9 +1000,149 @@ impl CommandLineApplication<'_> {
             operation_identifier: required(invocation, OPERATION_IDENTIFIER_OPTION)?.to_owned(),
             replayed: false,
         };
+        // An artifact read naming a destination is a download: its answer is a
+        // stream rather than one frame, and what the caller asked for is a file
+        // holding exactly the bytes the daemon vouched for. Without a
+        // destination the same read answers the access entry it always did, so
+        // a caller asking where the bytes are still gets that answer.
+        if invocation.verb == ARTIFACT_LEAF_NAME
+            && let Some(destination) = invocation.arguments.get(DESTINATION_OPTION)
+        {
+            if let Some(done) =
+                self.download(invocation, &namespace, &hello, request, &admitted, Path::new(destination))?
+            {
+                return Ok(done);
+            }
+            return Err(RunRefusal::Usage(
+                "an artifact download needs the artifact it is fetching".to_owned(),
+            ));
+        }
         let response =
             self.exchange(&namespace, &hello, request, &admitted.operation_identifier)?;
         self.resolved(&namespace, &hello, &response, &self.access(&namespace, &hello, &admitted))
+    }
+
+    /// Fetches one operation's artifact to a destination the caller named.
+    ///
+    /// The design is about one moment: the publication that makes the
+    /// destination appear. Everything before it is private and disposable,
+    /// everything after it is visible and final, and nothing in between is
+    /// observable. Bytes accumulate in a staging file beside the destination
+    /// and are verified as they arrive, and the destination is created only
+    /// once the length and the digest both agree.
+    ///
+    /// Returns `None` when the daemon answered something other than a transfer,
+    /// which is its answer to a request that was not an artifact read and is
+    /// the caller's to render.
+    fn download(
+        &self,
+        invocation: &Invocation,
+        namespace: &NamespacePair,
+        hello: &HelloResult,
+        request: OperationRequest,
+        admitted: &Admitted,
+        destination: &Path,
+    ) -> Result<Option<Completion>, RunRefusal> {
+        let artifact_identifier = required(invocation, ARTIFACT_OPTION)?.to_owned();
+        let payload = StagedPayload::OperationArtifact {
+            artifact_identifier: artifact_identifier.clone(),
+            operation_identifier: admitted.operation_identifier.clone(),
+        };
+        let names = artifact_staging_lock::names_beside(
+            destination,
+            &hello.author_target_identity_digest,
+            &hello.selected_environment_revision,
+            &payload,
+        );
+        // Nothing is downloaded under a destination something else is already
+        // staging: two processes writing one partial download produce a file
+        // that belongs to neither of them.
+        let _lock = artifact_staging_lock::StagingLock::take(&names.lock)
+            .map_err(|refusal| RunRefusal::Local(refusal.to_string()))?;
+        if destination.exists() {
+            // A destination this transfer did not make is left exactly as it
+            // is: something already there is a collision, not a target.
+            return Err(RunRefusal::Local(
+                DownloadRefusal::DestinationOccupied.to_string(),
+            ));
+        }
+        let envelope = OperationEnvelope {
+            author_target_identity_digest: hello.author_target_identity_digest.clone(),
+            daemon_runtime_contract_digest: hello.daemon_runtime_contract_digest.clone(),
+            operation_protocol_version: spoken_operation_version(),
+            request,
+            request_identifier: self.request_identifier(),
+            selected_environment_revision: hello.selected_environment_revision.clone(),
+        };
+        envelope.require_well_formed().map_err(|failure| RunRefusal::Local(failure.to_string()))?;
+        let mut arrival = Arrival::new(names.staging.clone())
+            .map_err(|refusal| RunRefusal::Local(refusal.to_string()))?;
+        let answer = {
+            let mut take = |event: ArtifactEvent| arrival.take(event);
+            let streamed = self.daemon.stream_artifact(namespace, &envelope, &mut take);
+            self.reached_stream(streamed, &Phase::FetchingArtifact {
+                artifact_identifier: artifact_identifier.clone(),
+                operation_identifier: admitted.operation_identifier.clone(),
+            })
+        };
+        let answer = match answer {
+            Ok(answer) => answer,
+            Err(refusal) => {
+                // A transfer that came apart leaves nothing behind: what it
+                // staged belongs to nobody until the whole of it has been
+                // proved, and the next command that read a partial file could
+                // not tell it from a whole one.
+                arrival.discard();
+                return Err(refusal);
+            }
+        };
+        if arrival.declared().is_none() {
+            // The daemon answered something other than a transfer, which is its
+            // answer to this request and is rendered exactly as one.
+            let context = self.access(namespace, hello, admitted);
+            return Ok(Some(self.resolved(namespace, hello, &answer, &context)?));
+        }
+        arrival.publish(destination).map_err(|refusal| RunRefusal::Local(refusal.to_string()))?;
+        let declared = arrival
+            .declared()
+            .cloned()
+            .ok_or_else(|| RunRefusal::Local("the transfer declared no artifact".to_owned()))?;
+        let context = self.access(namespace, hello, admitted);
+        let uri = artifact_uri(
+            &context.profile,
+            &context.environment,
+            &context.author_target_identity_digest,
+            &context.operation_identifier,
+            declared.artifact_identifier.as_str(),
+        );
+        Ok(Some(succeeded(MachineOutcomeEnvelope::StructuredResultArtifactAccess {
+            artifact: ArtifactAccess {
+                artifact_identifier: declared.artifact_identifier,
+                author_target_identity_digest: context.author_target_identity_digest,
+                byte_length: declared.byte_length,
+                content_digest: declared.content_digest,
+                media_type: declared.media_type,
+                operation_identifier: context.operation_identifier,
+                uri,
+            },
+        })))
+    }
+
+    /// Returns what one streamed exchange reached, or why it reached nothing.
+    ///
+    /// A failed transfer after somebody asked the run to stop is that stop
+    /// rather than an unavailable daemon, exactly as for a finite exchange: the
+    /// daemon was there, and the run walked away from it.
+    fn reached_stream(
+        &self,
+        outcome: Result<OperationResponse, ArtifactStreamRefusal>,
+        phase: &Phase,
+    ) -> Result<OperationResponse, RunRefusal> {
+        match outcome {
+            Ok(answered) => Ok(answered),
+            Err(_) if self.signals.stop_requested() => Err(RunRefusal::Halted(Box::new(phase.clone()))),
+            Err(refusal) => Err(RunRefusal::Unavailable(refusal.to_string())),
+        }
     }
 
     /// Lists operations, or previews, applies, or reads maintenance.

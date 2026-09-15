@@ -27,6 +27,7 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 
+use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
 use crate::model_context_protocol::schema_projection::{
     OPERATION_KEY_MEMBER, ProjectionRefusal, require_acceptable,
 };
@@ -150,6 +151,27 @@ pub fn require_runnable(
         .ok_or_else(|| ExecutionRefusal::ToolUnknown(named.to_owned()))?;
     let arguments = require_acceptable(&tool, raw_arguments)?;
     Ok((tool, arguments))
+}
+
+/// Runs one tool call somewhere it can reach the daemon.
+///
+/// The protocol server knows what a tool is called and what its arguments
+/// mean; it does not know how to reach an author, and it must not learn. A
+/// caller supplies this, so the one thing a tool call and a command line share
+/// - the command it runs and the daemon it reaches - lives in one place rather
+/// than in two implementations that would have to agree.
+pub trait ToolRunner {
+    /// Runs one tool call and returns the outcome it reached.
+    ///
+    /// The name and the accepted arguments travel together, because the
+    /// registry row and the call's own arguments are what the outcome is
+    /// about. What comes back is the envelope a command line writes for the
+    /// same outcome, so the two surfaces cannot disagree about what happened.
+    ///
+    /// # Errors
+    ///
+    /// Returns what stopped the call, in words a caller can act on.
+    fn run(&mut self, tool: &ToolDescriptor, arguments: &Value) -> Result<MachineOutcomeEnvelope, String>;
 }
 
 /// Returns the operation key one accepted argument document supplies.

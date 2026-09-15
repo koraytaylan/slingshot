@@ -42,7 +42,14 @@ use crate::application::{
     SignalBoundary,
 };
 use crate::configuration_check::{self, CheckReport};
-use crate::daemon_connection::{self, ExchangeFailure};
+use crate::daemon_connection::{
+    self, ArtifactEvent, ArtifactStreamRefusal, ExchangeFailure,
+};
+use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
+use crate::model_context_protocol::operation_execution::{self, ToolRunner};
+use crate::model_context_protocol::schema_projection;
+use crate::model_context_protocol::tool_catalog::ToolDescriptor;
+use crate::target_selection::namespace_of;
 use crate::daemon_entry::{self, DaemonEntryArguments, DaemonEntryOutcome};
 use crate::exit_classification;
 use crate::explicit_daemon_start::{self, TargetRuntime};
@@ -219,7 +226,7 @@ pub fn run(
         }
     };
     if invocation.verb == SERVE_LEAF {
-        return serve_protocol(&mut std::io::stdin().lock(), output, diagnostics);
+        return serve_protocol(&invocation, executable, &mut std::io::stdin().lock(), output, diagnostics);
     }
     let completion = complete(&invocation, executable);
     write_completion(&completion, invocation.output, output, diagnostics)
@@ -233,6 +240,128 @@ pub fn run(
 pub fn serves_protocol(arguments: &[String]) -> bool {
     let named = normalized(arguments);
     invocation::parse(&named).is_ok_and(|invocation| invocation.verb == SERVE_LEAF)
+}
+
+/// Runs one tool call as the invocation a command line would have made.
+///
+/// The protocol server and the command line reach the same daemon through the
+/// same application, so a tool call is turned into the invocation its
+/// arguments describe and run through it. A second path to an author would be
+/// a second place the same checks live, and the two would eventually disagree
+/// about what a request did.
+struct ProductToolRunner {
+    /// The contract every frame is written under.
+    contract: FoundationContract,
+    /// Where this run's daemon objects live.
+    runtime_root: PathBuf,
+    /// Which profile and environment the process was started for.
+    selection: Selection,
+    /// The executable a daemon would be started from, when one is.
+    executable: PathBuf,
+}
+
+impl ToolRunner for ProductToolRunner {
+    fn run(
+        &mut self,
+        tool: &ToolDescriptor,
+        arguments: &serde_json::Value,
+    ) -> Result<MachineOutcomeEnvelope, String> {
+        let invocation = tool_invocation(tool, arguments, &self.selection)?;
+        let contract = &self.contract;
+        let executable = &self.executable;
+        let request_identity = ProductRequestIdentity;
+        let configuration = ProductConfiguration;
+        let filesystem = ProductFilesystem;
+        let network = ProductNetwork;
+        let signals = ProductSignals::watching();
+        let daemon = ProductDaemon::new(contract, &self.runtime_root, signals.flag());
+        let process = ProductProcess {
+            contract,
+            executable: executable.to_path_buf(),
+            runtime_root: self.runtime_root.clone(),
+        };
+        let application = CommandLineApplication {
+            request_identity: &request_identity,
+            configuration: &configuration,
+            daemon: &daemon,
+            filesystem: &filesystem,
+            network: &network,
+            process: &process,
+            provenance: Provenance::embedded(),
+            signals: &signals,
+        };
+        match complete_over(&application, &invocation).answer {
+            Answer::Envelope(envelope) => Ok(*envelope),
+            Answer::Refusal(message) => Err(message),
+            Answer::Text(text) => {
+                Err(format!("{} answered text rather than an outcome: {text}", tool.name))
+            }
+        }
+    }
+}
+
+/// Returns the invocation one tool call describes.
+///
+/// The tool's own arguments are the invocation's options, spelled the way the
+/// registry spells them: a tool call and a command line name the same things,
+/// and a second vocabulary here would be a second thing to keep in step.
+fn tool_invocation(
+    tool: &ToolDescriptor,
+    arguments: &serde_json::Value,
+    selection: &Selection,
+) -> Result<Invocation, String> {
+    let held = arguments.as_object().ok_or_else(|| "a tool call carries an object".to_owned())?;
+    let mut named = std::collections::BTreeMap::new();
+    let mut operation_key = operation_execution::supplied_key(arguments).map(str::to_owned);
+    for (member, value) in held {
+        if member == schema_projection::OPERATION_KEY_MEMBER {
+            continue;
+        }
+        match value {
+            serde_json::Value::String(text) => {
+                named.insert(format!("--{}", member.replace('_', "-")), text.clone());
+            }
+            serde_json::Value::Bool(flag) => {
+                if *flag {
+                    named.insert(format!("--{}", member.replace('_', "-")), String::new());
+                }
+            }
+            other => {
+                return Err(format!(
+                    "{} names {} as {other}, which is not a value a command line takes",
+                    tool.name, member
+                ))
+            }
+        }
+    }
+    if operation_key.is_none() {
+        operation_key = Some(invocation_identifier());
+    }
+    Ok(Invocation {
+        arguments: named,
+        detached: false,
+        operation_key,
+        output: Some(OutputForm::Machine),
+        selection: selection.clone(),
+        verb: tool.name.clone(),
+    })
+}
+
+/// Returns one new operation key for a call that supplied none.
+///
+/// The same collision-resistant identity a command line invents, from the same
+/// boundary, so a key this server generated is one its own command line could
+/// have generated and nothing about the shape differs between the two.
+fn invocation_identifier() -> String {
+    ProductRequestIdentity.invent_request_identifier()
+}
+
+/// Returns what one parsed invocation produced against an application.
+fn complete_over(
+    application: &CommandLineApplication<'_>,
+    invocation: &Invocation,
+) -> Completion {
+    application.run(invocation)
 }
 
 /// Returns what one parsed invocation produced against the real boundaries.
@@ -331,11 +460,27 @@ fn write_diagnostic(diagnostics: &mut dyn Write, message: &str) {
 /// that produces nothing is a notification, and silence is the correct answer
 /// to one.
 fn serve_protocol(
+    invocation: &Invocation,
+    executable: &Path,
     input: &mut dyn std::io::BufRead,
     output: &mut dyn Write,
     diagnostics: &mut dyn Write,
 ) -> i32 {
-    let mut server = ServerApplication::new();
+    // The server is given the runner the rest of this binary uses, so a tool
+    // call reaches the same daemon a command line reaches. A run whose
+    // selection or runtime root cannot be resolved still serves the protocol:
+    // the catalog and everything that describes this build answer, and a call
+    // that needs a daemon is told there is not one rather than being invented.
+    let runner = match (runtime_root(invocation), namespace_of(&invocation.selection)) {
+        (Ok(root), Ok(_)) => Some(Box::new(ProductToolRunner {
+            contract: FoundationContract::embedded(),
+            runtime_root: root,
+            selection: invocation.selection.clone(),
+            executable: executable.to_path_buf(),
+        }) as Box<dyn ToolRunner>),
+        _ => None,
+    };
+    let mut server = ServerApplication::over(runner);
     loop {
         let (line, terminal) = match read_bounded_line(input) {
             Ok(BoundedLine::Line(line)) => (line, false),
@@ -714,5 +859,29 @@ impl DaemonBoundary for ProductDaemon<'_> {
     ) -> Result<OperationResponse, ExchangeFailure> {
         let address = self.address(namespace)?;
         self.driven(daemon_connection::exchange_operation(self.contract, &address, envelope))
+    }
+
+    fn stream_artifact(
+        &self,
+        namespace: &NamespacePair,
+        envelope: &OperationEnvelope,
+        take: &mut dyn FnMut(ArtifactEvent) -> Result<(), String>,
+    ) -> Result<OperationResponse, ArtifactStreamRefusal> {
+        let address = self.address(namespace).map_err(ArtifactStreamRefusal::Exchange)?;
+        let runtime = self.runtime.as_ref().ok_or_else(|| {
+            ArtifactStreamRefusal::Exchange(ExchangeFailure::Transport(
+                "no runtime could be built".to_owned(),
+            ))
+        })?;
+        runtime.block_on(async {
+            tokio::select! {
+                answered = daemon_connection::stream_artifact(
+                    self.contract, &address, envelope, take,
+                ) => answered,
+                () = stopped(&self.stop_requested) => Err(ArtifactStreamRefusal::Exchange(
+                    ExchangeFailure::Transport(STOP_REQUESTED.to_owned()),
+                )),
+            }
+        })
     }
 }

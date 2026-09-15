@@ -255,7 +255,7 @@ fn released_rows(manifest: &serde_json::Value) -> u64 {
 }
 
 /// Returns the completion one successful envelope makes.
-fn succeeded(envelope: MachineOutcomeEnvelope) -> Completion {
+pub(crate) fn succeeded(envelope: MachineOutcomeEnvelope) -> Completion {
     Completion {
         answer: Answer::Envelope(Box::new(envelope)),
         diagnostics: Vec::new(),
