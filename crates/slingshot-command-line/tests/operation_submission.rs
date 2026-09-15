@@ -180,6 +180,7 @@ fn a_daemon_this_client_may_not_use_is_refused_before_anything_is_prepared() {
         GENERATED.to_owned()
     };
     let keyless = Invocation {
+        command: None,
         arguments: std::collections::BTreeMap::new(),
         detached: false,
         operation_key: None,

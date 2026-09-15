@@ -293,6 +293,7 @@ fn start_frame() -> OperationResponse {
 /// Returns the invocation one fetch makes.
 fn fetching(destination: &Path) -> Invocation {
     Invocation {
+        command: None,
         arguments: [
             (OPERATION_IDENTIFIER_OPTION.to_owned(), OPERATION_IDENTIFIER.to_owned()),
             ("--artifact".to_owned(), ARTIFACT_IDENTIFIER.to_owned()),

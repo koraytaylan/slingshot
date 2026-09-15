@@ -873,8 +873,11 @@ impl CommandLineApplication<'_> {
 
     /// Submits one catalog command and reports what the daemon admitted.
     fn submit(&self, invocation: &Invocation) -> Result<Completion, RunRefusal> {
-        let command =
-            build_command(invocation).map_err(|refusal| RunRefusal::Usage(refusal.to_string()))?;
+        let command = match invocation.carried_command() {
+            Some(held) => held.clone(),
+            None => build_command(invocation)
+                .map_err(|refusal| RunRefusal::Usage(refusal.to_string()))?,
+        };
         let namespace = self.namespace(invocation)?;
         let hello = self.owner(invocation, &namespace)?;
         let expectation = self.expectation(invocation, &hello);
@@ -1192,6 +1195,7 @@ fn live_operation_invocation(
     let mut arguments = BTreeMap::new();
     arguments.insert(OPERATION_IDENTIFIER_OPTION.to_owned(), operation_identifier.to_owned());
     Invocation {
+        command: None,
         arguments,
         detached: false,
         operation_key: None,

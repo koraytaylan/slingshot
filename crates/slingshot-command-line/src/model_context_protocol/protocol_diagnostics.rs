@@ -81,4 +81,14 @@ impl ProtocolDiagnosticSink {
     pub fn dropped(&self) -> usize {
         self.dropped
     }
+
+    /// Takes everything held, leaving the sink empty.
+    ///
+    /// The stream takes records when it can, so what is held accumulates until
+    /// something asks for it. Taking rather than reading is what keeps a record
+    /// from being written twice: whoever drains this owns the records it got.
+    pub fn take(&mut self) -> Vec<String> {
+        self.held_bytes = 0;
+        std::mem::take(&mut self.held)
+    }
 }

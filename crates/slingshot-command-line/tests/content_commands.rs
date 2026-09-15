@@ -81,6 +81,7 @@ fn the_caller_key_is_required_at_the_parser_and_again_at_the_builder() {
     );
 
     let keyless = Invocation {
+        command: None,
         arguments: [(PATH_OPTION.to_owned(), MALFORMED_PATH.to_owned())].into_iter().collect(),
         detached: false,
         operation_key: None,

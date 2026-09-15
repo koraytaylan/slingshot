@@ -260,6 +260,7 @@ fn the_serve_leaf_takes_a_target_and_nothing_a_caller_writes_a_command_with() {
 #[test]
 fn the_serve_leaf_is_not_versioned_because_it_starts_no_operation() {
     let invocation = Invocation {
+        command: None,
         arguments: std::collections::BTreeMap::new(),
         detached: false,
         operation_key: None,

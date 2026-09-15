@@ -147,6 +147,7 @@ fn agreement_refusal_name(failure: &LiveRefusal) -> &'static str {
 /// Returns the invocation `leaf` names with no options at all.
 fn bare(leaf: &str) -> Invocation {
     Invocation {
+        command: None,
         arguments: BTreeMap::new(),
         detached: false,
         operation_key: requires_operation_key(leaf).then(|| KEY.to_owned()),

@@ -24,11 +24,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use serde_json::Value;
+
 use slingshot_configuration::profile_loader::{
     ConfigurationDiagnostic, DiagnosticSourceClass, DiagnosticStage, LoadedProfiles,
 };
 use slingshot_daemon::platform_runtime::endpoint::{self, EndpointAddress};
 use slingshot_daemon::runtime_namespace::RuntimeNamespace;
+use slingshot_domain::command::catalog::{Command, CommandCatalog};
 use slingshot_domain::profile_authentication_contract::ConfigurationFailureCode;
 use slingshot_local_protocol::control::{HELLO_METHOD, HelloResult};
 use slingshot_local_protocol::envelope::{ControlRequest, ControlResponse, ResponseOutcome};
@@ -59,7 +62,7 @@ use crate::model_context_protocol::schema_projection;
 use crate::model_context_protocol::standard_stream_transport::{
     BoundedLine, LineSink, OutputFailure, Written, read_bounded_line,
 };
-use crate::model_context_protocol::tool_catalog::ToolDescriptor;
+use crate::model_context_protocol::tool_catalog::{KeyPresence, ToolDescriptor};
 use crate::target_selection::NamespacePair;
 use crate::target_selection::namespace_of;
 
@@ -306,44 +309,46 @@ impl ToolRunner for ProductToolRunner {
 
 /// Returns the invocation one tool call describes.
 ///
-/// The tool's own arguments are the invocation's options, spelled the way the
-/// registry spells them: a tool call and a command line name the same things,
-/// and a second vocabulary here would be a second thing to keep in step.
-fn tool_invocation(
+/// The two kinds of tool are answered differently because they are different
+/// things. A registry command carries the command's own argument document,
+/// which is exactly what the tool's declared `inputSchema` describes, so a call
+/// becomes the typed command the schema names rather than a command line spelled
+/// with options: `root_path` is the command's member and `--path` is the option
+/// that fills it, and renaming one into the other would be inventing a mapping
+/// the registry never declared. A control is not a command at all - it is one of
+/// the observation or maintenance leaves - so its declared members are mapped to
+/// the options those leaves read, in one table both sides can find.
+///
+/// # Errors
+///
+/// Returns what stopped the call, in words a caller can act on.
+pub fn tool_invocation(
     tool: &ToolDescriptor,
     arguments: &serde_json::Value,
     selection: &Selection,
 ) -> Result<Invocation, String> {
     let held = arguments.as_object().ok_or_else(|| "a tool call carries an object".to_owned())?;
-    let mut named = std::collections::BTreeMap::new();
-    let mut operation_key = operation_execution::supplied_key(arguments).map(str::to_owned);
-    for (member, value) in held {
-        if member == schema_projection::OPERATION_KEY_MEMBER {
-            continue;
-        }
-        match value {
-            serde_json::Value::String(text) => {
-                named.insert(format!("--{}", member.replace('_', "-")), text.clone());
-            }
-            serde_json::Value::Bool(flag) => {
-                if *flag {
-                    named.insert(format!("--{}", member.replace('_', "-")), String::new());
-                }
-            }
-            other => {
-                return Err(format!(
-                    "{} names {} as {other}, which is not a value a command line takes",
-                    tool.name, member
-                ));
-            }
-        }
-    }
-    if operation_key.is_none() {
-        operation_key = Some(invocation_identifier());
-    }
+    let detached = schema_projection::detached(arguments);
+    // A key the caller supplies identifies an operation whose rerun must be
+    // that same operation, which is exactly what a command that cannot repeat
+    // harmlessly needs. A command that may omit its key is given one by the
+    // command line instead: the declared schema offers the member as optional,
+    // so a caller's spelling of it is a preference rather than a request the
+    // command line has a rule for.
+    let operation_key = match tool.operation_key {
+        KeyPresence::Required => operation_execution::supplied_key(arguments).map(str::to_owned),
+        KeyPresence::Optional | KeyPresence::Absent => None,
+    };
+    let is_command = CommandCatalog::published().find(&tool.name).is_some();
+    let (arguments, command) = if is_command {
+        (std::collections::BTreeMap::new(), Some(tool_command(tool, held)?))
+    } else {
+        (schema_projection::control_options(tool, arguments)?, None)
+    };
     Ok(Invocation {
-        arguments: named,
-        detached: false,
+        arguments,
+        command,
+        detached,
         operation_key,
         output: Some(OutputForm::Machine),
         selection: selection.clone(),
@@ -351,13 +356,22 @@ fn tool_invocation(
     })
 }
 
-/// Returns one new operation key for a call that supplied none.
+/// Returns the typed command one tool call's arguments describe.
 ///
-/// The same collision-resistant identity a command line invents, from the same
-/// boundary, so a key this server generated is one its own command line could
-/// have generated and nothing about the shape differs between the two.
-fn invocation_identifier() -> String {
-    ProductRequestIdentity.invent_request_identifier()
+/// The arguments are the command's own document, so this is a deserialization
+/// rather than a translation: a member the command does not declare is an error
+/// the command itself names, and a value outside the command's own vocabulary
+/// fails where the command's own constructor would have refused it.
+fn tool_command(
+    tool: &ToolDescriptor,
+    held: &serde_json::Map<String, Value>,
+) -> Result<Command, String> {
+    let mut document = held.clone();
+    document.remove(schema_projection::OPERATION_KEY_MEMBER);
+    document.remove(schema_projection::DETACHED_MEMBER);
+    document.insert("command".to_owned(), Value::String(tool.name.clone()));
+    serde_json::from_value::<Command>(Value::Object(document))
+        .map_err(|failure| format!("{} did not accept these arguments: {failure}", tool.name))
 }
 
 /// Returns what one parsed invocation produced against an application.
@@ -497,6 +511,14 @@ fn serve_protocol(
             }
             Served::Silent => {}
             Served::Finished => break,
+        }
+        // Whatever this server has to say about why an answer is what it is
+        // goes to the diagnostic stream, which is the only stream a reason may
+        // travel on: standard output carries protocol messages and nothing
+        // else, and a reason written there would corrupt every client parsing
+        // them.
+        for diagnostic in server.take_diagnostics() {
+            write_diagnostic(diagnostics, &diagnostic);
         }
         if terminal {
             break;
