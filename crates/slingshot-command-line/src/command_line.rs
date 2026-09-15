@@ -42,14 +42,7 @@ use crate::application::{
     SignalBoundary,
 };
 use crate::configuration_check::{self, CheckReport};
-use crate::daemon_connection::{
-    self, ArtifactEvent, ArtifactStreamRefusal, ExchangeFailure,
-};
-use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
-use crate::model_context_protocol::operation_execution::{self, ToolRunner};
-use crate::model_context_protocol::schema_projection;
-use crate::model_context_protocol::tool_catalog::ToolDescriptor;
-use crate::target_selection::namespace_of;
+use crate::daemon_connection::{self, ArtifactEvent, ArtifactStreamRefusal, ExchangeFailure};
 use crate::daemon_entry::{self, DaemonEntryArguments, DaemonEntryOutcome};
 use crate::exit_classification;
 use crate::explicit_daemon_start::{self, TargetRuntime};
@@ -58,12 +51,17 @@ use crate::invocation::{
     self, ENVIRONMENT_OPTION, Invocation, OutputForm, PROFILE_OPTION, RUNTIME_ROOT_OPTION,
     SERVE_LEAF, Selection,
 };
+use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
 use crate::machine_readable_renderer;
 use crate::model_context_protocol::application::{Served, ServerApplication};
+use crate::model_context_protocol::operation_execution::{self, ToolRunner};
+use crate::model_context_protocol::schema_projection;
 use crate::model_context_protocol::standard_stream_transport::{
     BoundedLine, LineSink, OutputFailure, Written, read_bounded_line,
 };
+use crate::model_context_protocol::tool_catalog::ToolDescriptor;
 use crate::target_selection::NamespacePair;
+use crate::target_selection::namespace_of;
 
 /// Exit status of a command that finished.
 pub const EXIT_SUCCESS: u8 = 0;
@@ -226,7 +224,13 @@ pub fn run(
         }
     };
     if invocation.verb == SERVE_LEAF {
-        return serve_protocol(&invocation, executable, &mut std::io::stdin().lock(), output, diagnostics);
+        return serve_protocol(
+            &invocation,
+            executable,
+            &mut std::io::stdin().lock(),
+            output,
+            diagnostics,
+        );
     }
     let completion = complete(&invocation, executable);
     write_completion(&completion, invocation.output, output, diagnostics)
@@ -330,7 +334,7 @@ fn tool_invocation(
                 return Err(format!(
                     "{} names {} as {other}, which is not a value a command line takes",
                     tool.name, member
-                ))
+                ));
             }
         }
     }
@@ -357,10 +361,7 @@ fn invocation_identifier() -> String {
 }
 
 /// Returns what one parsed invocation produced against an application.
-fn complete_over(
-    application: &CommandLineApplication<'_>,
-    invocation: &Invocation,
-) -> Completion {
+fn complete_over(application: &CommandLineApplication<'_>, invocation: &Invocation) -> Completion {
     application.run(invocation)
 }
 

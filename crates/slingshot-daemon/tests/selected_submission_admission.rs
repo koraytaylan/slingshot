@@ -2364,9 +2364,7 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                     let route = if stage == 0 {
                         "/aem/bin/slingshot/agent/subscriptions/high-water?agent_event_store_generation=7&daemon_subscription_identifier=subscription-one".into()
                     } else if defect.starts_with("generation-") {
-                        format!(
-                            "/aem/bin/slingshot/agent/jobs?sling_job_identifier=job-{stage}"
-                        )
+                        format!("/aem/bin/slingshot/agent/jobs?sling_job_identifier=job-{stage}")
                     } else {
                         format!(
                             "/aem/bin/slingshot/agent/snapshot?agent_operation_identifier={}",

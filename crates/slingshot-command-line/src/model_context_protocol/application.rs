@@ -249,7 +249,12 @@ impl ServerApplication {
     /// them after initializing, and refusing those requests would refuse every
     /// client the handshake exists for. A session that never initialized is
     /// stateless, and every request says which revision it speaks.
-    fn answer(&mut self, identifier: &Value, method: &str, parameters: &Value) -> Result<Value, Refusal> {
+    fn answer(
+        &mut self,
+        identifier: &Value,
+        method: &str,
+        parameters: &Value,
+    ) -> Result<Value, Refusal> {
         if method == "initialize" {
             return Ok(self.legacy.initialize(requested_revision(parameters)));
         }
@@ -272,7 +277,9 @@ impl ServerApplication {
                 .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
             let (tool, accepted) =
                 operation_execution::require_runnable(name, &raw, &Provenance::recomputed())
-                    .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
+                    .map_err(|failure| Refusal::ParametersUnusable {
+                        detail: failure.to_string(),
+                    })?;
             // A call this server can run reaches the same daemon, the same
             // registry command and the same operation identity a command line
             // reaches, and what it answers is the document a command line
@@ -283,10 +290,8 @@ impl ServerApplication {
             // The identifier a caller quotes is the one they sent, spelled the
             // way they spelled it: a retry quoting a JSON string the protocol
             // put quotes around would not match their own request.
-            let retry_identifier = identifier.as_str().map_or_else(
-                || identifier_key(identifier),
-                str::to_owned,
-            );
+            let retry_identifier =
+                identifier.as_str().map_or_else(|| identifier_key(identifier), str::to_owned);
             let envelope = match self.runner_as_mut() {
                 None => MachineOutcomeEnvelope::LocalApplicationError {
                     interruption: local_interruption(&retry_identifier),
@@ -307,10 +312,11 @@ impl ServerApplication {
             // answer a call it accepted, and the document goes out whole.
             let local_failure = envelope.tag() == "local_application_error";
             if local_failure {
-                let text = crate::machine_readable_renderer::render(&envelope)
-                    .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
-                let structured_content =
-                    serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
+                let text =
+                    crate::machine_readable_renderer::render(&envelope).map_err(|refusal| {
+                        Refusal::ParametersUnusable { detail: refusal.to_string() }
+                    })?;
+                let structured_content = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
                 return Ok(current_stateless_revision::decorated(
                     method,
                     json!({
@@ -402,9 +408,7 @@ fn requested_revision(parameters: &Value) -> &str {
 /// the envelope, because the envelope's interruption vocabulary states exactly
 /// that and nothing about why.
 fn local_interruption(retry_identifier: &str) -> Interruption {
-    Interruption::PreReceipt {
-        retry_identifier: retry_identifier.to_owned(),
-    }
+    Interruption::PreReceipt { retry_identifier: retry_identifier.to_owned() }
 }
 
 /// Returns one rendered result line.

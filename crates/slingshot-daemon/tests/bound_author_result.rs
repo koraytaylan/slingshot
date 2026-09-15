@@ -533,8 +533,7 @@ fn artifact_identity_is_derived_from_local_context_not_trusted_from_the_result()
         submitted_command_digest: expected.submitted_command_digest.clone(),
     };
     let body = serde_json::to_vec(&document).unwrap();
-    let checked =
-        decode_bound_result(&body, &expected, &command, &identity).unwrap();
+    let checked = decode_bound_result(&body, &expected, &command, &identity).unwrap();
     assert_eq!(
         checked.remote_artifact.unwrap().identifier.as_text(),
         artifact_identifier.as_text()
@@ -546,24 +545,16 @@ fn artifact_identity_is_derived_from_local_context_not_trusted_from_the_result()
     let mut opaque_document = document.clone();
     opaque_document.canonical_result = write_canonical(&opaque_payload).unwrap();
     let opaque_body = serde_json::to_vec(&opaque_document).unwrap();
-    let checked_opaque =
-        decode_bound_result(&opaque_body, &expected, &command, &identity).unwrap();
-    assert_eq!(
-        checked_opaque.remote_artifact.unwrap().identifier.as_text(),
-        opaque_name
-    );
+    let checked_opaque = decode_bound_result(&opaque_body, &expected, &command, &identity).unwrap();
+    assert_eq!(checked_opaque.remote_artifact.unwrap().identifier.as_text(), opaque_name);
     let hex_name = "a".repeat(DIGEST_HEX_CHARACTERS);
     let mut hex_payload = payload.clone();
     hex_payload["artifact"]["identifier"] = hex_name.clone().into();
     let mut hex_document = document.clone();
     hex_document.canonical_result = write_canonical(&hex_payload).unwrap();
     let hex_body = serde_json::to_vec(&hex_document).unwrap();
-    let checked_hex =
-        decode_bound_result(&hex_body, &expected, &command, &identity).unwrap();
-    assert_eq!(
-        checked_hex.remote_artifact.unwrap().identifier.as_text(),
-        hex_name
-    );
+    let checked_hex = decode_bound_result(&hex_body, &expected, &command, &identity).unwrap();
+    assert_eq!(checked_hex.remote_artifact.unwrap().identifier.as_text(), hex_name);
     // Invalid identifiers (e.g. too long or non-printable) should still be refused by the type.
     let invalid_name = "x".repeat(129);
     let mut invalid_payload = payload.clone();

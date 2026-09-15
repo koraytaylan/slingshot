@@ -225,10 +225,9 @@ impl Arrival {
                 Ok(())
             }
             crate::daemon_connection::ArtifactEvent::Chunk(bytes) => {
-                let held = self
-                    .transfer
-                    .as_mut()
-                    .ok_or_else(|| "the daemon sent bytes before saying what they are".to_owned())?;
+                let held = self.transfer.as_mut().ok_or_else(|| {
+                    "the daemon sent bytes before saying what they are".to_owned()
+                })?;
                 held.absorb(bytes.len() as u64).map_err(|refusal| refusal.to_string())?;
                 self.hasher.update(&bytes);
                 std::io::Write::write_all(&mut self.staging, &bytes)
@@ -252,18 +251,14 @@ impl Arrival {
     pub fn publish(&mut self, destination: &std::path::Path) -> Result<(), DownloadRefusal> {
         use sha2::Digest as _;
         let transfer = self.transfer.take().ok_or(DownloadRefusal::DestinationUnusable)?;
-        let digest: String = self
-            .hasher
-            .clone()
-            .finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
+        let digest: String =
+            self.hasher.clone().finalize().iter().map(|byte| format!("{byte:02x}")).collect();
         if let Err(refusal) = transfer.require_publishable(&digest) {
             self.discard();
             return Err(refusal);
         }
-        std::io::Write::flush(&mut self.staging).map_err(|_| DownloadRefusal::DestinationUnusable)?;
+        std::io::Write::flush(&mut self.staging)
+            .map_err(|_| DownloadRefusal::DestinationUnusable)?;
         if let Err(refusal) = publish(&self.staging_path, destination) {
             self.discard();
             return Err(refusal);

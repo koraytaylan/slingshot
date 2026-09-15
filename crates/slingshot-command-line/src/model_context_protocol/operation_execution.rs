@@ -171,7 +171,11 @@ pub trait ToolRunner {
     /// # Errors
     ///
     /// Returns what stopped the call, in words a caller can act on.
-    fn run(&mut self, tool: &ToolDescriptor, arguments: &Value) -> Result<MachineOutcomeEnvelope, String>;
+    fn run(
+        &mut self,
+        tool: &ToolDescriptor,
+        arguments: &Value,
+    ) -> Result<MachineOutcomeEnvelope, String>;
 }
 
 /// Returns the operation key one accepted argument document supplies.

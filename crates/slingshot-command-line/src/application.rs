@@ -1008,9 +1008,14 @@ impl CommandLineApplication<'_> {
         if invocation.verb == ARTIFACT_LEAF_NAME
             && let Some(destination) = invocation.arguments.get(DESTINATION_OPTION)
         {
-            if let Some(done) =
-                self.download(invocation, &namespace, &hello, request, &admitted, Path::new(destination))?
-            {
+            if let Some(done) = self.download(
+                invocation,
+                &namespace,
+                &hello,
+                request,
+                &admitted,
+                Path::new(destination),
+            )? {
                 return Ok(done);
             }
             return Err(RunRefusal::Usage(
@@ -1062,9 +1067,7 @@ impl CommandLineApplication<'_> {
         if destination.exists() {
             // A destination this transfer did not make is left exactly as it
             // is: something already there is a collision, not a target.
-            return Err(RunRefusal::Local(
-                DownloadRefusal::DestinationOccupied.to_string(),
-            ));
+            return Err(RunRefusal::Local(DownloadRefusal::DestinationOccupied.to_string()));
         }
         let envelope = OperationEnvelope {
             author_target_identity_digest: hello.author_target_identity_digest.clone(),
@@ -1080,10 +1083,13 @@ impl CommandLineApplication<'_> {
         let answer = {
             let mut take = |event: ArtifactEvent| arrival.take(event);
             let streamed = self.daemon.stream_artifact(namespace, &envelope, &mut take);
-            self.reached_stream(streamed, &Phase::FetchingArtifact {
-                artifact_identifier: artifact_identifier.clone(),
-                operation_identifier: admitted.operation_identifier.clone(),
-            })
+            self.reached_stream(
+                streamed,
+                &Phase::FetchingArtifact {
+                    artifact_identifier: artifact_identifier.clone(),
+                    operation_identifier: admitted.operation_identifier.clone(),
+                },
+            )
         };
         let answer = match answer {
             Ok(answer) => answer,
@@ -1140,7 +1146,9 @@ impl CommandLineApplication<'_> {
     ) -> Result<OperationResponse, RunRefusal> {
         match outcome {
             Ok(answered) => Ok(answered),
-            Err(_) if self.signals.stop_requested() => Err(RunRefusal::Halted(Box::new(phase.clone()))),
+            Err(_) if self.signals.stop_requested() => {
+                Err(RunRefusal::Halted(Box::new(phase.clone())))
+            }
             Err(refusal) => Err(RunRefusal::Unavailable(refusal.to_string())),
         }
     }

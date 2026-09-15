@@ -29,7 +29,9 @@ use slingshot_command_line::application::{
 };
 use slingshot_command_line::command_line;
 use slingshot_command_line::configuration_check::{CheckReport, ResolvedFacts};
-use slingshot_command_line::daemon_connection::{ArtifactEvent, ArtifactStreamRefusal, ExchangeFailure};
+use slingshot_command_line::daemon_connection::{
+    ArtifactEvent, ArtifactStreamRefusal, ExchangeFailure,
+};
 use slingshot_command_line::exit_classification::{EVERY_EXIT, INTERRUPTED, UNAVAILABLE};
 use slingshot_command_line::invocation::{
     EXPECTED_REVISION_OPTION, Invocation, LOCAL_LEAVES, METADATA_ONLY_LEAVES, Selection,

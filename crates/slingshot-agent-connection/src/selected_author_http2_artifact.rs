@@ -238,10 +238,7 @@ impl SelectedAuthorTransport {
         let operation = submission.operation.agent_operation_identifier.as_str();
         let slot_text = expected.artifact_slot.as_str();
         let segments = ["bin", "slingshot", "agent", "artifact"];
-        let query = [
-            ("agent_operation_identifier", operation),
-            ("artifact_slot", slot_text),
-        ];
+        let query = [("agent_operation_identifier", operation), ("artifact_slot", slot_text)];
         let head = self.encode_http2_request_head(
             Method::GET,
             &segments,

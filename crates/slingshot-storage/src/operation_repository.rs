@@ -1095,7 +1095,15 @@ impl OperationRepository {
         category: Option<String>,
         now: u64,
     ) -> Result<OperationSummary, RepositoryFailure> {
-        self.settle_failed_agent_snapshot(expected, expected_revision, snapshot, None, category, true, now)
+        self.settle_failed_agent_snapshot(
+            expected,
+            expected_revision,
+            snapshot,
+            None,
+            category,
+            true,
+            now,
+        )
     }
 
     fn settle_failed_agent_snapshot(
@@ -1152,9 +1160,7 @@ impl OperationRepository {
                         certainty: OperationExecutionCertainty::ConfirmedNotExecuted,
                     }
                 },
-                metadata: diagnosis
-                    .map(|diagnosis| diagnosis.as_text().to_owned())
-                    .or(category),
+                metadata: diagnosis.map(|diagnosis| diagnosis.as_text().to_owned()).or(category),
             },
         };
         Self::require_bounded(&fact)?;
