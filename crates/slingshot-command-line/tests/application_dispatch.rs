@@ -29,7 +29,7 @@ use slingshot_command_line::application::{
 };
 use slingshot_command_line::command_line;
 use slingshot_command_line::configuration_check::{CheckReport, ResolvedFacts};
-use slingshot_command_line::daemon_connection::ExchangeFailure;
+use slingshot_command_line::daemon_connection::{ArtifactEvent, ArtifactStreamRefusal, ExchangeFailure};
 use slingshot_command_line::exit_classification::{EVERY_EXIT, INTERRUPTED, UNAVAILABLE};
 use slingshot_command_line::invocation::{
     EXPECTED_REVISION_OPTION, Invocation, LOCAL_LEAVES, METADATA_ONLY_LEAVES, Selection,
@@ -443,6 +443,20 @@ impl DaemonBoundary for Fakes {
         Reached::counted(&self.reached.daemon);
         Reached::counted(&self.reached.operations);
         self.operation_request_identifiers.borrow_mut().push(envelope.request_identifier.clone());
+        Ok(self.answer.clone())
+    }
+
+    fn stream_artifact(
+        &self,
+        _namespace: &NamespacePair,
+        _envelope: &OperationEnvelope,
+        _take: &mut dyn FnMut(ArtifactEvent) -> Result<(), String>,
+    ) -> Result<OperationResponse, ArtifactStreamRefusal> {
+        Reached::counted(&self.reached.daemon);
+        // The dispatch suite drives leaves rather than transfers, so an
+        // artifact read here answers what the daemon says to every other
+        // operation. The transfer itself is proved in its own suite against a
+        // daemon that really streams.
         Ok(self.answer.clone())
     }
 }

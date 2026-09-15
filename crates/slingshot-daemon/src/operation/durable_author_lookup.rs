@@ -685,9 +685,7 @@ async fn reconcile_retained_operation(
                 wire_name: contract.command_wire_name.clone(),
             };
             // Plan 0005's local mapping, never a wire-selected disposition.
-            let mut diagnosis = None;
-            let mut partial_admission = false;
-            let no_effect = match &command {
+            let (no_effect, category, diagnosis, partial_admission) = match &command {
                 Command::InspectSlingJob(_)
                 | Command::InspectWorkflowInstance(_)
                 | Command::InspectReplicationAgent(_)
@@ -707,13 +705,13 @@ async fn reconcile_retained_operation(
                 | Command::ListResourceMappings(_)
                 | Command::ListSlingJobQueues(_)
                 | Command::ListWorkflowModels(_) => {
-                    slingshot_agent_connection::terminal_failure::decode_read_failure(
+                    let failure = slingshot_agent_connection::terminal_failure::decode_read_failure(
                         &body,
                         &expectation,
                         &command,
                     )
                     .map_err(|_| failed_exchange())?;
-                    true
+                    (true, Some(failure.category().to_owned()), None, false)
                 }
                 Command::UpdatePage(_)
                 | Command::MovePage(_)
@@ -748,38 +746,42 @@ async fn reconcile_retained_operation(
                 | Command::UpdateOpenServiceGatewayInitiativeConfiguration(_)
                 | Command::DeleteOpenServiceGatewayInitiativeConfiguration(_)
                 | Command::SetOpenServiceGatewayInitiativeBundleState(_) => {
-                    slingshot_agent_connection::terminal_failure::decode_mutation_failure(
+                    let failure = slingshot_agent_connection::terminal_failure::decode_mutation_failure(
                         &body,
                         &expectation,
                         &command,
                     )
-                    .map_err(|_| failed_exchange())?
-                    .proves_no_effect()
+                    .map_err(|_| failed_exchange())?;
+                    (failure.proves_no_effect(), Some(failure.category().to_owned()), None, false)
                 }
                 Command::ReplicateContent(_) => {
                     use slingshot_agent_connection::terminal_failure::{
                         ReplicationFailureEffect, decode_replication_failure,
                     };
-                    let effect = decode_replication_failure(&body, &expectation, &command)
-                        .map_err(|_| failed_exchange())?
-                        .effect();
-                    partial_admission = effect == ReplicationFailureEffect::PartialAdmission;
-                    effect == ReplicationFailureEffect::NoAdmission
+                    let failure = decode_replication_failure(&body, &expectation, &command)
+                        .map_err(|_| failed_exchange())?;
+                    let effect = failure.effect();
+                    (
+                        effect == ReplicationFailureEffect::NoAdmission,
+                        Some(failure.category().to_owned()),
+                        None,
+                        effect == ReplicationFailureEffect::PartialAdmission,
+                    )
                 }
                 Command::CreatePage(_) | Command::AddComponent(_) => {
-                    decode_creation_failure(&body, &expectation, &command)
-                        .map_err(|_| failed_exchange())?
-                        .proves_no_effect()
+                    let failure = decode_creation_failure(&body, &expectation, &command)
+                        .map_err(|_| failed_exchange())?;
+                    (failure.proves_no_effect(), Some(failure.category().to_owned()), None, false)
                 }
                 Command::LoadContentAsJson(_) => {
-                    decode_load_failure(&body, &expectation, &command)
+                    let failure = decode_load_failure(&body, &expectation, &command)
                         .map_err(|_| failed_exchange())?;
-                    true
+                    (true, Some(failure.category().to_owned()), None, false)
                 }
                 Command::InspectOpenServiceGatewayInitiativeConfiguration(_) => {
-                    decode_configuration_failure(&body, &expectation, &command)
+                    let failure = decode_configuration_failure(&body, &expectation, &command)
                         .map_err(|_| failed_exchange())?;
-                    true
+                    (true, Some(failure.category().to_owned()), None, false)
                 }
                 Command::QueryPaths(_)
                 | Command::FindPagesByTemplate(_)
@@ -787,21 +789,28 @@ async fn reconcile_retained_operation(
                 | Command::FindPagesUsingComponents(_)
                 | Command::FindAssetsByMetadata(_)
                 | Command::FindAssetsReferencedByPage(_) => {
-                    slingshot_agent_connection::terminal_failure::decode_discovery_failure(
+                    let failure = slingshot_agent_connection::terminal_failure::decode_discovery_failure(
                         &body,
                         &expectation,
                         &command,
                     )
                     .map_err(|_| failed_exchange())?;
-                    true
+                    (true, Some(failure.category().to_owned()), None, false)
                 }
                 Command::DownloadContentPackage(_) => {
                     let failure = decode_package_failure(&body, &expectation, &command)
                         .map_err(|_| failed_exchange())?;
-                    if failure.category() == "staging_cleanup_failed" {
-                        diagnosis = Some(slingshot_storage::agent_job_repository::RejectedAgentDiagnosis::PackageStagingCleanupRequired);
-                    }
-                    failure.proves_no_publication()
+                    let diagnosis = if failure.category() == "staging_cleanup_failed" {
+                        Some(slingshot_storage::agent_job_repository::RejectedAgentDiagnosis::PackageStagingCleanupRequired)
+                    } else {
+                        None
+                    };
+                    (
+                        failure.proves_no_publication(),
+                        Some(failure.category().to_owned()),
+                        diagnosis,
+                        false,
+                    )
                 }
             };
             let elapsed =
@@ -826,6 +835,7 @@ async fn reconcile_retained_operation(
                         &retained,
                         expected_operation_revision,
                         &snapshot,
+                        category,
                         now,
                     )
                 } else {
@@ -834,6 +844,7 @@ async fn reconcile_retained_operation(
                         expected_operation_revision,
                         &snapshot,
                         diagnosis,
+                        category,
                         now,
                     )
                 }

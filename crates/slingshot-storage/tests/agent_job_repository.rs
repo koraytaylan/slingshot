@@ -424,9 +424,9 @@ fn rejected_snapshot_is_atomic_guarded_and_cannot_retract_success() {
         };
         let settle = |child: &AgentSubmission, rev, snapshot: &FailedAgentSnapshot| {
             if partial {
-                local.settle_partial_admission_snapshot(child, rev, snapshot, NOW + 1)
+                local.settle_partial_admission_snapshot(child, rev, snapshot, None, NOW + 1)
             } else {
-                local.settle_rejected_agent_snapshot(child, rev, snapshot, None, NOW + 1)
+                local.settle_rejected_agent_snapshot(child, rev, snapshot, None, None, NOW + 1)
             }
         };
         assert!(settle(&expected, 1, &snapshot).is_err());

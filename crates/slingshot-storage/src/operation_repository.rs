@@ -1071,6 +1071,7 @@ impl OperationRepository {
         expected_revision: u64,
         snapshot: &crate::agent_job_repository::FailedAgentSnapshot,
         diagnosis: Option<crate::agent_job_repository::RejectedAgentDiagnosis>,
+        category: Option<String>,
         now: u64,
     ) -> Result<OperationSummary, RepositoryFailure> {
         self.settle_failed_agent_snapshot(
@@ -1078,6 +1079,7 @@ impl OperationRepository {
             expected_revision,
             snapshot,
             diagnosis,
+            category,
             false,
             now,
         )
@@ -1090,9 +1092,10 @@ impl OperationRepository {
         expected: &crate::agent_job_repository::AgentSubmission,
         expected_revision: u64,
         snapshot: &crate::agent_job_repository::FailedAgentSnapshot,
+        category: Option<String>,
         now: u64,
     ) -> Result<OperationSummary, RepositoryFailure> {
-        self.settle_failed_agent_snapshot(expected, expected_revision, snapshot, None, true, now)
+        self.settle_failed_agent_snapshot(expected, expected_revision, snapshot, None, category, true, now)
     }
 
     fn settle_failed_agent_snapshot(
@@ -1101,6 +1104,7 @@ impl OperationRepository {
         expected_revision: u64,
         snapshot: &crate::agent_job_repository::FailedAgentSnapshot,
         diagnosis: Option<crate::agent_job_repository::RejectedAgentDiagnosis>,
+        category: Option<String>,
         partial_admission: bool,
         now: u64,
     ) -> Result<OperationSummary, RepositoryFailure> {
@@ -1148,7 +1152,9 @@ impl OperationRepository {
                         certainty: OperationExecutionCertainty::ConfirmedNotExecuted,
                     }
                 },
-                metadata: diagnosis.map(|diagnosis| diagnosis.as_text().to_owned()),
+                metadata: diagnosis
+                    .map(|diagnosis| diagnosis.as_text().to_owned())
+                    .or(category),
             },
         };
         Self::require_bounded(&fact)?;

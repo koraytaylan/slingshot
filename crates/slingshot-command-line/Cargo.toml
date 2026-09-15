@@ -33,6 +33,7 @@ name = "command_golden_sessions"
 required-features = ["runtime-test-host"]
 
 [dependencies]
+base64.workspace = true
 bytes.workspace = true
 clap.workspace = true
 directories.workspace = true

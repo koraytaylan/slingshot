@@ -162,6 +162,141 @@ pub async fn exchange_operation(
         .map_err(|failure| ExchangeFailure::Unreadable(failure.to_string()))
 }
 
+/// What one artifact transfer says as it arrives.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArtifactEvent {
+    /// The transfer is beginning, and this is what it will be.
+    Start {
+        /// Which artifact.
+        artifact_identifier: String,
+        /// How long it is.
+        byte_length: u64,
+        /// What it digests to.
+        content_digest: String,
+        /// What kind of bytes it holds.
+        media_type: String,
+    },
+    /// These bytes are part of it, in order.
+    Chunk(Vec<u8>),
+}
+
+/// One artifact's bytes, read from the daemon that owns the endpoint.
+///
+/// An artifact read is answered with many frames on one connection rather than
+/// one: `ArtifactStart` says what is coming, zero or more `ArtifactChunk`
+/// frames carry it, and `ArtifactEnd` says it ended. Reading only the first
+/// would leave the chunks unread on a connection that is then closed, which is
+/// why this is its own exchange rather than a variant of
+/// [`exchange_operation`].
+///
+/// Every event is handed to `observe` as it arrives, so a caller bounds and
+/// verifies the bytes while the transfer is happening rather than after the
+/// daemon has sent everything.
+///
+/// # Errors
+///
+/// Returns [`ArtifactStreamRefusal`] when the exchange fails, when the daemon
+/// ends the transfer before it said it would, or when it answers a frame an
+/// artifact transfer may not carry. A frame that is not a transfer at all is
+/// returned to the caller, which is the daemon's answer to a request that was
+/// not an artifact read.
+pub async fn stream_artifact<Observe>(
+    contract: &FoundationContract,
+    address: &EndpointAddress,
+    envelope: &OperationEnvelope,
+    mut observe: Observe,
+) -> Result<OperationResponse, ArtifactStreamRefusal>
+where
+    Observe: FnMut(ArtifactEvent) -> Result<(), String>,
+{
+    let mut stream = open(address).await.map_err(ArtifactStreamRefusal::Exchange)?;
+    let payload = serde_json::to_vec(envelope).map_err(|failure| {
+        ArtifactStreamRefusal::Exchange(ExchangeFailure::Unreadable(failure.to_string()))
+    })?;
+    let frame = framing::render(&contract.framing, &payload).map_err(|failure| {
+        ArtifactStreamRefusal::Exchange(ExchangeFailure::Unreadable(failure.to_string()))
+    })?;
+    local_server::write_frame(&mut stream, contract, &frame).await.map_err(|failure| {
+        ArtifactStreamRefusal::Exchange(ExchangeFailure::Transport(failure.to_string()))
+    })?;
+    let mut reader = local_server::FrameReader::new();
+    let Some(first) = read_next(&mut reader, &mut stream, contract).await? else {
+        return Err(ArtifactStreamRefusal::Exchange(ExchangeFailure::Absent(address.display())));
+    };
+    let start = serde_json::from_slice::<OperationResponse>(&first).map_err(|failure| {
+        ArtifactStreamRefusal::Exchange(ExchangeFailure::Unreadable(failure.to_string()))
+    })?;
+    let OperationResponse::ArtifactStart {
+        artifact_identifier,
+        byte_length,
+        content_digest,
+        media_type,
+    } = &start
+    else {
+        // Anything else is the daemon's answer to a request that was not an
+        // artifact read, and this exchange has nothing to stream.
+        return Ok(start);
+    };
+    observe(ArtifactEvent::Start {
+        artifact_identifier: artifact_identifier.clone(),
+        byte_length: *byte_length,
+        content_digest: content_digest.clone(),
+        media_type: media_type.clone(),
+    })
+    .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
+    loop {
+        let Some(frame) = read_next(&mut reader, &mut stream, contract).await? else {
+            return Err(ArtifactStreamRefusal::EndedEarly);
+        };
+        let response = serde_json::from_slice::<OperationResponse>(&frame).map_err(|failure| {
+            ArtifactStreamRefusal::Exchange(ExchangeFailure::Unreadable(failure.to_string()))
+        })?;
+        match response {
+            OperationResponse::ArtifactChunk { body } => {
+                use base64::Engine as _;
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(&body.encoded_bytes)
+                    .map_err(|_| ArtifactStreamRefusal::ChunkUnreadable)?;
+                observe(ArtifactEvent::Chunk(bytes))
+                    .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
+            }
+            OperationResponse::ArtifactEnd => return Ok(start),
+            other => return Err(ArtifactStreamRefusal::OtherFrame(Box::new(other))),
+        }
+    }
+}
+
+/// Reads one more frame, or nothing when the connection ended cleanly.
+async fn read_next(
+    reader: &mut local_server::FrameReader,
+    stream: &mut tokio::net::UnixStream,
+    contract: &FoundationContract,
+) -> Result<Option<Vec<u8>>, ArtifactStreamRefusal> {
+    reader.read(stream, contract, false).await.map_err(|failure| {
+        ArtifactStreamRefusal::Exchange(ExchangeFailure::Transport(failure.to_string()))
+    })
+}
+
+/// Why one artifact stream could not be read.
+#[derive(Debug, thiserror::Error)]
+pub enum ArtifactStreamRefusal {
+    /// The exchange itself failed.
+    #[error(transparent)]
+    Exchange(#[from] ExchangeFailure),
+    /// A chunk was not the base64 the protocol carries bytes in.
+    #[error("the daemon sent a chunk this build cannot read")]
+    ChunkUnreadable,
+    /// The connection ended before the transfer did.
+    #[error("the daemon ended the transfer before it said it would")]
+    EndedEarly,
+    /// The caller would not take what arrived.
+    #[error("the artifact could not be taken: {0}")]
+    AbsorbRefused(String),
+    /// A frame arrived that an artifact transfer may not carry.
+    #[error("the daemon answered a frame an artifact transfer does not carry")]
+    OtherFrame(Box<OperationResponse>),
+}
+
 /// What a client expects the daemon owning its target to be serving.
 ///
 /// Compared against what the owner says about itself before a single request is

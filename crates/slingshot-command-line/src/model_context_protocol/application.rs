@@ -21,6 +21,7 @@
 
 use serde_json::{Value, json};
 
+use crate::machine_outcome_envelope::{Interruption, MachineOutcomeEnvelope};
 use crate::model_context_protocol::active_request_registry::{
     ActiveRequestRegistry, AdmissionRefusal,
 };
@@ -30,9 +31,10 @@ use crate::model_context_protocol::current_stateless_revision::{
 use crate::model_context_protocol::legacy_initialized_revision::{
     LegacySession, Lifecycle, undecorated,
 };
-use crate::model_context_protocol::operation_execution;
+use crate::model_context_protocol::operation_execution::{self, ToolRunner};
 use crate::model_context_protocol::progress_and_cancellation::ProgressRegistry;
 use crate::model_context_protocol::protocol_diagnostics::ProtocolDiagnosticSink;
+use crate::model_context_protocol::result_projection;
 use crate::model_context_protocol::schema_projection;
 use crate::model_context_protocol::standard_stream_transport::{
     LineSink, Message, MessageRefusal, OutputFailure, OutputQueue, read_message,
@@ -54,7 +56,6 @@ pub enum Served {
 }
 
 /// The whole server, over the pieces it composes.
-#[derive(Debug)]
 pub struct ServerApplication {
     /// Which requests are in flight.
     active: ActiveRequestRegistry,
@@ -68,6 +69,18 @@ pub struct ServerApplication {
     progress: ProgressRegistry,
     /// The installed command/control surface projected as protocol tools.
     tools: Vec<ToolDescriptor>,
+    /// Where a tool call reaches the daemon, when this server has one.
+    runner: Option<Box<dyn ToolRunner>>,
+}
+
+impl ::core::fmt::Debug for ServerApplication {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        formatter
+            .debug_struct("ServerApplication")
+            .field("tools", &self.tools.len())
+            .field("reaches_a_daemon", &self.runner.is_some())
+            .finish()
+    }
 }
 
 impl Default for ServerApplication {
@@ -77,9 +90,26 @@ impl Default for ServerApplication {
 }
 
 impl ServerApplication {
-    /// Returns a server that has answered nothing.
+    /// Returns the runner, when this server has one.
+    fn runner_as_mut(&mut self) -> Option<&mut Box<dyn ToolRunner>> {
+        self.runner.as_mut()
+    }
+
+    /// Returns a server that has answered nothing and reaches no daemon.
+    ///
+    /// A server with no runner advertises the catalog and answers every request
+    /// that describes this build rather than running anything. That is what a
+    /// check of the protocol surface needs, and it is honest about what it is:
+    /// a tool call it cannot run is a local failure rather than an invented
+    /// result.
     #[must_use]
     pub fn new() -> Self {
+        Self::over(None)
+    }
+
+    /// Returns a server that runs tool calls through `runner`.
+    #[must_use]
+    pub fn over(runner: Option<Box<dyn ToolRunner>>) -> Self {
         Self {
             active: ActiveRequestRegistry::new(),
             diagnostics: ProtocolDiagnosticSink::new(),
@@ -87,6 +117,7 @@ impl ServerApplication {
             output: OutputQueue::new(),
             progress: ProgressRegistry::new(),
             tools: tool_catalog::derive(&Provenance::recomputed()).unwrap_or_default(),
+            runner,
         }
     }
 
@@ -184,7 +215,7 @@ impl ServerApplication {
             };
             return rendered_error(Some(identifier), code, &refusal.to_string());
         }
-        let answered = self.answer(method, parameters);
+        let answered = self.answer(identifier, method, parameters);
         self.active.answered(&key);
         let line = match answered {
             Ok(result) => rendered_result(identifier, result),
@@ -218,7 +249,7 @@ impl ServerApplication {
     /// them after initializing, and refusing those requests would refuse every
     /// client the handshake exists for. A session that never initialized is
     /// stateless, and every request says which revision it speaks.
-    fn answer(&mut self, method: &str, parameters: &Value) -> Result<Value, Refusal> {
+    fn answer(&mut self, identifier: &Value, method: &str, parameters: &Value) -> Result<Value, Refusal> {
         if method == "initialize" {
             return Ok(self.legacy.initialize(requested_revision(parameters)));
         }
@@ -239,8 +270,40 @@ impl ServerApplication {
             let arguments = parameters.get("arguments").cloned().unwrap_or_else(|| json!({}));
             let raw = serde_json::to_vec(&arguments)
                 .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
-            operation_execution::require_runnable(name, &raw, &Provenance::recomputed())
-                .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
+            let (tool, accepted) =
+                operation_execution::require_runnable(name, &raw, &Provenance::recomputed())
+                    .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
+            // A call this server can run reaches the same daemon, the same
+            // registry command and the same operation identity a command line
+            // reaches, and what it answers is the document a command line
+            // writes for the same outcome. Without a runner there is nothing to
+            // run it on, and saying so is the truthful answer: the surface is
+            // there and the daemon is not.
+            let retry_identifier = identifier_key(identifier);
+            let envelope = match self.runner_as_mut() {
+                None => MachineOutcomeEnvelope::LocalApplicationError {
+                    interruption: local_interruption(&retry_identifier),
+                },
+                Some(runner) => match runner.run(&tool, &accepted) {
+                    Ok(reached) => reached,
+                    Err(detail) => {
+                        self.diagnostics.record(&detail);
+                        MachineOutcomeEnvelope::LocalApplicationError {
+                            interruption: local_interruption(&retry_identifier),
+                        }
+                    }
+                },
+            };
+            let projected = result_projection::projected(&envelope, true, Vec::new())
+                .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
+            return Ok(current_stateless_revision::decorated(
+                method,
+                json!({
+                    "content": [{ "type": "text", "text": projected.text }],
+                    "structuredContent": projected.structured_content,
+                    "isError": projected.is_error,
+                }),
+            ));
         }
         if method == "resources/read" {
             let uri = parameters.get("uri").and_then(Value::as_str).ok_or_else(|| {
@@ -302,6 +365,20 @@ impl ServerApplication {
 /// Returns the revision one request says it speaks.
 fn requested_revision(parameters: &Value) -> &str {
     parameters[current_stateless_revision::REVISION_MEMBER].as_str().unwrap_or_default()
+}
+
+/// Returns the local failure one tool call produces.
+///
+/// A call that never reached a daemon claims nothing about one, so the
+/// interruption it names is the pre-receipt one: no operation exists to name,
+/// and the retry identifier is what a caller quotes to find out whether
+/// anything happened. What went wrong travels as a diagnostic rather than in
+/// the envelope, because the envelope's interruption vocabulary states exactly
+/// that and nothing about why.
+fn local_interruption(retry_identifier: &str) -> Interruption {
+    Interruption::PreReceipt {
+        retry_identifier: retry_identifier.to_owned(),
+    }
 }
 
 /// Returns one rendered result line.
