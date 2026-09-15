@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use slingshot_command_line::command_line::tool_invocation;
 use slingshot_command_line::invocation::Selection;
 use slingshot_command_line::model_context_protocol::tool_catalog::{
-    KeyPresence, Provenance, ToolDescriptor, derive,
+    EVERY_CONTROL, KeyPresence, Provenance, ToolDescriptor, derive,
 };
 use slingshot_domain::command::catalog::{Command, CommandCatalog};
 
@@ -178,29 +178,40 @@ fn a_command_call_carries_the_commands_members_and_not_a_commands_options() {
 }
 
 #[test]
-fn every_control_tool_maps_its_declared_members_to_the_options_its_leaf_reads() {
+fn every_control_tool_maps_every_declared_member_to_the_option_its_leaf_reads() {
     let offered = tools();
     let controls: Vec<&ToolDescriptor> = offered
         .iter()
         .filter(|held| CommandCatalog::published().find(&held.name).is_none())
         .collect();
+    assert_eq!(controls.len(), EVERY_CONTROL.len(), "every control is covered");
     let mut unreachable: Vec<String> = Vec::new();
     for tool in controls {
+        let declared =
+            slingshot_command_line::model_context_protocol::schema_projection::input_schema(tool)
+                .expect("every control declares an input schema");
+        let properties =
+            declared.get("properties").and_then(Value::as_object).cloned().unwrap_or_default();
+        // Every member the schema declares has to reach an option, not only the
+        // ones it marks required: a member a caller may send and nothing reads
+        // is a spelling the server silently drops.
+        for member in properties.keys() {
+            if member == "operation_key" || member == "detached" {
+                continue;
+            }
+            if slingshot_command_line::model_context_protocol::schema_projection::control_option(
+                tool, member,
+            )
+            .is_err()
+            {
+                unreachable.push(format!("{}.{member} has no option to fill", tool.name));
+            }
+        }
+        // And a call built from the schema's own required set has to translate,
+        // which is what a conforming caller would send.
         let arguments = minimal_arguments(tool);
         match tool_invocation(tool, &arguments, &Selection::default()) {
-            Ok(invocation) if invocation.carried_command().is_none() => {
-                let declared = slingshot_command_line::model_context_protocol::schema_projection::input_schema(tool)
-                    .expect("every control declares an input schema");
-                let required =
-                    declared.get("required").and_then(Value::as_array).cloned().unwrap_or_default();
-                for member in required.iter().filter_map(Value::as_str) {
-                    if slingshot_command_line::model_context_protocol::schema_projection::control_option(member)
-                        .is_none()
-                    {
-                        unreachable.push(format!("{}.{member} has no option to fill", tool.name));
-                    }
-                }
-            }
+            Ok(invocation) if invocation.carried_command().is_none() => {}
             Ok(_) => unreachable.push(format!("{} built a command, and is not one", tool.name)),
             Err(refusal) => unreachable.push(format!("{}: {refusal}", tool.name)),
         }
@@ -210,4 +221,34 @@ fn every_control_tool_maps_its_declared_members_to_the_options_its_leaf_reads() 
         "these controls declare something nothing carries:\n{}",
         unreachable.join("\n")
     );
+}
+
+#[test]
+fn a_control_whose_leaf_insists_on_something_declares_that_something() {
+    // The failure this catches is the one the coverage probe found: a control
+    // whose leaf refuses the call because a member the schema never declared is
+    // missing. A schema no conforming call can satisfy is worse than no schema,
+    // because a caller trusts it.
+    for (named, member) in [
+        ("operation-restart", "expected_operation_revision"),
+        ("operation-artifact", "expected_content_digest"),
+        ("maintenance-preview", "before_unix_milliseconds"),
+        ("maintenance-apply", "reviewed_manifest_digest"),
+    ] {
+        let offered = tools();
+        let tool = offered.iter().find(|held| held.name == named).expect("the control is offered");
+        let declared =
+            slingshot_command_line::model_context_protocol::schema_projection::input_schema(tool)
+                .expect("it declares an input schema");
+        let required: Vec<&str> = declared["required"]
+            .as_array()
+            .expect("the required set is a list")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        assert!(
+            required.contains(&member),
+            "{named} does not require {member}, and the leaf it answers with refuses without it"
+        );
+    }
 }
