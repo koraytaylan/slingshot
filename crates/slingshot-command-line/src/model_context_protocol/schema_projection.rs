@@ -123,13 +123,15 @@ fn operation_key_schema() -> Value {
 fn control_input_schema(tool: &ToolDescriptor) -> Result<Value, ProjectionRefusal> {
     let mut properties = serde_json::Map::new();
     let mut required = Vec::new();
-    for member in CONTROL_MEMBERS
-        .iter()
-        .filter(|(named, _)| named == &tool.name)
-        .flat_map(|(_, members)| members.iter())
-    {
-        properties.insert((*member).to_owned(), json!({ "type": "string" }));
-        required.push(json!(member));
+    for declared in declared_members(tool) {
+        let schema = match declared.kind {
+            MemberKind::Text => json!({ "type": "string" }),
+            MemberKind::Count => json!({ "type": "integer", "minimum": 0 }),
+        };
+        properties.insert(declared.member.to_owned(), schema);
+        if declared.required {
+            required.push(json!(declared.member));
+        }
     }
     Ok(json!({
         "$schema": schema::SCHEMA_DIALECT,
@@ -141,42 +143,142 @@ fn control_input_schema(tool: &ToolDescriptor) -> Result<Value, ProjectionRefusa
     }))
 }
 
-/// What each control requires a caller to name.
-const CONTROL_MEMBERS: &[(&str, &[&str])] = &[
+/// What kind of value one declared control member carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MemberKind {
+    /// A spelling the leaf reads as text.
+    Text,
+    /// A whole number the leaf reads as a count.
+    Count,
+}
+
+/// One member a control declares, the option that fills it, and whether a call
+/// cannot do without it.
+struct ControlMember {
+    /// What the caller sends.
+    member: &'static str,
+    /// Which option the leaf reads it from.
+    option: &'static str,
+    /// What kind of value it is.
+    kind: MemberKind,
+    /// Whether a call cannot do without it.
+    required: bool,
+}
+
+/// Returns the members one control declares.
+fn declared_members(tool: &ToolDescriptor) -> &'static [ControlMember] {
+    CONTROL_MEMBERS
+        .iter()
+        .find(|(named, _)| named == &tool.name.as_str())
+        .map(|(_, members)| *members)
+        .unwrap_or_default()
+}
+
+/// One declared member the leaf cannot act without.
+const fn needed(member: &'static str, option: &'static str, kind: MemberKind) -> ControlMember {
+    ControlMember { member, option, kind, required: true }
+}
+
+/// One declared member the leaf supplies a default for.
+const fn optional(member: &'static str, option: &'static str) -> ControlMember {
+    ControlMember { member, option, kind: MemberKind::Text, required: false }
+}
+
+/// The member naming the operation a control acts on.
+const OPERATION: &str = "operation_identifier";
+
+/// What each control declares, and the option each member fills.
+///
+/// A control's declared members are the protocol's vocabulary and the
+/// observation and maintenance leaves read the command line's, so the two have
+/// to meet somewhere. They meet once, here, rather than in a rename a control
+/// and a command would each have to agree about separately.
+///
+/// A member is required exactly when its leaf cannot act without it. Declaring
+/// one the leaf would refuse anyway advertises a schema no conforming call could
+/// satisfy; requiring one the leaf defaults would make a caller name something
+/// they need not know.
+const CONTROL_MEMBERS: &[(&str, &[ControlMember])] = &[
     ("operation-list", &[]),
-    ("operation-status", &["operation_identifier"]),
-    ("operation-wait", &["operation_identifier"]),
-    ("operation-restart", &["operation_identifier", "expected_recovery_category"]),
-    ("operation-result", &["operation_identifier"]),
-    ("operation-artifact", &["operation_identifier", "artifact_identifier"]),
-    ("maintenance-preview", &["author_target_identity_digest"]),
-    ("maintenance-apply", &["author_target_identity_digest", "reviewed_manifest_digest"]),
+    (
+        "operation-status",
+        &[needed(OPERATION, crate::invocation::OPERATION_IDENTIFIER_OPTION, MemberKind::Text)],
+    ),
+    (
+        "operation-wait",
+        &[needed(OPERATION, crate::invocation::OPERATION_IDENTIFIER_OPTION, MemberKind::Text)],
+    ),
+    (
+        "operation-restart",
+        &[
+            needed(OPERATION, crate::invocation::OPERATION_IDENTIFIER_OPTION, MemberKind::Text),
+            needed(
+                "expected_operation_revision",
+                crate::invocation::EXPECTED_REVISION_OPTION,
+                MemberKind::Count,
+            ),
+            needed(
+                "expected_recovery_category",
+                crate::invocation::EXPECTED_CATEGORY_OPTION,
+                MemberKind::Text,
+            ),
+        ],
+    ),
+    (
+        "operation-result",
+        &[needed(OPERATION, crate::invocation::OPERATION_IDENTIFIER_OPTION, MemberKind::Text)],
+    ),
+    (
+        "operation-artifact",
+        &[
+            needed(OPERATION, crate::invocation::OPERATION_IDENTIFIER_OPTION, MemberKind::Text),
+            needed("artifact_identifier", crate::invocation::ARTIFACT_OPTION, MemberKind::Text),
+            needed(
+                "expected_content_digest",
+                crate::invocation::EXPECTED_DIGEST_OPTION,
+                MemberKind::Text,
+            ),
+        ],
+    ),
+    (
+        "maintenance-preview",
+        &[
+            optional("author_target_identity_digest", crate::invocation::TARGET_DIGEST_OPTION),
+            needed("before_unix_milliseconds", crate::invocation::BEFORE_OPTION, MemberKind::Count),
+        ],
+    ),
+    (
+        "maintenance-apply",
+        &[
+            optional("author_target_identity_digest", crate::invocation::TARGET_DIGEST_OPTION),
+            needed(
+                "reviewed_manifest_digest",
+                crate::invocation::REVIEWED_DIGEST_OPTION,
+                MemberKind::Text,
+            ),
+        ],
+    ),
 ];
 
 /// Returns the option one declared control member fills.
 ///
-/// A control's declared members are the protocol's vocabulary and the
-/// observation and maintenance leaves read the command line's, so the two have
-/// to meet somewhere. They meet here, once, rather than in a rename that a
-/// control and a command would each have to agree about separately.
-#[must_use]
-pub fn control_option(member: &str) -> Option<&'static str> {
-    match member {
-        "operation_identifier" => Some(crate::invocation::OPERATION_IDENTIFIER_OPTION),
-        "expected_recovery_category" => Some(crate::invocation::EXPECTED_CATEGORY_OPTION),
-        "artifact_identifier" => Some(crate::invocation::ARTIFACT_OPTION),
-        "author_target_identity_digest" => Some(crate::invocation::TARGET_DIGEST_OPTION),
-        "reviewed_manifest_digest" => Some(crate::invocation::REVIEWED_DIGEST_OPTION),
-        _ => None,
-    }
+/// # Errors
+///
+/// Returns what stopped the call, in words a caller can act on.
+pub fn control_option(tool: &ToolDescriptor, member: &str) -> Result<&'static str, String> {
+    declared_members(tool)
+        .iter()
+        .find(|declared| declared.member == member)
+        .map(|declared| declared.option)
+        .ok_or_else(|| format!("{} does not declare the argument {member}", tool.name))
 }
 
 /// Returns the options one control's arguments fill, by option name.
 ///
-/// Only the members the control declares are mapped: a member it does not
-/// declare is no part of it, and saying so is better than passing a spelling
-/// down to a leaf that would have to guess what it meant. Whether the result is
-/// complete is the leaf's own question, and it answers it in its own words.
+/// Only the members the control declares are mapped, and each is spelled the way
+/// the leaf that reads it spells it. Whether the result is complete is the
+/// leaf's own question, and it answers it in its own words rather than in a
+/// second vocabulary here.
 ///
 /// # Errors
 ///
@@ -186,25 +288,25 @@ pub fn control_options(
     arguments: &Value,
 ) -> Result<std::collections::BTreeMap<String, String>, String> {
     let held = arguments.as_object().ok_or_else(|| "a tool call carries an object".to_owned())?;
-    let declared: Vec<&str> = CONTROL_MEMBERS
-        .iter()
-        .filter(|(named, _)| named == &tool.name.as_str())
-        .flat_map(|(_, members)| members.iter().copied())
-        .collect();
     let mut named = std::collections::BTreeMap::new();
     for (member, value) in held {
         if member == OPERATION_KEY_MEMBER || member == DETACHED_MEMBER {
             continue;
         }
-        if !declared.contains(&member.as_str()) {
-            return Err(format!("{} does not declare the argument {member}", tool.name));
-        }
-        let option = control_option(member)
-            .ok_or_else(|| format!("{} declares {member}, and no option carries it", tool.name))?;
-        let text = value.as_str().ok_or_else(|| {
-            format!("{} names {member} as {value}, which is not a value it takes", tool.name)
-        })?;
-        named.insert(option.to_owned(), text.to_owned());
+        let declared = declared_members(tool)
+            .iter()
+            .find(|declared| declared.member == member)
+            .ok_or_else(|| format!("{} does not declare the argument {member}", tool.name))?;
+        let text = match declared.kind {
+            MemberKind::Text => value.as_str().map(str::to_owned).ok_or_else(|| {
+                format!("{} names {member} as {value}, which is not a value it takes", tool.name)
+            })?,
+            MemberKind::Count => value
+                .as_u64()
+                .map(|count| count.to_string())
+                .ok_or_else(|| format!("{} names {member} as a whole number", tool.name))?,
+        };
+        named.insert(declared.option.to_owned(), text);
     }
     Ok(named)
 }

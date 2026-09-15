@@ -65,8 +65,8 @@
 {"input":"c14c080d137aabf869f6c6d81e9945be3608161730cb7b466b8b085a5ac63da1","output":"97c6200b2452f38b2bcd673ca5ab4d7a2695541645f285df6744392a53642f5a","tool":"operation-list"}
 {"input":"009b7327e1255f1bb164221167f27d7d4e8f4d8bd788741e57150f26a63d5ee9","output":"c27b9940bfd4fd8bb32b98b20e8725d76440c92a94f230bbb4be932387f5d9a5","tool":"operation-status"}
 {"input":"009b7327e1255f1bb164221167f27d7d4e8f4d8bd788741e57150f26a63d5ee9","output":"d220a4bc53dc2116dc129d0c6d577ae37d7f39a68e18732fa668e9f3ad285d0f","tool":"operation-wait"}
-{"input":"40c0ef5234f940b975acb124cfd1a81a594bbd5d5a735abeef7ff0dc466ae9f3","output":"7e819bb430a479044d1c14f201f6e49b3b50858a1f6af275e8729b87eff92621","tool":"operation-restart"}
+{"input":"aa53d1ef079d219cfaa9cabac2efa481e8d4c8d7540075ec620286c3dcc057da","output":"7e819bb430a479044d1c14f201f6e49b3b50858a1f6af275e8729b87eff92621","tool":"operation-restart"}
 {"input":"009b7327e1255f1bb164221167f27d7d4e8f4d8bd788741e57150f26a63d5ee9","output":"be19a63a14cee45e8766c1c598a84b519192b12e27fa90fcd39ec707f2998355","tool":"operation-result"}
-{"input":"190342f7f10b2bc787584cb3a4a26c85fb1955fddab844006b6e9b2547ab2c9d","output":"362be653c2ea3c5f709f548b9c56252eea823dbe5be1786d0f90cfa79957c66c","tool":"operation-artifact"}
-{"input":"24ef762a78b3a163be082418a789abab7b5a378c911c17c937aad8f199e4b32b","output":"5336946e735b1a87f0961a8b50ebdb5825b111bfc39ee098cbecb86ac9de308c","tool":"maintenance-preview"}
-{"input":"e8fe25fb17be22cb0102713b85352be05b880ed9ab7215a9ff5d6b4f5db37913","output":"5115edfc9ea85632b809a91f6831b0b47d3095facea1c062b26efd5a51285fb8","tool":"maintenance-apply"}
+{"input":"f955d0d8c84fc5dad0f0bcb1f1e8873aeffb4657bdecf67fd6340273fb0cb904","output":"362be653c2ea3c5f709f548b9c56252eea823dbe5be1786d0f90cfa79957c66c","tool":"operation-artifact"}
+{"input":"a29c47e234a17433a2d7375b1bafc86236968f51faf239758d98adbd81d97c56","output":"5336946e735b1a87f0961a8b50ebdb5825b111bfc39ee098cbecb86ac9de308c","tool":"maintenance-preview"}
+{"input":"2163407d42c601864f6c0e4442b8926fd707adfa4d7fb5932e69bd4a712bbb68","output":"5115edfc9ea85632b809a91f6831b0b47d3095facea1c062b26efd5a51285fb8","tool":"maintenance-apply"}
