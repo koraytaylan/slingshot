@@ -55,6 +55,40 @@ fn answered(server: &mut ServerApplication, line: &str) -> Value {
 }
 
 #[test]
+fn a_tool_call_this_build_cannot_run_is_a_result_rather_than_a_protocol_error() {
+    // A server with no runner can advertise the catalog and answer every
+    // request that describes this build. A call it cannot run is a tool result
+    // carrying the local-failure document, because the protocol read the
+    // request and this build is what could not answer it: reporting it as
+    // `-32602` would tell the caller their request was malformed when it was
+    // not, and a caller told that would rewrite a request that was already
+    // right.
+    let mut server = ServerApplication::new();
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"call","method":"tools/call","params":{{"protocolVersion":"{CURRENT}","name":"operation-list","arguments":{{}}}}}}"#
+        ),
+    );
+    assert!(
+        answer.get("error").is_none(),
+        "a call this build could not run was answered as a protocol error: {answer}"
+    );
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(true));
+    let structured = &answer["result"]["structuredContent"];
+    assert_eq!(structured["outcome"].as_str(), Some("local_application_error"));
+    // The identifier a caller quotes is the one they sent: a retry that quoted
+    // a JSON string with the protocol's own quotes around it would not match
+    // the request it came from.
+    assert_eq!(structured["interruption"]["retry_identifier"].as_str(), Some("call"));
+    // The text and the structured content are one document, which is what makes
+    // the two surfaces one: a client reading either sees the same bytes.
+    let text = answer["result"]["content"][0]["text"].as_str().expect("the content carries text");
+    let reparsed: Value = serde_json::from_str(text).expect("the text is one document");
+    assert_eq!(&reparsed, structured, "two renderings would be two documents");
+}
+
+#[test]
 fn one_request_produces_one_answer_and_releases_one_reservation() {
     let mut server = ServerApplication::new();
     let answer = answered(
