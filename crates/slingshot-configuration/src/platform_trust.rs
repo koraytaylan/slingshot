@@ -26,7 +26,9 @@ use crate::profile_loader::{ConfigurationDiagnostic, DiagnosticSourceClass, Diag
 
 /// Structural location every decision here is reported at.
 const LOCATION: &str = "platform_trust";
+#[cfg(target_os = "linux")]
 const TRUST_BUNDLE_BYTE_MULTIPLIER: u64 = 2;
+#[cfg(target_os = "linux")]
 const TRUST_BUNDLE_ENTRY_MULTIPLIER: u64 = 4;
 
 /// What one provider store says about one record.
