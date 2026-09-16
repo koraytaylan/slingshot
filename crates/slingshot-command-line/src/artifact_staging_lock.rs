@@ -13,6 +13,7 @@
 //! purpose, and two different fetches never collide by accident.
 
 use crate::artifact_staging_metadata::StagedPayload;
+use sha2::{Digest, Sha256};
 
 /// The suffix a staging file carries.
 pub const STAGING_SUFFIX: &str = ".slingshot-partial";
@@ -25,6 +26,7 @@ pub const LOCK_SUFFIX: &str = ".slingshot-lock";
 
 /// The separator between the parts of a derived name.
 const PART_SEPARATOR: char = '.';
+const MAX_STEM_BYTES: usize = 220;
 
 /// Returns the stem every file of one transfer is named from.
 ///
@@ -45,10 +47,16 @@ pub fn stem(
             maintenance_result_identifier.clone()
         }
     };
-    format!(
+    let rendered = format!(
         "{author_target_identity_digest}{PART_SEPARATOR}{selected_environment_revision}\
          {PART_SEPARATOR}{identity}"
-    )
+    );
+    if rendered.len() <= MAX_STEM_BYTES {
+        return rendered;
+    }
+    let digest = Sha256::digest(rendered.as_bytes());
+    let encoded = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    format!("slingshot-{encoded}")
 }
 
 /// The three files one transfer keeps beside its destination.
