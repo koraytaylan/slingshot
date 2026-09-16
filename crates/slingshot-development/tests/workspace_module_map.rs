@@ -508,7 +508,10 @@ fn declared_children(text: &str) -> BTreeSet<String> {
             {
                 children.insert("tests".to_owned());
             }
-            if let Some(rest) = line.strip_prefix("pub mod ").or_else(|| line.strip_prefix("mod "))
+            if let Some(rest) = line
+                .strip_prefix("pub mod ")
+                .or_else(|| line.strip_prefix("pub(crate) mod "))
+                .or_else(|| line.strip_prefix("mod "))
             {
                 if let Some(name) = rest.strip_suffix(';') {
                     children.insert(name.to_owned());
