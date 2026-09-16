@@ -402,6 +402,8 @@ pub enum OperationResponse {
     },
     /// One recovery resume was applied.
     RecoveryResumeApplied {
+        /// Recovery category released by this resume.
+        recovery_category: String,
         /// State the operation is in now.
         current_lifecycle_state: String,
         /// Operation that was resumed.
@@ -415,6 +417,8 @@ pub enum OperationResponse {
     /// the receipt, because a caller replaying a resume wants to know where the
     /// operation is now.
     RecoveryResumeReplayed {
+        /// Recovery category released by the earlier resume.
+        recovery_category: String,
         /// State the operation is in now.
         current_lifecycle_state: String,
         /// Operation that was resumed.

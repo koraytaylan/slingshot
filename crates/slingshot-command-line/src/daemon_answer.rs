@@ -144,15 +144,15 @@ pub fn observed(
                 state: detail.clone(),
             }
         }
-        OperationResponse::RecoveryResumeApplied { current_lifecycle_state, .. } => {
+        OperationResponse::RecoveryResumeApplied { recovery_category, .. } => {
             MachineOutcomeEnvelope::OperationResumeReceipt {
-                category: current_lifecycle_state.clone(),
+                category: recovery_category.clone(),
                 replayed: false,
             }
         }
-        OperationResponse::RecoveryResumeReplayed { current_lifecycle_state, .. } => {
+        OperationResponse::RecoveryResumeReplayed { recovery_category, .. } => {
             MachineOutcomeEnvelope::OperationResumeReceipt {
-                category: current_lifecycle_state.clone(),
+                category: recovery_category.clone(),
                 replayed: true,
             }
         }
