@@ -500,6 +500,14 @@ fn declared_children(text: &str) -> BTreeSet<String> {
     let mut children = BTreeSet::new();
     for line in text.lines().map(str::trim) {
         if depth == 0 {
+            // `operation_dispatch::tests` is an inline test module that owns
+            // the external `results.rs` child. Keep the inline parent visible
+            // to this source-map check as well.
+            if line == "mod tests {"
+                && text.lines().any(|candidate| candidate.trim() == "mod results;")
+            {
+                children.insert("tests".to_owned());
+            }
             if let Some(rest) = line.strip_prefix("pub mod ").or_else(|| line.strip_prefix("mod "))
             {
                 if let Some(name) = rest.strip_suffix(';') {
