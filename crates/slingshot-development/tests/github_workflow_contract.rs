@@ -28,6 +28,9 @@ const WORKFLOWS: &[&str] = &[
 /// The one job that may hold a permission beyond reading content.
 const ATTESTATION_JOB: &str = "release-binary-provenance";
 
+/// The one job that may update the guarded rolling GitHub release.
+const RELEASE_PUBLISHER_JOB: &str = "develop-snapshot";
+
 /// The permissions that job alone may add.
 const ATTESTATION_PERMISSIONS: &[&str] = &["attestations", "id-token"];
 
@@ -156,7 +159,11 @@ fn every_job_says_which_permissions_it_holds_and_holds_no_more() {
             for (held, value) in permissions {
                 let held = held.as_str().unwrap_or_default();
                 if held == "contents" {
-                    assert_eq!(value.as_str(), Some(READ_CONTENT), "{relative}/{name}");
+                    if name == RELEASE_PUBLISHER_JOB {
+                        assert_eq!(value.as_str(), Some(WRITE_PERMISSION), "{relative}/{name}");
+                    } else {
+                        assert_eq!(value.as_str(), Some(READ_CONTENT), "{relative}/{name}");
+                    }
                     continue;
                 }
                 assert_eq!(
