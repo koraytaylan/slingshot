@@ -39,7 +39,7 @@ use slingshot_command_line::exit_classification::{
     EVERY_EXIT, INTERRUPTED, SUCCESS, UNAVAILABLE, USAGE,
 };
 use slingshot_command_line::invocation::{LOCAL_LEAVES, METADATA_ONLY_LEAVES};
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use slingshot_daemon::platform_runtime::endpoint::{self, EndpointAddress};
 use slingshot_daemon::platform_runtime::locks::OwnerLock;
 #[cfg(target_os = "linux")]
