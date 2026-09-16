@@ -203,22 +203,9 @@ impl OperationRepository {
         // manually resumable. A resume does not rewind the operation lifecycle
         // (for example, Running cannot transition back to Queued); the
         // scheduler's committed receipt is the eligibility signal.
-        let Some(_recovery) = current.record.outstanding_recovery.as_ref() else {
+        if current.record.outstanding_recovery.is_none() {
             return Err(RepositoryFailure::NoSuchOperation {
                 identifier: current.operation_identifier.clone(),
-            });
-        };
-        let changed = transaction.execute(
-            statement("consume one recovery resume eligibility"),
-            rusqlite::params![
-                &current.author_target_identity_digest,
-                &current.operation_identifier,
-            ],
-        )?;
-        if changed != ONE_ROW {
-            return Err(RepositoryFailure::RevisionMoved {
-                expected: current.record.revision,
-                stored: current.record.revision,
             });
         }
         let cleared = transaction.execute(
