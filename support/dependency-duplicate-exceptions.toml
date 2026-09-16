@@ -22,7 +22,7 @@ review = "remove when jsonwebtoken converges"
 [[exception]]
 graph = "product"
 package = "bitflags"
-versions = ["1.3.2", "2.13.2"]
+versions = ["1.3.2", "2.13.1"]
 paths = ["legacy platform dependency -> bitflags", "workspace dependencies -> bitflags"]
 reason = "platform dependencies retain the older bitflags line"
 owner = "repository-owner"
@@ -94,7 +94,7 @@ review = "remove when rand users converge"
 [[exception]]
 graph = "product"
 package = "syn"
-versions = ["2.0.119", "3.0.5"]
+versions = ["2.0.119", "3.0.4"]
 paths = ["serde_derive -> syn", "clap_derive -> syn"]
 reason = "proc-macro release lines differ"
 owner = "repository-owner"
@@ -119,7 +119,7 @@ review = "remove when product converges"
 [[exception]]
 graph = "fuzz"
 package = "bitflags"
-versions = ["1.3.2", "2.13.2"]
+versions = ["1.3.2", "2.13.1"]
 paths = ["legacy platform dependency -> bitflags", "workspace dependencies -> bitflags"]
 reason = "platform dependencies retain the older bitflags line"
 owner = "repository-owner"
@@ -151,7 +151,7 @@ review = "remove when target dependencies converge"
 [[exception]]
 graph = "fuzz"
 package = "syn"
-versions = ["2.0.119", "3.0.5"]
+versions = ["2.0.119", "3.0.4"]
 paths = ["serde_derive -> syn", "clap_derive -> syn"]
 reason = "inherits product graph"
 owner = "repository-owner"
