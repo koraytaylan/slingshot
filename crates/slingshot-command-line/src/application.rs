@@ -1065,8 +1065,9 @@ impl CommandLineApplication<'_> {
         // Nothing is downloaded under a destination something else is already
         // staging: two processes writing one partial download produce a file
         // that belongs to neither of them.
-        let _lock = artifact_staging_lock::StagingLock::take(&names.lock)
-            .map_err(|refusal| RunRefusal::Local(refusal.to_string()))?;
+        let _lock = artifact_staging_lock::StagingLock::take(&names.lock).map_err(|refusal| {
+            RunRefusal::Local(format!("{refusal} at {}", names.lock.display()))
+        })?;
         if destination.exists() {
             // A destination this transfer did not make is left exactly as it
             // is: something already there is a collision, not a target.
