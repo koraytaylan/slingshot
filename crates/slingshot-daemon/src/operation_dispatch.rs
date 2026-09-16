@@ -654,6 +654,13 @@ mod tests {
             RecoveryExecutionEvidence, RecoveryFact, SuccessfulSettlement,
         };
         use slingshot_storage::database::{OperationDatabase, RequiredSettings};
+        const INITIAL_REVISION: u64 = 1;
+        const FIRST_READING: u64 = 2;
+        const RESUME_READING: u64 = 3;
+        const SETTLEMENT_READING: u64 = 4;
+        const REPLAY_READING: u64 = 5;
+        const MALFORMED_READING: u64 = 6;
+        const MISSING_READING: u64 = 7;
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("recovery.sqlite");
         let limits = DaemonRuntimeContract::embedded();
@@ -678,12 +685,12 @@ mod tests {
             .prepare_admission(&installation)
             .unwrap()
             .unwrap()
-            .persist_scheduled(&repository, &std::collections::BTreeSet::new(), 1)
+            .persist_scheduled(&repository, &std::collections::BTreeSet::new(), INITIAL_REVISION)
             .unwrap();
         let mut value = envelope();
         value["request"] = serde_json::json!({"request":"resume_operation_recovery", "operation_identifier":"operation", "expected_operation_revision":1, "expected_recovery_category":"operation_lookup"});
         assert!(matches!(
-            bind(&value).unwrap().resume(&repository, 2).unwrap(),
+            bind(&value).unwrap().resume(&repository, FIRST_READING).unwrap(),
             Some(OperationResponse::InvalidTransition { .. })
         ));
         let target = served().author_target_identity_digest;
@@ -691,7 +698,7 @@ mod tests {
             .apply(
                 &target,
                 "operation",
-                1,
+                INITIAL_REVISION,
                 &OperationFact::Recovery {
                     recovery: RecoveryFact {
                         attempt_count: 1,
@@ -702,14 +709,14 @@ mod tests {
                         },
                         manual_resume_eligible: true,
                         retry_delay_milliseconds: 0,
-                        retry_observed_at_unix_milliseconds: 2,
+                        retry_observed_at_unix_milliseconds: FIRST_READING,
                     },
                 },
-                2,
+                FIRST_READING,
             )
             .unwrap();
         assert!(matches!(
-            bind(&value).unwrap().resume(&repository, 3).unwrap(),
+            bind(&value).unwrap().resume(&repository, RESUME_READING).unwrap(),
             Some(OperationResponse::InvalidTransition { .. })
         ));
         value["request"]["expected_operation_revision"] = waiting.record.revision.into();
@@ -741,14 +748,14 @@ mod tests {
                     inline_result: Some("{}".to_owned()),
                     expected_lifecycle_state: OperationLifecycleState::Queued,
                     expected_revision: current.record.revision,
-                    settled_at_unix_milliseconds: 4,
+                    settled_at_unix_milliseconds: SETTLEMENT_READING,
                 },
             )
             .unwrap();
         drop(repository);
         let repository = open();
         assert_eq!(
-            bind(&value).unwrap().resume(&repository, 5).unwrap(),
+            bind(&value).unwrap().resume(&repository, REPLAY_READING).unwrap(),
             Some(OperationResponse::RecoveryResumeReplayed {
                 recovery_category: "operation_lookup".to_owned(),
                 current_lifecycle_state: "succeeded".to_owned(),
@@ -757,13 +764,14 @@ mod tests {
             })
         );
         value["request"]["expected_recovery_category"] = "unknown-secret-category".into();
-        let refused = bind(&value).unwrap().resume(&repository, 6).unwrap().unwrap();
+        let refused =
+            bind(&value).unwrap().resume(&repository, MALFORMED_READING).unwrap().unwrap();
         assert!(matches!(refused, OperationResponse::MalformedFrame { .. }));
         assert!(!serde_json::to_string(&refused).unwrap().contains("secret"));
         value["request"]["expected_recovery_category"] = "operation_lookup".into();
         value["request"]["operation_identifier"] = "missing".into();
         assert!(matches!(
-            bind(&value).unwrap().resume(&repository, 7).unwrap(),
+            bind(&value).unwrap().resume(&repository, MISSING_READING).unwrap(),
             Some(OperationResponse::MissingOperation { .. })
         ));
     }
