@@ -76,12 +76,14 @@ impl BoundRequest {
                 let identifier = hex::encode(Sha256::digest(identity));
                 if matches!(outcome, ResumeResponse::Applied(_)) {
                     OperationResponse::RecoveryResumeApplied {
+                        recovery_category: expected_recovery_category.clone(),
                         current_lifecycle_state: lifecycle_state,
                         operation_identifier: operation_identifier.clone(),
                         resume_receipt_identifier: identifier,
                     }
                 } else {
                     OperationResponse::RecoveryResumeReplayed {
+                        recovery_category: expected_recovery_category.clone(),
                         current_lifecycle_state: lifecycle_state,
                         operation_identifier: operation_identifier.clone(),
                         resume_receipt_identifier: identifier,

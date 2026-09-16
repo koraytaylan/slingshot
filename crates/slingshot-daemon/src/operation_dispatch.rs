@@ -721,6 +721,7 @@ mod tests {
         assert_eq!(repository.read(&target, "operation").unwrap().unwrap(), waiting);
         value["request"]["expected_recovery_category"] = "operation_lookup".into();
         let Some(OperationResponse::RecoveryResumeApplied {
+            recovery_category,
             resume_receipt_identifier,
             current_lifecycle_state,
             ..
@@ -729,6 +730,7 @@ mod tests {
             panic!("an exact resume applies")
         };
         assert_eq!(current_lifecycle_state, "queued");
+        assert_eq!(recovery_category, "operation_lookup");
         let current = repository.read(&target, "operation").unwrap().unwrap();
         repository
             .settle_success(
@@ -748,6 +750,7 @@ mod tests {
         assert_eq!(
             bind(&value).unwrap().resume(&repository, 5).unwrap(),
             Some(OperationResponse::RecoveryResumeReplayed {
+                recovery_category: "operation_lookup".to_owned(),
                 current_lifecycle_state: "succeeded".to_owned(),
                 operation_identifier: "operation".to_owned(),
                 resume_receipt_identifier,
