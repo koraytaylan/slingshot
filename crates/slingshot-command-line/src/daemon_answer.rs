@@ -15,7 +15,9 @@
 //! becomes a local refusal instead, which exits as a local failure and writes
 //! no envelope at all.
 
-use slingshot_local_protocol::message::{OperationResponse, TerminalFailureDisposition};
+use slingshot_local_protocol::message::{
+    OperationResponse, RecoveryExecutionEvidence, TerminalFailureDisposition,
+};
 
 use crate::application::{Answer, Completion, RunRefusal};
 use crate::exit_classification::{self, TerminalDisposition};
@@ -300,6 +302,16 @@ fn ended(response: &OperationResponse) -> Option<Completion> {
     }
 }
 
+/// Returns the operator-facing recovery evidence document.
+///
+/// The typed evidence stays the closed union. A named unknown-submission cause
+/// is appended so an operator can tell Body from UnvalidatedStatus without a
+/// second diagnostic channel.
+#[must_use]
+pub fn recovery_evidence_document(evidence: &RecoveryExecutionEvidence, detail: &str) -> String {
+    if detail.is_empty() { format!("{evidence:?}") } else { format!("{evidence:?}; {detail}") }
+}
+
 /// Returns the operation, category, and evidence one recovery answer names.
 ///
 /// The answer carries no revision, and a recovery report without one would be
@@ -309,9 +321,16 @@ fn ended(response: &OperationResponse) -> Option<Completion> {
 #[must_use]
 pub fn recovery_facts(response: &OperationResponse) -> Option<(String, String, String)> {
     match response {
-        OperationResponse::RecoveryRequired { category, evidence, operation_identifier } => {
-            Some((category.clone(), format!("{evidence:?}"), operation_identifier.clone()))
-        }
+        OperationResponse::RecoveryRequired {
+            category,
+            detail,
+            evidence,
+            operation_identifier,
+        } => Some((
+            category.clone(),
+            recovery_evidence_document(evidence, detail),
+            operation_identifier.clone(),
+        )),
         _ => None,
     }
 }

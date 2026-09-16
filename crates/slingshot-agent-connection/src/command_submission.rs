@@ -383,6 +383,14 @@ pub enum UnknownCause {
     UnvalidatedStatus,
 }
 
+impl UnknownCause {
+    /// Returns the operator-facing spelling of this cause, with no response body.
+    #[must_use]
+    pub fn spelling(self) -> String {
+        format!("{self:?}")
+    }
+}
+
 impl From<ResponseRefusal> for UnknownCause {
     fn from(refusal: ResponseRefusal) -> Self {
         match refusal {

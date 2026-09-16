@@ -255,7 +255,7 @@ impl AuthorAgentProtocol for RetainedAuthorProtocol<'_> {
                 return HandoffDisposition::Conflict;
             }
             let Ok(local) = self.local(identity) else {
-                return HandoffDisposition::Unknown;
+                return HandoffDisposition::Unknown { cause: None };
             };
             if local.record.lifecycle_state.is_terminal() || self.deferred(&local) {
                 return HandoffDisposition::ReconcileRetained;
@@ -273,7 +273,7 @@ impl AuthorAgentProtocol for RetainedAuthorProtocol<'_> {
             .await
             {
                 Ok(outcome) => disposition_of(&outcome),
-                Err(_) => HandoffDisposition::Unknown,
+                Err(_) => HandoffDisposition::Unknown { cause: None },
             }
         })
     }

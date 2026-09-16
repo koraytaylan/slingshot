@@ -288,20 +288,71 @@ impl ServerApplication {
             });
         }
         if method == "resources/read" {
-            let uri = parameters.get("uri").and_then(Value::as_str).ok_or_else(|| {
-                Refusal::ParametersUnusable {
-                    detail: "resources/read requires a string uri".to_owned(),
-                }
-            })?;
-            crate::model_context_protocol::resource_catalog::parse(uri)
-                .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
+            let result = self.resources_read(identifier, parameters)?;
+            return Ok(if legacy {
+                undecorated(result)
+            } else {
+                current_stateless_revision::decorated(method, result)
+            });
         }
-        let payload = self.payload_for(method);
+        let payload = self.payload_for(method)?;
         Ok(if legacy {
             undecorated(payload)
         } else {
             current_stateless_revision::decorated(method, payload)
         })
+    }
+
+    /// Reads one published resource through the same daemon a tool call uses.
+    ///
+    /// A URI this server publishes is parsed first. An empty `contents` array
+    /// after a successful parse would look like a present empty document, so a
+    /// server that cannot reach the daemon answers a local-application-error
+    /// document instead. An operation address is asked of the runner as
+    /// `operation-result`; other published shapes that this process cannot
+    /// fetch are the same local failure rather than invented bytes.
+    fn resources_read(&mut self, identifier: &Value, parameters: &Value) -> Result<Value, Refusal> {
+        let uri = parameters.get("uri").and_then(Value::as_str).ok_or_else(|| {
+            Refusal::ParametersUnusable {
+                detail: "resources/read requires a string uri".to_owned(),
+            }
+        })?;
+        let address = crate::model_context_protocol::resource_catalog::parse(uri)
+            .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
+        let retry_identifier =
+            identifier.as_str().map_or_else(|| identifier_key(identifier), str::to_owned);
+        let result_tool = self.tools.iter().find(|held| held.name == "operation-result").cloned();
+        let envelope = match (self.runner_as_mut(), address, result_tool) {
+            (
+                Some(runner),
+                crate::model_context_protocol::resource_catalog::ResourceAddress::Operation {
+                    operation_identifier,
+                    ..
+                },
+                Some(tool),
+            ) => {
+                match runner.run(&tool, &json!({ "operation_identifier": operation_identifier })) {
+                    Ok(reached) => reached,
+                    Err(detail) => {
+                        self.diagnostics.record(&detail);
+                        MachineOutcomeEnvelope::LocalApplicationError {
+                            interruption: local_interruption(&retry_identifier),
+                        }
+                    }
+                }
+            }
+            _ => MachineOutcomeEnvelope::LocalApplicationError {
+                interruption: local_interruption(&retry_identifier),
+            },
+        };
+        let text = crate::machine_readable_renderer::render(&envelope)
+            .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
+        let is_error = envelope.tag() == "local_application_error"
+            || envelope.tag() == "operation_terminal_error";
+        Ok(json!({
+            "contents": [{ "uri": uri, "mimeType": "application/json", "text": text }],
+            "isError": is_error,
+        }))
     }
 
     /// Runs one `tools/call` through the runner both eras share.
@@ -380,11 +431,11 @@ impl ServerApplication {
 
 /// Returns the semantic payload one method answers with.
 impl ServerApplication {
-    fn payload_for(&self, method: &str) -> Value {
+    fn payload_for(&self, method: &str) -> Result<Value, Refusal> {
         match method {
-            "server/discover" => current_stateless_revision::discovery(),
-            "ping" => json!({}),
-            "tools/list" => json!({
+            "server/discover" => Ok(current_stateless_revision::discovery()),
+            "ping" => Ok(json!({})),
+            "tools/list" => Ok(json!({
                 "tools": self.tools.iter().filter_map(|tool| {
                     Some(json!({
                         "name": &tool.name,
@@ -398,14 +449,14 @@ impl ServerApplication {
                         }
                     }))
                 }).collect::<Vec<_>>(),
-            }),
-            "resources/list" => json!({ "resources": [] }),
-            "resources/templates/list" => json!({ "resourceTemplates": [
+            })),
+            "resources/list" => Ok(json!({ "resources": [] })),
+            "resources/templates/list" => Ok(json!({ "resourceTemplates": [
             { "uriTemplate": crate::model_context_protocol::resource_catalog::OPERATION_TEMPLATE, "name": "operation", "mimeType": "application/json" },
             { "uriTemplate": crate::model_context_protocol::resource_catalog::ARTIFACT_TEMPLATE, "name": "artifact", "mimeType": "application/octet-stream" },
             { "uriTemplate": crate::model_context_protocol::resource_catalog::MAINTENANCE_TEMPLATE, "name": "maintenance-result", "mimeType": "application/json" },
-        ] }),
-            _ => json!({ "contents": [] }),
+        ] })),
+            other => Err(Refusal::MethodUnavailable { named: other.to_owned() }),
         }
     }
 }

@@ -63,6 +63,7 @@ impl BoundRequest {
                     }
                     Some(OperationResponse::RecoveryRequired {
                         category: word(recovery.category)?,
+                        detail: recovery.detail.clone(),
                         evidence: match recovery.evidence {
                             domain::RecoveryExecutionEvidence::ExecutionCertainty { certainty } => {
                                 wire::RecoveryExecutionEvidence::ExecutionCertainty {

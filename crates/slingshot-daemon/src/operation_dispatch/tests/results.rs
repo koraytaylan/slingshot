@@ -552,12 +552,13 @@ fn recovery_and_terminal_results_preserve_the_domains_conditional_evidence() {
                 2,
             )
             .unwrap();
-        let OperationResponse::RecoveryRequired { evidence: actual, .. } =
+        let OperationResponse::RecoveryRequired { evidence: actual, detail, .. } =
             answer(&repository, identifier)
         else {
             panic!("recovery response")
         };
         assert_eq!(serde_json::to_value(actual).unwrap(), serde_json::to_value(evidence).unwrap());
+        assert_eq!(detail, "paused");
     }
     let nonexecution = TerminalFailureDisposition::AuthoritativeNonExecution {
         certainty: OperationExecutionCertainty::ConfirmedNotExecuted,

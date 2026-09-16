@@ -5,8 +5,8 @@
 {"accepted":true,"document":"{\"response\":\"list_page\",\"operations\":[\"operation-1\",\"operation-2\"]}","note":"a page","reason":""}
 {"accepted":true,"document":"{\"response\":\"list_page\",\"next_cursor\":\"opaque\",\"operations\":[\"operation-1\"]}","note":"a page with more to come","reason":""}
 {"accepted":true,"document":"{\"response\":\"progress\",\"detail\":\"submitting\",\"operation_identifier\":\"operation-1\",\"operation_revision\":5}","note":"progress","reason":""}
-{"accepted":true,"document":"{\"response\":\"recovery_resume_applied\",\"current_lifecycle_state\":\"running\",\"operation_identifier\":\"operation-1\",\"resume_receipt_identifier\":\"receipt-1\"}","note":"a resume applied","reason":""}
-{"accepted":true,"document":"{\"response\":\"recovery_resume_replayed\",\"current_lifecycle_state\":\"succeeded\",\"operation_identifier\":\"operation-1\",\"resume_receipt_identifier\":\"receipt-1\"}","note":"a resume replayed, reporting where the operation is now","reason":""}
+{"accepted":true,"document":"{\"response\":\"recovery_resume_applied\",\"recovery_category\":\"ambiguous_submission\",\"current_lifecycle_state\":\"running\",\"operation_identifier\":\"operation-1\",\"resume_receipt_identifier\":\"receipt-1\"}","note":"a resume applied","reason":""}
+{"accepted":true,"document":"{\"response\":\"recovery_resume_replayed\",\"recovery_category\":\"ambiguous_submission\",\"current_lifecycle_state\":\"succeeded\",\"operation_identifier\":\"operation-1\",\"resume_receipt_identifier\":\"receipt-1\"}","note":"a resume replayed, reporting where the operation is now","reason":""}
 {"accepted":true,"document":"{\"response\":\"artifact_start\",\"artifact_identifier\":\"artifact-1\",\"byte_length\":1024,\"content_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"media_type\":\"application/json\"}","note":"an artifact starting","reason":""}
 {"accepted":true,"document":"{\"response\":\"artifact_chunk\",\"body\":{\"encoded_bytes\":\"AAAA\",\"starting_byte_offset\":0}}","note":"an artifact chunk","reason":""}
 {"accepted":true,"document":"{\"response\":\"artifact_end\"}","note":"an artifact ending","reason":""}

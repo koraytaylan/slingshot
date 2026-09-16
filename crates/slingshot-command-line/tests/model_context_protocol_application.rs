@@ -8,7 +8,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use slingshot_command_line::application::{Service, service_for};
 use slingshot_command_line::command_line::serves_protocol;
@@ -18,7 +18,8 @@ use slingshot_command_line::model_context_protocol::application::{
     RESOURCE_EXHAUSTED_ERROR, Served, ServerApplication,
 };
 use slingshot_command_line::model_context_protocol::current_stateless_revision::{
-    COMPLETE_MEMBER, INVALID_REQUEST_ERROR, PARSE_ERROR, UNSUPPORTED_REVISION_ERROR,
+    COMPLETE_MEMBER, EVERY_REQUEST, INVALID_REQUEST_ERROR, METHOD_NOT_FOUND_ERROR, PARSE_ERROR,
+    UNSUPPORTED_REVISION_ERROR,
 };
 use slingshot_command_line::model_context_protocol::legacy_initialized_revision::{
     Lifecycle, NOT_INITIALIZED_ERROR,
@@ -329,6 +330,191 @@ fn nothing_is_served_once_this_server_has_finished() {
         server.finish(OutputFailure::WriteExpired).is_empty(),
         "finishing twice ends nothing new"
     );
+}
+
+#[test]
+fn a_resource_read_without_a_daemon_is_a_local_failure_not_empty_contents() {
+    let mut server = ServerApplication::new();
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"read","method":"resources/read","params":{{"protocolVersion":"{CURRENT}","uri":"slingshot://profiles/local/environments/author/targets/one/operations/two"}}}}"#
+        ),
+    );
+    assert!(answer.get("error").is_none(), "a valid URI was a protocol error: {answer}");
+    let contents =
+        answer["result"]["contents"].as_array().expect("a resource read carries contents");
+    assert!(!contents.is_empty(), "empty contents after a valid URI is the old stub: {answer}");
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(true));
+    let text = contents[0]["text"].as_str().unwrap_or("");
+    assert!(text.contains("local_application_error"), "{text}");
+}
+
+#[test]
+fn a_legacy_resource_read_without_a_daemon_is_a_local_failure_not_empty_contents() {
+    let mut server = ServerApplication::new();
+    handshake(&mut server);
+    let answer = answered(
+        &mut server,
+        r#"{"id":"read","method":"resources/read","params":{"uri":"slingshot://profiles/local/environments/author/targets/one/operations/two"}}"#,
+    );
+    let contents = answer["result"]["contents"].as_array().expect("contents");
+    assert!(!contents.is_empty(), "{answer}");
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(true));
+    assert!(answer["result"].get(COMPLETE_MEMBER).is_none());
+}
+
+#[test]
+fn a_resource_read_of_an_operation_reaches_the_runner() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut server =
+        ServerApplication::over(Some(Box::new(RecordingRunner { calls: calls.clone() })));
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"read","method":"resources/read","params":{{"protocolVersion":"{CURRENT}","uri":"slingshot://profiles/local/environments/author/targets/one/operations/two"}}}}"#
+        ),
+    );
+    assert_eq!(calls.lock().expect("the recorder is uncontended").as_slice(), ["operation-result"]);
+    assert!(answer.get("error").is_none(), "{answer}");
+    let contents = answer["result"]["contents"].as_array().expect("contents");
+    assert!(!contents.is_empty(), "{answer}");
+}
+
+#[test]
+fn recovery_documents_name_the_unknown_cause_that_produced_them() {
+    use slingshot_agent_connection::command_submission::UnknownCause;
+    use slingshot_command_line::daemon_answer::{recovering, recovery_facts};
+    use slingshot_local_protocol::message::{
+        OperationExecutionCertainty, OperationResponse, RecoveryExecutionEvidence,
+    };
+
+    let cause = UnknownCause::UnvalidatedStatus;
+    let evidence = RecoveryExecutionEvidence::ExecutionCertainty {
+        certainty: OperationExecutionCertainty::SubmissionUnknown,
+    };
+    let response = OperationResponse::RecoveryRequired {
+        category: "ambiguous_submission".to_owned(),
+        detail: cause.spelling(),
+        evidence,
+        operation_identifier: "held".to_owned(),
+    };
+    let Some((category, document, identifier)) = recovery_facts(&response) else {
+        panic!("a recovery response projects recovery facts")
+    };
+    assert_eq!(identifier, "held");
+    assert!(
+        document.contains(&cause.spelling()),
+        "the operator document must name the cause: {document}"
+    );
+    assert!(!cause.spelling().is_empty());
+    let completion = recovering(category, document.clone(), 2);
+    match completion.answer {
+        slingshot_command_line::application::Answer::Envelope(envelope) => {
+            match envelope.as_ref() {
+                MachineOutcomeEnvelope::OperationRecoveryRequired { evidence: held, .. } => {
+                    assert!(held.contains(&cause.spelling()), "{held}");
+                }
+                other => panic!("expected a recovery envelope, got {other:?}"),
+            }
+        }
+        other => panic!("expected an envelope, got {other:?}"),
+    }
+
+    struct RecoveryRunner {
+        evidence: String,
+    }
+    impl ToolRunner for RecoveryRunner {
+        fn run(
+            &mut self,
+            _tool: &ToolDescriptor,
+            _arguments: &Value,
+        ) -> Result<MachineOutcomeEnvelope, String> {
+            Ok(MachineOutcomeEnvelope::OperationRecoveryRequired {
+                category: "ambiguous_submission".to_owned(),
+                evidence: self.evidence.clone(),
+                revision: 2,
+            })
+        }
+    }
+    let mut server = ServerApplication::over(Some(Box::new(RecoveryRunner { evidence: document })));
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"wait","method":"tools/call","params":{{"protocolVersion":"{CURRENT}","name":"operation-result","arguments":{{"operation_identifier":"held"}}}}}}"#
+        ),
+    );
+    let held = answer["result"]["structuredContent"]["evidence"].as_str().unwrap_or("");
+    assert!(held.contains(&cause.spelling()), "{answer}");
+}
+
+/// Returns the parameters one advertised method needs in `era`.
+fn advertised_parameters(method: &str, legacy: bool) -> Value {
+    let mut parameters = serde_json::Map::new();
+    if !legacy {
+        parameters.insert("protocolVersion".to_owned(), json!(CURRENT));
+    }
+    match method {
+        "tools/call" => {
+            parameters.insert("name".to_owned(), json!("operation-list"));
+            parameters.insert("arguments".to_owned(), json!({}));
+        }
+        "resources/read" => {
+            parameters.insert(
+                "uri".to_owned(),
+                json!("slingshot://profiles/local/environments/author/targets/one/operations/two"),
+            );
+        }
+        _ => {}
+    }
+    Value::Object(parameters)
+}
+
+/// Requires `answer` to be work or an honest failure, never the empty-contents stub.
+fn require_honest_advertised_answer(method: &str, answer: &Value) {
+    assert_ne!(
+        answer["error"]["code"].as_i64(),
+        Some(METHOD_NOT_FOUND_ERROR),
+        "{method} was method-not-found: {answer}"
+    );
+    match method {
+        "resources/read" => {
+            let contents =
+                answer["result"]["contents"].as_array().expect("a resource read carries contents");
+            assert!(!contents.is_empty(), "{method} empty contents: {answer}");
+        }
+        "tools/call" => {
+            let content =
+                answer["result"]["content"].as_array().expect("a tool result carries content");
+            assert!(!content.is_empty(), "{method} empty content: {answer}");
+        }
+        _ => {
+            let contents = &answer["result"]["contents"];
+            assert!(
+                contents.is_null() || contents.as_array().is_some_and(|held| !held.is_empty()),
+                "{method} stub contents: {answer}"
+            );
+        }
+    }
+}
+
+#[test]
+fn no_advertised_method_in_either_era_answers_empty_contents_as_success() {
+    for legacy in [false, true] {
+        let mut server = ServerApplication::new();
+        if legacy {
+            handshake(&mut server);
+        }
+        for method in EVERY_REQUEST {
+            let line = json!({
+                "id": method,
+                "method": method,
+                "params": advertised_parameters(method, legacy),
+            })
+            .to_string();
+            require_honest_advertised_answer(method, &answered(&mut server, &line));
+        }
+    }
 }
 
 #[test]

@@ -430,6 +430,9 @@ pub enum OperationResponse {
     RecoveryRequired {
         /// Bounded category of what went wrong.
         category: String,
+        /// Why a submission could not be believed, when this build named one.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        detail: String,
         /// What is known about execution.
         evidence: RecoveryExecutionEvidence,
         /// Operation that needs it.
