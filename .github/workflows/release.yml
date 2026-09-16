@@ -14,6 +14,8 @@ on:
   push:
     tags:
       - v[0-9]*
+    branches:
+      - develop
 permissions:
   contents: read
 concurrency:
