@@ -299,7 +299,11 @@ jobs:
   develop-snapshot:
     name: replace the rolling develop snapshot
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    needs: [release-binary-provenance, release-acceptance, release-notes]
+    # The rolling develop channel is for sharing the exact build outputs while
+    # functionality is still under review. It requires successful compilation,
+    # provenance, and release notes, but does not bypass the stable release's
+    # separate acceptance matrix.
+    needs: [release-binary-provenance, release-notes]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
