@@ -37,7 +37,7 @@ pub(super) struct Preflight<'fixture> {
 
 impl Preflight<'_> {
     async fn run_discovery(&self, mode: u8, http2: bool) -> bool {
-        let result = match mode {
+        match mode {
             AUTHENTICATED_ASYNC_MODE => self
                 .transport
                 .discover_capabilities_authenticated_async(
@@ -92,8 +92,7 @@ impl Preflight<'_> {
                 )
                 .await
                 .is_ok(),
-        };
-        result
+        }
     }
 
     /// Checks every discovery mode before the submission exchanges start.
