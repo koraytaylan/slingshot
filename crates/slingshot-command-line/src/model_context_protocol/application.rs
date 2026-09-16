@@ -29,7 +29,7 @@ use crate::model_context_protocol::current_stateless_revision::{
     self, INVALID_REQUEST_ERROR, PARSE_ERROR, Refusal,
 };
 use crate::model_context_protocol::legacy_initialized_revision::{
-    LegacySession, Lifecycle, undecorated,
+    LegacyRefusal, LegacySession, Lifecycle, undecorated,
 };
 use crate::model_context_protocol::operation_execution::{self, ToolRunner};
 use crate::model_context_protocol::progress_and_cancellation::ProgressRegistry;
@@ -255,11 +255,14 @@ impl ServerApplication {
 
     /// Returns what one request is answered with.
     ///
-    /// A session that finished the older era's handshake is served in that era,
-    /// whatever a request says about revisions - its clients send nothing about
-    /// them after initializing, and refusing those requests would refuse every
-    /// client the handshake exists for. A session that never initialized is
-    /// stateless, and every request says which revision it speaks.
+    /// The first `initialize` selects the older era for the rest of the
+    /// process: those clients send nothing about revisions after the
+    /// handshake, and falling through to the stateless era would dispatch work
+    /// on a session neither side had agreed. A process that never initialized
+    /// is stateless, and every request says which revision it speaks.
+    ///
+    /// Both eras run `tools/call` through the same runner. The older era omits
+    /// the modern result members; it does not omit the call.
     fn answer(
         &mut self,
         identifier: &Value,
@@ -269,84 +272,20 @@ impl ServerApplication {
         if method == "initialize" {
             return Ok(self.legacy.initialize(requested_revision(parameters)));
         }
-        if self.legacy.lifecycle() == Lifecycle::Ready {
-            self.legacy
-                .require_actionable(method)
-                .map_err(|refusal| Refusal::MethodUnavailable { named: refusal.to_string() })?;
-            return Ok(undecorated(self.payload_for(method)));
+        let legacy = self.legacy.lifecycle() != Lifecycle::Fresh;
+        if legacy {
+            self.legacy.require_actionable(method).map_err(legacy_refusal)?;
+        } else {
+            let revision = requested_revision(parameters);
+            current_stateless_revision::require_answerable(method, revision)?;
         }
-        let revision = requested_revision(parameters);
-        current_stateless_revision::require_answerable(method, revision)?;
         if method == "tools/call" {
-            let name = parameters.get("name").and_then(Value::as_str).ok_or_else(|| {
-                Refusal::ParametersUnusable {
-                    detail: "tools/call requires a string name".to_owned(),
-                }
-            })?;
-            let arguments = parameters.get("arguments").cloned().unwrap_or_else(|| json!({}));
-            let raw = serde_json::to_vec(&arguments)
-                .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
-            let (tool, accepted) =
-                operation_execution::require_runnable(name, &raw, &Provenance::recomputed())
-                    .map_err(|failure| Refusal::ParametersUnusable {
-                        detail: failure.to_string(),
-                    })?;
-            // A call this server can run reaches the same daemon, the same
-            // registry command and the same operation identity a command line
-            // reaches, and what it answers is the document a command line
-            // writes for the same outcome. A call it cannot run is that same
-            // document with the local-failure tag: the protocol read the
-            // request and this build is what could not answer it, which is a
-            // tool result rather than a protocol error.
-            // The identifier a caller quotes is the one they sent, spelled the
-            // way they spelled it: a retry quoting a JSON string the protocol
-            // put quotes around would not match their own request.
-            let retry_identifier =
-                identifier.as_str().map_or_else(|| identifier_key(identifier), str::to_owned);
-            let envelope = match self.runner_as_mut() {
-                None => MachineOutcomeEnvelope::LocalApplicationError {
-                    interruption: local_interruption(&retry_identifier),
-                },
-                Some(runner) => match runner.run(&tool, &accepted) {
-                    Ok(reached) => reached,
-                    Err(detail) => {
-                        self.diagnostics.record(&detail);
-                        MachineOutcomeEnvelope::LocalApplicationError {
-                            interruption: local_interruption(&retry_identifier),
-                        }
-                    }
-                },
-            };
-            // The projection suppresses the CLI-signal tags, because they
-            // describe a keystroke at a terminal this server does not have. A
-            // local failure is not one of those: it is this build failing to
-            // answer a call it accepted, and the document goes out whole.
-            let local_failure = envelope.tag() == "local_application_error";
-            if local_failure {
-                let text =
-                    crate::machine_readable_renderer::render(&envelope).map_err(|refusal| {
-                        Refusal::ParametersUnusable { detail: refusal.to_string() }
-                    })?;
-                let structured_content = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
-                return Ok(current_stateless_revision::decorated(
-                    method,
-                    json!({
-                        "content": [{ "type": "text", "text": text }],
-                        "structuredContent": structured_content,
-                        "isError": true,
-                    }),
-                ));
-            }
-            let projected = result_projection::projected(&envelope, true, Vec::new())
-                .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
-            return Ok(current_stateless_revision::decorated(
-                method,
-                json!({
-                    "content": [{ "type": "text", "text": projected.text }],
-                    "structuredContent": projected.structured_content,
-                    "isError": projected.is_error,
-                }),
-            ));
+            let result = self.tools_call(identifier, parameters)?;
+            return Ok(if legacy {
+                undecorated(result)
+            } else {
+                current_stateless_revision::decorated(method, result)
+            });
         }
         if method == "resources/read" {
             let uri = parameters.get("uri").and_then(Value::as_str).ok_or_else(|| {
@@ -357,7 +296,74 @@ impl ServerApplication {
             crate::model_context_protocol::resource_catalog::parse(uri)
                 .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
         }
-        Ok(current_stateless_revision::decorated(method, self.payload_for(method)))
+        let payload = self.payload_for(method);
+        Ok(if legacy {
+            undecorated(payload)
+        } else {
+            current_stateless_revision::decorated(method, payload)
+        })
+    }
+
+    /// Runs one `tools/call` through the runner both eras share.
+    ///
+    /// A call this server can run reaches the same daemon, the same registry
+    /// command and the same operation identity a command line reaches, and
+    /// what it answers is the document a command line writes for the same
+    /// outcome. A call it cannot run is that same document with the
+    /// local-failure tag: the protocol read the request and this build is what
+    /// could not answer it, which is a tool result rather than a protocol
+    /// error.
+    fn tools_call(&mut self, identifier: &Value, parameters: &Value) -> Result<Value, Refusal> {
+        let name = parameters.get("name").and_then(Value::as_str).ok_or_else(|| {
+            Refusal::ParametersUnusable { detail: "tools/call requires a string name".to_owned() }
+        })?;
+        let arguments = parameters.get("arguments").cloned().unwrap_or_else(|| json!({}));
+        let raw = serde_json::to_vec(&arguments)
+            .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
+        let (tool, accepted) =
+            operation_execution::require_runnable(name, &raw, &Provenance::recomputed())
+                .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
+        // The identifier a caller quotes is the one they sent, spelled the way
+        // they spelled it: a retry quoting a JSON string the protocol put
+        // quotes around would not match their own request.
+        let retry_identifier =
+            identifier.as_str().map_or_else(|| identifier_key(identifier), str::to_owned);
+        let envelope = match self.runner_as_mut() {
+            None => MachineOutcomeEnvelope::LocalApplicationError {
+                interruption: local_interruption(&retry_identifier),
+            },
+            Some(runner) => match runner.run(&tool, &accepted) {
+                Ok(reached) => reached,
+                Err(detail) => {
+                    self.diagnostics.record(&detail);
+                    MachineOutcomeEnvelope::LocalApplicationError {
+                        interruption: local_interruption(&retry_identifier),
+                    }
+                }
+            },
+        };
+        // The projection suppresses the CLI-signal tags, because they describe
+        // a keystroke at a terminal this server does not have. A local failure
+        // is not one of those: it is this build failing to answer a call it
+        // accepted, and the document goes out whole.
+        let local_failure = envelope.tag() == "local_application_error";
+        if local_failure {
+            let text = crate::machine_readable_renderer::render(&envelope)
+                .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
+            let structured_content = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
+            return Ok(json!({
+                "content": [{ "type": "text", "text": text }],
+                "structuredContent": structured_content,
+                "isError": true,
+            }));
+        }
+        let projected = result_projection::projected(&envelope, true, Vec::new())
+            .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
+        Ok(json!({
+            "content": [{ "type": "text", "text": projected.text }],
+            "structuredContent": projected.structured_content,
+            "isError": projected.is_error,
+        }))
     }
 
     /// Ends everything, once, and says what was detached.
@@ -393,7 +399,6 @@ impl ServerApplication {
                     }))
                 }).collect::<Vec<_>>(),
             }),
-            "tools/call" => json!({ "content": [] }),
             "resources/list" => json!({ "resources": [] }),
             "resources/templates/list" => json!({ "resourceTemplates": [
             { "uriTemplate": crate::model_context_protocol::resource_catalog::OPERATION_TEMPLATE, "name": "operation", "mimeType": "application/json" },
@@ -408,6 +413,14 @@ impl ServerApplication {
 /// Returns the revision one request says it speaks.
 fn requested_revision(parameters: &Value) -> &str {
     parameters[current_stateless_revision::REVISION_MEMBER].as_str().unwrap_or_default()
+}
+
+/// Returns the protocol refusal one older-era handshake failure becomes.
+fn legacy_refusal(refusal: LegacyRefusal) -> Refusal {
+    match refusal {
+        LegacyRefusal::NotInitialized { named } => Refusal::NotInitialized { named },
+        LegacyRefusal::MethodUnavailable { named } => Refusal::MethodUnavailable { named },
+    }
 }
 
 /// Returns the local failure one tool call produces.

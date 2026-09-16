@@ -6,21 +6,28 @@
 //! is the kind of thing that works in the ordinary case and breaks in the one
 //! where a client disconnects halfway.
 
+use std::sync::{Arc, Mutex};
+
 use serde_json::Value;
 
 use slingshot_command_line::application::{Service, service_for};
 use slingshot_command_line::command_line::serves_protocol;
 use slingshot_command_line::invocation::{Invocation, SERVE_LEAF, Selection, parse};
+use slingshot_command_line::machine_outcome_envelope::MachineOutcomeEnvelope;
 use slingshot_command_line::model_context_protocol::application::{
     RESOURCE_EXHAUSTED_ERROR, Served, ServerApplication,
 };
 use slingshot_command_line::model_context_protocol::current_stateless_revision::{
     COMPLETE_MEMBER, INVALID_REQUEST_ERROR, PARSE_ERROR, UNSUPPORTED_REVISION_ERROR,
 };
-use slingshot_command_line::model_context_protocol::legacy_initialized_revision::Lifecycle;
+use slingshot_command_line::model_context_protocol::legacy_initialized_revision::{
+    Lifecycle, NOT_INITIALIZED_ERROR,
+};
+use slingshot_command_line::model_context_protocol::operation_execution::ToolRunner;
 use slingshot_command_line::model_context_protocol::standard_stream_transport::{
     LineSink, OutputFailure, SUPPORTED_REVISIONS, Written,
 };
+use slingshot_command_line::model_context_protocol::tool_catalog::ToolDescriptor;
 
 /// The revision the current era speaks.
 const CURRENT: &str = "2026-07-28";
@@ -41,6 +48,35 @@ impl LineSink for RefusingSink {
     fn write_line(&mut self, _line: &str) -> Written {
         Written::Refused
     }
+}
+
+/// A runner that records the tools it was asked to run.
+struct RecordingRunner {
+    /// The wire names, in call order.
+    calls: Arc<Mutex<Vec<String>>>,
+}
+
+impl ToolRunner for RecordingRunner {
+    fn run(
+        &mut self,
+        tool: &ToolDescriptor,
+        _arguments: &Value,
+    ) -> Result<MachineOutcomeEnvelope, String> {
+        self.calls.lock().expect("the recorder is uncontended").push(tool.name.clone());
+        Ok(MachineOutcomeEnvelope::OperationListPage {
+            operations: vec!["held".to_owned()],
+            continuation_token: None,
+        })
+    }
+}
+
+/// Completes the older era's handshake on `server`.
+fn handshake(server: &mut ServerApplication) {
+    let _ = answered(
+        server,
+        r#"{"id":"init","method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+    );
+    server.serve_line(br#"{"method":"notifications/initialized"}"#);
 }
 
 /// Returns the answer one line produced.
@@ -177,6 +213,71 @@ fn an_initialize_begins_a_session_and_the_notification_finishes_it() {
     assert_eq!(server.lifecycle(), Lifecycle::Offered);
     server.serve_line(br#"{"method":"notifications/initialized"}"#);
     assert_eq!(server.lifecycle(), Lifecycle::Ready);
+}
+
+#[test]
+fn a_legacy_session_runs_a_tool_call_after_it_is_initialized() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut server =
+        ServerApplication::over(Some(Box::new(RecordingRunner { calls: calls.clone() })));
+    handshake(&mut server);
+    let answer = answered(
+        &mut server,
+        r#"{"id":"call","method":"tools/call","params":{"name":"operation-list","arguments":{}}}"#,
+    );
+    assert_eq!(calls.lock().expect("the recorder is uncontended").as_slice(), ["operation-list"]);
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(false));
+    assert_eq!(
+        answer["result"]["structuredContent"]["outcome"].as_str(),
+        Some("operation_list_page")
+    );
+    assert_eq!(
+        answer["result"]["structuredContent"]["operations"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert!(
+        answer["result"].get(COMPLETE_MEMBER).is_none(),
+        "the older era does not carry the modern completeness member: {answer}"
+    );
+}
+
+#[test]
+fn a_legacy_tool_call_this_build_cannot_run_is_a_result_rather_than_empty_content() {
+    let mut server = ServerApplication::new();
+    handshake(&mut server);
+    let answer = answered(
+        &mut server,
+        r#"{"id":"call","method":"tools/call","params":{"name":"operation-list","arguments":{}}}"#,
+    );
+    assert!(
+        answer.get("error").is_none(),
+        "a call this build could not run was a protocol error: {answer}"
+    );
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(true));
+    assert_eq!(
+        answer["result"]["structuredContent"]["outcome"].as_str(),
+        Some("local_application_error")
+    );
+    let content = answer["result"]["content"].as_array().expect("a tool result carries content");
+    assert!(!content.is_empty(), "an empty content array is not a local failure: {answer}");
+    assert!(answer["result"].get(COMPLETE_MEMBER).is_none());
+}
+
+#[test]
+fn a_tool_call_between_the_handshake_halves_does_not_run() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut server =
+        ServerApplication::over(Some(Box::new(RecordingRunner { calls: calls.clone() })));
+    let _ = answered(
+        &mut server,
+        r#"{"id":"init","method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+    );
+    let answer = answered(
+        &mut server,
+        r#"{"id":"call","method":"tools/call","params":{"name":"operation-list","arguments":{}}}"#,
+    );
+    assert!(calls.lock().expect("the recorder is uncontended").is_empty());
+    assert_eq!(answer["error"]["code"].as_i64(), Some(NOT_INITIALIZED_ERROR));
 }
 
 #[test]
