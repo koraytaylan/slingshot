@@ -180,26 +180,7 @@ impl OperationRepository {
         // the operation queueable and clear the recovery hold before commit.
         // Without this fold a successful resume is acknowledged but remains
         // parked forever, so the scheduler can never claim it.
-        let folded = current
-            .record
-            .fold(&OperationFact::Lifecycle { lifecycle_state: OperationLifecycleState::Queued })?;
-        let folded = OperationRecord { outstanding_recovery: None, ..folded };
-        self.write_folded(&transaction, &current, &folded, None)?;
-        let cleared = transaction.execute(
-            statement("clear one resumed operation's stale scheduler claim"),
-            rusqlite::params![
-                author_target_identity_digest,
-                operation_identifier,
-                encode_word(&OperationLifecycleState::Queued)?,
-                i64::try_from(folded.revision).unwrap_or(i64::MAX),
-            ],
-        )?;
-        if cleared != ONE_ROW {
-            return Err(RepositoryFailure::RevisionMoved {
-                expected: folded.revision,
-                stored: folded.revision,
-            });
-        }
+        self.activate_resumed_operation(&transaction, &current)?;
         let written = Self::receipt_within(
             &transaction,
             author_target_identity_digest,
@@ -211,6 +192,35 @@ impl OperationRepository {
         })?;
         transaction.commit()?;
         Ok(ResumeOutcome::Applied(Box::new(written)))
+    }
+
+    fn activate_resumed_operation(
+        &self,
+        transaction: &rusqlite::Transaction<'_>,
+        current: &OperationSummary,
+    ) -> Result<(), RepositoryFailure> {
+        let folded = current
+            .record
+            .fold(&OperationFact::Lifecycle { lifecycle_state: OperationLifecycleState::Queued })?;
+        let folded = OperationRecord { outstanding_recovery: None, ..folded };
+        self.write_folded(transaction, current, &folded, None)?;
+        let cleared = transaction.execute(
+            statement("clear one resumed operation's stale scheduler claim"),
+            rusqlite::params![
+                &current.author_target_identity_digest,
+                &current.operation_identifier,
+                encode_word(&OperationLifecycleState::Queued)?,
+                i64::try_from(folded.revision).unwrap_or(i64::MAX),
+            ],
+        )?;
+        if cleared == ONE_ROW {
+            Ok(())
+        } else {
+            Err(RepositoryFailure::RevisionMoved {
+                expected: folded.revision,
+                stored: folded.revision,
+            })
+        }
     }
 
     /// Refuses a fresh receipt once the transaction sees an operation at its bound.
