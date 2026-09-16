@@ -14,6 +14,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 use slingshot_domain::command::command_identity::CommandContract;
+use syn::parse::Parser;
 use syn::visit::Visit;
 
 /// Repository path of the source policy values.
@@ -309,6 +310,33 @@ struct ComplexityScan {
 }
 
 impl<'ast> ::syn::visit::Visit<'ast> for ComplexityScan {
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        if !matches!(
+            quote_path(&node.path).as_str(),
+            "tokio::join" | "::tokio::join" | "tokio::try_join" | "::tokio::try_join"
+        ) {
+            return;
+        }
+        // These macros evaluate comma-separated Rust expressions, optionally
+        // preceded by Tokio's scheduling directive. Do not interpret arbitrary
+        // macro token grammars or quoted source as executable Rust.
+        let parser = |input: syn::parse::ParseStream<'_>| {
+            if input.peek(syn::Ident) && input.peek2(syn::Token![;]) {
+                let mode: syn::Ident = input.parse()?;
+                if mode != "biased" {
+                    return Err(input.error("unrecognized join scheduling directive"));
+                }
+                let _: syn::Token![;] = input.parse()?;
+            }
+            syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated(input)
+        };
+        if let Ok(expressions) = parser.parse2(node.tokens.clone()) {
+            for expression in expressions {
+                self.visit_expr(&expression);
+            }
+        }
+    }
+
     fn visit_expr_if(&mut self, node: &'ast syn::ExprIf) {
         self.decisions += 1;
         syn::visit::visit_expr_if(self, node);

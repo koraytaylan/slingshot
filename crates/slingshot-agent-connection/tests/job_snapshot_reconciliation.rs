@@ -385,6 +385,53 @@ fn reset_coverage_uses_subscription_watermark_not_job_sequence() {
     assert!(capture.require_snapshot_coverage(&value).is_err());
 }
 
+/// Agent decimal cursor boundaries must not reverse snapshot coverage.
+#[test]
+fn reset_coverage_respects_agent_decimal_cursor_order() {
+    use slingshot_agent_connection::selected_author_exchange::{
+        CollectedFiniteResponse, validate_collected_finite_response,
+    };
+    use slingshot_agent_connection::server_sent_event_decoder::{DecoderBounds, EventStreamCursor};
+    use slingshot_agent_connection::subscription_high_water::decode_high_water;
+
+    const HTTP_SUCCESS: u16 = 200;
+    const JOB_SEQUENCE: u64 = 1;
+    const ATTEMPT: u64 = 1;
+    const PROGRESS: u64 = 10;
+    for (captured, watermark, covered) in [
+        ("7:10", "7:9", false),
+        ("7:9", "7:10", true),
+        ("7:100", "7:99", false),
+        ("7:99", "7:100", true),
+    ] {
+        let response = validate_collected_finite_response(CollectedFiniteResponse {
+            response: http::Response::builder()
+                .status(HTTP_SUCCESS)
+                .version(http::Version::HTTP_2)
+                .header("content-type", "application/json")
+                .body(serde_json::to_vec(&serde_json::json!({
+                    "format": slingshot_agent_protocol::identity::AGENT_FORMAT,
+                    "transport_contract_digest": AuthorAgentTransportContract::embedded_digest(),
+                    "daemon_subscription_identifier": SUBSCRIPTION,
+                    "agent_event_store_generation": GENERATION,
+                    "high_water_cursor": captured,
+                })).unwrap()).unwrap(),
+            framing_ambiguous: false,
+            trailer_section_present: false,
+            trailing_bytes: false,
+        }).unwrap();
+        let capture = decode_high_water(&response, SUBSCRIPTION, GENERATION).unwrap();
+        let mut value = snapshot(JobEventKind::Progress, JOB_SEQUENCE, ATTEMPT, PROGRESS);
+        value.subscription_watermark =
+            EventStreamCursor::new(watermark, DecoderBounds::embedded().identifier_bytes).unwrap();
+        assert_eq!(
+            capture.require_snapshot_coverage(&value).is_ok(),
+            covered,
+            "captured {captured}, snapshot {watermark}"
+        );
+    }
+}
+
 /// Returns the echo a truthful answer carries.
 fn echo() -> SnapshotEcho {
     SnapshotEcho {

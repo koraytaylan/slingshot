@@ -76,8 +76,8 @@ pub(crate) fn request_fields(
     if let Some(cursor) = cursor {
         if cursor.as_text().is_empty()
             || cursor.as_text().len() as u64 > DecoderBounds::embedded().identifier_bytes
-            || cursor.as_text().as_bytes().first().is_some_and(|b| matches!(b, b' ' | b'\t'))
-            || cursor.as_text().as_bytes().last().is_some_and(|b| matches!(b, b' ' | b'\t'))
+            || cursor.as_text().as_bytes().first().is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+            || cursor.as_text().as_bytes().last().is_some_and(|byte| matches!(byte, b' ' | b'\t'))
         {
             return Err(FiniteHttpFailure::Request);
         }
@@ -89,24 +89,26 @@ pub(crate) fn request_fields(
     Ok((fields, operation))
 }
 
-pub(crate) struct EventDelivery<R, C> {
-    decoder: ServerSentEventDecoder<R>,
-    consume: C,
+pub(crate) struct EventDelivery<Resolver, Consumer> {
+    decoder: ServerSentEventDecoder<Resolver>,
+    consume: Consumer,
     attached: Instant,
     heartbeat: EventStreamHeartbeat,
     poisoned: bool,
 }
 
-impl<R: TerminalExpectationResolver, C: FnMut(StreamItem) -> Result<(), FiniteHttpFailure>>
-    EventDelivery<R, C>
+impl<
+    Resolver: TerminalExpectationResolver,
+    Consumer: FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
+> EventDelivery<Resolver, Consumer>
 {
     pub(crate) fn attached(
         head: &ResponseHead,
         media: &str,
         subscription: String,
         generation: u64,
-        resolver: R,
-        consume: C,
+        resolver: Resolver,
+        consume: Consumer,
     ) -> Result<Self, FiniteHttpFailure> {
         if head.location.is_some() {
             return Err(FiniteHttpFailure::Head);

@@ -15,7 +15,7 @@ use crate::selected_author_events::{EventDelivery, classify_attachment, request_
 use crate::selected_author_exchange::validate_finite_head;
 use crate::selected_author_hpack_block::ResponseBlock;
 use crate::selected_author_http::FiniteHttpFailure;
-use crate::selected_author_http2::{ResponseConsumer, drive_response};
+use crate::selected_author_http2::{FlowCredits, ResponseConsumer, drive_response};
 use crate::selected_author_http2_flow::ReceiveWindows;
 use crate::selected_author_http2_frames::{ResponseFrame, TransportEnd};
 use crate::selected_author_http2_response::{FiniteResponse, ResponseRefusal, declared_length};
@@ -285,14 +285,14 @@ impl SelectedAuthorTransport {
     /// resolve terminal expectations from independently retained operations.
     /// No retry, cursor persistence, authentication refresh or job mutation is
     /// inferred by this transport. Dropping its future drops the attachment.
-    pub async fn events_http2<R: TerminalExpectationResolver>(
+    pub async fn events_http2<Resolver: TerminalExpectationResolver>(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
         subscription: &str,
         generation: u64,
         committed_cursor: Option<&EventStreamCursor>,
         authentication: &RequestAuthentication,
-        resolver: R,
+        resolver: Resolver,
         consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
         self.events_over(
@@ -311,14 +311,14 @@ impl SelectedAuthorTransport {
     /// Attaches on the original negotiated socket with the same committed
     /// cursor and retained terminal resolver. No retry or cursor advancement
     /// is inferred; dropping the future drops the selected attachment.
-    pub async fn events_negotiated<R: TerminalExpectationResolver>(
+    pub async fn events_negotiated<Resolver: TerminalExpectationResolver>(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
         subscription: &str,
         generation: u64,
         committed_cursor: Option<&EventStreamCursor>,
         authentication: &RequestAuthentication,
-        resolver: R,
+        resolver: Resolver,
         consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
         self.events_over(
@@ -337,7 +337,7 @@ impl SelectedAuthorTransport {
     /// Attaches with request-scoped provider authentication. A fully framed JSON
     /// 401 may refresh Cloud once and repeat the exact committed cursor. Once
     /// stream items have been delivered, no failure here retries the attachment.
-    pub async fn events_authenticated<R: TerminalExpectationResolver>(
+    pub async fn events_authenticated<Resolver: TerminalExpectationResolver>(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
         subscription: &str,
@@ -346,7 +346,7 @@ impl SelectedAuthorTransport {
         provider: &crate::authentication::environment_provider::EnvironmentAuthenticationProvider,
         source: &dyn crate::authentication::access_token_cache::AccessTokenSource,
         reading: u64,
-        mut resolver: R,
+        mut resolver: Resolver,
         mut consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
         request_fields(self, identity, subscription, generation, committed_cursor)?;
@@ -389,7 +389,7 @@ impl SelectedAuthorTransport {
 
     /// Uses the selected async provider; only a complete pre-stream 401
     /// permits one refreshed request. Partial consumer delivery never retries.
-    pub async fn events_authenticated_async<R: TerminalExpectationResolver, Clock, Utc>(
+    pub async fn events_authenticated_async<Resolver: TerminalExpectationResolver, Clock, Utc>(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
         subscription: &str,
@@ -398,7 +398,7 @@ impl SelectedAuthorTransport {
         provider: &crate::authentication::environment_provider::AsyncEnvironmentAuthenticationProvider,
         clock: &Clock,
         utc: &Utc,
-        mut resolver: R,
+        mut resolver: Resolver,
         mut consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure>
     where
@@ -445,14 +445,14 @@ impl SelectedAuthorTransport {
         Ok(outcome)
     }
 
-    async fn events_over<R: TerminalExpectationResolver>(
+    async fn events_over<Resolver: TerminalExpectationResolver>(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
         subscription: &str,
         generation: u64,
         committed_cursor: Option<&EventStreamCursor>,
         authentication: &RequestAuthentication,
-        resolver: R,
+        resolver: Resolver,
         consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
         automatic: bool,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
@@ -535,12 +535,15 @@ impl SelectedAuthorTransport {
     }
 }
 
-struct EventResponse<R, C> {
+const CONTINUATION_FRAME: u8 = 9;
+const END_HEADERS_FLAG: u8 = 4;
+
+struct EventResponse<Resolver, Consumer> {
     subscription: String,
     generation: u64,
-    resolver: Option<R>,
-    consume: Option<C>,
-    delivery: Option<EventDelivery<R, C>>,
+    resolver: Option<Resolver>,
+    consume: Option<Consumer>,
+    delivery: Option<EventDelivery<Resolver, Consumer>>,
     error: Option<FiniteResponse>,
     block: Option<ResponseBlock>,
     header_end: bool,
@@ -553,8 +556,8 @@ struct EventResponse<R, C> {
     poisoned: bool,
 }
 
-impl<R, C> EventResponse<R, C> {
-    fn new(subscription: String, generation: u64, resolver: R, consume: C) -> Self {
+impl<Resolver, Consumer> EventResponse<Resolver, Consumer> {
+    fn new(subscription: String, generation: u64, resolver: Resolver, consume: Consumer) -> Self {
         Self {
             subscription,
             generation,
@@ -575,8 +578,98 @@ impl<R, C> EventResponse<R, C> {
     }
 }
 
-impl<R: TerminalExpectationResolver, C: FnMut(StreamItem) -> Result<(), FiniteHttpFailure>>
-    ResponseConsumer for EventResponse<R, C>
+impl<
+    Resolver: TerminalExpectationResolver,
+    Consumer: FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
+> EventResponse<Resolver, Consumer>
+{
+    fn accept_head(&mut self, frame: &ResponseFrame) -> Result<(), ResponseRefusal> {
+        if self.complete_head {
+            return Err(ResponseRefusal);
+        }
+        if frame.kind == 1 {
+            if self.block.is_some() {
+                return Err(ResponseRefusal);
+            }
+            self.block = Some(ResponseBlock::new());
+            self.header_end = frame.flags & 1 != 0;
+        }
+        self.block
+            .as_mut()
+            .ok_or(ResponseRefusal)?
+            .push(&frame.payload)
+            .map_err(|_| ResponseRefusal)?;
+        if frame.flags & END_HEADERS_FLAG != 0 {
+            self.finish_head()?;
+            self.complete_head = true;
+        }
+        Ok(())
+    }
+
+    fn finish_head(&mut self) -> Result<(), ResponseRefusal> {
+        let (status, headers) =
+            self.block.take().unwrap().finish().map_err(|_| ResponseRefusal)?.into_parts();
+        let (head, media) =
+            validate_finite_head(status, Version::HTTP_2, &headers).map_err(|_| ResponseRefusal)?;
+        if head.location.is_some() {
+            return Err(ResponseRefusal);
+        }
+        if status == StatusCode::OK {
+            self.length = declared_length(&headers)?;
+            if self.header_end && self.length.is_some_and(|length| length != 0) {
+                return Err(ResponseRefusal);
+            }
+            self.delivery = Some(
+                EventDelivery::attached(
+                    &head,
+                    &media,
+                    self.subscription.clone(),
+                    self.generation,
+                    self.resolver.take().ok_or(ResponseRefusal)?,
+                    self.consume.take().ok_or(ResponseRefusal)?,
+                )
+                .map_err(|_| ResponseRefusal)?,
+            );
+            self.ended = self.header_end;
+        } else {
+            if !crate::selected_author_submission::json_media_type(&media) {
+                return Err(ResponseRefusal);
+            }
+            self.error = Some(FiniteResponse::from_decoded_head(status, headers, self.header_end)?);
+        }
+        Ok(())
+    }
+
+    fn accept_data(
+        &mut self,
+        frame: &ResponseFrame,
+    ) -> Result<Option<FlowCredits>, ResponseRefusal> {
+        if !self.complete_head || self.block.is_some() {
+            return Err(ResponseRefusal);
+        }
+        let (permit, content) = self.windows.receive_frame(frame).map_err(|_| ResponseRefusal)?;
+        let received = self.received.checked_add(content.len() as u64).ok_or(ResponseRefusal)?;
+        if self
+            .length
+            .is_some_and(|length| received > length || frame.flags & 1 != 0 && received != length)
+        {
+            return Err(ResponseRefusal);
+        }
+        self.delivery
+            .as_mut()
+            .ok_or(ResponseRefusal)?
+            .push(content)
+            .map_err(|_| ResponseRefusal)?;
+        self.received = received;
+        self.ended = frame.flags & 1 != 0;
+        Ok(permit.release())
+    }
+}
+
+impl<
+    Resolver: TerminalExpectationResolver,
+    Consumer: FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
+> ResponseConsumer for EventResponse<Resolver, Consumer>
 {
     type Output = EventHttpOutcome;
     fn head_complete(&self) -> bool {
@@ -588,7 +681,7 @@ impl<R: TerminalExpectationResolver, C: FnMut(StreamItem) -> Result<(), FiniteHt
     fn liveness_deadline(&self) -> Option<Instant> {
         self.delivery.as_ref().map(EventDelivery::deadline)
     }
-    fn accept(&mut self, frame: &ResponseFrame) -> Result<Option<[[u8; 13]; 2]>, ResponseRefusal> {
+    fn accept(&mut self, frame: &ResponseFrame) -> Result<Option<FlowCredits>, ResponseRefusal> {
         if self.poisoned || self.stream_ended() || frame.stream_identifier != 1 {
             self.poisoned = true;
             return Err(ResponseRefusal);
@@ -598,88 +691,11 @@ impl<R: TerminalExpectationResolver, C: FnMut(StreamItem) -> Result<(), FiniteHt
             error.accept(frame)?
         } else {
             match frame.kind {
-                1 | 9 => {
-                    if self.complete_head {
-                        return Err(ResponseRefusal);
-                    }
-                    if frame.kind == 1 {
-                        if self.block.is_some() {
-                            return Err(ResponseRefusal);
-                        }
-                        self.block = Some(ResponseBlock::new());
-                        self.header_end = frame.flags & 1 != 0;
-                    }
-                    self.block
-                        .as_mut()
-                        .ok_or(ResponseRefusal)?
-                        .push(&frame.payload)
-                        .map_err(|_| ResponseRefusal)?;
-                    if frame.flags & 4 != 0 {
-                        let (status, headers) = self
-                            .block
-                            .take()
-                            .unwrap()
-                            .finish()
-                            .map_err(|_| ResponseRefusal)?
-                            .into_parts();
-                        let (head, media) = validate_finite_head(status, Version::HTTP_2, &headers)
-                            .map_err(|_| ResponseRefusal)?;
-                        if head.location.is_some() {
-                            return Err(ResponseRefusal);
-                        }
-                        if status == StatusCode::OK {
-                            self.length = declared_length(&headers)?;
-                            if self.header_end && self.length.is_some_and(|length| length != 0) {
-                                return Err(ResponseRefusal);
-                            }
-                            self.delivery = Some(
-                                EventDelivery::attached(
-                                    &head,
-                                    &media,
-                                    self.subscription.clone(),
-                                    self.generation,
-                                    self.resolver.take().ok_or(ResponseRefusal)?,
-                                    self.consume.take().ok_or(ResponseRefusal)?,
-                                )
-                                .map_err(|_| ResponseRefusal)?,
-                            );
-                            self.ended = self.header_end;
-                        } else {
-                            if !crate::selected_author_submission::json_media_type(&media) {
-                                return Err(ResponseRefusal);
-                            }
-                            self.error = Some(FiniteResponse::from_decoded_head(
-                                status,
-                                headers,
-                                self.header_end,
-                            )?);
-                        }
-                        self.complete_head = true;
-                    }
+                1 | CONTINUATION_FRAME => {
+                    self.accept_head(frame)?;
                     None
                 }
-                0 => {
-                    if !self.complete_head || self.block.is_some() {
-                        return Err(ResponseRefusal);
-                    }
-                    let (permit, content) =
-                        self.windows.receive_frame(frame).map_err(|_| ResponseRefusal)?;
-                    let received =
-                        self.received.checked_add(content.len() as u64).ok_or(ResponseRefusal)?;
-                    if self.length.is_some_and(|length| {
-                        received > length || frame.flags & 1 != 0 && received != length
-                    }) {
-                        return Err(ResponseRefusal);
-                    }
-                    self.delivery
-                        .as_mut()
-                        .ok_or(ResponseRefusal)?
-                        .push(content)
-                        .map_err(|_| ResponseRefusal)?;
-                    self.received = received;
-                    self.ended = frame.flags & 1 != 0;
-                    permit.release()
-                }
+                0 => self.accept_data(frame)?,
                 _ => return Err(ResponseRefusal),
             }
         };

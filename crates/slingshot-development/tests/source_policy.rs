@@ -16,6 +16,9 @@ const FIXTURE_DIRECTORY: &str = "crates/slingshot-development/tests/fixtures/sou
 /// Samples that must produce no violation, paired with the name they are
 /// checked under so the checker classifies them the way they are meant.
 const ACCEPTED: &[(&str, &str)] = &[
+    ("accepted-join-complexity.rs", "probe.rs"),
+    ("accepted-biased-join-complexity.rs", "probe.rs"),
+    ("accepted-try-join-complexity.rs", "probe.rs"),
     ("accepted-line-ceiling.rs", "probe.rs"),
     ("accepted-external-interface.rs", "probe.rs"),
     ("accepted-complexity-ceiling.rs", "probe.rs"),
@@ -36,6 +39,9 @@ const ACCEPTED: &[(&str, &str)] = &[
 /// Samples that must produce the named rule, with the name they are checked
 /// under.
 const REJECTED: &[(&str, &str, &str)] = &[
+    ("rejected-join-complexity.rs", "probe.rs", "function-branches-too-many-ways"),
+    ("rejected-biased-join-complexity.rs", "probe.rs", "function-branches-too-many-ways"),
+    ("rejected-try-join-complexity.rs", "probe.rs", "function-branches-too-many-ways"),
     ("rejected-one-line-beyond-the-ceiling.rs", "probe.rs", "file-is-longer-than-the-ceiling"),
     ("rejected-aliased-external-interface.rs", "probe.rs", "declared-name-is-not-spelled-in-full"),
     ("rejected-inherent-lookalike.rs", "probe.rs", "declared-name-is-not-spelled-in-full"),

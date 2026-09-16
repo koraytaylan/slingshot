@@ -30,6 +30,7 @@ use slingshot_storage::{
 use tokio_util::sync::CancellationToken;
 
 mod publication_recovery;
+mod execution;
 pub use publication_recovery::RecoveredPublication;
 
 use crate::{
@@ -42,8 +43,8 @@ use crate::{
 /// No caller-selected target/revision strings or replacement authentication
 /// policy can be installed after construction.
 pub struct RuntimeBuilder {
-    authentication: AsyncEnvironmentAuthenticationProvider,
-    transport: SelectedAuthorTransport,
+    authentication: std::sync::Arc<AsyncEnvironmentAuthenticationProvider>,
+    transport: std::sync::Arc<SelectedAuthorTransport>,
     target: SelectedTarget,
     state_root: PathBuf,
     settings: RequiredSettings,
@@ -52,6 +53,7 @@ pub struct RuntimeBuilder {
     ownership: DaemonOwnership,
 }
 
+#[derive(Clone, Copy)]
 struct RuntimeClock(std::time::Instant);
 
 impl slingshot_agent_connection::authentication::identity_management_exchange::MonotonicClock
@@ -88,7 +90,7 @@ pub enum RuntimeExecutionRefusal {
     Claim,
 }
 
-impl core::fmt::Debug for RuntimeBuilder {
+impl ::core::fmt::Debug for RuntimeBuilder {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("RuntimeBuilder([redacted])")
     }
@@ -141,7 +143,7 @@ pub struct DurableRuntime {
     builder: RuntimeBuilder,
 }
 
-impl core::fmt::Debug for DurableRuntime {
+impl ::core::fmt::Debug for DurableRuntime {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("DurableRuntime([redacted])")
     }
@@ -157,9 +159,7 @@ pub struct RecoveredOperation {
 }
 
 impl DurableRuntime {
-    /// Executes only while the supplied local scheduler fence is still live.
-    /// This is the production handoff; the compatibility method below remains
-    /// for the pre-scheduler author-port tests.
+    /// Executes under the live scheduler fence using independent live connections.
     pub async fn execute_retained_with_claim(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -171,33 +171,20 @@ impl DurableRuntime {
         slingshot_domain::operation_executor::OperationExecutorOutcome,
         RuntimeExecutionRefusal,
     > {
-        let facts = slingshot_storage::operation::scheduler_claim::facts(
-            self.database(),
-            &identity.author_target_identity_digest,
-            &identity.operation_identifier,
-        )
-        .map_err(|_| RuntimeExecutionRefusal::Claim)?
-        .ok_or(RuntimeExecutionRefusal::Claim)?;
-        if facts.scheduler_fence != Some(fence)
-            || facts.checkpoint.is_some()
-            || facts
-                .lease_expires_at_unix_milliseconds
-                .is_some_and(|expiry| expiry < now_unix_milliseconds)
-        {
-            return Err(RuntimeExecutionRefusal::Claim);
-        }
-        if !slingshot_storage::operation::scheduler_claim::checkpoint(
-            self.database(),
-            &identity.author_target_identity_digest,
-            &identity.operation_identifier,
-            fence,
-            "executor-started",
-        )
-        .map_err(|_| RuntimeExecutionRefusal::Claim)?
-        {
-            return Err(RuntimeExecutionRefusal::Claim);
-        }
-        self.execute_retained(identity, submission, progress).await
+        self.execution()?
+            .execute_retained_with_claim(
+                identity,
+                submission,
+                progress,
+                fence,
+                now_unix_milliseconds,
+            )
+            .await
+    }
+
+    /// Opens worker connections while the scheduler retains this runtime's ownership.
+    pub(crate) fn execution(&self) -> Result<execution::RuntimeExecution, RuntimeExecutionRefusal> {
+        execution::RuntimeExecution::open(self)
     }
 
     pub(crate) fn ownership(&self) -> &DaemonOwnership {
@@ -222,9 +209,13 @@ impl DurableRuntime {
     pub fn recovered_stages(&self) -> u64 {
         self.recovered_stages
     }
-    /// Runs the concrete retained protocol over this runtime's resources.
-    /// The caller owns scheduling/settlement and must already hold its execution
-    /// authority. This method neither grants a scheduler lease nor re-admits work.
+    /// Runs the retained protocol on live connections without repeating startup recovery.
+    /// The owning runtime remains borrowed until remote execution ends.
+    ///
+    /// # Errors
+    /// Returns `Cancelled` when local polling has stopped, or `Binding` when
+    /// live database connections, retained identity, submission, transport, or
+    /// protocol resources cannot be bound to this runtime.
     pub async fn execute_retained(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -234,55 +225,7 @@ impl DurableRuntime {
         slingshot_domain::operation_executor::OperationExecutorOutcome,
         RuntimeExecutionRefusal,
     > {
-        use slingshot_domain::operation_executor::OperationExecutor as _;
-        if self.cancellation.is_cancelled() {
-            return Err(RuntimeExecutionRefusal::Cancelled);
-        }
-        self.builder
-            .transport
-            .require_execution(identity)
-            .map_err(|_| RuntimeExecutionRefusal::Binding)?;
-        let local = self
-            .operations
-            .read(&identity.author_target_identity_digest, &identity.operation_identifier)
-            .map_err(|_| RuntimeExecutionRefusal::Binding)?
-            .ok_or(RuntimeExecutionRefusal::Binding)?;
-        if local.installation_identifier != self.installation {
-            return Err(RuntimeExecutionRefusal::Binding);
-        }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .ok()
-            .and_then(|value| u64::try_from(value.as_millis()).ok())
-            .ok_or(RuntimeExecutionRefusal::Binding)?;
-        let capacity = self.capacity();
-        let protocol =
-            crate::retained_author_protocol::RetainedAuthorProtocol::new_with_authentication(
-                &self.operations,
-                &self.remote,
-                &self.artifacts,
-                &capacity,
-                crate::operation::author_authentication::AuthorAuthentication::AsyncProvider {
-                    provider: &self.builder.authentication,
-                    clock: &self.builder.clock,
-                    utc: &self.builder.clock,
-                },
-                identity.clone(),
-                submission,
-                now,
-            )
-            .map_err(|_| RuntimeExecutionRefusal::Binding)?;
-        let ports = crate::author_agent_operation_executor::ProductAuthorPorts::over_transport(
-            &self.builder.transport,
-            &protocol,
-        );
-        let executor =
-            crate::author_agent_operation_executor::AuthorAgentOperationExecutor::over(&ports);
-        tokio::select! {
-            biased;
-            _ = self.cancellation.cancelled() => Err(RuntimeExecutionRefusal::Cancelled),
-            outcome = executor.execute(identity, protocol.command(), progress) => Ok(outcome),
-        }
+        self.execution()?.execute_retained(identity, submission, progress).await
     }
 
     /// Stops owned local polling without claiming cancellation of remote work.
@@ -349,6 +292,11 @@ impl DurableRuntime {
     /// Acquires the durable local scheduler fence for one retained operation.
     /// Selection and the compare-and-set claim happen in one SQLite transaction;
     /// a stale lifecycle/revision or worker loses without executor authority.
+    ///
+    /// # Errors
+    /// Returns the repository failure if durable claim facts cannot be read,
+    /// validated, or updated in the database transaction. Losing the claim is
+    /// represented by the returned claim outcome rather than an error.
     pub fn claim_scheduled_operation(
         &self,
         operation_identifier: &str,
@@ -374,6 +322,10 @@ impl DurableRuntime {
     }
 
     /// Selects the oldest eligible queued operation and claims it atomically.
+    ///
+    /// # Errors
+    /// Returns the repository failure if selection or claim persistence fails.
+    /// No eligible operation is represented by `Ok(None)`.
     pub fn claim_next_scheduled_operation(
         &self,
         fence: u64,
@@ -395,6 +347,10 @@ impl DurableRuntime {
     /// Settles a locally executed operation only through the fence acquired
     /// by [`Self::claim_scheduled_operation`]. This keeps executor handoff and
     /// terminal publication on the same durable ownership boundary.
+    ///
+    /// # Errors
+    /// Returns the repository failure if the operation, settlement, or scheduler
+    /// fence cannot be validated, or the terminal state cannot be persisted.
     pub fn settle_success_with_scheduler_fence(
         &self,
         operation_identifier: &str,
@@ -414,6 +370,10 @@ impl DurableRuntime {
 
     /// Persists any executor outcome through the same scheduler fence used for
     /// handoff. This is the required settlement path for local workers.
+    ///
+    /// # Errors
+    /// Returns the repository failure if the retained operation, executor outcome,
+    /// or scheduler fence cannot be validated or settlement cannot be persisted.
     pub fn settle_execution_with_scheduler_fence(
         &self,
         summary: &slingshot_storage::operation_repository::OperationSummary,
@@ -446,37 +406,24 @@ impl RuntimeBuilder {
     /// generated only in an empty state root. Interrupted staged intent remains
     /// durable on failure; existing missing or foreign identities are never repaired.
     /// No endpoint or readiness record is published by this transition.
+    ///
+    /// # Errors
+    /// Returns `Installation` for inaccessible or inconsistent installation state,
+    /// `Database` for database binding/open failures, or `Resources` when artifact,
+    /// diagnostic, capacity, or retained recovery state cannot be established.
+    /// Staged installation intent can remain on disk after refusal.
     pub fn establish_durable(self) -> Result<DurableRuntime, RuntimeBuildRefusal> {
-        use rand::RngExt as _;
         let installation_failure = |_| RuntimeBuildRefusal::Installation;
         crate::runtime_namespace::create_private_directory(&self.state_root)
             .map_err(installation_failure)?;
         let state = InstallationState::at(&self.state_root);
         let mut transaction = state.transaction().map_err(|_| RuntimeBuildRefusal::Installation)?;
-        let mut record = match transaction.read() {
-            Ok(record) => record,
-            Err(InstallationStateFailure::Absent) if !transaction.state_root_occupied() => {
-                let bytes: [u8; INSTALLATION_RANDOM_BYTES] = rand::rng().random();
-                InstallationRecord::new(
-                    InstallationIdentifier::parse(&hex::encode(bytes))
-                        .map_err(|_| RuntimeBuildRefusal::Installation)?,
-                )
-            }
-            Err(_) => return Err(RuntimeBuildRefusal::Installation),
-        };
+        let mut record = Self::installation_record(&transaction)?;
         let paths = self.namespace().beneath(&self.state_root);
         let namespace = self.namespace().key();
-        let present = match std::fs::symlink_metadata(paths.database_path()) {
-            Ok(_) => true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-            Err(_) => return Err(RuntimeBuildRefusal::Installation),
-        };
+        let present = Self::database_is_present(&paths)?;
         let registration = record.registration(&namespace);
-        if (registration.is_none() && present)
-            || (registration == Some(TargetRegistration::Registered) && !present)
-        {
-            return Err(RuntimeBuildRefusal::Installation);
-        }
+        Self::validate_database_registration(registration, present)?;
         let database = if present {
             OperationDatabase::reopen_bound(
                 &paths.database_path(),
@@ -570,35 +517,12 @@ impl RuntimeBuilder {
             if summary.record.lifecycle_state.is_terminal() {
                 continue;
             }
-            let input = operations
-                .read_execution_input(
-                    &self.target.author_target_identity_digest,
-                    &summary.operation_identifier,
-                )
-                .map_err(|_| RuntimeBuildRefusal::Resources)?
-                .ok_or(RuntimeBuildRefusal::Resources)?;
-            if input.summary != summary
-                || summary.installation_identifier != installation
-                || summary.selected_environment_revision
-                    != self.target.selected_environment_revision
-                || input.daemon_runtime_contract_digest
-                    != self.target.daemon_runtime_contract_digest
-            {
-                return Err(RuntimeBuildRefusal::Resources);
-            }
-            let child = remote
-                .read_for_local_operation(
-                    &self.target.author_target_identity_digest,
-                    &summary.operation_identifier,
-                )
-                .map_err(|_| RuntimeBuildRefusal::Resources)?;
-            if child.as_ref().is_some_and(|child| {
-                child.identity.selected_environment_revision
-                    != self.target.selected_environment_revision
-            }) {
-                return Err(RuntimeBuildRefusal::Resources);
-            }
-            recovered_operations.push(RecoveredOperation { input, remote: child });
+            recovered_operations.push(self.recover_operation(
+                summary,
+                &operations,
+                &remote,
+                &installation,
+            )?);
         }
         let pending_publications = publication_recovery::bind_publications(
             &installation,
@@ -646,10 +570,88 @@ impl RuntimeBuilder {
         })
     }
 
+    fn installation_record(
+        transaction: &slingshot_storage::installation_state::InstallationTransaction<'_>,
+    ) -> Result<InstallationRecord, RuntimeBuildRefusal> {
+        use rand::RngExt as _;
+        match transaction.read() {
+            Ok(record) => Ok(record),
+            Err(InstallationStateFailure::Absent) if !transaction.state_root_occupied() => {
+                let bytes: [u8; INSTALLATION_RANDOM_BYTES] = rand::rng().random();
+                Ok(InstallationRecord::new(
+                    InstallationIdentifier::parse(&hex::encode(bytes))
+                        .map_err(|_| RuntimeBuildRefusal::Installation)?,
+                ))
+            }
+            Err(_) => Err(RuntimeBuildRefusal::Installation),
+        }
+    }
+
+    fn database_is_present(paths: &PersistentTargetPaths) -> Result<bool, RuntimeBuildRefusal> {
+        match std::fs::symlink_metadata(paths.database_path()) {
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(_) => Err(RuntimeBuildRefusal::Installation),
+        }
+    }
+
+    fn validate_database_registration(
+        registration: Option<TargetRegistration>,
+        present: bool,
+    ) -> Result<(), RuntimeBuildRefusal> {
+        if (registration.is_none() && present)
+            || (registration == Some(TargetRegistration::Registered) && !present)
+        {
+            return Err(RuntimeBuildRefusal::Installation);
+        }
+        Ok(())
+    }
+
+    fn recover_operation(
+        &self,
+        summary: slingshot_storage::operation_repository::OperationSummary,
+        operations: &OperationRepository,
+        remote: &AgentJobRepository,
+        installation: &InstallationIdentifier,
+    ) -> Result<RecoveredOperation, RuntimeBuildRefusal> {
+        let input = operations
+            .read_execution_input(
+                &self.target.author_target_identity_digest,
+                &summary.operation_identifier,
+            )
+            .map_err(|_| RuntimeBuildRefusal::Resources)?
+            .ok_or(RuntimeBuildRefusal::Resources)?;
+        if input.summary != summary
+            || &summary.installation_identifier != installation
+            || summary.selected_environment_revision != self.target.selected_environment_revision
+            || input.daemon_runtime_contract_digest != self.target.daemon_runtime_contract_digest
+        {
+            return Err(RuntimeBuildRefusal::Resources);
+        }
+        let child = remote
+            .read_for_local_operation(
+                &self.target.author_target_identity_digest,
+                &summary.operation_identifier,
+            )
+            .map_err(|_| RuntimeBuildRefusal::Resources)?;
+        if child.as_ref().is_some_and(|child| {
+            child.identity.selected_environment_revision
+                != self.target.selected_environment_revision
+        }) {
+            return Err(RuntimeBuildRefusal::Resources);
+        }
+        Ok(RecoveredOperation { input, remote: child })
+    }
+
     /// Consumes one resolved snapshot and one acquired namespace ownership.
     /// Failure releases ownership without creating durable state, opening a
     /// network connection or publishing readiness. Normal provider construction
     /// uses process randomness and the fixed IMS endpoint, never a test seam.
+    ///
+    /// # Errors
+    /// Returns `OwnershipMismatch` when the lock and snapshot select different
+    /// namespaces, `Transport` when transport construction fails, or
+    /// `Authentication` when the selected provider cannot be initialized.
     pub fn new(
         snapshot: SelectedEnvironmentSnapshot,
         ownership: DaemonOwnership,
@@ -673,8 +675,8 @@ impl RuntimeBuilder {
         let authentication = AsyncEnvironmentAuthenticationProvider::new_async(snapshot)
             .map_err(|_| RuntimeBuildRefusal::Authentication)?;
         Ok(Self {
-            authentication,
-            transport,
+            authentication: std::sync::Arc::new(authentication),
+            transport: std::sync::Arc::new(transport),
             target,
             state_root,
             settings,

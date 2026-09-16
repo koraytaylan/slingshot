@@ -182,10 +182,22 @@ pub enum StreamRefusal {
 /// orders one subscription's whole stream; a sequence orders one job's events.
 /// Deriving either from the other would make a reconnection resume at a
 /// position the agent never issued.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventStreamCursor {
     /// The bytes the agent issued, unread.
     spelling: String,
+}
+
+impl ::core::cmp::Ord for EventStreamCursor {
+    fn cmp(&self, other: &Self) -> ::core::cmp::Ordering {
+        slingshot_domain::stream_cursor_order::compare(&self.spelling, &other.spelling)
+    }
+}
+
+impl ::core::cmp::PartialOrd for EventStreamCursor {
+    fn partial_cmp(&self, other: &Self) -> Option<::core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl EventStreamCursor {
@@ -239,7 +251,7 @@ pub struct OperationStreamExpectation {
     pub submitted_command_digest: String,
 }
 
-impl core::fmt::Debug for OperationStreamExpectation {
+impl ::core::fmt::Debug for OperationStreamExpectation {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("OperationStreamExpectation([redacted])")
     }
@@ -308,9 +320,9 @@ pub struct DecodedEvent {
     pub terminal: Option<TerminalCorrelation>,
 }
 
-impl core::fmt::Debug for DecodedEvent {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("DecodedEvent([redacted])")
+impl ::core::fmt::Debug for DecodedEvent {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("DecodedEvent([redacted])")
     }
 }
 
@@ -328,7 +340,7 @@ pub enum StreamItem {
 }
 
 /// One event stream being read, a byte at a time.
-pub struct ServerSentEventDecoder<R = FixedTerminalExpectation> {
+pub struct ServerSentEventDecoder<Resolver = FixedTerminalExpectation> {
     /// Failed decoding or delivery closes this connection permanently.
     poisoned: bool,
     /// Whether the previous byte was a carriage return.
@@ -344,7 +356,7 @@ pub struct ServerSentEventDecoder<R = FixedTerminalExpectation> {
     /// What the request asked for.
     subscription: String,
     generation: u64,
-    resolver: R,
+    resolver: Resolver,
     /// The cursor the current event carries.
     identifier: Option<String>,
     /// Bytes of the line being read.
@@ -353,7 +365,7 @@ pub struct ServerSentEventDecoder<R = FixedTerminalExpectation> {
     saw_field: bool,
 }
 
-impl<R> core::fmt::Debug for ServerSentEventDecoder<R> {
+impl<Resolver> ::core::fmt::Debug for ServerSentEventDecoder<Resolver> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("ServerSentEventDecoder([redacted])")
     }
@@ -398,17 +410,22 @@ impl ServerSentEventDecoder {
     }
 }
 
-impl<R: TerminalExpectationResolver> ServerSentEventDecoder<R> {
+impl<Resolver: TerminalExpectationResolver> ServerSentEventDecoder<Resolver> {
     /// Attaches one filtered subscription with independently resolved terminal
     /// expectations for every operation. Resolution happens only after closed
     /// event decoding and subscription/generation checks, and before delivery.
+    ///
+    /// # Errors
+    ///
+    /// Returns a refusal if the response head or event-stream media type is
+    /// unacceptable. No event body is consumed during attachment.
     pub fn attached_subscription(
         head: &ResponseHead,
         media_type: &str,
         bounds: DecoderBounds,
         subscription: String,
         generation: u64,
-        resolver: R,
+        resolver: Resolver,
     ) -> Result<Self, StreamRefusal> {
         head.require_acceptable()?;
         require_event_stream(media_type)?;
@@ -453,6 +470,12 @@ impl<R: TerminalExpectationResolver> ServerSentEventDecoder<R> {
     /// A failed callback stops before any later byte is consumed. The decoder
     /// is permanently closed on either decoding or consumer refusal; reopening
     /// requires a new connection and the caller's last durably committed cursor.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StreamRefusal::Closed`] after an earlier refusal, or the first
+    /// decoding, correlation, bound, or consumer refusal in this chunk. Items
+    /// delivered successfully before that refusal are not retracted.
     pub fn push_each(
         &mut self,
         chunk: &[u8],
@@ -640,12 +663,10 @@ impl<R: TerminalExpectationResolver> ServerSentEventDecoder<R> {
                 named: document.agent_event_store_generation,
             });
         }
-        if document.agent_operation_identifier.len() != 64
-            || !document
-                .agent_operation_identifier
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        {
+        if !is_lowercase_hexadecimal(
+            &document.agent_operation_identifier,
+            slingshot_domain::agent_identity::IDENTIFIER_CHARACTERS,
+        ) {
             return Err(StreamRefusal::Malformed { field: "agent_operation_identifier" });
         }
         Ok(())
@@ -676,12 +697,10 @@ impl<R: TerminalExpectationResolver> ServerSentEventDecoder<R> {
                     transport_contract_digest: AuthorAgentTransportContract::embedded_digest(),
                 };
                 installed.require_matching(&expected.expected_provenance.provenance())?;
-                if expected.submitted_command_digest.len() != 64
-                    || !expected
-                        .submitted_command_digest
-                        .bytes()
-                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-                {
+                if !is_lowercase_hexadecimal(
+                    &expected.submitted_command_digest,
+                    slingshot_domain::command_fingerprint::DIGEST_CHARACTERS,
+                ) {
                     return Err(StreamRefusal::AnotherSubmission);
                 }
                 expected.expected_provenance.require_matching(&terminal.provenance)?;
@@ -705,6 +724,12 @@ impl<R: TerminalExpectationResolver> ServerSentEventDecoder<R> {
         self.pending.clear();
         self.saw_field = false;
     }
+}
+
+/// Checks the shared lexical shape without conflating identifier and digest bounds.
+fn is_lowercase_hexadecimal(value: &str, characters: usize) -> bool {
+    value.len() == characters
+        && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 /// Requires one response to announce exactly one event stream.

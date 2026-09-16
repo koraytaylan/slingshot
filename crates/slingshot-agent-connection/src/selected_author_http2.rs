@@ -21,9 +21,31 @@ use crate::selected_author_http2_handshake::Negotiated;
 use crate::selected_author_http2_response::FiniteResponse;
 use crate::selected_author_transport::SelectedAuthorTransport;
 
+const DATA_FRAME: u8 = 0;
+const HEADERS_FRAME: u8 = 1;
+const RESET_FRAME: u8 = 3;
+const SETTINGS_FRAME: u8 = 4;
+const PING_FRAME: u8 = 6;
+const GOAWAY_FRAME: u8 = 7;
+const WINDOW_UPDATE_FRAME: u8 = 8;
+const CONTINUATION_FRAME: u8 = 9;
+const ACKNOWLEDGEMENT_FLAG: u8 = 1;
+const PING_FRAME_BYTES: usize = 17;
+const WINDOW_UPDATE_FRAME_BYTES: usize = 13;
+const FLOW_CONTROL_WINDOWS: usize = 2;
+const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
+
+/// One receive-window update for the connection and one for its single stream.
+pub(crate) type FlowCredits = [[u8; WINDOW_UPDATE_FRAME_BYTES]; FLOW_CONTROL_WINDOWS];
+
 impl SelectedAuthorTransport {
     /// Sends one finite GET/POST after strict selected-author h2 negotiation.
     /// Callers still own durable submission authority and route identity checks.
+    ///
+    /// # Errors
+    /// Refuses invalid request/authentication bindings, failed negotiation or
+    /// writes, malformed or incomplete responses, and expired exchange deadlines.
+    /// Failures after sending do not establish remote nonexecution.
     pub async fn finite_http2_query(
         &self,
         method: Method,
@@ -47,8 +69,10 @@ impl SelectedAuthorTransport {
         .await?;
         Ok(FiniteHttpReceipt {
             response,
-            elapsed_milliseconds: u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000))
-                .unwrap_or(u64::MAX),
+            elapsed_milliseconds: u64::try_from(
+                started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND),
+            )
+            .unwrap_or(u64::MAX),
         })
     }
 }
@@ -58,7 +82,7 @@ impl SelectedAuthorTransport {
 // keep sending after its caller has gone away.
 enum Outgoing {
     Control(ResponseFrame),
-    Credit([[u8; 13]; 2], oneshot::Sender<()>),
+    Credit(FlowCredits, oneshot::Sender<()>),
     Finish,
 }
 
@@ -74,7 +98,7 @@ pub(crate) trait ResponseConsumer {
     fn accept(
         &mut self,
         frame: &ResponseFrame,
-    ) -> Result<Option<[[u8; 13]; 2]>, crate::selected_author_http2_response::ResponseRefusal>;
+    ) -> Result<Option<FlowCredits>, crate::selected_author_http2_response::ResponseRefusal>;
     fn finish_at_transport_end(
         self,
         end: crate::selected_author_http2_frames::TransportEnd,
@@ -112,7 +136,7 @@ impl ResponseConsumer for FiniteResponse {
     fn accept(
         &mut self,
         frame: &ResponseFrame,
-    ) -> Result<Option<[[u8; 13]; 2]>, crate::selected_author_http2_response::ResponseRefusal> {
+    ) -> Result<Option<FlowCredits>, crate::selected_author_http2_response::ResponseRefusal> {
         self.accept(frame)
     }
     fn finish_at_transport_end(
@@ -138,14 +162,14 @@ pub(crate) async fn drive(
     drive_response(stream, negotiated, head, body, deadlines, FiniteResponse::new()).await
 }
 
-pub(crate) async fn drive_response<R: ResponseConsumer>(
+pub(crate) async fn drive_response<Consumer: ResponseConsumer>(
     stream: impl AsyncRead + AsyncWrite + Unpin,
     negotiated: Negotiated,
     head: impl Iterator<Item = Vec<u8>>,
     body: &[u8],
     deadlines: ExchangeDeadlines,
-    response: R,
-) -> Result<R::Output, FiniteHttpFailure> {
+    response: Consumer,
+) -> Result<Consumer::Output, FiniteHttpFailure> {
     let (input, output) = tokio::io::split(stream);
     let (commands, pending) = mpsc::channel(1);
     let (completed, completion) = watch::channel(None);
@@ -207,14 +231,7 @@ async fn write(
     .map_err(|_| FiniteHttpFailure::Write)??;
     if !early_end {
         let _ = completed.send(Some(Instant::now()));
-        loop {
-            match commands.recv().await.ok_or(FiniteHttpFailure::Body)? {
-                Outgoing::Finish => break,
-                command => control(&mut output, &mut windows, command, true)
-                    .await
-                    .map_err(|_| FiniteHttpFailure::Body)?,
-            }
-        }
+        finish_controls(&mut output, &mut windows, &mut commands).await?;
     }
     if position < body.len() {
         // A complete early response can stop the unfinished request half.
@@ -228,6 +245,21 @@ async fn write(
         .await
         .map_err(|_| FiniteHttpFailure::Body)?;
     output.shutdown().await.map_err(|_| FiniteHttpFailure::Body)
+}
+
+async fn finish_controls(
+    output: &mut (impl AsyncWrite + Unpin),
+    windows: &mut SendWindows,
+    commands: &mut mpsc::Receiver<Outgoing>,
+) -> Result<(), FiniteHttpFailure> {
+    loop {
+        match commands.recv().await.ok_or(FiniteHttpFailure::Body)? {
+            Outgoing::Finish => return Ok(()),
+            command => control(output, windows, command, true)
+                .await
+                .map_err(|_| FiniteHttpFailure::Body)?,
+        }
+    }
 }
 
 async fn send(
@@ -246,14 +278,14 @@ async fn control(
 ) -> Result<(), FiniteHttpFailure> {
     match command {
         Outgoing::Control(frame) => match frame.kind {
-            4 => {
+            SETTINGS_FRAME => {
                 windows.observe(&frame).map_err(|_| FiniteHttpFailure::Body)?;
                 send(output, &[0, 0, 0, 4, 1, 0, 0, 0, 0]).await?;
             }
-            8 if request_complete && frame.stream_identifier == 1 => {}
-            8 => windows.observe(&frame).map_err(|_| FiniteHttpFailure::Body)?,
-            6 => {
-                let mut ack = [0; 17];
+            WINDOW_UPDATE_FRAME if request_complete && frame.stream_identifier == 1 => {}
+            WINDOW_UPDATE_FRAME => windows.observe(&frame).map_err(|_| FiniteHttpFailure::Body)?,
+            PING_FRAME => {
+                let mut ack = [0; PING_FRAME_BYTES];
                 ack[..9].copy_from_slice(&[0, 0, 8, 6, 1, 0, 0, 0, 0]);
                 ack[9..].copy_from_slice(&frame.payload);
                 send(output, &ack).await?;
@@ -271,19 +303,18 @@ async fn control(
     Ok(())
 }
 
-async fn read<R: ResponseConsumer>(
+async fn read<Consumer: ResponseConsumer>(
     input: impl AsyncRead + Unpin,
     mut frames: ResponseFrameReader,
     commands: mpsc::Sender<Outgoing>,
     mut completion: watch::Receiver<Option<Instant>>,
     request_end: Instant,
     deadlines: ExchangeDeadlines,
-    mut response: R,
-) -> Result<R::Output, FiniteHttpFailure> {
+    mut response: Consumer,
+) -> Result<Consumer::Output, FiniteHttpFailure> {
     let mut input = IdleRead::new(input);
-    let mut body_end = None;
-    let mut live = false;
-    let mut body_started = false;
+    let mut timing =
+        ReadTiming { request_end, deadlines, body_end: None, live: false, body_started: false };
     let mut finish_sent = false;
     loop {
         let failure = if response.head_complete() {
@@ -291,101 +322,20 @@ async fn read<R: ResponseConsumer>(
         } else {
             FiniteHttpFailure::Head
         };
-        let timeout_failure = if live { FiniteHttpFailure::EventHeartbeat } else { failure };
-        let frame = {
-            let next = frames.read_next(&mut input);
-            tokio::pin!(next);
-            // A completed request changes the head deadline without cancelling an
-            // in-progress frame read (which would poison the framing reader).
-            loop {
-                let request_completed = *completion.borrow();
-                let end = if live {
-                    response.liveness_deadline().ok_or(FiniteHttpFailure::Body)?
-                } else {
-                    body_end.unwrap_or_else(|| {
-                        request_completed.unwrap_or(request_end)
-                            + Duration::from_millis(deadlines.response_header_milliseconds)
-                    })
-                };
-                if Instant::now() >= end {
-                    return Err(timeout_failure);
-                }
-                tokio::select! {
-                    result = &mut next => {
-                        if Instant::now() >= end { return Err(timeout_failure); }
-                        break result.map_err(|_| failure)?;
-                    },
-                    changed = completion.changed(), if !body_started && request_completed.is_none() => {
-                        changed.map_err(|_| failure)?;
-                    }
-                    _ = sleep_until(end) => return Err(timeout_failure),
-                }
-            }
-        };
+        let frame = timing
+            .next_frame(&mut input, &mut frames, &mut completion, &mut response, failure)
+            .await?;
         match frame {
             FrameRead::End(end) => {
                 return response.finish_at_transport_end(end).map_err(|_| failure);
             }
             FrameRead::Frame(frame) => {
-                let mut credit_written = None;
-                let command = match frame.kind {
-                    0 | 1 | 9 => {
-                        let credits = response.accept(&frame).map_err(|_| {
-                            if live
-                                && response
-                                    .liveness_deadline()
-                                    .is_some_and(|end| Instant::now() >= end)
-                            {
-                                FiniteHttpFailure::EventHeartbeat
-                            } else {
-                                failure
-                            }
-                        })?;
-                        if response.stream_ended() {
-                            None
-                        } else {
-                            credits.map(|frames| {
-                                let (written, confirmation) = oneshot::channel();
-                                credit_written = Some(confirmation);
-                                Outgoing::Credit(frames, written)
-                            })
-                        }
-                    }
-                    3 => return Err(failure),
-                    4 if frame.flags & 1 != 0 => return Err(failure), // our sole SETTINGS was already ACKed
-                    4 | 8 => Some(Outgoing::Control(frame)),
-                    6 if frame.flags & 1 == 0 => Some(Outgoing::Control(frame)),
-                    7 => {
-                        let last = u32::from_be_bytes(frame.payload[..4].try_into().unwrap())
-                            & 0x7fff_ffff;
-                        let error = u32::from_be_bytes(frame.payload[4..8].try_into().unwrap());
-                        if last < 1 || error != 0 {
-                            return Err(failure);
-                        }
-                        None
-                    }
-                    _ => None,
-                };
-                if response.head_complete() && !body_started {
-                    body_started = true;
-                    live = response.liveness_deadline().is_some();
-                    if !live {
-                        let (total, idle) = response.body_deadlines(deadlines);
-                        body_end = Some(Instant::now() + Duration::from_millis(total));
-                        input.enable(Duration::from_millis(idle));
-                    }
-                }
-                let end = if live {
-                    response.liveness_deadline().ok_or(FiniteHttpFailure::Body)?
-                } else {
-                    body_end.unwrap_or_else(|| {
-                        (*completion.borrow()).unwrap_or(request_end)
-                            + Duration::from_millis(deadlines.response_header_milliseconds)
-                    })
-                };
+                let PendingFrame { command, credit_written } =
+                    classify_response_frame(frame, &mut response, timing.live, failure)?;
+                timing.begin_body(&mut input, &response);
+                let end = timing.end(&response, *completion.borrow())?;
                 // Credit must reach the writer before more DATA is admitted.
-                let timeout_failure =
-                    if live { FiniteHttpFailure::EventHeartbeat } else { failure };
+                let timeout_failure = timing.timeout_failure(failure);
                 if let Some(command) = command {
                     if !response.stream_ended() {
                         timeout_at(end, commands.send(command))
@@ -407,34 +357,8 @@ async fn read<R: ResponseConsumer>(
                         .map_err(|_| failure)?;
                     finish_sent = true;
                     if response.stream_end_is_terminal() {
-                        // END_STREAM completes this response without requiring
-                        // peer EOF. Drain anything already available in the
-                        // frame reader, however, so a trailing response frame
-                        // on stream 1 is never silently published.
-                        loop {
-                            let next = frames.read_next(&mut input);
-                            tokio::pin!(next);
-                            let next = tokio::select! {
-                                biased;
-                                result = &mut next => Some(result.map_err(|_| failure)?),
-                                _ = tokio::task::yield_now() => None,
-                            };
-                            let Some(next) = next else {
-                                return response.finish_at_stream_end().map_err(|_| failure);
-                            };
-                            match next {
-                                FrameRead::End(_) => {
-                                    return response.finish_at_stream_end().map_err(|_| failure);
-                                }
-                                FrameRead::Frame(frame)
-                                    if frame.stream_identifier == 1
-                                        && matches!(frame.kind, 0 | 1 | 9) =>
-                                {
-                                    return Err(failure);
-                                }
-                                FrameRead::Frame(_) => {}
-                            }
-                        }
+                        return finish_response_stream(response, &mut frames, &mut input, failure)
+                            .await;
                     }
                 }
             }
@@ -442,15 +366,185 @@ async fn read<R: ResponseConsumer>(
     }
 }
 
+struct ReadTiming {
+    request_end: Instant,
+    deadlines: ExchangeDeadlines,
+    body_end: Option<Instant>,
+    live: bool,
+    body_started: bool,
+}
+
+impl ReadTiming {
+    fn end(
+        &self,
+        response: &impl ResponseConsumer,
+        completed: Option<Instant>,
+    ) -> Result<Instant, FiniteHttpFailure> {
+        if self.live {
+            response.liveness_deadline().ok_or(FiniteHttpFailure::Body)
+        } else {
+            Ok(self.body_end.unwrap_or_else(|| {
+                completed.unwrap_or(self.request_end)
+                    + Duration::from_millis(self.deadlines.response_header_milliseconds)
+            }))
+        }
+    }
+
+    fn timeout_failure(&self, failure: FiniteHttpFailure) -> FiniteHttpFailure {
+        if self.live { FiniteHttpFailure::EventHeartbeat } else { failure }
+    }
+
+    fn begin_body<Reader>(
+        &mut self,
+        input: &mut IdleRead<Reader>,
+        response: &impl ResponseConsumer,
+    ) {
+        if response.head_complete() && !self.body_started {
+            self.body_started = true;
+            self.live = response.liveness_deadline().is_some();
+            if !self.live {
+                let (total, idle) = response.body_deadlines(self.deadlines);
+                self.body_end = Some(Instant::now() + Duration::from_millis(total));
+                input.enable(Duration::from_millis(idle));
+            }
+        }
+    }
+
+    async fn next_frame(
+        &self,
+        input: &mut (impl AsyncRead + Unpin),
+        frames: &mut ResponseFrameReader,
+        completion: &mut watch::Receiver<Option<Instant>>,
+        response: &mut impl ResponseConsumer,
+        failure: FiniteHttpFailure,
+    ) -> Result<FrameRead, FiniteHttpFailure> {
+        let next = frames.read_next(input);
+        tokio::pin!(next);
+        // Request completion changes the head deadline without cancelling
+        // the in-progress frame read, which would poison framing state.
+        loop {
+            let completed = *completion.borrow();
+            let end = self.end(response, completed)?;
+            let expired = self.timeout_failure(failure);
+            if Instant::now() >= end {
+                return Err(expired);
+            }
+            tokio::select! {
+                result = &mut next => {
+                    if Instant::now() >= end { return Err(expired); }
+                    return result.map_err(|_| failure);
+                },
+                changed = completion.changed(), if !self.body_started && completed.is_none() => {
+                    changed.map_err(|_| failure)?;
+                }
+                _ = sleep_until(end) => return Err(expired),
+            }
+        }
+    }
+}
+
+// END_STREAM can complete without peer EOF. Drain frames already available
+// first, so a trailing response frame on stream 1 cannot become published evidence.
+async fn finish_response_stream<Consumer: ResponseConsumer>(
+    response: Consumer,
+    frames: &mut ResponseFrameReader,
+    input: &mut (impl AsyncRead + Unpin),
+    failure: FiniteHttpFailure,
+) -> Result<Consumer::Output, FiniteHttpFailure> {
+    loop {
+        let next = frames.read_next(input);
+        tokio::pin!(next);
+        let next = tokio::select! {
+            biased;
+            result = &mut next => Some(result.map_err(|_| failure)?),
+            _ = tokio::task::yield_now() => None,
+        };
+        let Some(next) = next else {
+            return response.finish_at_stream_end().map_err(|_| failure);
+        };
+        match next {
+            FrameRead::End(_) => return response.finish_at_stream_end().map_err(|_| failure),
+            FrameRead::Frame(frame)
+                if frame.stream_identifier == 1
+                    && matches!(frame.kind, DATA_FRAME | HEADERS_FRAME | CONTINUATION_FRAME) =>
+            {
+                return Err(failure);
+            }
+            FrameRead::Frame(_) => {}
+        }
+    }
+}
+
+struct PendingFrame {
+    command: Option<Outgoing>,
+    credit_written: Option<oneshot::Receiver<()>>,
+}
+
+fn classify_response_frame(
+    frame: ResponseFrame,
+    response: &mut impl ResponseConsumer,
+    live: bool,
+    failure: FiniteHttpFailure,
+) -> Result<PendingFrame, FiniteHttpFailure> {
+    let mut credit_written = None;
+    let command = match frame.kind {
+        DATA_FRAME | HEADERS_FRAME | CONTINUATION_FRAME => {
+            let credits =
+                response.accept(&frame).map_err(|_| response_failure(response, live, failure))?;
+            if response.stream_ended() {
+                None
+            } else {
+                credits.map(|frames| {
+                    let (written, confirmation) = oneshot::channel();
+                    credit_written = Some(confirmation);
+                    Outgoing::Credit(frames, written)
+                })
+            }
+        }
+        RESET_FRAME => return Err(failure),
+        SETTINGS_FRAME if frame.flags & ACKNOWLEDGEMENT_FLAG != 0 => return Err(failure), // our sole SETTINGS was already ACKed
+        SETTINGS_FRAME | WINDOW_UPDATE_FRAME => Some(Outgoing::Control(frame)),
+        PING_FRAME if frame.flags & ACKNOWLEDGEMENT_FLAG == 0 => Some(Outgoing::Control(frame)),
+        GOAWAY_FRAME => {
+            require_successful_goaway(&frame).map_err(|_| failure)?;
+            None
+        }
+        _ => None,
+    };
+    Ok(PendingFrame { command, credit_written })
+}
+
+fn response_failure(
+    response: &impl ResponseConsumer,
+    live: bool,
+    failure: FiniteHttpFailure,
+) -> FiniteHttpFailure {
+    if live && response.liveness_deadline().is_some_and(|end| Instant::now() >= end) {
+        FiniteHttpFailure::EventHeartbeat
+    } else {
+        failure
+    }
+}
+
+fn require_successful_goaway(frame: &ResponseFrame) -> Result<(), FiniteHttpFailure> {
+    const STREAM_IDENTIFIER_MASK: u32 = 0x7fff_ffff;
+    let last = u32::from_be_bytes(frame.payload[..4].try_into().unwrap()) & STREAM_IDENTIFIER_MASK;
+    let error = u32::from_be_bytes(frame.payload[4..8].try_into().unwrap());
+    if last < 1 || error != 0 {
+        return Err(FiniteHttpFailure::Body);
+    }
+    Ok(())
+}
+
 // Idle means time between received bytes, not time to collect a whole frame.
-struct IdleRead<R> {
-    input: R,
+struct IdleRead<Reader> {
+    input: Reader,
     duration: Option<Duration>,
     timer: Pin<Box<Sleep>>,
 }
 
-impl<R> IdleRead<R> {
-    fn new(input: R) -> Self {
+impl<Reader> IdleRead<Reader> {
+    fn new(input: Reader) -> Self {
         Self { input, duration: None, timer: Box::pin(sleep(Duration::ZERO)) }
     }
     fn enable(&mut self, duration: Duration) {
@@ -459,7 +553,7 @@ impl<R> IdleRead<R> {
     }
 }
 
-impl<R: AsyncRead + Unpin> AsyncRead for IdleRead<R> {
+impl<Reader: AsyncRead + Unpin> AsyncRead for IdleRead<Reader> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
@@ -480,426 +574,5 @@ impl<R: AsyncRead + Unpin> AsyncRead for IdleRead<R> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-    use tokio::io::{AsyncReadExt, DuplexStream};
-    use tokio::time::timeout;
-
-    pub(crate) fn frame(kind: u8, flags: u8, stream: u32, payload: &[u8]) -> Vec<u8> {
-        let length = (payload.len() as u32).to_be_bytes();
-        let mut result = vec![length[1], length[2], length[3], kind, flags];
-        result.extend_from_slice(&stream.to_be_bytes());
-        result.extend_from_slice(payload);
-        result
-    }
-
-    pub(crate) async fn receive(peer: &mut DuplexStream) -> ResponseFrame {
-        let mut header = [0; 9];
-        peer.read_exact(&mut header).await.unwrap();
-        let length =
-            usize::from(header[0]) << 16 | usize::from(header[1]) << 8 | usize::from(header[2]);
-        assert!(length <= 16_384);
-        let mut payload = vec![0; length];
-        peer.read_exact(&mut payload).await.unwrap();
-        ResponseFrame {
-            kind: header[3],
-            flags: header[4],
-            stream_identifier: u32::from_be_bytes(header[5..].try_into().unwrap()),
-            payload,
-        }
-    }
-
-    pub(crate) async fn handshake(peer: &mut DuplexStream, window: u32) {
-        let mut preface = [0; 39];
-        peer.read_exact(&mut preface).await.unwrap();
-        assert_eq!(&preface[..24], b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
-        let mut setting = vec![0, 4];
-        setting.extend_from_slice(&window.to_be_bytes());
-        peer.write_all(&frame(4, 0, 0, &setting)).await.unwrap();
-        let ack = receive(peer).await;
-        assert_eq!((ack.kind, ack.flags), (4, 1));
-        peer.write_all(&frame(4, 1, 0, &[])).await.unwrap();
-    }
-
-    fn response_head(ended: bool) -> Vec<u8> {
-        let mut block = vec![0x88, 0x0f, 16, 16]; // :status 200; literal static name 31 content-type
-        block.extend_from_slice(b"application/json");
-        frame(1, if ended { 5 } else { 4 }, 1, &block)
-    }
-
-    pub(crate) fn deadlines() -> ExchangeDeadlines {
-        ExchangeDeadlines {
-            connect_milliseconds: 1000,
-            transport_layer_security_milliseconds: 1000,
-            request_body_milliseconds: 1000,
-            response_header_milliseconds: 1000,
-            finite_idle_milliseconds: 1000,
-            finite_total_milliseconds: 3000,
-        }
-    }
-
-    async fn client(
-        mut stream: DuplexStream,
-        body: &[u8],
-        deadlines: ExchangeDeadlines,
-    ) -> Result<SelectedAuthorFiniteResponse, FiniteHttpFailure> {
-        let negotiated =
-            crate::selected_author_http2_handshake::negotiate(&mut stream, Duration::from_secs(1))
-                .await?;
-        let block =
-            [if body.is_empty() { 0x82 } else { 0x83 }, 0x86, 0x84, 1, 4, b't', b'e', b's', b't'];
-        drive(
-            stream,
-            negotiated,
-            [frame(1, if body.is_empty() { 5 } else { 4 }, 1, &block)].into_iter(),
-            body,
-            deadlines,
-        )
-        .await
-    }
-
-    pub(crate) async fn close(peer: &mut DuplexStream) {
-        loop {
-            let outgoing = receive(peer).await;
-            if outgoing.kind == 7 {
-                assert_eq!(outgoing.payload, [0; 8]);
-                break;
-            }
-            assert!(matches!(outgoing.kind, 3 | 4 | 6 | 8));
-        }
-        assert_eq!(peer.read(&mut [0; 1]).await.unwrap(), 0);
-        peer.shutdown().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn full_duplex_flow_control_handles_request_and_response_larger_than_windows() {
-        let (stream, mut peer) = tokio::io::duplex(1024);
-        let body = vec![b'x'; 100_000];
-        let server = async {
-            handshake(&mut peer, 7).await;
-            assert_eq!(receive(&mut peer).await.kind, 1);
-            let first = receive(&mut peer).await;
-            assert_eq!(first.payload, vec![b'x'; 7]);
-            // No stream credit remains: the client must continue reading.
-            peer.write_all(&frame(6, 0, 0, b"12345678")).await.unwrap();
-            let ack = receive(&mut peer).await;
-            assert_eq!(
-                (ack.kind, ack.flags, ack.payload.as_slice()),
-                (6, 1, b"12345678".as_slice())
-            );
-            peer.write_all(&frame(8, 0, 1, &100_000u32.to_be_bytes())).await.unwrap();
-            peer.write_all(&frame(8, 0, 0, &100_000u32.to_be_bytes())).await.unwrap();
-            let mut received = first.payload.clone();
-            loop {
-                let data = receive(&mut peer).await;
-                assert_eq!(data.kind, 0);
-                received.extend_from_slice(&data.payload);
-                if data.flags & 1 != 0 {
-                    break;
-                }
-            }
-            assert_eq!(received, body);
-            peer.write_all(&response_head(false)).await.unwrap();
-            for index in 0..10 {
-                peer.write_all(&frame(0, u8::from(index == 9), 1, &vec![b'y'; 10_000]))
-                    .await
-                    .unwrap();
-                if index != 9 {
-                    for stream in [0, 1] {
-                        let credit = receive(&mut peer).await;
-                        assert_eq!((credit.kind, credit.stream_identifier), (8, stream));
-                        assert_eq!(credit.payload, 10_000u32.to_be_bytes());
-                    }
-                }
-            }
-            close(&mut peer).await;
-        };
-        let (result, ()) = timeout(Duration::from_secs(5), async {
-            tokio::join!(client(stream, &body, deadlines()), server)
-        })
-        .await
-        .unwrap();
-        assert_eq!(result.unwrap().body, vec![b'y'; 100_000]);
-    }
-
-    #[tokio::test]
-    async fn complete_early_response_closes_the_unfinished_request_without_retry() {
-        let (stream, mut peer) = tokio::io::duplex(1024);
-        let server = async {
-            handshake(&mut peer, 0).await;
-            assert_eq!(receive(&mut peer).await.kind, 1);
-            peer.write_all(&response_head(true)).await.unwrap();
-            let reset = receive(&mut peer).await;
-            assert_eq!((reset.kind, reset.stream_identifier), (3, 1));
-            assert_eq!(reset.payload, [0; 4]);
-            close(&mut peer).await;
-        };
-        let (result, ()) = timeout(Duration::from_secs(2), async {
-            tokio::join!(client(stream, b"not sent", deadlines()), server)
-        })
-        .await
-        .unwrap();
-        assert!(result.unwrap().body.is_empty());
-    }
-
-    #[tokio::test]
-    async fn post_end_control_frames_do_not_issue_multiple_close_commands() {
-        let (stream, mut peer) = tokio::io::duplex(1024);
-        let server = async {
-            handshake(&mut peer, 65535).await;
-            receive(&mut peer).await;
-            let bytes = [
-                response_head(true),
-                frame(6, 0, 0, b"12345678"),
-                frame(7, 0, 0, &[0, 0, 0, 1, 0, 0, 0, 0]),
-            ]
-            .concat();
-            peer.write_all(&bytes).await.unwrap();
-            close(&mut peer).await;
-        };
-        let (result, ()) = timeout(Duration::from_secs(2), async {
-            tokio::join!(client(stream, b"", deadlines()), server)
-        })
-        .await
-        .unwrap();
-        assert!(result.unwrap().body.is_empty());
-    }
-
-    #[tokio::test]
-    async fn malformed_partial_reset_and_trailing_responses_never_publish() {
-        for response in [
-            vec![],
-            frame(3, 0, 1, &[0; 4]),
-            [response_head(false), frame(0, 0, 1, b"partial")].concat(),
-            [response_head(true), frame(1, 5, 1, &[])].concat(),
-            [response_head(true), frame(0, 1, 1, &[])].concat(),
-            [response_head(true), vec![0]].concat(),
-            [response_head(false), frame(4, 1, 0, &[])].concat(),
-            frame(7, 0, 0, &[0; 8]),
-        ] {
-            let (stream, mut peer) = tokio::io::duplex(1024);
-            let server = async {
-                handshake(&mut peer, 65535).await;
-                receive(&mut peer).await;
-                peer.write_all(&response).await.unwrap();
-                peer.shutdown().await.unwrap();
-                let mut discarded = Vec::new();
-                let _ = peer.read_to_end(&mut discarded).await;
-            };
-            let (result, ()) = timeout(Duration::from_secs(2), async {
-                tokio::join!(client(stream, b"", deadlines()), server)
-            })
-            .await
-            .unwrap();
-            assert!(result.unwrap_err().request_may_have_reached_author());
-        }
-    }
-
-    #[tokio::test]
-    async fn request_header_and_body_silence_have_distinct_bounded_failures() {
-        for expected in [FiniteHttpFailure::Write, FiniteHttpFailure::Head, FiniteHttpFailure::Body]
-        {
-            let (stream, mut peer) = tokio::io::duplex(1024);
-            let server = async {
-                handshake(&mut peer, if expected == FiniteHttpFailure::Write { 0 } else { 65535 })
-                    .await;
-                receive(&mut peer).await;
-                if expected == FiniteHttpFailure::Body {
-                    peer.write_all(&response_head(false)).await.unwrap();
-                }
-                assert_eq!(peer.read(&mut [0; 1]).await.unwrap(), 0);
-            };
-            let mut limits = deadlines();
-            limits.request_body_milliseconds = 30;
-            limits.response_header_milliseconds = 30;
-            limits.finite_idle_milliseconds = 30;
-            let body = if expected == FiniteHttpFailure::Write { b"x".as_slice() } else { b"" };
-            let (result, ()) = timeout(Duration::from_secs(2), async {
-                tokio::join!(client(stream, body, limits), server)
-            })
-            .await
-            .unwrap();
-            assert_eq!(result.unwrap_err(), expected);
-        }
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn idle_budget_resets_on_each_byte_not_only_after_a_whole_frame() {
-        let (input, mut output) = tokio::io::duplex(16);
-        let mut input = IdleRead::new(input);
-        input.enable(Duration::from_millis(10));
-        let reader = async {
-            let mut bytes = [0; 5];
-            input.read_exact(&mut bytes).await.unwrap();
-            assert_eq!(bytes, [1; 5]);
-        };
-        let writer = async {
-            for _ in 0..5 {
-                sleep(Duration::from_millis(9)).await;
-                output.write_all(&[1]).await.unwrap();
-            }
-        };
-        tokio::join!(reader, writer);
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn end_stream_without_peer_eof_completes_finite_receipt() {
-        let (stream, mut peer) = tokio::io::duplex(1024);
-        let mut limits = deadlines();
-        limits.finite_idle_milliseconds = 10;
-        let server = async {
-            handshake(&mut peer, 65535).await;
-            receive(&mut peer).await;
-            peer.write_all(&response_head(true)).await.unwrap();
-            assert_eq!(receive(&mut peer).await.kind, 7);
-            assert_eq!(peer.read(&mut [0; 1]).await.unwrap(), 0);
-            // Keep the peer's writing half open beyond the closure deadline.
-            sleep(Duration::from_millis(20)).await;
-        };
-        let (result, ()) = tokio::join!(client(stream, b"", limits), server);
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn control_traffic_cannot_extend_the_finite_total_deadline() {
-        let (stream, mut peer) = tokio::io::duplex(1024);
-        let mut limits = deadlines();
-        limits.finite_idle_milliseconds = 10;
-        limits.finite_total_milliseconds = 30;
-        let server = async {
-            handshake(&mut peer, 65535).await;
-            receive(&mut peer).await;
-            peer.write_all(&response_head(false)).await.unwrap();
-            loop {
-                sleep(Duration::from_millis(5)).await;
-                if peer.write_all(&frame(6, 0, 0, b"12345678")).await.is_err() {
-                    break;
-                }
-                let mut ack = [0; 17];
-                if peer.read_exact(&mut ack).await.is_err() {
-                    break;
-                }
-            }
-        };
-        let started = Instant::now();
-        let (result, ()) = tokio::join!(client(stream, b"", limits), server);
-        assert_eq!(result.unwrap_err(), FiniteHttpFailure::Body);
-        assert!(started.elapsed() >= Duration::from_millis(30));
-        assert!(started.elapsed() < Duration::from_millis(60));
-    }
-
-    #[tokio::test]
-    async fn caller_cancellation_drops_both_halves_without_background_sends() {
-        let (stream, mut peer) = tokio::io::duplex(1024);
-        let (observed, request_seen) = oneshot::channel();
-        let cancelled = async {
-            let future = client(stream, b"body awaiting flow credit", deadlines());
-            tokio::pin!(future);
-            tokio::select! {
-                result = &mut future => panic!("unexpected completion: {result:?}"),
-                _ = request_seen => {}
-            }
-            // Leaving this scope drops both joined I/O futures and the socket.
-        };
-        let server = async {
-            handshake(&mut peer, 0).await;
-            assert_eq!(receive(&mut peer).await.kind, 1);
-            observed.send(()).unwrap();
-            assert_eq!(peer.read(&mut [0; 1]).await.unwrap(), 0);
-        };
-        timeout(Duration::from_secs(2), async { tokio::join!(cancelled, server) }).await.unwrap();
-    }
-
-    // A deterministic consumer isolates the driver's deadline policy. Actual
-    // event validity remains the event decoder's responsibility.
-    struct LiveFixture {
-        response: FiniteResponse,
-        deadline: Option<Instant>,
-    }
-    impl ResponseConsumer for LiveFixture {
-        type Output = SelectedAuthorFiniteResponse;
-        fn head_complete(&self) -> bool {
-            self.response.head_complete()
-        }
-        fn stream_ended(&self) -> bool {
-            self.response.stream_ended()
-        }
-        fn accept(
-            &mut self,
-            frame: &ResponseFrame,
-        ) -> Result<Option<[[u8; 13]; 2]>, crate::selected_author_http2_response::ResponseRefusal>
-        {
-            let credits = self.response.accept(frame)?;
-            if self.deadline.is_none() && self.head_complete()
-                || frame.kind == 0 && frame.payload == b":\n"
-            {
-                self.deadline = Some(Instant::now() + Duration::from_millis(10));
-            }
-            Ok(credits)
-        }
-        fn finish_at_transport_end(
-            self,
-            end: crate::selected_author_http2_frames::TransportEnd,
-        ) -> Result<Self::Output, crate::selected_author_http2_response::ResponseRefusal> {
-            self.response.finish_at_transport_end(end)
-        }
-        fn liveness_deadline(&self) -> Option<Instant> {
-            self.deadline
-        }
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn live_consumer_heartbeats_outlive_finite_limits_but_ping_traffic_does_not() {
-        for heartbeat in [true, false] {
-            let (mut stream, mut peer) = tokio::io::duplex(1024);
-            let request = async {
-                let negotiated = crate::selected_author_http2_handshake::negotiate(
-                    &mut stream,
-                    Duration::from_secs(1),
-                )
-                .await
-                .unwrap();
-                let mut limits = deadlines();
-                limits.finite_total_milliseconds = 1;
-                limits.finite_idle_milliseconds = 1;
-                drive_response(
-                    stream,
-                    negotiated,
-                    [frame(1, 5, 1, &[0x82, 0x86, 0x84])].into_iter(),
-                    b"",
-                    limits,
-                    LiveFixture { response: FiniteResponse::new(), deadline: None },
-                )
-                .await
-            };
-            let server = async {
-                handshake(&mut peer, 65535).await;
-                receive(&mut peer).await;
-                peer.write_all(&response_head(false)).await.unwrap();
-                for _ in 0..5 {
-                    sleep(Duration::from_millis(5)).await;
-                    let bytes = if heartbeat {
-                        frame(0, 0, 1, b":\n")
-                    } else {
-                        frame(6, 0, 0, b"12345678")
-                    };
-                    if peer.write_all(&bytes).await.is_err() {
-                        return;
-                    }
-                    let mut acknowledgement = vec![0; if heartbeat { 26 } else { 17 }];
-                    if peer.read_exact(&mut acknowledgement).await.is_err() {
-                        return;
-                    }
-                }
-                assert!(heartbeat);
-                peer.write_all(&frame(0, 1, 1, &[])).await.unwrap();
-                close(&mut peer).await;
-            };
-            let (result, ()) = tokio::join!(request, server);
-            assert_eq!(result.is_ok(), heartbeat);
-            if !heartbeat {
-                assert_eq!(result.unwrap_err(), FiniteHttpFailure::EventHeartbeat);
-            }
-        }
-    }
-}
+#[path = "selected_author_http2_tests.rs"]
+pub(crate) mod tests;

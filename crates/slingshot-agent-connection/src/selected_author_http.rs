@@ -6,7 +6,7 @@
 //! HTTP/2 exchanges require their own reader before runtime composition
 //! can advertise full transport conformance.
 
-use http::{HeaderMap, HeaderName, HeaderValue, Method, Response, Uri, Version};
+use http::{HeaderMap, HeaderName, HeaderValue, Method, Response, StatusCode, Uri, Version};
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::time::{Duration, Instant, timeout};
@@ -18,10 +18,18 @@ use crate::selected_author_exchange::{
 };
 use crate::selected_author_transport::{SelectedAuthorStream, SelectedAuthorTransport};
 
+const HEXADECIMAL_RADIX: u32 = 16;
+const OBSOLETE_TEXT_FIRST_BYTE: u8 = 0x80;
+const OBSOLETE_TEXT_LAST_BYTE: u8 = 0xff;
+const STATUS_LINE_PARTS: usize = 3;
+const STATUS_CODE_DIGITS: usize = 3;
+const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
+const LINE_TERMINATOR_BYTES: usize = b"\r\n".len();
+
 /// Phase at which a finite exchange failed. No remote strings are retained.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum FiniteHttpFailure {
-    /// Request construction failed before network access.
+    /// Request construction failed before application request bytes were sent.
     #[error("author request is invalid")]
     Request,
     /// No application request was sent.
@@ -57,7 +65,7 @@ pub struct FiniteHttpReceipt {
     pub elapsed_milliseconds: u64,
 }
 
-impl core::fmt::Debug for FiniteHttpReceipt {
+impl ::core::fmt::Debug for FiniteHttpReceipt {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("FiniteHttpReceipt([redacted])")
     }
@@ -102,275 +110,19 @@ pub enum ArtifactHttpOutcome {
     },
 }
 
+#[path = "selected_author_http_artifact.rs"]
+mod artifact;
+
 impl SelectedAuthorTransport {
-    /// Streams a successful artifact response into private caller-owned staging.
-    /// The caller validates the command/slot manifest and reserves capacity
-    /// before calling. Sink writes must be bounded and must not publish content.
-    /// Non-200 responses remain refusals, never proof of artifact retirement.
-    pub async fn stream_artifact_http1(
-        &self,
-        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
-        submission: &crate::command_submission::Submission,
-        expected: &crate::artifact_download::ExpectedArtifact,
-        authentication: &RequestAuthentication,
-        sink: impl FnMut(&[u8]) -> Result<(), FiniteHttpFailure>,
-    ) -> Result<ArtifactHttpReceipt, FiniteHttpFailure> {
-        match self
-            .exchange_artifact_http1(identity, submission, expected, None, authentication, sink)
-            .await?
-        {
-            ArtifactHttpOutcome::Transferred(receipt) => Ok(receipt),
-            ArtifactHttpOutcome::Unavailable { .. } | ArtifactHttpOutcome::Unauthorized => {
-                Err(FiniteHttpFailure::Head)
-            }
-        }
-    }
-
-    /// Streams successful bytes or validates a closed unavailable response for
-    /// the independently derived artifact identifier. Neither branch publishes.
-    pub async fn artifact_http1(
-        &self,
-        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
-        submission: &crate::command_submission::Submission,
-        expected: &crate::artifact_download::ExpectedArtifact,
-        artifact_identifier: &str,
-        authentication: &RequestAuthentication,
-        sink: impl FnMut(&[u8]) -> Result<(), FiniteHttpFailure>,
-    ) -> Result<ArtifactHttpOutcome, FiniteHttpFailure> {
-        if artifact_identifier.is_empty() || artifact_identifier.len() > 128 {
-            return Err(FiniteHttpFailure::Request);
-        }
-        self.exchange_artifact_http1(
-            identity,
-            submission,
-            expected,
-            Some(artifact_identifier),
-            authentication,
-            sink,
-        )
-        .await
-    }
-
-    async fn exchange_artifact_http1(
-        &self,
-        identity: &slingshot_domain::operation_executor::ExecutionIdentity,
-        submission: &crate::command_submission::Submission,
-        expected: &crate::artifact_download::ExpectedArtifact,
-        artifact_identifier: Option<&str>,
-        authentication: &RequestAuthentication,
-        sink: impl FnMut(&[u8]) -> Result<(), FiniteHttpFailure>,
-    ) -> Result<ArtifactHttpOutcome, FiniteHttpFailure> {
-        self.require_submission(identity, submission).map_err(|_| FiniteHttpFailure::Request)?;
-        let media = crate::artifact_download::require_remote_slot(&expected.artifact_slot)
-            .map_err(|_| FiniteHttpFailure::Request)?;
-        if media != expected.media_type
-            || expected.artifact_digest.len() != 64
-            || !expected
-                .artifact_digest
-                .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-            || expected.byte_length
-                > slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
-                    .formula("maximum_individual_artifact_bytes")
-        {
-            return Err(FiniteHttpFailure::Request);
-        }
-        let request = encode_request(
-            self,
-            Method::GET,
-            &["bin", "slingshot", "agent", "artifact"],
-            &[
-                ("agent_operation_identifier", &submission.operation.agent_operation_identifier),
-                ("artifact_slot", &expected.artifact_slot),
-            ],
-            authentication,
-            &HeaderMap::new(),
-            b"",
-        )?;
-        let started = Instant::now();
-        let stream = self.connect().await.map_err(|_| FiniteHttpFailure::Connect)?;
-        Self::artifact_http1_on_stream(
-            stream,
-            &request,
-            started,
-            submission,
-            expected,
-            artifact_identifier,
-            sink,
-        )
-        .await
-    }
-
-    pub(crate) async fn artifact_http1_on_stream(
-        mut stream: SelectedAuthorStream,
-        request: &[u8],
-        started: Instant,
-        submission: &crate::command_submission::Submission,
-        expected: &crate::artifact_download::ExpectedArtifact,
-        artifact_identifier: Option<&str>,
-        mut sink: impl FnMut(&[u8]) -> Result<(), FiniteHttpFailure>,
-    ) -> Result<ArtifactHttpOutcome, FiniteHttpFailure> {
-        use sha2::Digest as _;
-        let deadlines = ExchangeDeadlines::embedded();
-        timeout(Duration::from_millis(deadlines.request_body_milliseconds), async {
-            stream.write_all(request).await?;
-            stream.flush().await
-        })
-        .await
-        .map_err(|_| FiniteHttpFailure::Write)?
-        .map_err(|_| FiniteHttpFailure::Write)?;
-        let (status, headers, framing) = timeout(
-            Duration::from_millis(deadlines.response_header_milliseconds),
-            read_head(&mut stream),
-        )
-        .await
-        .map_err(|_| FiniteHttpFailure::Head)??;
-        let mut response = Response::builder()
-            .status(status)
-            .version(Version::HTTP_11)
-            .body(Vec::new())
-            .map_err(|_| FiniteHttpFailure::Head)?;
-        *response.headers_mut() = headers;
-        let accepted = validate_collected_finite_response(CollectedFiniteResponse {
-            response,
-            framing_ambiguous: false,
-            trailer_section_present: false,
-            trailing_bytes: false,
-        })
-        .map_err(|_| FiniteHttpFailure::Head)?;
-        if status != 200 {
-            let artifact_identifier = artifact_identifier.ok_or(FiniteHttpFailure::Head)?;
-            if !matches!(status, 401 | 404 | 410)
-                || accepted.head.location.is_some()
-                || !crate::selected_author_submission::json_media_type(
-                    accepted.content_type.as_deref().unwrap_or(""),
-                )
-            {
-                return Err(FiniteHttpFailure::Head);
-            }
-            let contract = AuthorAgentTransportContract::embedded();
-            let limit = contract
-                .limit("maximum_finite_response_body_bytes")
-                .min(contract.limit("maximum_agent_protocol_document_bytes"));
-            let body = timeout(
-                Duration::from_millis(deadlines.finite_total_milliseconds),
-                read_framed_body(
-                    &mut stream,
-                    framing,
-                    limit,
-                    Duration::from_millis(deadlines.finite_idle_milliseconds),
-                ),
-            )
-            .await
-            .map_err(|_| FiniteHttpFailure::Body)??;
-            if status == 401 {
-                return Ok(ArtifactHttpOutcome::Unauthorized);
-            }
-            let evidence = crate::artifact_download::decode_artifact_unavailable(
-                status,
-                &body,
-                submission,
-                artifact_identifier,
-                &expected.artifact_slot,
-            )
-            .map_err(|_| FiniteHttpFailure::Body)?;
-            return Ok(ArtifactHttpOutcome::Unavailable {
-                evidence,
-                elapsed_milliseconds: u64::try_from(
-                    started.elapsed().as_nanos().div_ceil(1_000_000),
-                )
-                .unwrap_or(u64::MAX),
-            });
-        }
-        crate::artifact_download::require_streamable(
-            expected,
-            &crate::artifact_download::ArtifactResponseHead {
-                head: accepted.head,
-                content_type: accepted.content_type.ok_or(FiniteHttpFailure::Head)?,
-            },
-        )
-        .map_err(|_| FiniteHttpFailure::Head)?;
-        if matches!(framing, BodyFraming::Fixed(length) if length != expected.byte_length) {
-            return Err(FiniteHttpFailure::Head);
-        }
-        let contract = AuthorAgentTransportContract::embedded();
-        let idle =
-            Duration::from_millis(contract.limit("artifact_transfer_idle_timeout_milliseconds"));
-        let total =
-            Duration::from_millis(contract.limit("artifact_transfer_total_timeout_milliseconds"));
-        let mut received = 0_u64;
-        let mut hasher = sha2::Sha256::new();
-        let body_started = Instant::now();
-        timeout(total, async {
-            match framing {
-                BodyFraming::Fixed(length) => {
-                    stream_artifact_part(
-                        &mut stream,
-                        length,
-                        expected.byte_length,
-                        &mut received,
-                        &mut hasher,
-                        &mut sink,
-                        idle,
-                    )
-                    .await?
-                }
-                BodyFraming::Chunked => loop {
-                    let line = read_chunk_line(&mut stream, idle).await?;
-                    let length = decode_chunk_size(&line)?;
-                    if length == 0 {
-                        if !read_chunk_line(&mut stream, idle).await?.is_empty() {
-                            return Err(FiniteHttpFailure::Body);
-                        }
-                        break;
-                    }
-                    stream_artifact_part(
-                        &mut stream,
-                        length,
-                        expected.byte_length,
-                        &mut received,
-                        &mut hasher,
-                        &mut sink,
-                        idle,
-                    )
-                    .await?;
-                    if !read_chunk_line(&mut stream, idle).await?.is_empty() {
-                        return Err(FiniteHttpFailure::Body);
-                    }
-                },
-            }
-            let mut extra = [0_u8];
-            if timeout(idle, stream.read(&mut extra))
-                .await
-                .map_err(|_| FiniteHttpFailure::Body)?
-                .map_err(|_| FiniteHttpFailure::Body)?
-                != 0
-            {
-                return Err(FiniteHttpFailure::Body);
-            }
-            Ok::<(), FiniteHttpFailure>(())
-        })
-        .await
-        .map_err(|_| FiniteHttpFailure::Body)??;
-        let digest: String = hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
-        // A synchronous staging sink cannot be preempted by Tokio's timeout.
-        // Refuse an overdue transfer even if its final poll completed ready.
-        if body_started.elapsed() >= total
-            || received != expected.byte_length
-            || digest != expected.artifact_digest
-        {
-            return Err(FiniteHttpFailure::Body);
-        }
-        Ok(ArtifactHttpOutcome::Transferred(ArtifactHttpReceipt {
-            byte_length: received,
-            elapsed_milliseconds: u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000))
-                .unwrap_or(u64::MAX),
-        }))
-    }
-
     /// Sends one finite request below the selected author. The authentication
     /// value is borrowed for serialization and never included in diagnostics.
     /// Caller fields cannot override transport framing or authentication.
+    ///
+    /// # Errors
+    /// Returns a request or connection failure before sending, or a write,
+    /// response-head, or response-body failure during the bounded exchange.
+    /// A failure after writing can leave remote execution unknown; it does
+    /// not establish that the author rejected a state-changing request.
     pub async fn finite_http1(
         &self,
         method: Method,
@@ -384,6 +136,13 @@ impl SelectedAuthorTransport {
 
     /// Sends a bounded, ordered query under the selected context prefix.
     /// Values are encoded from UTF-8 exactly once; no caller-supplied URL is accepted.
+    ///
+    /// # Errors
+    /// Returns `Request` when the selected authentication, request fields, path,
+    /// query, or framing cannot be encoded within their bounds; `Connect` when
+    /// connection establishment fails; or the corresponding write/head/body
+    /// failure if the exchange cannot finish within its framing and deadlines.
+    /// Failures after writing do not establish remote nonexecution.
     pub async fn finite_http1_query(
         &self,
         method: Method,
@@ -403,6 +162,12 @@ impl SelectedAuthorTransport {
     /// possible encodings are checked before connecting; the selected codec
     /// must be valid before any HTTP bytes are sent. An unselected codec's
     /// encoding limit does not constrain the selected one. No retry occurs.
+    ///
+    /// # Errors
+    /// Returns `Request` when neither encoding is valid or the negotiated codec
+    /// cannot encode this request, `Connect` if transport negotiation fails,
+    /// or a write/head/body failure for a refused or overdue protocol exchange.
+    /// Once writing begins, refusal is not evidence of remote nonexecution.
     pub async fn finite_negotiated_query(
         &self,
         method: Method,
@@ -442,8 +207,10 @@ impl SelectedAuthorTransport {
         .await?;
         Ok(FiniteHttpReceipt {
             response,
-            elapsed_milliseconds: u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000))
-                .unwrap_or(u64::MAX),
+            elapsed_milliseconds: u64::try_from(
+                started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND),
+            )
+            .unwrap_or(u64::MAX),
         })
     }
 
@@ -503,7 +270,8 @@ impl SelectedAuthorTransport {
         .map_err(|_| FiniteHttpFailure::Body)?;
         // Round up: rounding down would overstate remaining retention.
         let nanos = started.elapsed().as_nanos();
-        let elapsed_milliseconds = u64::try_from(nanos.div_ceil(1_000_000)).unwrap_or(u64::MAX);
+        let elapsed_milliseconds =
+            u64::try_from(nanos.div_ceil(NANOSECONDS_PER_MILLISECOND)).unwrap_or(u64::MAX);
         Ok(FiniteHttpReceipt { response, elapsed_milliseconds })
     }
 }
@@ -551,37 +319,6 @@ pub(crate) async fn read_framed_body(
     Ok(body)
 }
 
-async fn stream_artifact_part(
-    stream: &mut SelectedAuthorStream,
-    length: u64,
-    allowed: u64,
-    received: &mut u64,
-    hasher: &mut sha2::Sha256,
-    sink: &mut impl FnMut(&[u8]) -> Result<(), FiniteHttpFailure>,
-    idle: Duration,
-) -> Result<(), FiniteHttpFailure> {
-    use sha2::Digest as _;
-    let end = received
-        .checked_add(length)
-        .filter(|end| *end <= allowed)
-        .ok_or(FiniteHttpFailure::Body)?;
-    let mut buffer = [0_u8; 8192];
-    while *received < end {
-        let wanted = usize::try_from(end - *received).unwrap_or(buffer.len()).min(buffer.len());
-        let count = timeout(idle, stream.read(&mut buffer[..wanted]))
-            .await
-            .map_err(|_| FiniteHttpFailure::Body)?
-            .map_err(|_| FiniteHttpFailure::Body)?;
-        if count == 0 {
-            return Err(FiniteHttpFailure::Body);
-        }
-        sink(&buffer[..count])?;
-        hasher.update(&buffer[..count]);
-        *received += count as u64;
-    }
-    Ok(())
-}
-
 async fn read_body_part(
     stream: &mut (impl AsyncRead + Unpin),
     body: &mut Vec<u8>,
@@ -591,7 +328,7 @@ async fn read_body_part(
 ) -> Result<(), FiniteHttpFailure> {
     let end = (body.len() as u64)
         .checked_add(length)
-        .filter(|n| *n <= limit)
+        .filter(|length| *length <= limit)
         .ok_or(FiniteHttpFailure::Body)?;
     let mut position = body.len();
     body.resize(usize::try_from(end).map_err(|_| FiniteHttpFailure::Body)?, 0);
@@ -617,7 +354,7 @@ pub(crate) fn decode_chunk_size(line: &[u8]) -> Result<u64, FiniteHttpFailure> {
     }
     let length = u64::from_str_radix(
         std::str::from_utf8(&line[..digits]).map_err(|_| FiniteHttpFailure::Body)?,
-        16,
+        HEXADECIMAL_RADIX,
     )
     .map_err(|_| FiniteHttpFailure::Body)?;
     let mut rest = &line[digits..];
@@ -635,24 +372,7 @@ pub(crate) fn decode_chunk_size(line: &[u8]) -> Result<u64, FiniteHttpFailure> {
         if let Some(value) = after_whitespace.strip_prefix(b"=") {
             rest = skip_chunk_whitespace(value);
             if let Some(quoted) = rest.strip_prefix(b"\"") {
-                rest = quoted;
-                loop {
-                    let (&byte, remaining) = rest.split_first().ok_or(FiniteHttpFailure::Body)?;
-                    rest = remaining;
-                    match byte {
-                        b'"' => break,
-                        b'\\' => {
-                            let (&escaped, remaining) =
-                                rest.split_first().ok_or(FiniteHttpFailure::Body)?;
-                            if !matches!(escaped, b'\t' | b' '..=b'~' | 0x80..=0xff) {
-                                return Err(FiniteHttpFailure::Body);
-                            }
-                            rest = remaining;
-                        }
-                        b'\t' | b' ' | b'!' | b'#'..=b'[' | b']'..=b'~' | 0x80..=0xff => {}
-                        _ => return Err(FiniteHttpFailure::Body),
-                    }
-                }
+                rest = skip_quoted_chunk_value(quoted)?;
             } else {
                 let value = rest.iter().take_while(|byte| token(byte)).count();
                 if value == 0 {
@@ -669,9 +389,60 @@ fn skip_chunk_whitespace(bytes: &[u8]) -> &[u8] {
     &bytes[bytes.iter().take_while(|byte| matches!(byte, b' ' | b'\t')).count()..]
 }
 
+// The opening quote has already been consumed. Validate through the closing
+// quote and return only the suffix; extension metadata is never retained.
+fn skip_quoted_chunk_value(mut rest: &[u8]) -> Result<&[u8], FiniteHttpFailure> {
+    loop {
+        let (&byte, remaining) = rest.split_first().ok_or(FiniteHttpFailure::Body)?;
+        rest = remaining;
+        match byte {
+            b'"' => return Ok(rest),
+            b'\\' => {
+                let (&escaped, remaining) = rest.split_first().ok_or(FiniteHttpFailure::Body)?;
+                if !matches!(escaped, b'\t' | b' '..=b'~' | OBSOLETE_TEXT_FIRST_BYTE..=OBSOLETE_TEXT_LAST_BYTE)
+                {
+                    return Err(FiniteHttpFailure::Body);
+                }
+                rest = remaining;
+            }
+            b'\t'
+            | b' '
+            | b'!'
+            | b'#'..=b'['
+            | b']'..=b'~'
+            | OBSOLETE_TEXT_FIRST_BYTE..=OBSOLETE_TEXT_LAST_BYTE => {}
+            _ => return Err(FiniteHttpFailure::Body),
+        }
+    }
+}
+
 #[cfg(test)]
 mod chunk_tests {
     use super::decode_chunk_size;
+
+    #[test]
+    fn quoted_extension_byte_classes_preserve_the_following_extension() {
+        for byte in u8::MIN..=u8::MAX {
+            for escaped in [false, true] {
+                let mut line = b"0;value=\"".to_vec();
+                if escaped {
+                    line.push(b'\\');
+                }
+                line.push(byte);
+                line.extend_from_slice(b"\";next=valid");
+                let accepted = if escaped {
+                    matches!(byte, b'\t' | b' '..=b'~' | 0x80..=0xff)
+                } else {
+                    matches!(byte, b'\t' | b' ' | b'!' | b'#'..=b'[' | b']'..=b'~' | 0x80..=0xff)
+                };
+                assert_eq!(
+                    decode_chunk_size(&line).is_ok(),
+                    accepted,
+                    "{byte:#x}, escaped={escaped}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn extensions_are_validated_and_ignored_without_changing_the_size() {
@@ -733,7 +504,7 @@ pub(crate) async fn read_chunk_line(
             .map_err(|_| FiniteHttpFailure::Body)?;
         line.push(byte);
         if line.ends_with(b"\r\n") {
-            line.truncate(line.len() - 2);
+            line.truncate(line.len() - LINE_TERMINATOR_BYTES);
             return Ok(line);
         }
         if byte == b'\n' {
@@ -781,6 +552,11 @@ pub(crate) fn prepare_request_uri(
     if body.len() as u64 > limit {
         return Err(FiniteHttpFailure::Request);
     }
+    require_caller_fields(fields)?;
+    Ok(uri)
+}
+
+fn require_caller_fields(fields: &HeaderMap) -> Result<(), FiniteHttpFailure> {
     for name in fields.keys() {
         if [
             "host",
@@ -801,7 +577,7 @@ pub(crate) fn prepare_request_uri(
             return Err(FiniteHttpFailure::Request);
         }
     }
-    Ok(uri)
+    Ok(())
 }
 
 pub(crate) fn encode_request(
@@ -841,19 +617,7 @@ pub(crate) async fn read_head(
     let bounds = HeadBounds::embedded();
     let mut charged = 0_u64;
     let status = read_line(stream, bounds.head_bytes, &mut charged, bounds.head_bytes).await?;
-    let text = std::str::from_utf8(&status).map_err(|_| FiniteHttpFailure::Head)?;
-    let mut words = text.splitn(3, ' ');
-    if words.next() != Some("HTTP/1.1") {
-        return Err(FiniteHttpFailure::Head);
-    }
-    let code = words.next().ok_or(FiniteHttpFailure::Head)?;
-    if code.len() != 3 || !code.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(FiniteHttpFailure::Head);
-    }
-    let status: u16 = code.parse().map_err(|_| FiniteHttpFailure::Head)?;
-    if !(200..600).contains(&status) || (300..400).contains(&status) {
-        return Err(FiniteHttpFailure::Head);
-    }
+    let status = decode_response_status(&status)?;
     let mut headers = HeaderMap::new();
     let mut reader = HeadReader::new(bounds);
     loop {
@@ -861,7 +625,7 @@ pub(crate) async fn read_head(
         if line.is_empty() {
             break;
         }
-        let colon = line.iter().position(|b| *b == b':').ok_or(FiniteHttpFailure::Head)?;
+        let colon = line.iter().position(|byte| *byte == b':').ok_or(FiniteHttpFailure::Head)?;
         let name = HeaderName::from_bytes(&line[..colon]).map_err(|_| FiniteHttpFailure::Head)?;
         let value = std::str::from_utf8(&line[colon + 1..])
             .map_err(|_| FiniteHttpFailure::Head)?
@@ -869,6 +633,28 @@ pub(crate) async fn read_head(
         reader.read_field(name.as_str(), value).map_err(|_| FiniteHttpFailure::Head)?;
         headers.append(name, HeaderValue::from_str(value).map_err(|_| FiniteHttpFailure::Head)?);
     }
+    let framing = response_body_framing(&headers)?;
+    Ok((status, headers, framing))
+}
+
+fn decode_response_status(line: &[u8]) -> Result<u16, FiniteHttpFailure> {
+    let text = std::str::from_utf8(line).map_err(|_| FiniteHttpFailure::Head)?;
+    let mut words = text.splitn(STATUS_LINE_PARTS, ' ');
+    if words.next() != Some("HTTP/1.1") {
+        return Err(FiniteHttpFailure::Head);
+    }
+    let code = words.next().ok_or(FiniteHttpFailure::Head)?;
+    if code.len() != STATUS_CODE_DIGITS || !code.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(FiniteHttpFailure::Head);
+    }
+    let status = StatusCode::from_bytes(code.as_bytes()).map_err(|_| FiniteHttpFailure::Head)?;
+    if !(status.is_success() || status.is_client_error() || status.is_server_error()) {
+        return Err(FiniteHttpFailure::Head);
+    }
+    Ok(status.as_u16())
+}
+
+fn response_body_framing(headers: &HeaderMap) -> Result<BodyFraming, FiniteHttpFailure> {
     if headers.contains_key("upgrade") {
         return Err(FiniteHttpFailure::Head);
     }
@@ -881,17 +667,17 @@ pub(crate) async fn read_head(
         {
             return Err(FiniteHttpFailure::Head);
         }
-        return Ok((status, headers, BodyFraming::Chunked));
+        return Ok(BodyFraming::Chunked);
     }
     let [length] = lengths.as_slice() else {
         return Err(FiniteHttpFailure::Head);
     };
     let text = length.to_str().map_err(|_| FiniteHttpFailure::Head)?;
-    if text.is_empty() || !text.bytes().all(|b| b.is_ascii_digit()) {
+    if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(FiniteHttpFailure::Head);
     }
     let length = text.parse().map_err(|_| FiniteHttpFailure::Head)?;
-    Ok((status, headers, BodyFraming::Fixed(length)))
+    Ok(BodyFraming::Fixed(length))
 }
 
 async fn read_line(
@@ -909,7 +695,7 @@ async fn read_line(
         *charged += 1;
         line.push(byte);
         if line.ends_with(b"\r\n") {
-            line.truncate(line.len() - 2);
+            line.truncate(line.len() - LINE_TERMINATOR_BYTES);
             return Ok(line);
         }
         if byte == b'\n' {
@@ -929,10 +715,7 @@ async fn read_field_line(
     charged: &mut u64,
 ) -> Result<Vec<u8>, FiniteHttpFailure> {
     let mut line = Vec::new();
-    let mut in_value = false;
-    let mut value_started = false;
-    let mut decoded = 0_u64;
-    let mut pending_whitespace = 0_u64;
+    let mut accounting = FieldByteAccounting::default();
     let mut carriage_return = false;
     loop {
         if *charged >= bounds.head_bytes {
@@ -950,23 +733,39 @@ async fn read_field_line(
         if byte == b'\n' || fields as u64 >= bounds.field_count {
             return Err(FiniteHttpFailure::Head);
         }
-        if !in_value && byte == b':' {
-            in_value = true;
-        } else if in_value && matches!(byte, b' ' | b'\t') {
-            if value_started {
-                pending_whitespace =
-                    pending_whitespace.checked_add(1).ok_or(FiniteHttpFailure::Head)?;
+        accounting.observe(byte, bounds.field_bytes)?;
+        line.push(byte);
+    }
+}
+
+#[derive(Default)]
+struct FieldByteAccounting {
+    in_value: bool,
+    value_started: bool,
+    decoded: u64,
+    pending_whitespace: u64,
+}
+
+impl FieldByteAccounting {
+    fn observe(&mut self, byte: u8, maximum: u64) -> Result<(), FiniteHttpFailure> {
+        if !self.in_value && byte == b':' {
+            self.in_value = true;
+        } else if self.in_value && matches!(byte, b' ' | b'\t') {
+            if self.value_started {
+                self.pending_whitespace =
+                    self.pending_whitespace.checked_add(1).ok_or(FiniteHttpFailure::Head)?;
             }
         } else {
-            decoded = decoded
-                .checked_add(pending_whitespace)
+            self.decoded = self
+                .decoded
+                .checked_add(self.pending_whitespace)
                 .and_then(|count| count.checked_add(1))
-                .filter(|count| *count <= bounds.field_bytes)
+                .filter(|count| *count <= maximum)
                 .ok_or(FiniteHttpFailure::Head)?;
-            pending_whitespace = 0;
-            value_started |= in_value;
+            self.pending_whitespace = 0;
+            self.value_started |= self.in_value;
         }
-        line.push(byte);
+        Ok(())
     }
 }
 
@@ -974,8 +773,34 @@ async fn read_field_line(
 mod response_field_tests {
     use super::*;
 
+    #[test]
+    fn finite_status_categories_and_lexical_shape_are_exact() {
+        const THREE_DIGIT_STATUS_SPACE: u16 = 1000;
+        for status in 0..THREE_DIGIT_STATUS_SPACE {
+            let line = format!("HTTP/1.1 {status:03} reason");
+            let accepted = matches!(status, 200..=299 | 400..=599);
+            assert_eq!(decode_response_status(line.as_bytes()).is_ok(), accepted, "{status}");
+        }
+        for line in [
+            &b"HTTP/1.0 200 OK"[..],
+            b"HTTP/2 200 OK",
+            b"HTTP/1.1 20 OK",
+            b"HTTP/1.1 0200 OK",
+            b"HTTP/1.1 +200 OK",
+            b"HTTP/1.1 2x0 OK",
+            b"HTTP/1.1  200 OK",
+            b"HTTP/1.1\t200 OK",
+            b"HTTP/1.1 \xff00 OK",
+        ] {
+            assert!(decode_response_status(line).is_err(), "{line:?}");
+        }
+    }
+
     #[tokio::test]
     async fn decoded_fields_and_raw_heads_have_independent_incremental_limits() {
+        const FIELD_BYTES: u64 = 8;
+        const FIELD_COUNT: u64 = 2;
+        const TEST_TIMEOUT_SECONDS: u64 = 5;
         // Refusal cases intentionally omit the line ending. The peer waits
         // for client closure, proving rejection does not wait for more bytes.
         for (wire, fields, raw_limit, expected) in [
@@ -1010,7 +835,11 @@ mod response_field_tests {
                 let mut charged = 0;
                 let result = read_field_line(
                     &mut stream,
-                    HeadBounds { field_bytes: 8, field_count: 2, head_bytes: raw_limit },
+                    HeadBounds {
+                        field_bytes: FIELD_BYTES,
+                        field_count: FIELD_COUNT,
+                        head_bytes: raw_limit,
+                    },
                     fields,
                     &mut charged,
                 )
@@ -1021,7 +850,11 @@ mod response_field_tests {
                 }
                 assert!(charged <= raw_limit);
             };
-            timeout(Duration::from_secs(5), async { tokio::join!(client, peer) }).await.unwrap();
+            timeout(Duration::from_secs(TEST_TIMEOUT_SECONDS), async {
+                tokio::join!(client, peer)
+            })
+            .await
+            .unwrap();
         }
     }
 }

@@ -332,6 +332,23 @@ fn an_event_for_work_this_daemon_does_not_hold_moves_no_job() {
     assert_eq!(advanced.cursor().map(EventStreamCursor::as_text), Some("cursor-0001"));
 }
 
+/// Consecutive agent positions must advance even across decimal-width changes.
+#[test]
+fn agent_decimal_cursor_boundaries_advance_the_subscription() {
+    for (earlier, later) in [("7:9", "7:10"), ("7:99", "7:100")] {
+        let (_, held) = SubscriptionFold::opened(SUBSCRIPTION, GENERATION)
+            .folded(&fact(earlier, "contents-earlier"))
+            .unwrap();
+        let (disposition, advanced) = held.folded(&fact(later, "contents-later")).unwrap();
+        assert_eq!(
+            disposition,
+            SubscriptionDisposition::Advanced,
+            "agent position {later} must advance past {earlier}"
+        );
+        assert_eq!(advanced.cursor().map(EventStreamCursor::as_text), Some(later));
+    }
+}
+
 /// Returns one subscription fact at `cursor`.
 fn fact(cursor: &str, canonical_digest: &str) -> SubscriptionFact {
     SubscriptionFact {

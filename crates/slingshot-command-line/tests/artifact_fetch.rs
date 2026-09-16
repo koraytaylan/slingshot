@@ -15,8 +15,6 @@
 //! reaches. What is faked is the daemon on the other end, which is the one
 //! boundary a suite cannot have.
 
-#![allow(missing_docs)]
-
 use std::path::{Path, PathBuf};
 
 use sha2::Digest as _;

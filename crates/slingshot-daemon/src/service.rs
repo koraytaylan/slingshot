@@ -19,6 +19,10 @@ use crate::ownership::DaemonOwnership;
 use crate::runtime_builder::DurableRuntime;
 use tokio_util::sync::CancellationToken;
 
+mod operation_answer;
+mod scheduler;
+use scheduler::scheduler_loop;
+
 /// Keep SQLite behind a mutex: connections are movable, but not shareable.
 /// The runtime retains its namespace lock until all runtime resources close.
 #[derive(Debug)]
@@ -152,7 +156,7 @@ impl DaemonService {
         self.with_ownership(|ownership| ownership.readiness_nonce().to_owned())
     }
 
-    fn with_ownership<T>(&self, read: impl FnOnce(&DaemonOwnership) -> T) -> T {
+    fn with_ownership<Answer>(&self, read: impl FnOnce(&DaemonOwnership) -> Answer) -> Answer {
         match &self.lifetime {
             ServiceLifetime::Control(ownership) => read(ownership),
             ServiceLifetime::Runtime(runtime) => {
@@ -207,271 +211,14 @@ impl DaemonService {
         }
     }
 
-    fn answer_operation(&self, payload: &[u8]) -> ServiceOutcome {
-        let ServiceLifetime::Runtime(runtime) = &self.lifetime else {
-            return self.render_operation(OperationResponse::ExecutorUnavailable);
-        };
-        let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let target = guard.context().target();
-        let served = crate::operation_submission::ServedTarget {
-            author_target_identity_digest: target.author_target_identity_digest.clone(),
-            selected_environment_revision: target.selected_environment_revision.clone(),
-            daemon_runtime_contract_digest: target.daemon_runtime_contract_digest.clone(),
-            execution_available: true,
-        };
-        let version = slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
-            .operation_protocol_version as u32;
-        let bound = match crate::operation_dispatch::BoundRequest::decode(
-            &self.contract,
-            &served,
-            &[version],
-            payload,
-        ) {
-            Ok(bound) => bound,
-            Err(response) => return self.render_operation(response),
-        };
-        if matches!(bound.request(), OperationRequest::ArtifactRead { .. }) {
-            return match bound.artifact(guard.operations(), guard.installation(), guard.artifacts())
-            {
-                Ok(Some(stream)) => self.render_operation_stream(stream),
-                Ok(None) => self.render_operation(OperationResponse::MalformedFrame {
-                    detail: "the artifact request is malformed".to_owned(),
-                }),
-                Err(response) => self.render_operation(response),
-            };
-        }
-        if matches!(bound.request(), OperationRequest::MaintenanceResultRead { .. }) {
-            return match bound.maintenance_read(guard.database(), guard.artifacts()) {
-                Ok(Some(stream)) => self.render_operation_stream(stream),
-                Ok(None) => self.render_operation(OperationResponse::MalformedFrame {
-                    detail: "the maintenance request is malformed".to_owned(),
-                }),
-                Err(response) => self.render_operation(response),
-            };
-        }
-        if matches!(bound.request(), OperationRequest::Wait { .. }) {
-            let response = match bound.wait(guard.operations(), guard.waiters()) {
-                Ok(Some(mut waiter)) => match waiter.take_ready() {
-                    Some(crate::operation_wait::WaitUpdate::Progress { detail, revision }) => {
-                        OperationResponse::Progress {
-                            detail,
-                            operation_identifier: bound
-                                .request()
-                                .operation_identifier()
-                                .unwrap_or_default()
-                                .to_owned(),
-                            operation_revision: revision,
-                        }
-                    }
-                    Some(crate::operation_wait::WaitUpdate::RecoveryRequired { revision }) => {
-                        OperationResponse::Status {
-                            lifecycle_state: "recovery_required".to_owned(),
-                            operation_identifier: bound
-                                .request()
-                                .operation_identifier()
-                                .unwrap_or_default()
-                                .to_owned(),
-                            operation_revision: revision,
-                        }
-                    }
-                    Some(crate::operation_wait::WaitUpdate::Resumed { revision }) => {
-                        OperationResponse::Status {
-                            lifecycle_state: "resumed".to_owned(),
-                            operation_identifier: bound
-                                .request()
-                                .operation_identifier()
-                                .unwrap_or_default()
-                                .to_owned(),
-                            operation_revision: revision,
-                        }
-                    }
-                    Some(crate::operation_wait::WaitUpdate::Terminal { revision }) => bound
-                        .result(guard.operations(), guard.installation())
-                        .unwrap_or(OperationResponse::Status {
-                            lifecycle_state: "terminal".to_owned(),
-                            operation_identifier: bound
-                                .request()
-                                .operation_identifier()
-                                .unwrap_or_default()
-                                .to_owned(),
-                            operation_revision: revision,
-                        }),
-                    None => OperationResponse::InternalFailure {
-                        detail: "the wait observer was closed before an update was available"
-                            .to_owned(),
-                    },
-                },
-                Ok(None) => OperationResponse::MalformedFrame {
-                    detail: "the wait request is malformed".to_owned(),
-                },
-                Err(response) => response,
-            };
-            return self.render_operation(response);
-        }
-        let response = match bound.request() {
-            OperationRequest::Execute { .. } => {
-                let prepared = match bound.prepare_admission(guard.installation()) {
-                    Ok(Some(prepared)) => prepared,
-                    Ok(None) => {
-                        return self.render_operation(OperationResponse::MalformedFrame {
-                            detail: "the operation request is malformed".to_owned(),
-                        });
-                    }
-                    Err(response) => return self.render_operation(response),
-                };
-                let active = std::collections::BTreeSet::new();
-                let now = unix_milliseconds();
-                prepared.persist_scheduled(guard.operations(), &active, now).unwrap_or(
-                    OperationResponse::InternalFailure {
-                        detail: "the operation could not be admitted".to_owned(),
-                    },
-                )
-            }
-            OperationRequest::OperationStatus { .. } => {
-                bound.status(guard.operations()).unwrap_or(OperationResponse::MalformedFrame {
-                    detail: "the operation request is malformed".to_owned(),
-                })
-            }
-            OperationRequest::ListOperations { .. } => {
-                bound.list(guard.operations()).unwrap_or(OperationResponse::MalformedFrame {
-                    detail: "the operation request is malformed".to_owned(),
-                })
-            }
-            OperationRequest::Result { .. } => bound
-                .result(guard.operations(), guard.installation())
-                .unwrap_or(OperationResponse::MalformedFrame {
-                    detail: "the operation request is malformed".to_owned(),
-                }),
-            OperationRequest::ResumeOperationRecovery { .. } => {
-                bound.resume(guard.operations(), unix_milliseconds()).ok().flatten().unwrap_or(
-                    OperationResponse::InternalFailure {
-                        detail: "the recovery request could not be applied".to_owned(),
-                    },
-                )
-            }
-            OperationRequest::MaintenanceResultMetadata { .. } => bound
-                .maintenance_metadata(guard.database())
-                .unwrap_or(OperationResponse::MalformedFrame {
-                    detail: "the maintenance request is malformed".to_owned(),
-                }),
-            OperationRequest::TerminalMaintenancePreview {
-                before_unix_milliseconds,
-                maximum_operations,
-                ..
-            } => {
-                let allowed =
-                    slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
-                        .limit("maximum_terminal_maintenance_operations");
-                if *maximum_operations == 0 || u64::from(*maximum_operations) > allowed {
-                    return self.render_operation(OperationResponse::MalformedFrame {
-                        detail: "the maintenance preview bound is outside the runtime limit"
-                            .to_owned(),
-                    });
-                }
-                match slingshot_storage::maintenance::preview(
-                    guard.database(),
-                    &target.author_target_identity_digest,
-                    *before_unix_milliseconds,
-                    u64::from(*maximum_operations),
-                ) {
-                    Ok(manifest) => {
-                        let digest = manifest.digest();
-                        let rendered = serde_json::to_value(manifest.clone())
-                            .unwrap_or(serde_json::Value::Null);
-                        self.reviewed_maintenance
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .insert(digest.clone(), manifest);
-                        OperationResponse::MaintenancePreview {
-                            manifest: rendered,
-                            reviewed_manifest_digest: digest,
-                        }
-                    }
-                    Err(_) => OperationResponse::InternalFailure {
-                        detail: "the maintenance preview could not be read".to_owned(),
-                    },
-                }
-            }
-            OperationRequest::TerminalMaintenanceApply { reviewed_manifest_digest, .. } => {
-                let reviewed = self
-                    .reviewed_maintenance
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .get(reviewed_manifest_digest)
-                    .cloned();
-                let Some(reviewed) = reviewed else {
-                    return self.render_operation(OperationResponse::InternalFailure { detail: "the reviewed maintenance manifest is unavailable; request a new preview".to_owned() });
-                };
-                match slingshot_storage::maintenance::apply(
-                    guard.database(),
-                    &reviewed,
-                    unix_milliseconds(),
-                ) {
-                    Ok(slingshot_storage::maintenance::ApplyOutcome::Applied(receipt)) => {
-                        let result =
-                            slingshot_storage::maintenance_results::result_identifiers_for_receipt(
-                                guard.database(),
-                                &target.author_target_identity_digest,
-                                &receipt.application_receipt_identifier,
-                            )
-                            .ok()
-                            .and_then(|mut values| {
-                                if values.len() == 1 { values.pop() } else { None }
-                            });
-                        self.reviewed_maintenance
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .remove(reviewed_manifest_digest);
-                        OperationResponse::MaintenanceApplied {
-                            application_receipt_identifier: receipt.application_receipt_identifier,
-                            maintenance_result_identifier: result
-                                .unwrap_or_else(|| reviewed_manifest_digest.clone()),
-                        }
-                    }
-                    Ok(slingshot_storage::maintenance::ApplyOutcome::Replayed(receipt)) => {
-                        let result =
-                            slingshot_storage::maintenance_results::result_identifiers_for_receipt(
-                                guard.database(),
-                                &target.author_target_identity_digest,
-                                &receipt.application_receipt_identifier,
-                            )
-                            .ok()
-                            .and_then(|mut values| {
-                                if values.len() == 1 { values.pop() } else { None }
-                            });
-                        self.reviewed_maintenance
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .remove(reviewed_manifest_digest);
-                        OperationResponse::MaintenanceReplayed {
-                            application_receipt_identifier: receipt.application_receipt_identifier,
-                            maintenance_result_identifier: result
-                                .unwrap_or_else(|| reviewed_manifest_digest.clone()),
-                        }
-                    }
-                    Err(_) => OperationResponse::InternalFailure {
-                        detail:
-                            "the reviewed maintenance manifest no longer matches retained state"
-                                .to_owned(),
-                    },
-                }
-            }
-            OperationRequest::Wait { .. }
-            | OperationRequest::ArtifactRead { .. }
-            | OperationRequest::MaintenanceResultRead { .. } => {
-                OperationResponse::InternalFailure {
-                    detail:
-                        "this operation method requires its streaming or maintenance coordinator"
-                            .to_owned(),
-                }
-            }
-        };
-        self.render_operation(response)
-    }
-
     /// Holds a bound wait observer until the next durable update or caller/root
     /// cancellation. The runtime mutex is released before awaiting; the waiter
     /// registry, not a mutex guard, owns the observation lifetime.
+    ///
+    /// # Errors
+    /// Returns a protocol refusal when no runtime is available, decoding or
+    /// target binding fails, the wait cannot be registered, or cancellation
+    /// closes the observer before a durable update.
     pub async fn wait_for_update(
         &self,
         payload: &[u8],
@@ -549,9 +296,9 @@ impl DaemonService {
         ServiceOutcome::Respond(frame)
     }
 
-    fn render_operation_stream<I>(&self, stream: I) -> ServiceOutcome
+    fn render_operation_stream<Responses>(&self, stream: Responses) -> ServiceOutcome
     where
-        I: IntoIterator<Item = OperationResponse>,
+        Responses: IntoIterator<Item = OperationResponse>,
     {
         let frames = stream
             .into_iter()
@@ -695,142 +442,6 @@ fn unix_milliseconds() -> u64 {
         .ok()
         .and_then(|duration| u64::try_from(duration.as_millis()).ok())
         .unwrap_or(u64::MAX)
-}
-
-/// Runs one process-local scheduler over the durable queue. The runtime mutex
-/// is held while an invocation runs because its SQLite connections are
-/// intentionally non-shareable; this preserves the single-owner invariant and
-/// still lets the local server acknowledge admission immediately.
-async fn scheduler_loop(
-    runtime: std::sync::Arc<std::sync::Mutex<DurableRuntime>>,
-    shutdown: CancellationToken,
-) {
-    static NEXT_FENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-    let interval = std::time::Duration::from_millis(50);
-    loop {
-        if shutdown.is_cancelled() {
-            return;
-        }
-        let fence = NEXT_FENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed).max(1);
-        let now = unix_milliseconds();
-        let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let lease = now.saturating_add(
-            slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded()
-                .limit("worker_execution_lease_milliseconds"),
-        );
-        let claim = match guard.claim_next_scheduled_operation(fence, lease, now) {
-            Ok(claim) => claim,
-            Err(_) => {
-                let _ = guard.diagnostics().record("scheduler claim failed");
-                drop(guard);
-                tokio::time::sleep(interval).await;
-                continue;
-            }
-        };
-        let Some(claim) = claim else {
-            drop(guard);
-            tokio::time::sleep(interval).await;
-            continue;
-        };
-        let target = guard.context().target();
-        let input = match guard.operations().read_execution_input(
-            &target.author_target_identity_digest,
-            &claim.operation_identifier,
-        ) {
-            Ok(Some(input)) => input,
-            _ => {
-                let _ = guard.diagnostics().record("scheduler input read failed");
-                drop(guard);
-                continue;
-            }
-        };
-        let attempt = input
-            .summary
-            .record
-            .outstanding_recovery
-            .as_ref()
-            .map_or(1, |recovery| recovery.attempt_count.saturating_add(1));
-        let identity = slingshot_domain::operation_executor::ExecutionIdentity {
-            attempt,
-            author_target_identity_digest: input.summary.author_target_identity_digest.clone(),
-            selected_environment_revision: input.summary.selected_environment_revision.clone(),
-            operation_identifier: input.summary.operation_identifier.clone(),
-        };
-        let generation = slingshot_domain::agent_identity::AgentEventStoreGeneration::first();
-        let subscription = slingshot_domain::agent_identity::DaemonSubscriptionIdentifier::derive(
-            guard.installation().as_text(),
-            &identity.author_target_identity_digest,
-            &identity.selected_environment_revision,
-            generation,
-        );
-        let _ = guard.subscriptions().open_subscription(
-            &identity.author_target_identity_digest,
-            subscription.as_text(),
-            generation.value(),
-            now,
-        );
-        let expected = slingshot_agent_protocol::wire_contract::ExpectedProvenance {
-            canonical_json_contract_digest:
-                slingshot_domain::command::schema::canonical_contract_digest(),
-            command_contract:
-                match slingshot_domain::selected_command_contract_identity::SelectedCommandContractIdentity::installed(
-                    &input.summary.command_wire_name,
-                ) {
-                    Ok(contract) => contract,
-                    Err(_) => {
-                        drop(guard);
-                        continue;
-                    }
-                },
-            transport_contract_digest:
-                slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded_digest(),
-        };
-        let operation = slingshot_agent_protocol::identity::WireOperationIdentity::of(
-            &identity.author_target_identity_digest,
-            &identity.selected_environment_revision,
-            &identity.operation_identifier,
-            generation,
-        );
-        let Ok(submission) = slingshot_agent_connection::command_submission::Submission::build(
-            &expected,
-            operation,
-            subscription.as_text(),
-            &input.canonical_command,
-            slingshot_agent_connection::command_submission::ExpectedArtifactManifest::empty(),
-        ) else {
-            drop(guard);
-            continue;
-        };
-        struct NoopProgress;
-        impl slingshot_domain::operation_executor::ProgressPort for NoopProgress {
-            fn report(&self, _detail: &str) {}
-        }
-        let outcome = tokio::select! {
-            biased;
-            _ = shutdown.cancelled() => return,
-            outcome = guard.execute_retained_with_claim(&identity, submission, &NoopProgress, fence, now) => outcome,
-        };
-        if let Ok(outcome) = outcome {
-            let _settled = guard
-                .operations()
-                .read(&identity.author_target_identity_digest, &identity.operation_identifier)
-                .ok()
-                .flatten()
-                .map_or(Err(slingshot_storage::operation_repository::RepositoryFailure::NoSuchOperation {
-                    identifier: identity.operation_identifier.clone(),
-                }), |current| {
-                    guard.settle_execution_with_scheduler_fence(
-                        &current,
-                        &outcome,
-                        unix_milliseconds(),
-                        fence,
-                    )
-                });
-        } else {
-            let _ = guard.diagnostics().record("scheduler execution refused");
-        }
-        drop(guard);
-    }
 }
 
 impl Drop for DaemonService {

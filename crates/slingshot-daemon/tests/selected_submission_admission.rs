@@ -1,5 +1,11 @@
 //! Product admission ordering across a real selected-author socket and SQLite.
 
+#[path = "selected_submission_admission/scheduler_responsiveness.rs"]
+mod scheduler_responsiveness;
+
+#[path = "selected_submission_admission/high_water_fixture.rs"]
+mod high_water_fixture;
+
 const DIGEST_HEX_CHARACTERS: usize = 64;
 const RECOVERY_OBSERVED_AT: u64 = 2000;
 const COMPLETE_PROGRESS_PERCENT: u64 = 100;
@@ -1043,7 +1049,10 @@ async fn selected_live_events_commit_only_the_believed_prefix() {
                             assert!(request.len() <= 8192);
                         }
                     }
-                    let route = "/aem/bin/slingshot/agent/events?agent_event_store_generation=7&daemon_subscription_identifier=subscription-one";
+                    let route = format!(
+                        "/aem/bin/slingshot/agent/events?agent_event_store_generation=7&agent_operation_identifier={}&daemon_subscription_identifier=subscription-one",
+                        submission.operation.agent_operation_identifier
+                    );
                     assert!(request.windows(route.len()).any(|bytes| bytes == route.as_bytes()));
                     authentication.lend_value_bytes(|value| {
                         assert!(request.windows(value.len()).any(|bytes| bytes == value))
@@ -1408,8 +1417,7 @@ async fn selected_live_events_commit_only_the_believed_prefix() {
                                 snapshot,
                             ),
                         ] {
-                            if defect == "terminal-capability-error"
-                                && route.contains("/operations/")
+                            if defect == "terminal-capability-error" && route.contains("/snapshot?")
                             {
                                 break;
                             }
@@ -1501,7 +1509,9 @@ async fn selected_live_events_commit_only_the_believed_prefix() {
                             )
                         })
                         .await
-                        .unwrap()
+                        .unwrap_or_else(|failure| {
+                            panic!("terminal reconciliation {defect}, HTTP/2={http2}: {failure}")
+                        })
                     };
                     assert_eq!(
                         recovered.is_ok(),
@@ -2113,6 +2123,9 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
             "generation-unanswered-dispatch-stale",
             "generation-unanswered-dispatch-cancel",
         ] {
+            // Exercise both sides of the agent's unpadded decimal boundary:
+            // a snapshot at ten covers nine, but nine cannot cover ten.
+            let captured_cursor = if defect == "older" { "7:10" } else { "7:9" };
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let endpoint = format!("http://{}/aem", listener.local_addr().unwrap());
             let provider = provider(&endpoint);
@@ -2154,7 +2167,7 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                 agent_event_store_generation: 7,
                 agent_operation_identifier: None,
                 canonical_digest: "old".into(),
-                cursor: "cursor-005".into(),
+                cursor: "7:5".into(),
                 event_bytes: 3,
                 job_sequence: None,
             };
@@ -2333,6 +2346,9 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                 } else {
                     3
                 } {
+                    if stage == 0 {
+                        high_water_fixture::token(&listener, http2, &authentication).await;
+                    }
                     let (mut socket, _) = listener.accept().await.unwrap();
                     if stage == 1 && defect == "generation-unanswered-dispatch" {
                         assert!(scheduled_at.get().unwrap().elapsed() >= Duration::from_millis(50));
@@ -2347,7 +2363,7 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                         socket.read_exact(&mut header).await.unwrap();
                         socket.write_all(&header).await.unwrap();
                         socket.read_exact(&mut header).await.unwrap();
-                        assert_eq!((header[3], header[4]), (1, 5));
+                        assert_eq!((header[3], header[4]), (1, if stage == 0 { 4 } else { 5 }));
                         let length = usize::from(header[0]) << 16
                             | usize::from(header[1]) << 8
                             | usize::from(header[2]);
@@ -2359,10 +2375,10 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                             request.push(socket.read_u8().await.unwrap());
                             assert!(request.len() <= 8192);
                         }
-                        assert!(request.starts_with(b"GET "));
+                        assert!(request.starts_with(if stage == 0 { b"POST " } else { b"GET " }));
                     }
                     let route = if stage == 0 {
-                        "/aem/bin/slingshot/agent/subscriptions/high-water?agent_event_store_generation=7&daemon_subscription_identifier=subscription-one".into()
+                        "/aem/bin/slingshot/agent/subscriptions/high-water".into()
                     } else if defect.starts_with("generation-") {
                         format!("/aem/bin/slingshot/agent/jobs?sling_job_identifier=job-{stage}")
                     } else {
@@ -2375,6 +2391,9 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                     authentication.lend_value_bytes(|value| {
                         assert!(request.windows(value.len()).any(|bytes| bytes == value))
                     });
+                    if stage == 0 {
+                        high_water_fixture::body(&mut socket, &request, http2).await;
+                    }
                     assert_eq!(
                         ledger.read_subscription(target, "subscription-one").unwrap().unwrap(),
                         *before.ledger()
@@ -2396,7 +2415,7 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                         serde_json::json!({
                             "format":"slingshot.agent/1", "transport_contract_digest":expected.transport_contract_digest,
                             "daemon_subscription_identifier":if defect == "capture" {"wrong"} else {"subscription-one"},
-                            "agent_event_store_generation":7, "high_water_cursor":"cursor-010",
+                            "agent_event_store_generation":7, "high_water_cursor":captured_cursor,
                         })
                     } else {
                         let submission = &submissions
@@ -2405,7 +2424,7 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                             "agent_operation_identifier":submission.operation.agent_operation_identifier, "author_target_identity_digest":target,
                             "selected_environment_revision":selection.selected_environment_revision, "daemon_subscription_identifier":"subscription-one",
                             "submitted_command_digest":if defect == "digest" && stage == 2 {"0".repeat(DIGEST_HEX_CHARACTERS)} else {submission.submitted_command_digest.clone()},
-                            "subscription_watermark":if defect == "older" && stage == 2 {"cursor-009"} else {"cursor-010"},
+                            "subscription_watermark":if defect == "older" && stage == 2 {"7:9"} else {"7:10"},
                             "physical_sling_job_identifiers":[format!("job-{stage}")], "granted_retention_milliseconds":120000,
                             "attempt":1, "progress":10, "sequence":3, "kind":"progress",
                         })
@@ -2414,7 +2433,7 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                         if stage == 0 {
                             body = serde_json::json!({"format":"slingshot.agent/1", "transport_contract_digest":expected.transport_contract_digest,
                                 "daemon_subscription_identifier":"subscription-one", "requested_agent_event_store_generation":7,
-                                "requested_last_event_identifier":null, "agent_event_store_generation":8, "high_water_cursor":"cursor-010", "reason":"generation_changed"});
+                                "requested_last_event_identifier":null, "agent_event_store_generation":8, "high_water_cursor":"8:10", "reason":"generation_changed"});
                             409
                         } else if defect == "generation-missing"
                             || defect.starts_with("generation-unanswered")
@@ -2839,7 +2858,7 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                                 reset,
                             )
                             .unwrap();
-                            assert_eq!(cursor.as_text(), "cursor-010");
+                            assert_eq!(cursor.as_text(), "8:10");
                             assert!(
                                 finish_generation_reset(
                                     &ledger,
@@ -2998,8 +3017,8 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                     panic!("reset not installed");
                 };
                 assert_eq!(generation, 7);
-                assert_eq!(cursor.as_text(), "cursor-010");
-                assert_eq!(after.ledger().cursor.as_deref(), Some("cursor-010"));
+                assert_eq!(cursor.as_text(), captured_cursor);
+                assert_eq!(after.ledger().cursor.as_deref(), Some(captured_cursor));
                 assert_eq!(after.ledger().unresolved_incident, None);
                 for child in after.members() {
                     assert_eq!(child.observation.applied_sequence.value(), 3);
@@ -3021,7 +3040,7 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                         panic!("settled membership failed to resume");
                     };
                     assert_eq!(generation, 8);
-                    assert_eq!(cursor.as_text(), "cursor-010");
+                    assert_eq!(cursor.as_text(), "8:10");
                     for submission in &submissions {
                         let child = repository
                             .read(target, &submission.operation.agent_operation_identifier)
@@ -3033,7 +3052,7 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                 }
                 assert!(after.members().is_empty());
                 assert_eq!(after.ledger().agent_event_store_generation, 8);
-                assert_eq!(after.ledger().cursor.as_deref(), Some("cursor-010"));
+                assert_eq!(after.ledger().cursor.as_deref(), Some("8:10"));
                 assert_eq!(after.ledger().unresolved_incident, None);
                 for child in before.members() {
                     assert_eq!(
@@ -4441,11 +4460,11 @@ async fn retained_artifact_completion_case(
                 while !head.ends_with(b"\r\n\r\n") {
                     head.push(socket.read_u8().await.unwrap());
                 }
-                assert!(
-                    String::from_utf8(head)
-                        .unwrap()
-                        .starts_with("GET /bin/slingshot/agent/snapshot?")
-                );
+                let head = String::from_utf8(head).unwrap();
+                assert!(head.starts_with(&format!(
+                    "GET /bin/slingshot/agent/artifact?agent_operation_identifier={}&artifact_slot={slot} HTTP/1.1\r\n",
+                    submission.operation.agent_operation_identifier
+                )));
                 socket.write_all(format!("HTTP/1.1 {status} Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{unavailable}", unavailable.len()).as_bytes()).await.unwrap();
             };
             let (result, ()) = timeout(Duration::from_secs(5), async {
@@ -6029,10 +6048,8 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                             .unwrap();
                     }
                     if stage == 3 {
-                        for value in [
-                            "one-use-token",
-                            submission.operation.agent_operation_identifier.as_str(),
-                        ] {
+                        for value in ["one-use-token", submission.submitted_command_digest.as_str()]
+                        {
                             assert!(head.windows(value.len()).any(|part| part == value.as_bytes()));
                         }
                         let mut received = Vec::new();
@@ -6140,7 +6157,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                         assert!(head.contains("csrf-token: one-use-token\r\n"));
                         assert!(head.contains(&format!(
                             "idempotency-key: {}\r\n",
-                            submission.operation.agent_operation_identifier
+                            submission.submitted_command_digest
                         )));
                         let length: usize = head
                             .lines()

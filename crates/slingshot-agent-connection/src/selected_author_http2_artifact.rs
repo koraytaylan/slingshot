@@ -1,4 +1,4 @@
-//! Streaming artifacts over the same selected HTTP/2 driver and EOF proof.
+//! Streaming artifacts over the selected HTTP/2 driver and stream-completion proof.
 //! The sink owns private staging, never publication; no successful receipt is
 //! returned until framing, exact length and digest have all been verified.
 
@@ -13,15 +13,25 @@ use crate::author_hypertext_transfer_protocol_policy::ExchangeDeadlines;
 use crate::selected_author_exchange::{SelectedAuthorFiniteResponse, validate_finite_head};
 use crate::selected_author_hpack_block::ResponseBlock;
 use crate::selected_author_http::{ArtifactHttpOutcome, ArtifactHttpReceipt, FiniteHttpFailure};
-use crate::selected_author_http2::{ResponseConsumer, drive_response};
+use crate::selected_author_http2::{FlowCredits, ResponseConsumer, drive_response};
 use crate::selected_author_http2_flow::ReceiveWindows;
 use crate::selected_author_http2_frames::{ResponseFrame, TransportEnd};
 use crate::selected_author_http2_response::{FiniteResponse, ResponseRefusal, declared_length};
 use crate::selected_author_transport::SelectedAuthorTransport;
 
+const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
+const END_HEADERS_FLAG: u8 = 4;
+const CONTINUATION_FRAME: u8 = 9;
+const ARTIFACT_IDENTIFIER_BYTES: usize = 128;
+
 impl SelectedAuthorTransport {
     /// Streams one manifest-bound artifact, a bounded 401, or a closed 404/410 refusal.
     /// Sink writes must remain private until the returned receipt is accepted.
+    ///
+    /// # Errors
+    /// Refuses invalid request identity or artifact metadata, transport or deadline
+    /// failures, invalid response framing, sink failures, and length or digest
+    /// mismatches. An error never authorizes publication of staged bytes.
     pub async fn artifact_http2(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -46,6 +56,11 @@ impl SelectedAuthorTransport {
     /// Streams a manifest-bound artifact on the original negotiated socket.
     /// Both codecs retain private-sink, length/digest and closed-absence gates;
     /// no connection is retried or replaced after a refused transfer.
+    ///
+    /// # Errors
+    /// Refuses invalid request context, negotiation or transport failures,
+    /// exceeded deadlines, invalid response framing or metadata, sink failures,
+    /// and length or digest mismatches. Partial staged bytes remain private.
     pub async fn artifact_negotiated(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -69,6 +84,11 @@ impl SelectedAuthorTransport {
 
     /// Streams with provider authentication, refreshing once only after a fully
     /// framed 401 that wrote no artifact bytes. Partial transfers never retry.
+    ///
+    /// # Errors
+    /// Refuses invalid request or provider context, failed authentication or
+    /// refresh, persistent unauthorized responses, and any negotiated-transfer
+    /// failure. No error permits publication of partial staged bytes.
     pub async fn artifact_authenticated(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -119,7 +139,8 @@ impl SelectedAuthorTransport {
             }
         }
         let elapsed =
-            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+            u64::try_from(started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND))
+                .unwrap_or(u64::MAX);
         match outcome {
             ArtifactHttpOutcome::Transferred(receipt) => Ok(ArtifactHttpOutcome::Transferred(
                 ArtifactHttpReceipt::verified(receipt.byte_length(), elapsed),
@@ -133,6 +154,11 @@ impl SelectedAuthorTransport {
 
     /// Uses the selected async provider; only a complete pre-stream 401
     /// permits one refreshed request. Partial consumer delivery never retries.
+    ///
+    /// # Errors
+    /// Refuses invalid request or provider context, failed authentication or
+    /// refresh, persistent unauthorized responses, and any negotiated-transfer
+    /// failure. No error permits publication of partial staged bytes.
     pub async fn artifact_authenticated_async<Clock, Utc>(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -185,7 +211,8 @@ impl SelectedAuthorTransport {
             }
         }
         let elapsed =
-            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+            u64::try_from(started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND))
+                .unwrap_or(u64::MAX);
         match outcome {
             ArtifactHttpOutcome::Transferred(receipt) => Ok(ArtifactHttpOutcome::Transferred(
                 ArtifactHttpReceipt::verified(receipt.byte_length(), elapsed),
@@ -208,16 +235,17 @@ impl SelectedAuthorTransport {
         let media = crate::artifact_download::require_remote_slot(&expected.artifact_slot)
             .map_err(|_| FiniteHttpFailure::Request)?;
         if media != expected.media_type
-            || expected.artifact_digest.len() != 64
+            || expected.artifact_digest.len()
+                != slingshot_domain::command_fingerprint::DIGEST_CHARACTERS
             || !expected
                 .artifact_digest
                 .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
             || expected.byte_length
                 > slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
                     .formula("maximum_individual_artifact_bytes")
             || artifact_identifier.is_empty()
-            || artifact_identifier.len() > 128
+            || artifact_identifier.len() > ARTIFACT_IDENTIFIER_BYTES
         {
             return Err(FiniteHttpFailure::Request);
         }
@@ -303,13 +331,14 @@ impl SelectedAuthorTransport {
         )
         .await?;
         let elapsed_milliseconds =
-            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+            u64::try_from(started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND))
+                .unwrap_or(u64::MAX);
         match output {
             ArtifactBody::Transferred(byte_length) => Ok(ArtifactHttpOutcome::Transferred(
                 ArtifactHttpReceipt::verified(byte_length, elapsed_milliseconds),
             )),
             ArtifactBody::Unavailable(response) => {
-                if response.status == 401 {
+                if response.status == StatusCode::UNAUTHORIZED.as_u16() {
                     return Ok(ArtifactHttpOutcome::Unauthorized);
                 }
                 let evidence = crate::artifact_download::decode_artifact_unavailable(
@@ -332,9 +361,9 @@ enum ArtifactBody {
     Unavailable(SelectedAuthorFiniteResponse),
 }
 
-struct ArtifactResponse<'a, S> {
-    expected: &'a ExpectedArtifact,
-    sink: S,
+struct ArtifactResponse<'expected, Sink> {
+    expected: &'expected ExpectedArtifact,
+    sink: Sink,
     block: Option<ResponseBlock>,
     header_end: bool,
     head_complete: bool,
@@ -346,8 +375,8 @@ struct ArtifactResponse<'a, S> {
     poisoned: bool,
 }
 
-impl<'a, S> ArtifactResponse<'a, S> {
-    fn new(expected: &'a ExpectedArtifact, sink: S) -> Self {
+impl<'expected, Sink> ArtifactResponse<'expected, Sink> {
+    fn new(expected: &'expected ExpectedArtifact, sink: Sink) -> Self {
         Self {
             expected,
             sink,
@@ -364,8 +393,87 @@ impl<'a, S> ArtifactResponse<'a, S> {
     }
 }
 
-impl<S: FnMut(&[u8]) -> Result<(), FiniteHttpFailure>> ResponseConsumer
-    for ArtifactResponse<'_, S>
+impl<Sink: FnMut(&[u8]) -> Result<(), FiniteHttpFailure>> ArtifactResponse<'_, Sink> {
+    fn accept_head(&mut self, frame: &ResponseFrame) -> Result<(), ResponseRefusal> {
+        if self.head_complete {
+            return Err(ResponseRefusal);
+        }
+        if frame.kind == 1 {
+            if self.block.is_some() {
+                return Err(ResponseRefusal);
+            }
+            self.block = Some(ResponseBlock::new());
+            self.header_end = frame.flags & 1 != 0;
+        }
+        self.block
+            .as_mut()
+            .ok_or(ResponseRefusal)?
+            .push(&frame.payload)
+            .map_err(|_| ResponseRefusal)?;
+        if frame.flags & END_HEADERS_FLAG != 0 {
+            self.complete_head()?;
+            self.head_complete = true;
+        }
+        Ok(())
+    }
+
+    fn complete_head(&mut self) -> Result<(), ResponseRefusal> {
+        let (status, headers) =
+            self.block.take().unwrap().finish().map_err(|_| ResponseRefusal)?.into_parts();
+        let (head, content_type) =
+            validate_finite_head(status, Version::HTTP_2, &headers).map_err(|_| ResponseRefusal)?;
+        if status == StatusCode::OK {
+            require_streamable(self.expected, &ArtifactResponseHead { head, content_type })
+                .map_err(|_| ResponseRefusal)?;
+            if declared_length(&headers)?.is_some_and(|length| length != self.expected.byte_length)
+                || self.header_end && self.expected.byte_length != 0
+            {
+                return Err(ResponseRefusal);
+            }
+            self.ended = self.header_end;
+        } else {
+            if !matches!(
+                status,
+                StatusCode::UNAUTHORIZED | StatusCode::NOT_FOUND | StatusCode::GONE
+            ) || head.location.is_some()
+                || !crate::selected_author_submission::json_media_type(&content_type)
+            {
+                return Err(ResponseRefusal);
+            }
+            self.unavailable =
+                Some(FiniteResponse::from_decoded_head(status, headers, self.header_end)?);
+        }
+        Ok(())
+    }
+
+    fn accept_data(
+        &mut self,
+        frame: &ResponseFrame,
+    ) -> Result<Option<FlowCredits>, ResponseRefusal> {
+        if !self.head_complete || self.block.is_some() {
+            return Err(ResponseRefusal);
+        }
+        let (permit, content) = self.windows.receive_frame(frame).map_err(|_| ResponseRefusal)?;
+        let length = self
+            .received
+            .checked_add(content.len() as u64)
+            .filter(|length| *length <= self.expected.byte_length)
+            .ok_or(ResponseRefusal)?;
+        if frame.flags & 1 != 0 && length != self.expected.byte_length {
+            return Err(ResponseRefusal);
+        }
+        if !content.is_empty() {
+            (self.sink)(content).map_err(|_| ResponseRefusal)?;
+        }
+        self.digest.update(content);
+        self.received = length;
+        self.ended = frame.flags & 1 != 0;
+        Ok(permit.release())
+    }
+}
+
+impl<Sink: FnMut(&[u8]) -> Result<(), FiniteHttpFailure>> ResponseConsumer
+    for ArtifactResponse<'_, Sink>
 {
     type Output = ArtifactBody;
     fn head_complete(&self) -> bool {
@@ -384,7 +492,7 @@ impl<S: FnMut(&[u8]) -> Result<(), FiniteHttpFailure>> ResponseConsumer
             contract.limit("artifact_transfer_idle_timeout_milliseconds"),
         )
     }
-    fn accept(&mut self, frame: &ResponseFrame) -> Result<Option<[[u8; 13]; 2]>, ResponseRefusal> {
+    fn accept(&mut self, frame: &ResponseFrame) -> Result<Option<FlowCredits>, ResponseRefusal> {
         if self.poisoned || self.stream_ended() || frame.stream_identifier != 1 {
             self.poisoned = true;
             return Err(ResponseRefusal);
@@ -394,87 +502,11 @@ impl<S: FnMut(&[u8]) -> Result<(), FiniteHttpFailure>> ResponseConsumer
             unavailable.accept(frame)?
         } else {
             match frame.kind {
-                1 | 9 => {
-                    if self.head_complete {
-                        return Err(ResponseRefusal);
-                    }
-                    if frame.kind == 1 {
-                        if self.block.is_some() {
-                            return Err(ResponseRefusal);
-                        }
-                        self.block = Some(ResponseBlock::new());
-                        self.header_end = frame.flags & 1 != 0;
-                    }
-                    self.block
-                        .as_mut()
-                        .ok_or(ResponseRefusal)?
-                        .push(&frame.payload)
-                        .map_err(|_| ResponseRefusal)?;
-                    if frame.flags & 4 != 0 {
-                        let (status, headers) = self
-                            .block
-                            .take()
-                            .unwrap()
-                            .finish()
-                            .map_err(|_| ResponseRefusal)?
-                            .into_parts();
-                        let (head, content_type) =
-                            validate_finite_head(status, Version::HTTP_2, &headers)
-                                .map_err(|_| ResponseRefusal)?;
-                        if status == StatusCode::OK {
-                            require_streamable(
-                                self.expected,
-                                &ArtifactResponseHead { head, content_type },
-                            )
-                            .map_err(|_| ResponseRefusal)?;
-                            if declared_length(&headers)?
-                                .is_some_and(|length| length != self.expected.byte_length)
-                                || self.header_end && self.expected.byte_length != 0
-                            {
-                                return Err(ResponseRefusal);
-                            }
-                            self.ended = self.header_end;
-                        } else {
-                            if !matches!(status.as_u16(), 401 | 404 | 410)
-                                || head.location.is_some()
-                                || !crate::selected_author_submission::json_media_type(
-                                    &content_type,
-                                )
-                            {
-                                return Err(ResponseRefusal);
-                            }
-                            self.unavailable = Some(FiniteResponse::from_decoded_head(
-                                status,
-                                headers,
-                                self.header_end,
-                            )?);
-                        }
-                        self.head_complete = true;
-                    }
+                1 | CONTINUATION_FRAME => {
+                    self.accept_head(frame)?;
                     None
                 }
-                0 => {
-                    if !self.head_complete || self.block.is_some() {
-                        return Err(ResponseRefusal);
-                    }
-                    let (permit, content) =
-                        self.windows.receive_frame(frame).map_err(|_| ResponseRefusal)?;
-                    let length = self
-                        .received
-                        .checked_add(content.len() as u64)
-                        .filter(|length| *length <= self.expected.byte_length)
-                        .ok_or(ResponseRefusal)?;
-                    if frame.flags & 1 != 0 && length != self.expected.byte_length {
-                        return Err(ResponseRefusal);
-                    }
-                    if !content.is_empty() {
-                        (self.sink)(content).map_err(|_| ResponseRefusal)?;
-                    }
-                    self.digest.update(content);
-                    self.received = length;
-                    self.ended = frame.flags & 1 != 0;
-                    permit.release()
-                }
+                0 => self.accept_data(frame)?,
                 _ => return Err(ResponseRefusal),
             }
         };
@@ -501,9 +533,18 @@ impl<S: FnMut(&[u8]) -> Result<(), FiniteHttpFailure>> ResponseConsumer
 mod tests {
     use super::*;
 
+    const COMPLETE_HEAD_FLAGS: u8 = 4;
+    const COMPLETE_EMPTY_RESPONSE_FLAGS: u8 = 5;
+    const PADDED_DATA_FLAG: u8 = 8;
+    const FRAGMENT_PREFIX_BYTES: usize = 4;
+    const CONTINUATION_KIND: u8 = 9;
+
     fn expected(bytes: &[u8]) -> ExpectedArtifact {
         ExpectedArtifact {
-            artifact_digest: Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect(),
+            artifact_digest: Sha256::digest(bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
             artifact_slot: "content_package".into(),
             byte_length: bytes.len() as u64,
             media_type: "application/zip".into(),
@@ -517,7 +558,12 @@ mod tests {
             payload.push(value.len() as u8);
             payload.extend_from_slice(value.as_bytes());
         }
-        ResponseFrame { kind: 1, flags: if ended { 5 } else { 4 }, stream_identifier: 1, payload }
+        ResponseFrame {
+            kind: 1,
+            flags: if ended { COMPLETE_EMPTY_RESPONSE_FLAGS } else { COMPLETE_HEAD_FLAGS },
+            stream_identifier: 1,
+            payload,
+        }
     }
     fn data(bytes: &[u8], flags: u8) -> ResponseFrame {
         ResponseFrame { kind: 0, flags, stream_identifier: 1, payload: bytes.to_vec() }
@@ -537,7 +583,7 @@ mod tests {
                 false,
             ))
             .unwrap();
-        let credit = response.accept(&data(&[1, b'a', 0], 8)).unwrap().unwrap();
+        let credit = response.accept(&data(&[1, b'a', 0], PADDED_DATA_FLAG)).unwrap().unwrap();
         assert_eq!(&credit[0][9..], &[0, 0, 0, 3]);
         response.accept(&data(b"bc", 1)).unwrap();
         assert!(matches!(
@@ -621,6 +667,23 @@ mod tests {
     }
 
     #[test]
+    fn a_refused_final_chunk_cannot_be_repaired_or_enter_staging() {
+        let expected = expected(b"abc");
+        for bytes in [b"ab".as_slice(), b"abcd"] {
+            let mut response =
+                ArtifactResponse::new(&expected, |_: &[u8]| -> Result<(), FiniteHttpFailure> {
+                    panic!("refused or post-refusal bytes entered staging");
+                });
+            response.accept(&head("200", &[("content-type", "application/zip")], false)).unwrap();
+            assert!(response.accept(&data(bytes, 1)).is_err());
+            assert!(!response.head_complete());
+            assert!(!response.stream_ended());
+            assert!(response.accept(&data(b"abc", 1)).is_err());
+            assert!(response.finish_at_transport_end(TransportEnd::for_test()).is_err());
+        }
+    }
+
+    #[test]
     fn large_artifacts_exceed_finite_document_bounds_without_body_collection() {
         let maximum =
             AuthorAgentTransportContract::embedded().limit("maximum_finite_response_body_bytes");
@@ -634,7 +697,7 @@ mod tests {
             remaining -= count as u64;
         }
         let expected = ExpectedArtifact {
-            artifact_digest: digest.finalize().iter().map(|b| format!("{b:02x}")).collect(),
+            artifact_digest: digest.finalize().iter().map(|byte| format!("{byte:02x}")).collect(),
             artifact_slot: "content_package".into(),
             byte_length: size,
             media_type: "application/zip".into(),
@@ -672,13 +735,18 @@ mod tests {
                 panic!("empty artifact streamed");
             });
         let mut initial = head("200", &[("content-type", "application/zip")], true);
-        let tail = initial.payload.split_off(4);
+        let tail = initial.payload.split_off(FRAGMENT_PREFIX_BYTES);
         initial.flags = 1;
         response.accept(&initial).unwrap();
         assert!(!response.head_complete());
         assert!(!response.stream_ended());
         response
-            .accept(&ResponseFrame { kind: 9, flags: 4, stream_identifier: 1, payload: tail })
+            .accept(&ResponseFrame {
+                kind: CONTINUATION_KIND,
+                flags: COMPLETE_HEAD_FLAGS,
+                stream_identifier: 1,
+                payload: tail,
+            })
             .unwrap();
         assert!(matches!(
             response.finish_at_transport_end(TransportEnd::for_test()).unwrap(),
