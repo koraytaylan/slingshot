@@ -1,3 +1,5 @@
+//! Tests for capacity-paused durable lookup recovery.
+
 use super::*;
 
 #[test]

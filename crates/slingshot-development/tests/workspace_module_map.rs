@@ -90,6 +90,14 @@ const PLACEHOLDER_BODIES: &[&str] = &["todo!(", "unimplemented!("];
 /// Physical test modules whose Rust declarations use a different nested name.
 const PATH_MODULE_OVERRIDES: &[(&str, &str)] = &[
     (
+        "crates/slingshot-agent-connection/src/selected_author_http2_tests.rs",
+        "slingshot_agent_connection::selected_author_http2::tests",
+    ),
+    (
+        "crates/slingshot-agent-connection/src/selected_author_http_artifact.rs",
+        "slingshot_agent_connection::selected_author_http::artifact",
+    ),
+    (
         "crates/slingshot-agent-connection/src/authentication/identity_management_client_wire_tests.rs",
         "slingshot_agent_connection::authentication::identity_management_client::wire_tests",
     ),
