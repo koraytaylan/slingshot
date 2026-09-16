@@ -51,6 +51,22 @@ touches:
   - crates/slingshot-development/src/rustsec_advisory_pin.rs
   - crates/slingshot-development/tests/workspace_module_map.rs
   - "crates/slingshot-development/tests/fixtures/workspace-module-map/**"
+  - crates/slingshot-agent-connection/src/selected_author_http2_tests.rs
+  - crates/slingshot-agent-connection/src/selected_author_http_artifact.rs
+  - crates/slingshot-daemon/src/operation/durable_author_lookup/pause_tests.rs
+  - crates/slingshot-daemon/src/operation/durable_author_lookup/reconciliation.rs
+  - crates/slingshot-daemon/src/operation/durable_author_lookup/reconciliation/failure.rs
+  - crates/slingshot-daemon/src/operation/durable_author_lookup/terminal.rs
+  - crates/slingshot-daemon/src/runtime_builder/execution.rs
+  - crates/slingshot-daemon/src/service/operation_answer.rs
+  - crates/slingshot-daemon/src/service/scheduler.rs
+  - crates/slingshot-domain/src/profile/authority.rs
+  - crates/slingshot-domain/src/stream_cursor_order.rs
+  - crates/slingshot-storage/src/agent_subscription_ledger_events.rs
+  - crates/slingshot-storage/src/database_inventory.rs
+  - crates/slingshot-storage/src/database_tests.rs
+  - crates/slingshot-storage/src/operation_repository_mutations.rs
+  - crates/slingshot-storage/src/operation_repository_recovery.rs
 status: done
 merged_as: "f6763c5c6995172e222fd59c952fc769189f3c9d"
 ---
