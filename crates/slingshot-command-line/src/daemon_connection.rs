@@ -267,11 +267,14 @@ where
 }
 
 /// Reads one more frame, or nothing when the connection ended cleanly.
-async fn read_next(
+async fn read_next<Stream>(
     reader: &mut local_server::FrameReader,
-    stream: &mut tokio::net::UnixStream,
+    stream: &mut Stream,
     contract: &FoundationContract,
-) -> Result<Option<Vec<u8>>, ArtifactStreamRefusal> {
+) -> Result<Option<Vec<u8>>, ArtifactStreamRefusal>
+where
+    Stream: tokio::io::AsyncRead + Unpin,
+{
     reader.read(stream, contract, false).await.map_err(|failure| {
         ArtifactStreamRefusal::Exchange(ExchangeFailure::Transport(failure.to_string()))
     })
