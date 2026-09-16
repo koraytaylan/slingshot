@@ -93,10 +93,7 @@ const PATH_MODULE_OVERRIDES: &[(&str, &str)] = &[
         "crates/slingshot-storage/src/database_inventory.rs",
         "slingshot_storage::database::inventory",
     ),
-    (
-        "crates/slingshot-storage/src/database_tests.rs",
-        "slingshot_storage::database::tests",
-    ),
+    ("crates/slingshot-storage/src/database_tests.rs", "slingshot_storage::database::tests"),
     (
         "crates/slingshot-storage/src/agent_subscription_ledger_events.rs",
         "slingshot_storage::agent_subscription_ledger::events",
