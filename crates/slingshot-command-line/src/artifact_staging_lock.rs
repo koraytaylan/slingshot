@@ -27,6 +27,10 @@ pub const LOCK_SUFFIX: &str = ".slingshot-lock";
 /// The separator between the parts of a derived name.
 const PART_SEPARATOR: char = '.';
 const MAXIMUM_STEM_BYTES: usize = 220;
+#[cfg(unix)]
+const LOCK_FILE_MODE: u32 = 0o600;
+#[cfg(unix)]
+const FORBIDDEN_PERMISSION_BITS: u32 = 0o077;
 
 /// Returns the stem every file of one transfer is named from.
 ///
@@ -132,7 +136,7 @@ impl StagingLock {
         let mut options = std::fs::OpenOptions::new();
         options.create_new(true).read(true).write(true);
         #[cfg(unix)]
-        options.mode(0o600);
+        options.mode(LOCK_FILE_MODE);
         let file = options.open(path).map_err(|failure| {
             if failure.kind() == std::io::ErrorKind::AlreadyExists {
                 LockRefusal::Held
@@ -145,7 +149,7 @@ impl StagingLock {
             let metadata = file.metadata().map_err(|_| LockRefusal::Unavailable)?;
             let private = metadata.is_file()
                 && metadata.uid() == rustix::process::getuid().as_raw()
-                && metadata.mode() & 0o077 == 0
+                && metadata.mode() & FORBIDDEN_PERMISSION_BITS == 0
                 && metadata.nlink() == 1;
             if !private {
                 return Err(LockRefusal::Unavailable);
