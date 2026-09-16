@@ -22,6 +22,8 @@ pub const SOURCE_POLICY_PATH: &str = "policy/source-policy.toml";
 
 /// Repository path of the reviewed diagnostics baseline.
 pub const SOURCE_POLICY_BASELINE_PATH: &str = "policy/source-policy-baseline.tsv";
+const BASELINE_LINE_OFFSET: usize = 1;
+const BASELINE_FIELD_COUNT: usize = 4;
 
 /// Repository path of the shortened forms a declared name may not use.
 pub const ABBREVIATED_IDENTIFIERS_PATH: &str = "policy/abbreviated-identifiers.txt";
@@ -205,12 +207,15 @@ fn read_baseline(root: &Path) -> Result<BTreeSet<Violation>, PolicyFailure> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let fields: Vec<&str> = line.splitn(4, '\t').collect();
+        let fields: Vec<&str> = line.splitn(BASELINE_FIELD_COUNT, '\t').collect();
         let malformed = || PolicyFailure {
             path: SOURCE_POLICY_BASELINE_PATH.to_owned(),
-            reason: format!("line {} is not path<TAB>line<TAB>rule<TAB>symbol", offset + 1),
+            reason: format!(
+                "line {} is not path<TAB>line<TAB>rule<TAB>symbol",
+                offset + BASELINE_LINE_OFFSET
+            ),
         };
-        if fields.len() != 4 {
+        if fields.len() != BASELINE_FIELD_COUNT {
             return Err(malformed());
         }
         let line_number = fields[1].parse::<usize>().map_err(|_| malformed())?;
@@ -949,6 +954,11 @@ pub fn check_repository(root: &Path) -> Result<Vec<Violation>, PolicyFailure> {
 }
 
 /// Reports every diagnostic before the reviewed baseline is applied.
+///
+/// # Errors
+///
+/// Returns [`PolicyFailure`] when a policy document or a repository file cannot
+/// be read.
 pub fn check_repository_raw(root: &Path) -> Result<Vec<Violation>, PolicyFailure> {
     let policy = LoadedPolicy::load(root)?;
     check_repository_with_policy(&policy, root)
