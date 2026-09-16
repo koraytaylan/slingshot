@@ -176,6 +176,15 @@ impl OperationRepository {
                 source_fingerprint,
             ],
         )?;
+        // The receipt and eligibility transition are one durable fact: make
+        // the operation queueable and clear the recovery hold before commit.
+        // Without this fold a successful resume is acknowledged but remains
+        // parked forever, so the scheduler can never claim it.
+        let folded = current
+            .record
+            .fold(&OperationFact::Lifecycle { lifecycle_state: OperationLifecycleState::Queued })?;
+        let folded = OperationRecord { outstanding_recovery: None, ..folded };
+        self.write_folded(&transaction, &current, &folded, None)?;
         let written = Self::receipt_within(
             &transaction,
             author_target_identity_digest,
