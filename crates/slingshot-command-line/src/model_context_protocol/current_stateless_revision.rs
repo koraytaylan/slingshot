@@ -113,6 +113,11 @@ pub enum Refusal {
         /// What is wrong with them.
         detail: String,
     },
+    /// An older-era session has begun its handshake and has not finished it.
+    NotInitialized {
+        /// What was asked for too early.
+        named: String,
+    },
 }
 
 impl Refusal {
@@ -123,6 +128,9 @@ impl Refusal {
             Self::RevisionUnsupported { .. } => UNSUPPORTED_REVISION_ERROR,
             Self::MethodUnavailable { .. } => METHOD_NOT_FOUND_ERROR,
             Self::ParametersUnusable { .. } => INVALID_PARAMETERS_ERROR,
+            // The older era's not-initialized code, kept numeric so this
+            // module does not depend on that era's types.
+            Self::NotInitialized { .. } => -32_002,
         }
     }
 
@@ -146,6 +154,10 @@ impl Refusal {
             Self::ParametersUnusable { detail } => json!({
                 "code": self.code(),
                 "message": detail,
+            }),
+            Self::NotInitialized { named } => json!({
+                "code": self.code(),
+                "message": format!("{named} waits until this session says it is initialized"),
             }),
         }
     }
