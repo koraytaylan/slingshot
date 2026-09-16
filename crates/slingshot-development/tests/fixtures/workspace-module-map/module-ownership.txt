@@ -244,7 +244,7 @@ crates/slingshot-daemon/src/service/operation_answer.rs|slingshot-daemon|service
 crates/slingshot-daemon/src/service/scheduler.rs|slingshot-daemon|service|leaf|slingshot_daemon::service::scheduler|workspace-module-map
 crates/slingshot-domain/src/profile/authority.rs|slingshot-domain|domain|leaf|slingshot_domain::profile::authority|workspace-module-map
 crates/slingshot-domain/src/stream_cursor_order.rs|slingshot-domain|domain|leaf|slingshot_domain::stream_cursor_order|workspace-module-map
-crates/slingshot-storage/src/agent_subscription_ledger_events.rs|slingshot-storage|adapter|leaf|slingshot_storage::agent_subscription_ledger_events|workspace-module-map
+crates/slingshot-storage/src/agent_subscription_ledger_events.rs|slingshot-storage|adapter|leaf|slingshot_storage::agent_subscription_ledger::events|workspace-module-map
 crates/slingshot-storage/src/database_inventory.rs|slingshot-storage|adapter|leaf|slingshot_storage::database_inventory|workspace-module-map
 crates/slingshot-storage/src/database_tests.rs|slingshot-storage|adapter|leaf|slingshot_storage::database_tests|workspace-module-map
 crates/slingshot-storage/src/operation_repository_mutations.rs|slingshot-storage|adapter|leaf|slingshot_storage::operation_repository_mutations|workspace-module-map
