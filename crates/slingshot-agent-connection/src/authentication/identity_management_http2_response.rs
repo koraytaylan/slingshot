@@ -17,6 +17,19 @@ use slingshot_domain::{
     secret_value::SecretValue,
 };
 
+/// HTTP/2 WINDOW_UPDATE: a nine-byte frame head and four-byte increment.
+const WINDOW_UPDATE_FRAME_BYTES: usize = 13;
+/// A received payload restores both connection and request-stream credit.
+const RECEIVE_WINDOW_COUNT: usize = 2;
+/// HTTP/2 CONTINUATION frame type.
+const CONTINUATION_FRAME: u8 = 9;
+/// HTTP/2 END_HEADERS flag.
+const END_HEADERS: u8 = 4;
+/// Inclusive first redirect status.
+const REDIRECT_STATUS_START: u16 = 300;
+/// Exclusive end of redirect statuses.
+const REDIRECT_STATUS_END: u16 = 400;
+
 /// One ordered response on stream 1. Wire validation and control-frame handling
 /// stay with the enclosing driver; every response frame must reach this object.
 pub struct IdentityManagementHttp2Response {
@@ -30,9 +43,9 @@ pub struct IdentityManagementHttp2Response {
     windows: ReceiveWindows,
     failure: Option<ExchangeFailure>,
 }
-impl core::fmt::Debug for IdentityManagementHttp2Response {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("IdentityManagementHttp2Response([redacted])")
+impl ::core::fmt::Debug for IdentityManagementHttp2Response {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("IdentityManagementHttp2Response([redacted])")
     }
 }
 impl Drop for IdentityManagementHttp2Response {
@@ -67,7 +80,7 @@ impl IdentityManagementHttp2Response {
     pub fn head_complete(&self) -> bool {
         self.head.is_some() && self.failure.is_none()
     }
-    /// Whether a complete framed stream ended, still requiring clean transport EOF.
+    /// Whether a complete framed stream ended without a partial head or refusal.
     pub fn stream_ended(&self) -> bool {
         self.ended && !self.in_block && self.failure.is_none()
     }
@@ -77,10 +90,15 @@ impl IdentityManagementHttp2Response {
     }
     /// Admits one wire-validated response frame. Credits are returned only after
     /// bounded body admission; cancellation never restores unconsumed credit.
+    ///
+    /// # Errors
+    /// Rejects invalid frame order, headers, status, media, body bounds, or
+    /// declared lengths. Once refused, every later frame returns that refusal.
     pub fn accept(
         &mut self,
         frame: &ResponseFrame,
-    ) -> Result<Option<[[u8; 13]; 2]>, ExchangeFailure> {
+    ) -> Result<Option<[[u8; WINDOW_UPDATE_FRAME_BYTES]; RECEIVE_WINDOW_COUNT]>, ExchangeFailure>
+    {
         if let Some(failure) = self.failure {
             return Err(failure);
         }
@@ -93,87 +111,88 @@ impl IdentityManagementHttp2Response {
     fn accept_inner(
         &mut self,
         frame: &ResponseFrame,
-    ) -> Result<Option<[[u8; 13]; 2]>, ExchangeFailure> {
+    ) -> Result<Option<[[u8; WINDOW_UPDATE_FRAME_BYTES]; RECEIVE_WINDOW_COUNT]>, ExchangeFailure>
+    {
         if frame.stream_identifier != 1 || self.ended {
             return Err(malformed());
         }
         match frame.kind {
-            1 | 9 => {
-                if frame.kind == 1 {
-                    if self.in_block || self.head.is_some() && frame.flags & 1 == 0 {
-                        return Err(malformed());
-                    }
-                    self.in_block = true;
-                    self.header_end_stream = frame.flags & 1 != 0;
-                } else if !self.in_block {
-                    return Err(malformed());
-                }
-                let block = self.block.as_mut().ok_or_else(malformed)?;
-                if block.push(&frame.payload).is_err() {
-                    return Err(ExchangeFailure::new(if block.encoded_limit_exceeded() {
-                        Code::IdentityManagementResponseHeadLimitExceeded
-                    } else {
-                        block
-                            .reader()
-                            .failure_code()
-                            .unwrap_or(Code::IdentityManagementTransportFailed)
-                    }));
-                }
-                if frame.flags & 4 != 0 {
-                    let block = self.block.take().ok_or_else(malformed)?;
-                    if self.head.is_some() {
-                        block.finish().map_err(|_| malformed())?;
-                        return Err(ExchangeFailure::new(
-                            Code::IdentityManagementResponseTrailerRejected,
-                        ));
-                    }
-                    let (section, next) = block
-                        .finish_with_next_reader(
-                            IdentityManagementHeadReader::trailers(),
-                            maximum_head(),
-                        )
-                        .map_err(|_| malformed())?;
-                    self.block = Some(next);
-                    self.in_block = false;
-                    let head = DecodedHead {
-                        status: section.status.ok_or_else(malformed)?,
-                        fields: section.fields,
-                    };
-                    self.install_head(head)?;
-                }
-                Ok(None)
-            }
-            0 => {
-                if self.head.is_none() || self.in_block {
-                    return Err(malformed());
-                }
-                let (permit, content) =
-                    self.windows.receive_frame(frame).map_err(|_| malformed())?;
-                let length =
-                    (self.body.len() as u64).checked_add(content.len() as u64).ok_or_else(
-                        || ExchangeFailure::new(Code::IdentityManagementResponseBodyLimitExceeded),
-                    )?;
-                if length > maximum_body() {
-                    return Err(ExchangeFailure::new(
-                        Code::IdentityManagementResponseBodyLimitExceeded,
-                    ));
-                }
-                if self.expected_length.is_some_and(|expected| length > expected) {
-                    return Err(malformed());
-                }
-                self.body.extend_from_slice(content);
-                self.ended = frame.flags & 1 != 0;
-                if self.ended && self.expected_length.is_some_and(|expected| expected != length) {
-                    return Err(malformed());
-                }
-                Ok(permit.release())
-            }
+            1 | CONTINUATION_FRAME => self.accept_headers(frame).map(|()| None),
+            0 => self.accept_data(frame),
             _ => Err(malformed()),
         }
     }
+
+    fn accept_headers(&mut self, frame: &ResponseFrame) -> Result<(), ExchangeFailure> {
+        if frame.kind == 1 {
+            if self.in_block || self.head.is_some() && frame.flags & 1 == 0 {
+                return Err(malformed());
+            }
+            self.in_block = true;
+            self.header_end_stream = frame.flags & 1 != 0;
+        } else if !self.in_block {
+            return Err(malformed());
+        }
+        let block = self.block.as_mut().ok_or_else(malformed)?;
+        if block.push(&frame.payload).is_err() {
+            return Err(ExchangeFailure::new(if block.encoded_limit_exceeded() {
+                Code::IdentityManagementResponseHeadLimitExceeded
+            } else {
+                block.reader().failure_code().unwrap_or(Code::IdentityManagementTransportFailed)
+            }));
+        }
+        if frame.flags & END_HEADERS != 0 {
+            self.finish_headers()?;
+        }
+        Ok(())
+    }
+
+    fn finish_headers(&mut self) -> Result<(), ExchangeFailure> {
+        let block = self.block.take().ok_or_else(malformed)?;
+        if self.head.is_some() {
+            block.finish().map_err(|_| malformed())?;
+            return Err(ExchangeFailure::new(Code::IdentityManagementResponseTrailerRejected));
+        }
+        let (section, next) = block
+            .finish_with_next_reader(IdentityManagementHeadReader::trailers(), maximum_head())
+            .map_err(|_| malformed())?;
+        self.block = Some(next);
+        self.in_block = false;
+        self.install_head(DecodedHead {
+            status: section.status.ok_or_else(malformed)?,
+            fields: section.fields,
+        })
+    }
+
+    fn accept_data(
+        &mut self,
+        frame: &ResponseFrame,
+    ) -> Result<Option<[[u8; WINDOW_UPDATE_FRAME_BYTES]; RECEIVE_WINDOW_COUNT]>, ExchangeFailure>
+    {
+        if self.head.is_none() || self.in_block {
+            return Err(malformed());
+        }
+        let (permit, content) = self.windows.receive_frame(frame).map_err(|_| malformed())?;
+        let length =
+            (self.body.len() as u64).checked_add(content.len() as u64).ok_or_else(|| {
+                ExchangeFailure::new(Code::IdentityManagementResponseBodyLimitExceeded)
+            })?;
+        if length > maximum_body() {
+            return Err(ExchangeFailure::new(Code::IdentityManagementResponseBodyLimitExceeded));
+        }
+        if self.expected_length.is_some_and(|expected| length > expected) {
+            return Err(malformed());
+        }
+        self.body.extend_from_slice(content);
+        self.ended = frame.flags & 1 != 0;
+        if self.ended && self.expected_length.is_some_and(|expected| expected != length) {
+            return Err(malformed());
+        }
+        Ok(permit.release())
+    }
     fn install_head(&mut self, head: DecodedHead) -> Result<(), ExchangeFailure> {
         let length = declared_length(&head.fields)?;
-        if (300..400).contains(&head.status) {
+        if (REDIRECT_STATUS_START..REDIRECT_STATUS_END).contains(&head.status) {
             return Err(ExchangeFailure::new(Code::IdentityManagementRedirectRefused));
         }
         if u64::from(head.status)
@@ -200,6 +219,9 @@ impl IdentityManagementHttp2Response {
     }
     /// Consumes the frame reader's final EOF proof. Partial or poisoned assembly
     /// never exposes its head/body; token validation remains the source's job.
+    ///
+    /// # Errors
+    /// Returns the retained refusal or rejects an incomplete stream or absent head.
     pub fn finish_at_transport_end(
         mut self,
         _end: TransportEnd,
@@ -221,6 +243,9 @@ impl IdentityManagementHttp2Response {
     /// Consumes a complete HTTP/2 END_STREAM proof. HTTP/2 streams may end
     /// while the TLS connection remains reusable; transport EOF is not part
     /// of the response boundary.
+    ///
+    /// # Errors
+    /// Returns the retained refusal or rejects an incomplete stream or absent head.
     pub fn finish_at_stream_end(mut self) -> Result<DecodedResponse, ExchangeFailure> {
         if let Some(failure) = self.failure {
             return Err(failure);

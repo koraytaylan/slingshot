@@ -12,7 +12,7 @@
 //! the local operation and the target partition; the submitted digest from the
 //! transport contract, the five contract fields, the canonical byte contract,
 //! the complete canonical arguments, and the artifact manifest; the idempotency
-//! key is the derived agent operation identifier. So a daemon that crashed between writing the request and
+//! key is the manifest-bound submitted command digest. So a daemon that crashed between writing the request and
 //! recording the outcome arrives at the same names when it restarts, and asks
 //! about the submission by name instead of sending a second one and hoping.
 //!

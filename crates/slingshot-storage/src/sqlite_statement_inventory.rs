@@ -768,7 +768,7 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                    event_rows = event_rows + 1 \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
                  AND agent_event_store_generation = ? \
-                 AND (COALESCE(cursor, high_water_cursor) IS NULL OR COALESCE(cursor, high_water_cursor) < ?)",
+                 AND (COALESCE(cursor, high_water_cursor) IS NULL OR COALESCE(cursor, high_water_cursor) COLLATE slingshot_cursor < ?)",
         parameters: 7,
         maximum_rows: 0,
     },
@@ -840,7 +840,7 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         purpose: "compact one subscription's events below a position",
         text: "DELETE FROM subscription_event \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
-                 AND agent_event_store_generation = ? AND cursor < ?",
+                 AND agent_event_store_generation = ? AND cursor COLLATE slingshot_cursor < ?",
         parameters: 4,
         maximum_rows: 0,
     },

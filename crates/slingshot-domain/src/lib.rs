@@ -24,3 +24,4 @@ pub mod remote_job;
 pub mod secret_value;
 pub mod selected_command_contract_identity;
 pub mod selected_environment_revision;
+pub mod stream_cursor_order;

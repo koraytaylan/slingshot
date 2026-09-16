@@ -1,12 +1,112 @@
 # Base addresses and the one spelling each of them has.
 #
 # The accepted rows pin canonicalization: a scheme and host fold to lowercase, a
-# port equal to the scheme's default disappears, a root path has no
+# port equal to the scheme's default is refused, a root path has no
 # representation at all, and a percent escape becomes uppercase. The refused
 # rows pin the opposite decision, which is that an ambiguous address is an error
 # rather than something to normalize into one of its meanings.
 
 format = "slingshot.address-vectors/1"
+
+[[accepted]]
+input = "https://[2001:DB8:0:0:0:0:0:1]:8443/context"
+canonical = "https://[2001:db8:0:0:0:0:0:1]:8443/context"
+loopback = false
+protected = true
+
+[[accepted]]
+input = "http://[ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]"
+canonical = "http://[ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]"
+loopback = false
+protected = false
+
+[[refused]]
+input = "http://[abcd]"
+reason = "a hexadecimal string alone is not an IPv6 address"
+
+[[refused]]
+input = "http://[:]"
+reason = "one colon is not an IPv6 address"
+
+[[refused]]
+input = "http://[:::1]"
+reason = "three adjacent colons are not IPv6 compression"
+
+[[refused]]
+input = "http://[1::2::3]"
+reason = "an IPv6 address cannot compress twice"
+
+[[refused]]
+input = "http://[12345::1]"
+reason = "an IPv6 group exceeds four hexadecimal digits"
+
+[[refused]]
+input = "http://[1:2:3]"
+reason = "an uncompressed IPv6 address needs eight groups"
+
+[[refused]]
+input = "http://[1:2:3:4:5:6:7:8:9]"
+reason = "an IPv6 address has too many groups"
+
+[[accepted]]
+input = "http://author.example.com:1"
+canonical = "http://author.example.com:1"
+loopback = false
+protected = false
+
+[[accepted]]
+input = "https://[::1]:65535"
+canonical = "https://[::1]:65535"
+loopback = true
+protected = true
+
+[[refused]]
+input = "https://author.example.com:+8443"
+reason = "a port must contain decimal digits only"
+
+[[refused]]
+input = "https://author.example.com:+08443"
+reason = "a sign cannot bypass the leading-zero port refusal"
+
+[[refused]]
+input = "http://[::1]:+4502"
+reason = "a bracketed host also requires a digits-only port"
+
+[[accepted]]
+input = "http://[::1]"
+canonical = "http://[::1]"
+loopback = true
+protected = false
+
+[[accepted]]
+input = "HTTPS://[ABCD::1]:8443/context"
+canonical = "https://[abcd::1]:8443/context"
+loopback = false
+protected = true
+
+[[refused]]
+input = "http://[::1]suffix"
+reason = "text after a bracketed host is not a port"
+
+[[refused]]
+input = "https://[::1].example.com/context"
+reason = "a hostname suffix cannot follow a bracketed literal"
+
+[[refused]]
+input = "http://[::1]]"
+reason = "an extra closing bracket"
+
+[[refused]]
+input = "http://[::1]4502"
+reason = "a port must start with a colon"
+
+[[refused]]
+input = "http://[::1]:"
+reason = "an explicit port cannot be empty"
+
+[[refused]]
+input = "http://[::1]:4502suffix"
+reason = "a port cannot contain a hostname suffix"
 
 [[accepted]]
 input = "http://localhost:4502"

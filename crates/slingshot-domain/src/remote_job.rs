@@ -119,10 +119,22 @@ impl AgentJobIdentifier {
 /// A different value from the one the wire carries, and deliberately so: a wire
 /// cursor is something an agent said, and this is something this daemon wrote
 /// down. Only the second may be resumed from.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EventStreamCursor {
     /// The bytes the agent issued, unread.
     spelling: String,
+}
+
+impl ::core::cmp::Ord for EventStreamCursor {
+    fn cmp(&self, other: &Self) -> ::core::cmp::Ordering {
+        crate::stream_cursor_order::compare(&self.spelling, &other.spelling)
+    }
+}
+
+impl ::core::cmp::PartialOrd for EventStreamCursor {
+    fn partial_cmp(&self, other: &Self) -> Option<::core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl EventStreamCursor {

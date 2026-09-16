@@ -7,10 +7,14 @@ use crate::selected_author_exchange::{
     validate_finite_head,
 };
 use crate::selected_author_hpack_block::ResponseBlock;
+use crate::selected_author_http2::FlowCredits;
 use crate::selected_author_http2_flow::ReceiveWindows;
 use crate::selected_author_http2_frames::ResponseFrame;
 use http::{HeaderMap, Response, StatusCode, Version};
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
+
+const CONTINUATION_FRAME: u8 = 9;
+const END_HEADERS_FLAG: u8 = 4;
 
 /// Invalid or incomplete finite response; no private head/body data is retained.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -31,7 +35,7 @@ pub struct FiniteResponse {
     poisoned: bool,
 }
 
-impl core::fmt::Debug for FiniteResponse {
+impl ::core::fmt::Debug for FiniteResponse {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("FiniteResponse([redacted])")
     }
@@ -74,69 +78,77 @@ impl FiniteResponse {
     /// Processes a wire-validated response frame and returns receive-credit
     /// frames only after bounded body storage succeeds. The driver must send
     /// those credits before receiving more DATA, or discard the connection.
+    ///
+    /// # Errors
+    /// Refuses invalid ordering, head policy, body bounds or flow control, and
+    /// permanently poisons this response after any rejected frame.
     pub fn accept(
         &mut self,
         frame: &ResponseFrame,
-    ) -> Result<Option<[[u8; 13]; 2]>, ResponseRefusal> {
+    ) -> Result<Option<FlowCredits>, ResponseRefusal> {
         if self.poisoned || self.ended || frame.stream_identifier != 1 {
             self.poisoned = true;
             return Err(ResponseRefusal);
         }
         self.poisoned = true;
         let credits = match frame.kind {
-            1 | 9 => {
-                if self.head.is_some() {
-                    return Err(ResponseRefusal);
-                }
-                if frame.kind == 1 {
-                    if self.block.is_some() {
-                        return Err(ResponseRefusal);
-                    }
-                    self.block = Some(ResponseBlock::new());
-                    self.header_end_stream = frame.flags & 1 != 0;
-                }
-                let block = self.block.as_mut().ok_or(ResponseRefusal)?;
-                block.push(&frame.payload).map_err(|_| ResponseRefusal)?;
-                if frame.flags & 4 != 0 {
-                    let (status, headers) = self
-                        .block
-                        .take()
-                        .unwrap()
-                        .finish()
-                        .map_err(|_| ResponseRefusal)?
-                        .into_parts();
-                    self.install_head(status, headers, self.header_end_stream)?;
-                }
+            1 | CONTINUATION_FRAME => {
+                self.accept_head(frame)?;
                 None
             }
-            0 => {
-                let (status, _) = self.head.as_ref().ok_or(ResponseRefusal)?;
-                if self.block.is_some() {
-                    return Err(ResponseRefusal);
-                }
-                let (permit, content) =
-                    self.windows.receive_frame(frame).map_err(|_| ResponseRefusal)?;
-                let length = (self.body.len() as u64)
-                    .checked_add(content.len() as u64)
-                    .filter(|length| *length <= self.maximum)
-                    .ok_or(ResponseRefusal)?;
-                if self.expected_length.is_some_and(|expected| length > expected)
-                    || matches!(*status, StatusCode::NO_CONTENT | StatusCode::RESET_CONTENT)
-                        && !content.is_empty()
-                {
-                    return Err(ResponseRefusal);
-                }
-                self.body.extend_from_slice(content);
-                self.ended = frame.flags & 1 != 0;
-                if self.ended && self.expected_length.is_some_and(|expected| length != expected) {
-                    return Err(ResponseRefusal);
-                }
-                permit.release()
-            }
+            0 => self.accept_data(frame)?,
             _ => return Err(ResponseRefusal),
         };
         self.poisoned = false;
         Ok(credits)
+    }
+
+    fn accept_head(&mut self, frame: &ResponseFrame) -> Result<(), ResponseRefusal> {
+        if self.head.is_some() {
+            return Err(ResponseRefusal);
+        }
+        if frame.kind == 1 {
+            if self.block.is_some() {
+                return Err(ResponseRefusal);
+            }
+            self.block = Some(ResponseBlock::new());
+            self.header_end_stream = frame.flags & 1 != 0;
+        }
+        let block = self.block.as_mut().ok_or(ResponseRefusal)?;
+        block.push(&frame.payload).map_err(|_| ResponseRefusal)?;
+        if frame.flags & END_HEADERS_FLAG != 0 {
+            let (status, headers) =
+                self.block.take().unwrap().finish().map_err(|_| ResponseRefusal)?.into_parts();
+            self.install_head(status, headers, self.header_end_stream)?;
+        }
+        Ok(())
+    }
+
+    fn accept_data(
+        &mut self,
+        frame: &ResponseFrame,
+    ) -> Result<Option<FlowCredits>, ResponseRefusal> {
+        let (status, _) = self.head.as_ref().ok_or(ResponseRefusal)?;
+        if self.block.is_some() {
+            return Err(ResponseRefusal);
+        }
+        let (permit, content) = self.windows.receive_frame(frame).map_err(|_| ResponseRefusal)?;
+        let length = (self.body.len() as u64)
+            .checked_add(content.len() as u64)
+            .filter(|length| *length <= self.maximum)
+            .ok_or(ResponseRefusal)?;
+        if self.expected_length.is_some_and(|expected| length > expected)
+            || matches!(*status, StatusCode::NO_CONTENT | StatusCode::RESET_CONTENT)
+                && !content.is_empty()
+        {
+            return Err(ResponseRefusal);
+        }
+        self.body.extend_from_slice(content);
+        self.ended = frame.flags & 1 != 0;
+        if self.ended && self.expected_length.is_some_and(|expected| length != expected) {
+            return Err(ResponseRefusal);
+        }
+        Ok(permit.release())
     }
 
     /// Adopts a head already passed through the bounded HPACK decoder, for a
@@ -175,6 +187,10 @@ impl FiniteResponse {
     /// Completes a fully received finite response. The response is complete
     /// once END_STREAM has been validated; the peer may keep the TLS
     /// connection open after that point.
+    ///
+    /// # Errors
+    /// Refuses incomplete or previously poisoned responses and responses that
+    /// fail the shared finite-body policy. No partial result is returned.
     pub fn finish_at_transport_end(
         self,
         _end: crate::selected_author_http2_frames::TransportEnd,
@@ -183,6 +199,10 @@ impl FiniteResponse {
     }
 
     /// Completes a finite response immediately after a validated END_STREAM.
+    ///
+    /// # Errors
+    /// Refuses incomplete or previously poisoned responses and responses that
+    /// fail the shared finite-body policy. No partial result is returned.
     pub fn finish_at_stream_end(self) -> Result<SelectedAuthorFiniteResponse, ResponseRefusal> {
         self.finish_complete()
     }
@@ -225,6 +245,14 @@ pub(crate) fn declared_length(headers: &HeaderMap) -> Result<Option<u64>, Respon
 mod tests {
     use super::*;
 
+    const HEADER_FRAGMENT_BYTES: usize = 5;
+    const CONTINUATION_KIND: u8 = 9;
+    const COMPLETE_HEAD_FLAGS: u8 = 4;
+    const COMPLETE_EMPTY_RESPONSE_FLAGS: u8 = 5;
+    const PADDED_FINAL_DATA_FLAGS: u8 = 9;
+    const EXACT_BODY_LIMIT: u64 = 2;
+    const INDEXED_NO_CONTENT_STATUS: u8 = 0x89;
+
     #[tokio::test]
     async fn bounded_wire_frames_and_hpack_complete_one_finite_response() {
         use crate::selected_author_http2_frames::ResponseFrameReader;
@@ -236,11 +264,19 @@ mod tests {
         }
         let mut wire = vec![0, 0, 0, 4, 0, 0, 0, 0, 0];
         let mut initial = head(&[("content-length", "2")], false);
-        let tail = initial.payload.split_off(5);
+        let tail = initial.payload.split_off(HEADER_FRAGMENT_BYTES);
         initial.flags = 0;
         encode(initial, &mut wire);
-        encode(ResponseFrame { kind: 9, flags: 4, stream_identifier: 1, payload: tail }, &mut wire);
-        encode(data(&[1, b'{', b'}', 0], 9), &mut wire);
+        encode(
+            ResponseFrame {
+                kind: CONTINUATION_KIND,
+                flags: COMPLETE_HEAD_FLAGS,
+                stream_identifier: 1,
+                payload: tail,
+            },
+            &mut wire,
+        );
+        encode(data(&[1, b'{', b'}', 0], PADDED_FINAL_DATA_FLAGS), &mut wire);
         let mut input = wire.as_slice();
         let mut frames = ResponseFrameReader::new();
         assert_eq!(frames.read(&mut input).await.unwrap().kind, 4);
@@ -270,7 +306,12 @@ mod tests {
             payload.push(value.len() as u8);
             payload.extend_from_slice(value.as_bytes());
         }
-        ResponseFrame { kind: 1, flags: if ended { 5 } else { 4 }, stream_identifier: 1, payload }
+        ResponseFrame {
+            kind: 1,
+            flags: if ended { COMPLETE_EMPTY_RESPONSE_FLAGS } else { COMPLETE_HEAD_FLAGS },
+            stream_identifier: 1,
+            payload,
+        }
     }
 
     fn data(payload: &[u8], flags: u8) -> ResponseFrame {
@@ -360,7 +401,7 @@ mod tests {
             );
         }
         let mut response = FiniteResponse::new();
-        response.maximum = 2;
+        response.maximum = EXACT_BODY_LIMIT;
         response.accept(&head(&[], false)).unwrap();
         response.accept(&data(b"{}", 1)).unwrap();
         assert_eq!(
@@ -378,7 +419,8 @@ mod tests {
     fn padding_is_not_content_but_is_returned_as_flow_credit() {
         let mut response = FiniteResponse::new();
         response.accept(&head(&[("content-length", "2")], false)).unwrap();
-        let credit = response.accept(&data(&[1, b'{', b'}', 0], 9)).unwrap().unwrap();
+        let credit =
+            response.accept(&data(&[1, b'{', b'}', 0], PADDED_FINAL_DATA_FLAGS)).unwrap().unwrap();
         assert_eq!(&credit[0][9..], &[0, 0, 0, 4]);
         assert_eq!(
             response
@@ -433,15 +475,15 @@ mod tests {
     #[test]
     fn no_content_status_refuses_declared_lengths_and_nonempty_content() {
         let mut initial = head(&[], false);
-        initial.payload[0] = 0x89;
+        initial.payload[0] = INDEXED_NO_CONTENT_STATUS;
         let mut response = FiniteResponse::new();
         response.accept(&initial).unwrap();
         assert!(response.accept(&data(b"x", 1)).is_err());
         let mut initial = head(&[("content-length", "0")], true);
-        initial.payload[0] = 0x89;
+        initial.payload[0] = INDEXED_NO_CONTENT_STATUS;
         assert!(FiniteResponse::new().accept(&initial).is_err());
         let mut initial = head(&[], true);
-        initial.payload[0] = 0x89;
+        initial.payload[0] = INDEXED_NO_CONTENT_STATUS;
         let mut response = FiniteResponse::new();
         response.accept(&initial).unwrap();
         assert_eq!(format!("{response:?}"), "FiniteResponse([redacted])");

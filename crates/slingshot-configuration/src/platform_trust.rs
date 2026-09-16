@@ -241,14 +241,14 @@ fn parse_platform_bundle(source: &[u8]) -> Result<Vec<Vec<u8>>, ConfigurationDia
 
 #[cfg(target_os = "linux")]
 fn parse_platform_directory_bundle(source: &[u8]) -> Result<Vec<Vec<u8>>, ConfigurationDiagnostic> {
-    Ok(parse_platform_bundle_raw(source)?
+    parse_platform_bundle_raw(source)?
         .into_iter()
         .filter_map(|der| match anchor_is_eligible(&der) {
             Ok(true) => Some(Ok(der)),
             Ok(false) => None,
             Err(failure) => Some(Err(failure)),
         })
-        .collect::<Result<Vec<_>, _>>()?)
+        .collect::<Result<Vec<_>, _>>()
 }
 
 #[cfg(target_os = "linux")]

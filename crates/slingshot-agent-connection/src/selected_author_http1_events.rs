@@ -21,17 +21,24 @@ use http::{Method, Response, StatusCode, Version};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::time::{Duration, Instant, timeout, timeout_at};
 
+const STREAM_READ_BUFFER_BYTES: usize = 8192;
+
 impl SelectedAuthorTransport {
     /// Attaches once to the selected subscription and committed cursor. The
     /// caller owns retained terminal resolution, durable folding and reconnects.
-    pub async fn events_http1<R: TerminalExpectationResolver>(
+    ///
+    /// # Errors
+    /// Refuses invalid selection, cursor or request fields; connection/write
+    /// failures; malformed, truncated or overdue responses; invalid reset
+    /// evidence; and consumer refusals. Previously delivered items are not retracted.
+    pub async fn events_http1<Resolver: TerminalExpectationResolver>(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
         subscription: &str,
         generation: u64,
         committed_cursor: Option<&EventStreamCursor>,
         authentication: &RequestAuthentication,
-        resolver: R,
+        resolver: Resolver,
         consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
         let (fields, operation) =
@@ -63,13 +70,13 @@ impl SelectedAuthorTransport {
         .await
     }
 
-    pub(crate) async fn events_http1_on_stream<R: TerminalExpectationResolver>(
+    pub(crate) async fn events_http1_on_stream<Resolver: TerminalExpectationResolver>(
         mut stream: crate::selected_author_transport::SelectedAuthorStream,
         request: &[u8],
         subscription: &str,
         generation: u64,
         committed_cursor: Option<&EventStreamCursor>,
-        resolver: R,
+        resolver: Resolver,
         consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
         let deadlines = ExchangeDeadlines::embedded();
@@ -88,11 +95,11 @@ impl SelectedAuthorTransport {
     }
 }
 
-async fn receive<R: TerminalExpectationResolver>(
+async fn receive<Resolver: TerminalExpectationResolver>(
     stream: &mut (impl AsyncRead + Unpin),
     subscription: String,
     generation: u64,
-    resolver: R,
+    resolver: Resolver,
     consume: impl FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
     deadlines: ExchangeDeadlines,
 ) -> Result<EventHttpOutcome, FiniteHttpFailure> {
@@ -168,14 +175,14 @@ async fn receive<R: TerminalExpectationResolver>(
 }
 
 async fn part<
-    R: TerminalExpectationResolver,
-    C: FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
+    Resolver: TerminalExpectationResolver,
+    Consumer: FnMut(StreamItem) -> Result<(), FiniteHttpFailure>,
 >(
     stream: &mut (impl AsyncRead + Unpin),
     mut remaining: u64,
-    delivery: &mut EventDelivery<R, C>,
+    delivery: &mut EventDelivery<Resolver, Consumer>,
 ) -> Result<(), FiniteHttpFailure> {
-    let mut bytes = [0; 8192];
+    let mut bytes = [0; STREAM_READ_BUFFER_BYTES];
     while remaining != 0 {
         let count = remaining.min(bytes.len() as u64) as usize;
         let count = within(delivery.deadline(), async {
@@ -201,10 +208,10 @@ async fn chunk_line(
     within(deadline, read_chunk_line(stream, idle)).await
 }
 
-async fn within<T>(
+async fn within<Output>(
     deadline: Instant,
-    future: impl core::future::Future<Output = Result<T, FiniteHttpFailure>>,
-) -> Result<T, FiniteHttpFailure> {
+    future: impl core::future::Future<Output = Result<Output, FiniteHttpFailure>>,
+) -> Result<Output, FiniteHttpFailure> {
     if Instant::now() >= deadline {
         return Err(FiniteHttpFailure::EventHeartbeat);
     }
@@ -223,16 +230,24 @@ mod tests {
     use crate::selected_author_http2_events::tests::{resolve, terminal};
     use tokio::time::sleep;
 
+    const DUPLEX_CAPACITY_BYTES: usize = 4096;
+    const TEST_GENERATION: u64 = 7;
+    const HEARTBEAT_COUNT: usize = 3;
+    const HEARTBEAT_INTERVAL_SECONDS: u64 = 20;
+    const SHORT_FINITE_TIMEOUT_MILLISECONDS: u64 = 10;
+    const ACTIVITY_WRITES: u64 = 5;
+    const ACTIVITY_INTERVAL_SECONDS: u64 = 10;
+
     #[tokio::test(start_paused = true)]
     async fn fixed_and_chunked_live_streams_outlast_finite_limits_with_shared_terminal_validation()
     {
         for chunked in [false, true] {
-            let (mut input, mut peer) = tokio::io::duplex(4096);
+            let (mut input, mut peer) = tokio::io::duplex(DUPLEX_CAPACITY_BYTES);
             let terminal = terminal();
             let framing = if chunked {
                 "Transfer-Encoding: chunked".into()
             } else {
-                format!("Content-Length: {}", 24 + terminal.len())
+                format!("Content-Length: {}", HEARTBEAT_COUNT * b": alive\n".len() + terminal.len())
             };
             let server = async {
                 peer.write_all(
@@ -243,8 +258,8 @@ mod tests {
                 )
                 .await
                 .unwrap();
-                for _ in 0..3 {
-                    sleep(Duration::from_secs(20)).await;
+                for _ in 0..HEARTBEAT_COUNT {
+                    sleep(Duration::from_secs(HEARTBEAT_INTERVAL_SECONDS)).await;
                     peer.write_all(if chunked {
                         b"8;heartbeat\r\n: alive\n\r\n"
                     } else {
@@ -264,13 +279,13 @@ mod tests {
             };
             let mut items = Vec::new();
             let mut limits = deadlines();
-            limits.finite_total_milliseconds = 10;
-            limits.finite_idle_milliseconds = 10;
+            limits.finite_total_milliseconds = SHORT_FINITE_TIMEOUT_MILLISECONDS;
+            limits.finite_idle_milliseconds = SHORT_FINITE_TIMEOUT_MILLISECONDS;
             let (result, ()) = tokio::join!(
                 receive(
                     &mut input,
                     "sub".into(),
-                    7,
+                    TEST_GENERATION,
                     resolve,
                     |item| {
                         items.push(item);
@@ -311,7 +326,7 @@ mod tests {
             let result = receive(
                 &mut wire.as_slice(),
                 "sub".into(),
-                7,
+                TEST_GENERATION,
                 resolve,
                 |_| {
                     if defect == "sink" {
@@ -330,14 +345,14 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn chunk_metadata_and_partial_event_bytes_do_not_refresh_heartbeat() {
         for metadata in [false, true] {
-            let (mut input, mut peer) = tokio::io::duplex(4096);
+            let (mut input, mut peer) = tokio::io::duplex(DUPLEX_CAPACITY_BYTES);
             let server = async {
                 peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").await.unwrap();
                 if metadata {
                     peer.write_all(b"1;comment=\"").await.unwrap();
                 }
-                for _ in 0..5 {
-                    sleep(Duration::from_secs(10)).await;
+                for _ in 0..ACTIVITY_WRITES {
+                    sleep(Duration::from_secs(ACTIVITY_INTERVAL_SECONDS)).await;
                     if peer.write_all(if metadata { b"x" } else { b"1\r\nd\r\n" }).await.is_err() {
                         break;
                     }
@@ -347,7 +362,7 @@ mod tests {
                 let result = receive(
                     &mut input,
                     "sub".into(),
-                    7,
+                    TEST_GENERATION,
                     resolve,
                     |_| panic!("partial item delivered"),
                     deadlines(),
@@ -359,8 +374,16 @@ mod tests {
             let started = Instant::now();
             let (result, ()) = tokio::join!(client, server);
             assert_eq!(result.unwrap_err(), FiniteHttpFailure::EventHeartbeat);
-            assert!(started.elapsed() >= Duration::from_secs(45));
-            assert!(started.elapsed() <= Duration::from_secs(50));
+            assert!(
+                started.elapsed()
+                    >= Duration::from_millis(
+                        crate::event_stream_heartbeat::heartbeat_timeout_milliseconds()
+                    )
+            );
+            assert!(
+                started.elapsed()
+                    <= Duration::from_secs(ACTIVITY_WRITES * ACTIVITY_INTERVAL_SECONDS)
+            );
         }
     }
     #[tokio::test]
@@ -401,7 +424,7 @@ mod tests {
             let result = receive(
                 &mut bytes.as_bytes(),
                 "sub".into(),
-                7,
+                TEST_GENERATION,
                 resolve,
                 |_| panic!("invalid head or error became event"),
                 deadlines(),

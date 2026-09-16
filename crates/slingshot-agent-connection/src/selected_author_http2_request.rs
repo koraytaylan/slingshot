@@ -135,16 +135,21 @@ fn string(output: &mut Vec<u8>, bytes: &[u8]) {
 mod tests {
     use super::*;
 
+    const HIGH_LENGTH_BYTE_SHIFT: u32 = u8::BITS * 2;
+    const MIDDLE_LENGTH_BYTE_SHIFT: u32 = u8::BITS;
+
     #[test]
     fn fragments_have_exact_boundaries_and_end_flags_without_data_frames() {
-        for length in [1, FRAME_BYTES, FRAME_BYTES + 1, FRAME_BYTES * 2] {
+        for length in
+            [1, FRAME_BYTES, FRAME_BYTES + 1, FRAME_BYTES * 2, FRAME_BYTES * 2 + 1, FRAME_BYTES * 3]
+        {
             for body_empty in [true, false] {
                 let request = EncodedRequestHead { block: vec![b'x'; length], body_empty };
                 let frames: Vec<_> = request.frames().collect();
                 let mut reconstructed = Vec::new();
                 for (index, frame) in frames.iter().enumerate() {
-                    let payload_length = usize::from(frame[0]) << 16
-                        | usize::from(frame[1]) << 8
+                    let payload_length = usize::from(frame[0]) << HIGH_LENGTH_BYTE_SHIFT
+                        | usize::from(frame[1]) << MIDDLE_LENGTH_BYTE_SHIFT
                         | usize::from(frame[2]);
                     assert_eq!(payload_length, frame.len() - 9);
                     assert!(payload_length <= FRAME_BYTES);
@@ -169,5 +174,29 @@ mod tests {
         string(&mut bytes, &vec![b'x'; 1337]);
         assert_eq!(&bytes[..3], &[127, 186, 9]);
         assert_eq!(&bytes[3..], &vec![b'x'; 1337]);
+    }
+
+    #[test]
+    fn literal_length_prefix_boundaries_preserve_exact_payload_bytes() {
+        // Expected wire octets are independent of the encoder's arithmetic:
+        // a saturated seven-bit prefix is followed by base-128 remainder bytes.
+        for (length, prefix) in [
+            (0, &b"\x00"[..]),
+            (126, b"\x7e"),
+            (127, b"\x7f\x00"),
+            (128, b"\x7f\x01"),
+            (254, b"\x7f\x7f"),
+            (255, b"\x7f\x80\x01"),
+            (16510, b"\x7f\xff\x7f"),
+            (16511, b"\x7f\x80\x80\x01"),
+        ] {
+            for byte in [b'x', u8::MAX] {
+                let payload = vec![byte; length];
+                let mut encoded = Vec::new();
+                string(&mut encoded, &payload);
+                assert_eq!(&encoded[..prefix.len()], prefix, "length {length}");
+                assert_eq!(&encoded[prefix.len()..], payload, "length {length}");
+            }
+        }
     }
 }

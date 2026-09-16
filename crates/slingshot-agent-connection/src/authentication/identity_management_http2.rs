@@ -29,6 +29,20 @@ use tokio::{
 const ACK: &[u8] = &[0, 0, 0, 4, 1, 0, 0, 0, 0];
 const RESET: &[u8] = &[0, 0, 4, 3, 0, 0, 0, 0, 1, 0, 0, 0, 0];
 const GOAWAY: &[u8] = &[0, 0, 8, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const DATA_FRAME_KIND: u8 = 0;
+const HEADERS_FRAME_KIND: u8 = 1;
+const RESET_FRAME_KIND: u8 = 3;
+const SETTINGS_FRAME_KIND: u8 = 4;
+const PING_FRAME_KIND: u8 = 6;
+const GOAWAY_FRAME_KIND: u8 = 7;
+const WINDOW_UPDATE_FRAME_KIND: u8 = 8;
+const CONTINUATION_FRAME_KIND: u8 = 9;
+const ACKNOWLEDGEMENT_FLAG: u8 = 1;
+const STREAM_IDENTIFIER_MASK: u32 = 0x7fff_ffff;
+const STATIC_NAME_PREFIX_MAXIMUM: u8 = 15;
+const NEVER_INDEXED_PREFIX: u8 = 0x10;
+const STRING_LENGTH_PREFIX_MAXIMUM: usize = 127;
+const PING_FRAME_BYTES: usize = 17;
 enum Command {
     Control(ResponseFrame),
     Credit([[u8; 13]; 2], oneshot::Sender<()>),
@@ -38,8 +52,12 @@ enum Command {
 /// Negotiates and sends exactly one fixed IMS POST on this authenticated socket.
 /// No task is spawned. The caller also applies the whole-exchange deadline,
 /// including DNS/TCP/TLS setup, around this future.
-pub async fn exchange_http2<S: AsyncRead + AsyncWrite + Unpin>(
-    mut stream: S,
+///
+/// # Errors
+/// Refuses oversized requests, invalid framing or responses, failed transport
+/// operations, and expired write, header, idle-body or total-body deadlines.
+pub async fn exchange_http2<Stream: AsyncRead + AsyncWrite + Unpin>(
+    mut stream: Stream,
     body: &[u8],
     clock: &(dyn MonotonicClock + Sync),
 ) -> Result<IdentityManagementReceipt, ExchangeFailure> {
@@ -89,12 +107,12 @@ fn request_head(length: usize) -> Result<Vec<u8>, ExchangeFailure> {
         (28, &length.to_string()),
     ] {
         // Literal never indexed, using the static name. No credential is a field.
-        if index < 15 {
-            block.push(0x10 | index);
+        if index < STATIC_NAME_PREFIX_MAXIMUM {
+            block.push(NEVER_INDEXED_PREFIX | index);
         } else {
-            block.extend_from_slice(&[0x1f, index - 15]);
+            block.extend_from_slice(&[0x1f, index - STATIC_NAME_PREFIX_MAXIMUM]);
         }
-        if value.len() >= 127 {
+        if value.len() >= STRING_LENGTH_PREFIX_MAXIMUM {
             return Err(malformed());
         }
         block.push(value.len() as u8);
@@ -106,8 +124,8 @@ fn request_head(length: usize) -> Result<Vec<u8>, ExchangeFailure> {
     Ok(frame)
 }
 
-async fn write<W: AsyncWrite + Unpin>(
-    mut output: W,
+async fn write<Writer: AsyncWrite + Unpin>(
+    mut output: Writer,
     mut windows: SendWindows,
     head: &[u8],
     body: &[u8],
@@ -163,12 +181,7 @@ async fn write<W: AsyncWrite + Unpin>(
     }
     if !early {
         completed.send_replace(Some(Instant::now()));
-        loop {
-            match commands.recv().await.ok_or_else(malformed)? {
-                Command::Finish => break,
-                command => control(&mut output, &mut windows, command, true).await?,
-            }
-        }
+        finish_controls(&mut output, &mut windows, &mut commands).await?;
     }
     if position < body.len() {
         send(&mut output, RESET).await?;
@@ -177,6 +190,19 @@ async fn write<W: AsyncWrite + Unpin>(
     output.shutdown().await.map_err(|_| malformed())?;
     Ok(anchor)
 }
+async fn finish_controls(
+    output: &mut (impl AsyncWrite + Unpin),
+    windows: &mut SendWindows,
+    commands: &mut mpsc::Receiver<Command>,
+) -> Result<(), ExchangeFailure> {
+    loop {
+        match commands.recv().await.ok_or_else(malformed)? {
+            Command::Finish => return Ok(()),
+            command => control(output, windows, command, true).await?,
+        }
+    }
+}
+
 async fn send(output: &mut (impl AsyncWrite + Unpin), bytes: &[u8]) -> Result<(), ExchangeFailure> {
     output.write_all(bytes).await.map_err(|_| malformed())?;
     output.flush().await.map_err(|_| malformed())
@@ -189,14 +215,14 @@ async fn control(
 ) -> Result<(), ExchangeFailure> {
     match command {
         Command::Control(frame) => match frame.kind {
-            4 => {
+            SETTINGS_FRAME_KIND => {
                 windows.observe(&frame).map_err(|_| malformed())?;
                 send(output, ACK).await?;
             }
-            8 if complete && frame.stream_identifier == 1 => {}
-            8 => windows.observe(&frame).map_err(|_| malformed())?,
-            6 => {
-                let mut ack = [0; 17];
+            WINDOW_UPDATE_FRAME_KIND if complete && frame.stream_identifier == 1 => {}
+            WINDOW_UPDATE_FRAME_KIND => windows.observe(&frame).map_err(|_| malformed())?,
+            PING_FRAME_KIND => {
+                let mut ack = [0; PING_FRAME_BYTES];
                 ack[..9].copy_from_slice(&[0, 0, 8, 6, 1, 0, 0, 0, 0]);
                 ack[9..].copy_from_slice(&frame.payload);
                 send(output, &ack).await?;
@@ -214,8 +240,8 @@ async fn control(
     Ok(())
 }
 
-async fn read<R: AsyncRead + Unpin>(
-    input: R,
+async fn read<Reader: AsyncRead + Unpin>(
+    input: Reader,
     mut frames: ResponseFrameReader,
     commands: mpsc::Sender<Command>,
     mut completion: watch::Receiver<Option<Instant>>,
@@ -227,76 +253,16 @@ async fn read<R: AsyncRead + Unpin>(
     let mut response = IdentityManagementHttp2Response::new();
     let mut body_end = None;
     loop {
-        let result = {
-            let next = frames.read_next(&mut input);
-            tokio::pin!(next);
-            loop {
-                let complete = *completion.borrow();
-                let end = body_end.unwrap_or_else(|| {
-                    complete.unwrap_or(request_end)
-                        + Duration::from_millis(
-                            limits.identity_management_response_header_timeout_milliseconds,
-                        )
-                });
-                let expired = if body_end.is_some() {
-                    Code::IdentityManagementResponseBodyTotalTimeout
-                } else {
-                    Code::IdentityManagementResponseHeaderTimeout
-                };
-                if Instant::now() >= end {
-                    return Err(fail(expired));
-                }
-                tokio::select! {
-                    result = &mut next => { if Instant::now() >= end { return Err(fail(expired)); } break result; },
-                    changed = completion.changed(), if body_end.is_none() && complete.is_none() => { changed.map_err(|_| malformed())?; },
-                    _ = sleep_until(end) => return Err(fail(expired)),
-                }
-            }
-        };
-        let frame = result.map_err(|_| {
-            fail(if input.expired {
-                Code::IdentityManagementResponseBodyIdleTimeout
-            } else if frames.header_limit_exceeded() {
-                Code::IdentityManagementResponseHeadLimitExceeded
-            } else {
-                Code::IdentityManagementTransportFailed
-            })
-        })?;
+        let frame =
+            read_next_frame(&mut input, &mut frames, &mut completion, request_end, body_end)
+                .await?;
         match frame {
             FrameRead::End(end) => {
                 let receipt = clock.reading_milliseconds();
                 return Ok((response.finish_at_transport_end(end)?, receipt));
             }
             FrameRead::Frame(frame) => {
-                let mut confirmation = None;
-                let command = match frame.kind {
-                    0 | 1 | 9 => {
-                        let credits = response.accept(&frame)?;
-                        if response.stream_ended() {
-                            None
-                        } else {
-                            credits.map(|frames| {
-                                let (written, pending) = oneshot::channel();
-                                confirmation = Some(pending);
-                                Command::Credit(frames, written)
-                            })
-                        }
-                    }
-                    3 => return Err(malformed()),
-                    4 if frame.flags & 1 != 0 => return Err(malformed()),
-                    4 | 8 => Some(Command::Control(frame)),
-                    6 if frame.flags & 1 == 0 => Some(Command::Control(frame)),
-                    7 => {
-                        let last = u32::from_be_bytes(frame.payload[..4].try_into().unwrap())
-                            & 0x7fff_ffff;
-                        let error = u32::from_be_bytes(frame.payload[4..8].try_into().unwrap());
-                        if last < 1 || error != 0 {
-                            return Err(malformed());
-                        }
-                        None
-                    }
-                    _ => None,
-                };
+                let pending = frame_command(frame, &mut response)?;
                 if response.head_complete() && body_end.is_none() {
                     body_end = Some(
                         Instant::now()
@@ -325,20 +291,8 @@ async fn read<R: AsyncRead + Unpin>(
                 if Instant::now() >= end {
                     return Err(fail(expired));
                 }
-                if let Some(command) = command {
-                    if !response.stream_ended() {
-                        timeout_at(end, commands.send(command))
-                            .await
-                            .map_err(|_| fail(expired))?
-                            .map_err(|_| malformed())?;
-                    }
-                }
-                if let Some(written) = confirmation {
-                    timeout_at(end, written)
-                        .await
-                        .map_err(|_| fail(expired))?
-                        .map_err(|_| malformed())?;
-                }
+                dispatch_frame_command(&commands, pending, response.stream_ended(), end, expired)
+                    .await?;
                 if response.stream_ended() {
                     timeout_at(end, commands.send(Command::Finish))
                         .await
@@ -351,14 +305,127 @@ async fn read<R: AsyncRead + Unpin>(
     }
 }
 
-struct IdleRead<R> {
-    input: R,
+async fn dispatch_frame_command(
+    commands: &mpsc::Sender<Command>,
+    pending: FrameCommand,
+    stream_ended: bool,
+    end: Instant,
+    expired: Code,
+) -> Result<(), ExchangeFailure> {
+    if let Some(command) = pending.command {
+        if !stream_ended {
+            timeout_at(end, commands.send(command))
+                .await
+                .map_err(|_| fail(expired))?
+                .map_err(|_| malformed())?;
+        }
+    }
+    if let Some(written) = pending.confirmation {
+        timeout_at(end, written).await.map_err(|_| fail(expired))?.map_err(|_| malformed())?;
+    }
+    Ok(())
+}
+
+// Keep the same read future pinned while request completion changes the
+// header deadline: restarting it could discard a partially consumed frame.
+async fn read_next_frame<Reader: AsyncRead + Unpin>(
+    input: &mut IdleRead<Reader>,
+    frames: &mut ResponseFrameReader,
+    completion: &mut watch::Receiver<Option<Instant>>,
+    request_end: Instant,
+    body_end: Option<Instant>,
+) -> Result<FrameRead, ExchangeFailure> {
+    let limits = &ProfileAuthenticationContract::embedded().limits;
+    let result = {
+        let next = frames.read_next(input);
+        tokio::pin!(next);
+        loop {
+            let complete = *completion.borrow();
+            let end = body_end.unwrap_or_else(|| {
+                complete.unwrap_or(request_end)
+                    + Duration::from_millis(
+                        limits.identity_management_response_header_timeout_milliseconds,
+                    )
+            });
+            let expired = if body_end.is_some() {
+                Code::IdentityManagementResponseBodyTotalTimeout
+            } else {
+                Code::IdentityManagementResponseHeaderTimeout
+            };
+            if Instant::now() >= end {
+                return Err(fail(expired));
+            }
+            tokio::select! {
+                result = &mut next => { if Instant::now() >= end { return Err(fail(expired)); } break result; },
+                changed = completion.changed(), if body_end.is_none() && complete.is_none() => { changed.map_err(|_| malformed())?; },
+                _ = sleep_until(end) => return Err(fail(expired)),
+            }
+        }
+    };
+    result.map_err(|_| {
+        fail(if input.expired {
+            Code::IdentityManagementResponseBodyIdleTimeout
+        } else if frames.header_limit_exceeded() {
+            Code::IdentityManagementResponseHeadLimitExceeded
+        } else {
+            Code::IdentityManagementTransportFailed
+        })
+    })
+}
+
+struct FrameCommand {
+    command: Option<Command>,
+    confirmation: Option<oneshot::Receiver<()>>,
+}
+
+fn frame_command(
+    frame: ResponseFrame,
+    response: &mut IdentityManagementHttp2Response,
+) -> Result<FrameCommand, ExchangeFailure> {
+    let mut confirmation = None;
+    let command = match frame.kind {
+        DATA_FRAME_KIND | HEADERS_FRAME_KIND | CONTINUATION_FRAME_KIND => {
+            let credits = response.accept(&frame)?;
+            if response.stream_ended() {
+                None
+            } else {
+                credits.map(|frames| {
+                    let (written, pending) = oneshot::channel();
+                    confirmation = Some(pending);
+                    Command::Credit(frames, written)
+                })
+            }
+        }
+        RESET_FRAME_KIND => return Err(malformed()),
+        SETTINGS_FRAME_KIND if frame.flags & ACKNOWLEDGEMENT_FLAG != 0 => return Err(malformed()),
+        SETTINGS_FRAME_KIND | WINDOW_UPDATE_FRAME_KIND => Some(Command::Control(frame)),
+        PING_FRAME_KIND if frame.flags & ACKNOWLEDGEMENT_FLAG == 0 => Some(Command::Control(frame)),
+        GOAWAY_FRAME_KIND => {
+            require_successful_goaway(&frame)?;
+            None
+        }
+        _ => None,
+    };
+    Ok(FrameCommand { command, confirmation })
+}
+
+fn require_successful_goaway(frame: &ResponseFrame) -> Result<(), ExchangeFailure> {
+    let last = u32::from_be_bytes(frame.payload[..4].try_into().unwrap()) & STREAM_IDENTIFIER_MASK;
+    let error = u32::from_be_bytes(frame.payload[4..8].try_into().unwrap());
+    if last < 1 || error != 0 {
+        return Err(malformed());
+    }
+    Ok(())
+}
+
+struct IdleRead<Reader> {
+    input: Reader,
     duration: Option<Duration>,
     timer: Pin<Box<Sleep>>,
     expired: bool,
 }
-impl<R> IdleRead<R> {
-    fn new(input: R) -> Self {
+impl<Reader> IdleRead<Reader> {
+    fn new(input: Reader) -> Self {
         Self { input, duration: None, timer: Box::pin(sleep(Duration::ZERO)), expired: false }
     }
     fn enable(&mut self, duration: Duration) {
@@ -369,7 +436,7 @@ impl<R> IdleRead<R> {
         self.duration.map(|_| self.timer.deadline())
     }
 }
-impl<R: AsyncRead + Unpin> AsyncRead for IdleRead<R> {
+impl<Reader: AsyncRead + Unpin> AsyncRead for IdleRead<Reader> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,

@@ -20,6 +20,10 @@
 //! about those rows this one does not, and migrating them backwards would be
 //! guessing.
 
+#[path = "database_inventory.rs"]
+mod inventory;
+use inventory::PhysicalInventory;
+
 use std::ffi::CStr;
 use std::fs::File;
 use std::sync::OnceLock;
@@ -29,6 +33,20 @@ use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
 use slingshot_domain::installation::InstallationIdentifier;
 
 use crate::sqlite_statement_inventory::FORBIDDEN_CONSTRUCTS;
+
+const RUNTIME_CONTRACT_COLUMN: usize = 2;
+const OUTBOX_SCHEMA_VERSION: i64 = 2;
+#[cfg(unix)]
+const PRIVATE_DIRECTORY_MODE: u32 = 0o700;
+#[cfg(unix)]
+const OTHER_USER_PERMISSION_BITS: u32 = 0o077;
+
+/// Installs the same cursor ordering used by the event fold and reset validator.
+fn install_cursor_order(connection: &Connection) -> Result<(), DatabaseFailure> {
+    connection
+        .create_collation("slingshot_cursor", slingshot_domain::stream_cursor_order::compare)
+        .map_err(refused)
+}
 
 /// Migrations, in the order they apply.
 ///
@@ -58,7 +76,7 @@ pub const REVIEWED_SQLITE_LIBRARY: &str = "rusqlite 0.40.2 / libsqlite3-sys 0.38
 /// The SQLite version number in that reviewed vendored source.
 pub const REVIEWED_SQLITE_VERSION: i32 = 3_053_002;
 /// The SQLite source identifier in that reviewed vendored source.
-pub const REVIEWED_SQLITE_SOURCE_ID: &str =
+pub const REVIEWED_SQLITE_SOURCE_IDENTIFIER: &str =
     "2026-06-03 19:12:13 d6e03d8c777cfa2d35e3b60d8ec3e0187f3e9f99d8e2ee9cac695fd6fcdf1a24";
 
 /// Reason a database could not be opened.
@@ -199,6 +217,10 @@ impl OperationDatabase {
     /// Reopens a ledger-registered database only after a read-only identity and
     /// unfinished-partition audit. Refusal precedes migration and artifact recovery.
     /// The caller must retain installation and namespace ownership throughout.
+    ///
+    /// # Errors
+    /// Refuses mismatched installation or unfinished-work partitions and any
+    /// initialization, path, schema, settings, capacity or database failure.
     pub fn reopen_bound(
         path: &std::path::Path,
         settings: RequiredSettings,
@@ -243,6 +265,7 @@ impl OperationDatabase {
             ));
         }
         let connection = Connection::open(&pinned_path).map_err(refused)?;
+        install_cursor_order(&connection)?;
         if let Some(inspected) = inspected
             && file_snapshot(&pinned_path)? != inspected
         {
@@ -283,6 +306,7 @@ impl OperationDatabase {
     pub fn open_in_memory(settings: RequiredSettings) -> Result<Self, DatabaseFailure> {
         initialize_sqlite()?;
         let connection = Connection::open_in_memory().map_err(refused)?;
+        install_cursor_order(&connection)?;
         let database = Self {
             connection,
             _state_root: None,
@@ -345,6 +369,9 @@ impl OperationDatabase {
 
     /// Reads the database's installation identity without creating or repairing it.
     /// An absent identity is distinct from malformed or unreadable durable state.
+    ///
+    /// # Errors
+    /// Refuses unreadable stored identity or a noncanonical identifier.
     pub fn installation_identifier(
         &self,
     ) -> Result<Option<InstallationIdentifier>, DatabaseFailure> {
@@ -370,6 +397,10 @@ impl OperationDatabase {
     /// Records the staged installation exactly once. Even an identical second
     /// insertion refuses; callers must read and verify existing identity, never
     /// use this method to adopt or repair an existing database.
+    ///
+    /// # Errors
+    /// Refuses duplicate identity insertion, invalid stored time or database
+    /// failures; existing identity is never overwritten.
     pub fn record_installation_identifier(
         &self,
         identifier: &InstallationIdentifier,
@@ -399,7 +430,7 @@ impl OperationDatabase {
         );
         let mut prepared = self.connection.prepare(statement).map_err(refused)?;
         prepared
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(RUNTIME_CONTRACT_COLUMN)?)))
             .map_err(refused)?
             .collect::<Result<Vec<(String, String, String)>, _>>()
             .map_err(refused)
@@ -603,12 +634,12 @@ fn initialize_sqlite() -> Result<(), DatabaseFailure> {
 fn configure_sqlite() -> Result<(), DatabaseFailure> {
     // These FFI calls cannot initialize SQLite.  Checking them first ensures a
     // different library is refused before a connection factory is reachable.
-    let version = unsafe { rusqlite::ffi::sqlite3_libversion_number() };
+    let version = rusqlite::version_number();
     if version != REVIEWED_SQLITE_VERSION {
         return Err(DatabaseFailure::RuntimeIdentityRefused(REVIEWED_SQLITE_LIBRARY));
     }
     let source = unsafe { CStr::from_ptr(rusqlite::ffi::sqlite3_sourceid()) };
-    if source.to_str().ok() != Some(REVIEWED_SQLITE_SOURCE_ID) {
+    if source.to_str().ok() != Some(REVIEWED_SQLITE_SOURCE_IDENTIFIER) {
         return Err(DatabaseFailure::RuntimeIdentityRefused(REVIEWED_SQLITE_LIBRARY));
     }
     if !reports_only_required_temp_store_ffi() {
@@ -630,193 +661,6 @@ fn configure_sqlite() -> Result<(), DatabaseFailure> {
         )));
     }
     Ok(())
-}
-
-/// One database's named SQLite objects and the bound their combined bytes stay under.
-#[derive(Debug)]
-struct PhysicalInventory {
-    /// The SQLite main database path resolved through the retained directory descriptor.
-    main: std::path::PathBuf,
-    /// The verified state-root directory, kept open so its entries are read through
-    /// the descriptor rather than through the pinned pathname again. On macOS the
-    /// descriptor namespace is not directory-scannable by pathname, so the inventory
-    /// reads through the descriptor itself.
-    #[cfg(unix)]
-    state_root: Option<std::os::fd::OwnedFd>,
-    /// The largest combined main, WAL, and shared-memory footprint the contract permits.
-    maximum_bytes: u64,
-}
-
-impl PhysicalInventory {
-    /// Builds one inventory from a pinned main-database path.
-    fn new(main: std::path::PathBuf) -> Result<Self, DatabaseFailure> {
-        let maximum_bytes =
-            DaemonRuntimeContract::embedded().formula("maximum_sqlite_physical_bytes");
-        if maximum_bytes == 0 {
-            return Err(DatabaseFailure::PhysicalInventoryRefused(
-                "the runtime contract names no SQLite physical byte budget".to_owned(),
-            ));
-        }
-        Ok(Self {
-            main,
-            #[cfg(unix)]
-            state_root: None,
-            maximum_bytes,
-        })
-    }
-
-    /// Requires all SQLite-named objects to be private regular files within the byte budget.
-    fn require_within_budget(&self) -> Result<(), DatabaseFailure> {
-        let total = self.measured_bytes()?;
-        if total > self.maximum_bytes {
-            return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
-                "{total} bytes exceeds the {} byte SQLite budget",
-                self.maximum_bytes
-            )));
-        }
-        Ok(())
-    }
-
-    /// Returns whether another largest permitted write can begin safely.
-    fn has_write_headroom(&self) -> bool {
-        let contract = DaemonRuntimeContract::embedded();
-        let required = contract.formula("maximum_sqlite_write_transaction_bytes").checked_add(
-            contract.formula("maximum_sqlite_write_transaction_write_ahead_log_bytes"),
-        );
-        self.measured_bytes()
-            .ok()
-            .zip(required)
-            .and_then(|(held, required)| held.checked_add(required))
-            .is_some_and(|needed| needed <= self.maximum_bytes)
-    }
-
-    /// Sums the closed set of SQLite object bytes, refusing undeclared names and links.
-    fn measured_bytes(&self) -> Result<u64, DatabaseFailure> {
-        #[cfg(not(unix))]
-        let parent = self.main.parent().ok_or_else(|| {
-            DatabaseFailure::PhysicalInventoryRefused(
-                "the pinned database has no parent".to_owned(),
-            )
-        })?;
-        let main_name = self.main.file_name().and_then(|name| name.to_str()).ok_or_else(|| {
-            DatabaseFailure::PhysicalInventoryRefused(
-                "the pinned database has no UTF-8 name".to_owned(),
-            )
-        })?;
-        let permitted = [
-            main_name.to_owned(),
-            format!("{main_name}-wal"),
-            format!("{main_name}-shm"),
-            format!("{main_name}.replacement"),
-        ];
-        let mut total = 0_u64;
-        #[cfg(unix)]
-        let entries: Vec<(String, rustix::fs::Stat)> = match &self.state_root {
-            Some(state_root) => {
-                // Read the verified directory through its own descriptor. The pinned
-                // pathname's parent is a descriptor namespace that a path-based
-                // read_dir cannot scan everywhere this build runs.
-                let reader = rustix::fs::Dir::read_from(state_root).map_err(|failure| {
-                    DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                })?;
-                let mut named = Vec::new();
-                for entry in reader {
-                    let entry = entry.map_err(|failure| {
-                        DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                    })?;
-                    let name = match entry.file_name().to_str() {
-                        Ok(name) => name,
-                        Err(_) => {
-                            return Err(DatabaseFailure::PhysicalInventoryRefused(
-                                "the database directory has a non-UTF-8 SQLite object name"
-                                    .to_owned(),
-                            ));
-                        }
-                    };
-                    let metadata =
-                        rustix::fs::statat(state_root, name, rustix::fs::AtFlags::SYMLINK_NOFOLLOW)
-                            .map_err(|failure| {
-                                DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                            })?;
-                    named.push((name.to_owned(), metadata));
-                }
-                named
-            }
-            None => Vec::new(),
-        };
-        #[cfg(not(unix))]
-        let entries: Vec<(String, std::fs::Metadata)> = {
-            let mut named = Vec::new();
-            for entry in std::fs::read_dir(parent)
-                .map_err(|failure| DatabaseFailure::PhysicalInventoryRefused(failure.to_string()))?
-            {
-                let entry = entry.map_err(|failure| {
-                    DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                })?;
-                let metadata = entry.metadata().map_err(|failure| {
-                    DatabaseFailure::PhysicalInventoryRefused(failure.to_string())
-                })?;
-                let name = entry.file_name();
-                let name = name.to_str().ok_or_else(|| {
-                    DatabaseFailure::PhysicalInventoryRefused(
-                        "the database directory has a non-UTF-8 SQLite object name".to_owned(),
-                    )
-                })?;
-                named.push((name.to_owned(), metadata));
-            }
-            named
-        };
-        for (name, metadata) in entries {
-            if !name.starts_with(main_name) {
-                continue;
-            }
-            if !permitted.contains(&name.to_owned()) {
-                return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
-                    "{name} is not a permitted SQLite object"
-                )));
-            }
-            #[cfg(unix)]
-            {
-                if metadata.st_nlink != 1
-                    || rustix::fs::FileType::from_raw_mode(metadata.st_mode)
-                        != rustix::fs::FileType::RegularFile
-                {
-                    return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
-                        "{name} is not one private regular SQLite object"
-                    )));
-                }
-                total = total
-                    .checked_add(u64::try_from(metadata.st_size).unwrap_or(u64::MAX))
-                    .ok_or_else(|| {
-                        DatabaseFailure::PhysicalInventoryRefused(
-                            "SQLite object lengths overflow".to_owned(),
-                        )
-                    })?;
-            }
-            #[cfg(not(unix))]
-            {
-                if !is_private_regular_file(&metadata) {
-                    return Err(DatabaseFailure::PhysicalInventoryRefused(format!(
-                        "{name} is not one private regular SQLite object"
-                    )));
-                }
-                total = total.checked_add(metadata.len()).ok_or_else(|| {
-                    DatabaseFailure::PhysicalInventoryRefused(
-                        "SQLite object lengths overflow".to_owned(),
-                    )
-                })?;
-            }
-        }
-        Ok(total)
-    }
-}
-
-/// Windows has no stable standard-library hard-link count accessor. It still
-/// refuses non-regular objects here; the Windows handle-bound policy performs
-/// the stronger identity checks available through its safe API.
-#[cfg(not(unix))]
-fn is_private_regular_file(metadata: &std::fs::Metadata) -> bool {
-    metadata.is_file()
 }
 
 /// A database pathname resolved through an open, verified state-root directory.
@@ -860,10 +704,10 @@ impl PinnedDatabasePath {
                 "the state-root directory is not a directory owned by this user".to_owned(),
             ));
         }
-        root.set_permissions(std::fs::Permissions::from_mode(0o700))
+        root.set_permissions(std::fs::Permissions::from_mode(PRIVATE_DIRECTORY_MODE))
             .map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?;
         if root.metadata().map_err(|failure| DatabaseFailure::Refused(failure.to_string()))?.mode()
-            & 0o077
+            & OTHER_USER_PERMISSION_BITS
             != 0
         {
             return Err(DatabaseFailure::Refused(
@@ -1001,7 +845,7 @@ fn audit_existing_binding(
         connection.query_row("PRAGMA user_version", [], |row| row.get(0)).map_err(refused)?;
     // Version one predates the outbox; its normal migration creates the empty
     // table. Never query a table that this supported historical schema lacks.
-    if version >= 2 {
+    if version >= OUTBOX_SCHEMA_VERSION {
         let foreign_children: i64 = connection
             .query_row(
                 crate::sqlite_statement_inventory::statement_text(
@@ -1026,7 +870,7 @@ fn audit_existing_binding(
     while let Some(row) = rows.next().map_err(refused)? {
         let target: String = row.get(0).map_err(refused)?;
         let revision: String = row.get(1).map_err(refused)?;
-        let contract: String = row.get(2).map_err(refused)?;
+        let contract: String = row.get(RUNTIME_CONTRACT_COLUMN).map_err(refused)?;
         if target != binding.target
             || revision != binding.revision
             || contract != binding.runtime_contract
@@ -1093,214 +937,5 @@ fn refused(failure: rusqlite::Error) -> DatabaseFailure {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{OperationDatabase, RequiredSettings, StartupDatabaseBinding};
-    use slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract;
-    use slingshot_domain::installation::InstallationIdentifier;
-
-    fn settings() -> RequiredSettings {
-        RequiredSettings {
-            page_bytes: 4096,
-            database_pages: 262_144,
-            busy_timeout_milliseconds: 5000,
-        }
-    }
-
-    #[test]
-    fn bound_startup_refuses_each_foreign_partition_before_changes() {
-        use crate::operation_repository::{AdmissionRequest, OperationRepository};
-        use slingshot_domain::command_fingerprint::{CommandFingerprint, FingerprintInput};
-        for dimension in 0..4 {
-            let root = tempfile::tempdir().unwrap();
-            let path = root.path().join("operations.sqlite3");
-            let identity = InstallationIdentifier::parse(&"a".repeat(64)).unwrap();
-            let database = OperationDatabase::open(&path, settings()).unwrap();
-            database.record_installation_identifier(&identity, 123).unwrap();
-            let mut partition = ["target", "revision", "contract"];
-            if dimension < 3 {
-                partition[dimension] = "foreign";
-            }
-            let retained_installation =
-                if dimension == 3 { "b".repeat(64) } else { identity.as_text().to_owned() };
-            let repository = OperationRepository::new(database);
-            let canonical_command = r#"{"root_path":"/content/example"}"#.to_owned();
-            repository
-                .admit(
-                    &AdmissionRequest {
-                        author_target_identity: "identity".to_owned(),
-                        author_target_identity_digest: partition[0].to_owned(),
-                        caller_identity: None,
-                        command_fingerprint: CommandFingerprint::derive(&FingerprintInput {
-                            author_target_identity_digest: partition[0].to_owned(),
-                            canonical_command: canonical_command.clone(),
-                            command_wire_name: "query_paths".to_owned(),
-                            command_semantic_contract_version: "1.0.0".to_owned(),
-                            selected_environment_revision: partition[1].to_owned(),
-                        })
-                        .unwrap(),
-                        canonical_command,
-                        command_wire_name: "query_paths".to_owned(),
-                        daemon_runtime_contract_digest: partition[2].to_owned(),
-                        installation_identifier: InstallationIdentifier::parse(
-                            &retained_installation,
-                        )
-                        .unwrap(),
-                        operation_identifier: "operation".to_owned(),
-                        selected_environment_revision: partition[1].to_owned(),
-                        workflow_correlation_identifier: None,
-                    },
-                    123,
-                )
-                .unwrap();
-            drop(repository);
-            let before = std::fs::read(&path).unwrap();
-            let binding = StartupDatabaseBinding {
-                installation: &identity,
-                target: "target",
-                revision: "revision",
-                runtime_contract: "contract",
-            };
-            assert!(OperationDatabase::reopen_bound(&path, settings(), binding).is_err());
-            assert_eq!(std::fs::read(&path).unwrap(), before);
-            let database = OperationDatabase::open_live(&path, settings()).unwrap();
-            assert_eq!(
-                database.unfinished_partitions().unwrap(),
-                vec![(partition[0].to_owned(), partition[1].to_owned(), partition[2].to_owned(),)]
-            );
-            let repository = OperationRepository::new(database);
-            repository
-                .settle_success(
-                    partition[0],
-                    "operation",
-                    &slingshot_domain::operation::SuccessfulSettlement {
-                        artifacts: Vec::new(),
-                        inline_result: Some("{}".to_owned()),
-                        expected_lifecycle_state:
-                            slingshot_domain::operation::OperationLifecycleState::Queued,
-                        expected_revision: 1,
-                        settled_at_unix_milliseconds: 124,
-                    },
-                )
-                .unwrap();
-            drop(repository);
-            assert!(OperationDatabase::reopen_bound(&path, settings(), binding).is_ok());
-        }
-    }
-
-    #[test]
-    fn authorizer_refuses_file_escaping_and_temporary_sql_before_effect() {
-        let root = tempfile::tempdir().expect("a temporary directory");
-        let database = OperationDatabase::open(&root.path().join("operations.sqlite3"), settings())
-            .expect("a migrated database");
-        let attachment = root.path().join("attachment.sqlite3");
-        assert!(
-            database
-                .connection()
-                .execute("ATTACH DATABASE ? AS outside", [attachment.to_string_lossy()])
-                .is_err(),
-            "the authorizer refuses an attachment while SQLite prepares it"
-        );
-        assert!(!attachment.exists(), "the refused attachment creates no file");
-        assert!(
-            database
-                .connection()
-                .execute_batch("CREATE TEMP TABLE forbidden (value INTEGER)")
-                .is_err(),
-            "the authorizer refuses temporary database objects"
-        );
-        assert!(
-            database.connection().execute_batch("CREATE TABLE forbidden (value INTEGER)").is_err(),
-            "the authorizer refuses permanent schema changes after migration"
-        );
-        assert!(
-            database.connection().execute_batch("PRAGMA temp_store_directory = '/tmp'").is_err(),
-            "the authorizer refuses an ambient temporary-directory override"
-        );
-        assert!(
-            database.connection().execute_batch("PRAGMA user_version = 99").is_err(),
-            "the authorizer refuses write pragmas after migration"
-        );
-    }
-
-    #[test]
-    fn settings_are_read_back_on_the_product_connection() {
-        let root = tempfile::tempdir().expect("a temporary directory");
-        let settings = settings();
-        let database = OperationDatabase::open(&root.path().join("operations.sqlite3"), settings)
-            .expect("a migrated database");
-        let read_integer = |pragma: &str| {
-            database
-                .connection()
-                .query_row(&format!("PRAGMA {pragma}"), [], |row| row.get::<_, i64>(0))
-                .expect("the pragma reads")
-        };
-        let read_text = |pragma: &str| {
-            database
-                .connection()
-                .query_row(&format!("PRAGMA {pragma}"), [], |row| row.get::<_, String>(0))
-                .expect("the pragma reads")
-        };
-        assert_eq!(
-            read_integer("page_size"),
-            i64::try_from(settings.page_bytes).expect("a page count")
-        );
-        assert_eq!(
-            read_integer("max_page_count"),
-            i64::try_from(settings.database_pages).expect("a page count")
-        );
-        assert_eq!(
-            read_integer("busy_timeout"),
-            i64::try_from(settings.busy_timeout_milliseconds).expect("a timeout")
-        );
-        assert_eq!(read_text("journal_mode"), "wal");
-        assert_eq!(read_integer("synchronous"), 2);
-        assert_eq!(read_integer("foreign_keys"), 1);
-        assert_eq!(read_integer("temp_store"), 2);
-        assert_eq!(
-            read_integer("wal_autocheckpoint"),
-            i64::try_from(
-                DaemonRuntimeContract::embedded().limit("maximum_sqlite_write_ahead_log_frames")
-            )
-            .expect("a frame limit")
-        );
-        assert_eq!(
-            read_integer("journal_size_limit"),
-            i64::try_from(
-                DaemonRuntimeContract::embedded().formula("maximum_sqlite_write_ahead_log_bytes")
-            )
-            .expect("a WAL byte limit")
-        );
-        assert!(database.require_compile_options().is_ok());
-    }
-
-    #[test]
-    fn restart_refuses_an_uninventoried_sqlite_sidecar() {
-        let root = tempfile::tempdir().expect("a temporary directory");
-        let path = root.path().join("operations.sqlite3");
-        drop(OperationDatabase::open(&path, settings()).expect("a migrated database"));
-        std::fs::write(root.path().join("operations.sqlite3-journal"), b"unexpected")
-            .expect("the adversarial sidecar exists");
-        let outcome = OperationDatabase::open(&path, settings());
-        assert!(
-            matches!(outcome, Err(super::DatabaseFailure::PhysicalInventoryRefused(_))),
-            "an undeclared SQLite sidecar is refused before service: {outcome:?}"
-        );
-    }
-
-    #[test]
-    fn restart_refuses_a_permitted_object_over_the_physical_budget() {
-        let root = tempfile::tempdir().expect("a temporary directory");
-        let path = root.path().join("operations.sqlite3");
-        drop(OperationDatabase::open(&path, settings()).expect("a migrated database"));
-        let replacement = std::fs::File::create(root.path().join("operations.sqlite3.replacement"))
-            .expect("the adversarial replacement exists");
-        replacement
-            .set_len(DaemonRuntimeContract::embedded().formula("maximum_sqlite_physical_bytes") + 1)
-            .expect("a sparse over-budget fixture");
-        let outcome = OperationDatabase::open(&path, settings());
-        assert!(
-            matches!(outcome, Err(super::DatabaseFailure::PhysicalInventoryRefused(_))),
-            "an over-budget SQLite object is refused before service: {outcome:?}"
-        );
-    }
-}
+#[path = "database_tests.rs"]
+mod tests;

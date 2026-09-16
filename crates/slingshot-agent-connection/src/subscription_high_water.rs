@@ -11,15 +11,18 @@ use http::{HeaderMap, HeaderValue, Method};
 use slingshot_agent_protocol::subscription_high_water::SubscriptionHighWater;
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
 
+const CAPTURED_STATUS: u16 = 200;
+const GENERATION_CHANGED_STATUS: u16 = 409;
+
 /// A captured position bound to its echoed request, not a completed reset.
 pub struct ValidatedHighWater {
     subscription: String,
     generation: u64,
     cursor: EventStreamCursor,
 }
-impl core::fmt::Debug for ValidatedHighWater {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("ValidatedHighWater([redacted])")
+impl ::core::fmt::Debug for ValidatedHighWater {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("ValidatedHighWater([redacted])")
     }
 }
 impl ValidatedHighWater {
@@ -37,6 +40,11 @@ impl ValidatedHighWater {
     }
     /// Requires a separately identity-validated snapshot to cover this capture.
     /// This checks one member only; it cannot authorize a subscription reset.
+    ///
+    /// # Errors
+    ///
+    /// Refuses an invalid cursor, a different subscription or generation, or a
+    /// snapshot watermark ordered before the captured high-water position.
     pub fn require_snapshot_coverage(
         &self,
         snapshot: &crate::job_snapshot_reconciliation::JobSnapshot,
@@ -44,7 +52,11 @@ impl ValidatedHighWater {
         require_cursor(snapshot.subscription_watermark.as_text()).map_err(|_| HighWaterRefusal)?;
         if snapshot.echo.daemon_subscription_identifier != self.subscription
             || snapshot.echo.agent_event_store_generation != self.generation
-            || snapshot.subscription_watermark.as_text() < self.cursor.as_text()
+            || slingshot_domain::stream_cursor_order::compare(
+                snapshot.subscription_watermark.as_text(),
+                self.cursor.as_text(),
+            )
+            .is_lt()
         {
             return Err(HighWaterRefusal);
         }
@@ -54,8 +66,8 @@ impl ValidatedHighWater {
 
 /// Returns the canonical POST body one high-water capture carries.
 ///
-/// The two members are percent-encoded exactly once inside the JSON value, so
-/// the request names one subscription no matter what separators it contains.
+/// JSON string escaping preserves the subscription exactly; this body does not
+/// percent-encode it as if it were a query member.
 pub(crate) fn high_water_body(
     subscription: &str,
     generation: u64,
@@ -107,26 +119,18 @@ fn now_unix_milliseconds(receipt: &crate::selected_author_http::FiniteHttpReceip
 
 /// Validates a complete selected-author response against independent request
 /// values. A matching body cannot substitute another subscription/generation.
+///
+/// # Errors
+///
+/// Refuses invalid request identity, unacceptable response metadata or size,
+/// malformed closed JSON, mismatched echoes or contract identity, and an invalid
+/// cursor. A refusal yields no partially validated capture.
 pub fn decode_high_water(
     response: &SelectedAuthorFiniteResponse,
     subscription: &str,
     generation: u64,
 ) -> Result<ValidatedHighWater, HighWaterRefusal> {
-    let contract = AuthorAgentTransportContract::embedded();
-    if subscription.is_empty()
-        || subscription.len() as u64
-            > contract.limit("maximum_daemon_subscription_identifier_bytes")
-        || generation == 0
-        || response.status != 200
-        || response.head.location.is_some()
-        || response.body.len() as u64 > contract.limit("maximum_agent_protocol_document_bytes")
-        || !crate::selected_author_submission::json_media_type(
-            response.content_type.as_deref().unwrap_or(""),
-        )
-    {
-        return Err(HighWaterRefusal);
-    }
-    response.head.require_acceptable().map_err(|_| HighWaterRefusal)?;
+    require_capture_response(response, subscription, generation)?;
     let document: SubscriptionHighWater =
         serde_json::from_slice(&response.body).map_err(|_| HighWaterRefusal)?;
     if document.format != slingshot_agent_protocol::identity::AGENT_FORMAT
@@ -148,9 +152,36 @@ pub fn decode_high_water(
     })
 }
 
+fn require_capture_response(
+    response: &SelectedAuthorFiniteResponse,
+    subscription: &str,
+    generation: u64,
+) -> Result<(), HighWaterRefusal> {
+    let contract = AuthorAgentTransportContract::embedded();
+    if subscription.is_empty()
+        || subscription.len() as u64
+            > contract.limit("maximum_daemon_subscription_identifier_bytes")
+        || generation == 0
+        || response.status != CAPTURED_STATUS
+        || response.head.location.is_some()
+        || response.body.len() as u64 > contract.limit("maximum_agent_protocol_document_bytes")
+        || !crate::selected_author_submission::json_media_type(
+            response.content_type.as_deref().unwrap_or(""),
+        )
+    {
+        return Err(HighWaterRefusal);
+    }
+    response.head.require_acceptable().map_err(|_| HighWaterRefusal)
+}
+
 impl SelectedAuthorTransport {
     /// Captures one selected subscription position over HTTP/1.1 without retry
     /// or installing the returned position.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FiniteHttpFailure`] when token acquisition, request construction,
+    /// authenticated transport, or capture/reset validation cannot complete.
     pub async fn capture_high_water_http1(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -162,6 +193,11 @@ impl SelectedAuthorTransport {
             .await
     }
     /// Captures the same fixed route through strict HTTP/2 negotiation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same failures as [`Self::capture_high_water_http1`], including
+    /// refusal when the selected connection does not negotiate HTTP/2.
     pub async fn capture_high_water_http2(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -175,6 +211,11 @@ impl SelectedAuthorTransport {
     /// Captures on the original negotiated connection. The captured position
     /// remains evidence for durable reconciliation, not permission to install
     /// a cursor, change generation or retry the request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FiniteHttpFailure`] for token acquisition, request construction,
+    /// selected-protocol transport, or invalid capture/reset responses.
     pub async fn capture_high_water_negotiated(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -186,6 +227,11 @@ impl SelectedAuthorTransport {
     }
     /// Captures with request-scoped provider authentication. Only a validated
     /// Cloud 401 allows one identical repeat; neither attempt installs a cursor.
+    ///
+    /// # Errors
+    ///
+    /// Refuses invalid selection or request identity, unavailable provider or
+    /// CSRF credentials, failed transport, and invalid capture/reset responses.
     pub async fn capture_high_water_authenticated(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -263,6 +309,12 @@ impl SelectedAuthorTransport {
     /// Captures through the selected provider's asynchronous credential exchange.
     /// Selection checks run before authentication; response validation and the
     /// single refreshed-repeat policy are shared with the other transports.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same request, transport, and response-validation failures as
+    /// [`Self::capture_high_water_authenticated`], including asynchronous
+    /// credential-exchange refusal.
     pub async fn capture_high_water_authenticated_async<Clock, Utc>(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -450,10 +502,10 @@ impl SelectedAuthorTransport {
             return Err(FiniteHttpFailure::Head);
         }
         match response.status {
-            200 => decode_high_water(&response, subscription, generation)
+            CAPTURED_STATUS => decode_high_water(&response, subscription, generation)
                 .map(HighWaterOutcome::Captured)
                 .map_err(|_| FiniteHttpFailure::Body),
-            409 => decode_event_reset(
+            GENERATION_CHANGED_STATUS => decode_event_reset(
                 &response,
                 ResetRequest {
                     route: ResetRoute::HighWater,

@@ -157,9 +157,8 @@ pub fn require_runnable(
 ///
 /// The protocol server knows what a tool is called and what its arguments
 /// mean; it does not know how to reach an author, and it must not learn. A
-/// caller supplies this, so the one thing a tool call and a command line share
-/// - the command it runs and the daemon it reaches - lives in one place rather
-/// than in two implementations that would have to agree.
+/// caller supplies transport access, keeping the command and daemon shared by
+/// tool calls and command-line invocations in one implementation.
 pub trait ToolRunner {
     /// Runs one tool call and returns the outcome it reached.
     ///

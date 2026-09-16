@@ -4,7 +4,7 @@
 //! repeat of the bounded request, whatever its method. Route-specific response
 //! interpretation remains the caller's responsibility.
 
-use http::{HeaderMap, Method};
+use http::{HeaderMap, Method, StatusCode};
 use std::future::Future;
 use tokio::time::Instant;
 
@@ -14,6 +14,8 @@ use crate::authentication::environment_provider::{
 };
 use crate::selected_author_http::{FiniteHttpFailure, FiniteHttpReceipt};
 use crate::selected_author_transport::SelectedAuthorTransport;
+
+const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
 
 /// A bounded read failed without retaining remote strings or credential bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -38,6 +40,10 @@ impl SelectedAuthorTransport {
     /// includes authentication, both exchanges and refresh, so retry cannot
     /// extend the caller's advertised retention budget. Dropping this future
     /// cannot schedule a detached retry.
+    ///
+    /// # Errors
+    /// Refuses a provider from another selection, failed initial authentication
+    /// or refresh, invalid request encoding, and failed bounded exchanges.
     pub async fn authenticated_finite_get(
         &self,
         provider: &EnvironmentAuthenticationProvider,
@@ -60,6 +66,10 @@ impl SelectedAuthorTransport {
 
     /// Uses the async provider's single cache and its own selected-credential IMS
     /// client. Refresh and request cancellation remain owned by this future.
+    ///
+    /// # Errors
+    /// Refuses a provider from another selection, failed initial authentication
+    /// or refresh, invalid request encoding, and failed bounded exchanges.
     pub async fn authenticated_finite_get_async<Clock, Utc>(
         &self,
         provider: &crate::authentication::environment_provider::AsyncEnvironmentAuthenticationProvider,
@@ -142,7 +152,7 @@ impl SelectedAuthorTransport {
             .finite_negotiated_query(method.clone(), segments, query, &authentication, fields, body)
             .await?;
         drop(authentication);
-        if receipt.response.status == 401 {
+        if receipt.response.status == StatusCode::UNAUTHORIZED.as_u16() {
             if let Some(lease) = lease {
                 let (authentication, _) = refresh(lease).await?;
                 receipt = self
@@ -151,7 +161,8 @@ impl SelectedAuthorTransport {
             }
         }
         receipt.elapsed_milliseconds =
-            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+            u64::try_from(started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND))
+                .unwrap_or(u64::MAX);
         Ok(receipt)
     }
 

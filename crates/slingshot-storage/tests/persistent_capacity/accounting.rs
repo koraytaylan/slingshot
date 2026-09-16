@@ -514,13 +514,20 @@ fn opening_a_live_connection_preserves_reservations_and_never_initializes_a_data
 
 #[test]
 fn live_open_refuses_an_old_schema_before_changing_database_bytes_or_journalling() {
+    // Configure SQLite through the product before a raw historical-schema
+    // fixture can initialize the process-wide library with default settings.
+    drop(OperationDatabase::open_in_memory(settings()).unwrap());
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("old.sqlite3");
     let fixture = rusqlite::Connection::open(&path).unwrap();
     fixture.execute_batch("PRAGMA user_version = 1; CREATE TABLE sentinel (value TEXT); INSERT INTO sentinel VALUES ('preserve');").unwrap();
     drop(fixture);
     let before = std::fs::read(&path).unwrap();
-    assert!(OperationDatabase::open_live(&path, settings()).is_err());
+    assert!(matches!(
+        OperationDatabase::open_live(&path, settings()),
+        Err(slingshot_storage::database::DatabaseFailure::Refused(message))
+            if message == "a live connection requires the current database schema"
+    ));
     assert_eq!(std::fs::read(&path).unwrap(), before);
     assert!(!directory.path().join("old.sqlite3-wal").exists());
     assert!(!directory.path().join("old.sqlite3-shm").exists());
@@ -539,17 +546,26 @@ fn reservations_release_on_drop_and_always_use_their_own_database() {
     let second = database();
     let first_account = account(&first, small_policy());
     let second_account = account(&second, small_policy());
-    let first_reservation = first_account.reserve_artifact(None, 100).unwrap().unwrap();
-    let second_reservation = second_account.reserve_artifact(None, 200).unwrap().unwrap();
+    const FIRST_RESERVATION_BYTES: u64 = 100;
+    const SECOND_RESERVATION_BYTES: u64 = 200;
+    const REPLACEMENT_RESERVATION_BYTES: u64 = 300;
+    let first_reservation =
+        first_account.reserve_artifact(None, FIRST_RESERVATION_BYTES).unwrap().unwrap();
+    let second_reservation =
+        second_account.reserve_artifact(None, SECOND_RESERVATION_BYTES).unwrap().unwrap();
     assert_eq!(format!("{first_reservation:?}"), "ArtifactReservation([redacted])");
     // Both databases may allocate ticket one; the argument owns which one ends.
     second_account.release(first_reservation);
     assert_eq!(first_account.usage().unwrap().reserved_artifact_bytes, 0);
-    assert_eq!(second_account.usage().unwrap().reserved_artifact_bytes, 200);
-    let replacement = first_account.reserve_artifact(None, 300).unwrap().unwrap();
+    assert_eq!(second_account.usage().unwrap().reserved_artifact_bytes, SECOND_RESERVATION_BYTES);
+    let replacement =
+        first_account.reserve_artifact(None, REPLACEMENT_RESERVATION_BYTES).unwrap().unwrap();
     drop(second_reservation);
     assert_eq!(second_account.usage().unwrap().reserved_artifact_bytes, 0);
-    assert_eq!(first_account.usage().unwrap().reserved_artifact_bytes, 300);
+    assert_eq!(
+        first_account.usage().unwrap().reserved_artifact_bytes,
+        REPLACEMENT_RESERVATION_BYTES
+    );
     drop(replacement);
     assert_eq!(first_account.usage().unwrap().reserved_artifact_bytes, 0);
 }

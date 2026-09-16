@@ -74,7 +74,11 @@ fn build_checkout(directory: &tempfile::TempDir, origin: &str, authored_at: &str
     run_git(&checkout, &["remote", "add", "origin", origin], authored_at);
     std::fs::write(checkout.join("advisory.md"), b"one advisory").expect("the advisory is written");
     run_git(&checkout, &["add", "advisory.md"], authored_at);
-    run_git(&checkout, &["commit", "--quiet", "--message", "one advisory"], authored_at);
+    run_git(
+        &checkout,
+        &["commit", "--quiet", "--message", "test: add advisory fixture"],
+        authored_at,
+    );
     run_git(&checkout, &["checkout", "--quiet", "--detach", "HEAD"], authored_at);
     checkout
 }
