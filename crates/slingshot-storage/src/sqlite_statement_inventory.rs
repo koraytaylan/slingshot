@@ -948,6 +948,12 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
+        purpose: "clear one resumed operation's stale scheduler claim",
+        text: "UPDATE operation SET scheduler_fence = NULL, scheduler_lease_expires_at_unix_milliseconds = NULL, scheduler_checkpoint = NULL WHERE author_target_identity_digest = ? AND operation_identifier = ? AND lifecycle_state = ? AND operation_revision = ?",
+        parameters: 4,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
         purpose: "claim one retained operation for execution",
         text: "UPDATE operation SET scheduler_fence = ?, scheduler_lease_expires_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND lifecycle_state = ? AND operation_revision = ? AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds <= ?) AND (scheduler_fence IS NULL OR scheduler_fence < ?)",
         parameters: 8,
