@@ -199,14 +199,18 @@ impl OperationRepository {
         transaction: &rusqlite::Transaction<'_>,
         current: &OperationSummary,
     ) -> Result<(), RepositoryFailure> {
-        // Keep the recovery fact as durable evidence while making the
-        // operation queueable.  The retained-author activation path consumes
-        // that fact and marks it no longer manually resumable after it has
-        // reconciled the remote child.  Clearing it here would make the
-        // persisted receipt unusable by that path.
-        let folded = current
-            .record
-            .fold(&OperationFact::Lifecycle { lifecycle_state: OperationLifecycleState::Queued })?;
+        // Keep the recovery fact as durable evidence while making it no longer
+        // manually resumable. A resume does not rewind the operation lifecycle
+        // (for example, Running cannot transition back to Queued); the
+        // scheduler's committed receipt is the eligibility signal.
+        let Some(recovery) = current.record.outstanding_recovery.as_ref() else {
+            return Err(RepositoryFailure::NoSuchOperation {
+                identifier: current.operation_identifier.clone(),
+            });
+        };
+        let mut activated = recovery.clone();
+        activated.manual_resume_eligible = false;
+        let folded = current.record.fold(&OperationFact::Recovery { recovery: activated })?;
         self.write_folded(transaction, current, &folded, None)?;
         let cleared = transaction.execute(
             statement("clear one resumed operation's stale scheduler claim"),
