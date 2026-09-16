@@ -6194,7 +6194,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
         if stale_before_post {
             assert_eq!(
                 result,
-                HandoffDisposition::Unknown,
+                HandoffDisposition::Unknown { cause: None },
                 "revision changed during token acquisition"
             );
             assert!(
@@ -6228,7 +6228,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
             continue;
         }
         if truncate {
-            assert_eq!(result, HandoffDisposition::Unknown);
+            assert!(matches!(result, HandoffDisposition::Unknown { cause: Some(_) }));
         } else {
             assert_eq!(result, HandoffDisposition::Accepted);
         }

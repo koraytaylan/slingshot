@@ -229,7 +229,7 @@ fn disposition_spelling(disposition: &HandoffDisposition) -> &'static str {
         HandoffDisposition::RecoveryWindowExpired => "recovery-window-expired",
         HandoffDisposition::Conflict => "conflict",
         HandoffDisposition::RetryAfter { .. } => "retry-after",
-        HandoffDisposition::Unknown => "unknown",
+        HandoffDisposition::Unknown { .. } => "unknown",
         HandoffDisposition::ReconcileRetained => "reconcile-retained",
     }
 }
@@ -406,7 +406,10 @@ fn every_cut_after_the_request_bytes_stays_unknown_and_sends_nothing_again() {
     let submission = submission();
     for cut in post_byte {
         let disposition = disposition_of(&outcome_of(cut, &submission));
-        assert_eq!(disposition, HandoffDisposition::Unknown, "{cut}");
+        assert!(
+            matches!(disposition, HandoffDisposition::Unknown { cause: Some(_) }),
+            "{cut}: {disposition:?}"
+        );
         assert!(
             !disposition.permits_another_send(),
             "{cut}: resending an unknown outcome is how one command becomes two"

@@ -24,6 +24,7 @@
 //! exists to make hard.
 
 use slingshot_agent_connection::authentication::environment_provider::SelectedAuthorConnection;
+use slingshot_agent_connection::command_submission::UnknownCause;
 use slingshot_agent_connection::selected_author_transport::{
     SelectedAuthorTransport, SelectedAuthorTransportFailure,
 };
@@ -300,11 +301,13 @@ pub fn outcome_of_handoff(disposition: &HandoffDisposition) -> Option<OperationE
         HandoffDisposition::RetryAfter { milliseconds } => Some(unresolved(
             RecoveryCategory::AmbiguousSubmission,
             OperationExecutionCertainty::SubmissionUnknown,
+            String::new(),
             *milliseconds,
         )),
-        HandoffDisposition::Unknown => Some(unresolved(
+        HandoffDisposition::Unknown { cause } => Some(unresolved(
             RecoveryCategory::AmbiguousSubmission,
             OperationExecutionCertainty::SubmissionUnknown,
+            cause.map_or_else(String::new, UnknownCause::spelling),
             0,
         )),
     }
@@ -345,13 +348,14 @@ fn failed_closed(
 fn unresolved(
     category: RecoveryCategory,
     certainty: OperationExecutionCertainty,
+    detail: String,
     retry_delay_milliseconds: u64,
 ) -> OperationExecutorOutcome {
     OperationExecutorOutcome::RecoveryRequired {
         recovery: RecoveryFact {
             attempt_count: 0,
             category,
-            detail: String::new(),
+            detail,
             evidence: RecoveryExecutionEvidence::ExecutionCertainty { certainty },
             manual_resume_eligible: true,
             retry_delay_milliseconds,

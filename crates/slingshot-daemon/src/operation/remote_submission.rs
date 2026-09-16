@@ -22,7 +22,7 @@
 //! again would turn one command into two, which is exactly the failure the
 //! whole derivation scheme exists to prevent.
 
-use slingshot_agent_connection::command_submission::{Submission, SubmissionOutcome};
+use slingshot_agent_connection::command_submission::{Submission, SubmissionOutcome, UnknownCause};
 use slingshot_storage::operation::remote_submission::FenceFacts;
 
 /// How many physical Sling records prove nothing has started yet.
@@ -191,7 +191,10 @@ pub enum HandoffDisposition {
         milliseconds: u64,
     },
     /// Nobody knows, and the way out is a lookup rather than another send.
-    Unknown,
+    Unknown {
+        /// Why the answer could not be believed, when interpret named one.
+        cause: Option<UnknownCause>,
+    },
 }
 
 /// Returns what one submission outcome means durably.
@@ -211,10 +214,12 @@ pub fn disposition_of(outcome: &SubmissionOutcome) -> HandoffDisposition {
         SubmissionOutcome::RetryAfter { milliseconds } => {
             HandoffDisposition::RetryAfter { milliseconds: *milliseconds }
         }
-        SubmissionOutcome::SubmissionUnknown {
-            cause: slingshot_agent_connection::command_submission::UnknownCause::LookupRequired,
-        } => HandoffDisposition::ReconcileRetained,
-        SubmissionOutcome::SubmissionUnknown { .. } => HandoffDisposition::Unknown,
+        SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::LookupRequired } => {
+            HandoffDisposition::ReconcileRetained
+        }
+        SubmissionOutcome::SubmissionUnknown { cause } => {
+            HandoffDisposition::Unknown { cause: Some(*cause) }
+        }
     }
 }
 
@@ -231,6 +236,6 @@ impl HandoffDisposition {
     /// Returns whether this disposition must be settled by asking the agent.
     #[must_use]
     pub fn requires_lookup(&self) -> bool {
-        matches!(self, Self::ReconcileRetained | Self::Unknown | Self::RetryAfter { .. })
+        matches!(self, Self::ReconcileRetained | Self::Unknown { .. } | Self::RetryAfter { .. })
     }
 }

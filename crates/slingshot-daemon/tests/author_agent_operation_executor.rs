@@ -238,7 +238,7 @@ fn a_handoff_that_settles_nothing_never_asks_the_agent_what_happened() {
     for disposition in [
         HandoffDisposition::NotExecuted,
         HandoffDisposition::RetryAfter { milliseconds: RETRY_DELAY },
-        HandoffDisposition::Unknown,
+        HandoffDisposition::Unknown { cause: None },
         HandoffDisposition::Conflict,
         HandoffDisposition::RecoveryWindowExpired,
     ] {
@@ -263,7 +263,7 @@ fn a_handoff_that_settles_nothing_never_asks_the_agent_what_happened() {
 #[test]
 fn an_unclear_submission_is_outstanding_work_rather_than_an_ending() {
     let ports = ScriptedPorts::answering(
-        HandoffDisposition::Unknown,
+        HandoffDisposition::Unknown { cause: None },
         AgentSettlement::Succeeded { inline_result: None },
     );
     let (outcome, _) = executed(&ports);
@@ -282,6 +282,34 @@ fn an_unclear_submission_is_outstanding_work_rather_than_an_ending() {
         "the category and the evidence are a pairing the domain permits"
     );
     assert!(recovery.manual_resume_eligible, "and a person can release it");
+}
+
+#[test]
+fn a_named_unknown_cause_is_kept_on_recovery_and_never_looks_like_lookup_required() {
+    use slingshot_agent_connection::command_submission::{SubmissionOutcome, UnknownCause};
+    use slingshot_daemon::operation::remote_submission::disposition_of;
+
+    let cause = UnknownCause::UnvalidatedStatus;
+    let handoff = disposition_of(&SubmissionOutcome::SubmissionUnknown { cause });
+    assert_eq!(handoff, HandoffDisposition::Unknown { cause: Some(cause) });
+    assert!(handoff.requires_lookup());
+    assert!(!handoff.permits_another_send());
+    let lookup = disposition_of(&SubmissionOutcome::SubmissionUnknown {
+        cause: UnknownCause::LookupRequired,
+    });
+    assert_eq!(lookup, HandoffDisposition::ReconcileRetained);
+    assert_eq!(outcome_of_handoff(&lookup), None);
+
+    let ports =
+        ScriptedPorts::answering(handoff, AgentSettlement::Succeeded { inline_result: None });
+    let (outcome, _) = executed(&ports);
+    let OperationExecutorOutcome::RecoveryRequired { recovery } = outcome else {
+        panic!("a named unknown cause is outstanding recovery")
+    };
+    assert_eq!(recovery.category, RecoveryCategory::AmbiguousSubmission);
+    assert_eq!(recovery.detail, cause.spelling());
+    assert!(!recovery.detail.is_empty(), "a known cause must not vanish into an empty detail");
+    assert_eq!(*ports.asked.borrow(), vec!["submit"], "Unknown still does not settle");
 }
 
 #[test]
@@ -320,7 +348,7 @@ fn an_existing_child_enters_lookup_without_claiming_acceptance_or_permitting_res
     // not an instruction to bypass that recovery's scheduling or backoff.
     let ambiguous =
         disposition_of(&SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Body });
-    assert_eq!(ambiguous, HandoffDisposition::Unknown);
+    assert_eq!(ambiguous, HandoffDisposition::Unknown { cause: Some(UnknownCause::Body) });
     assert!(outcome_of_handoff(&ambiguous).is_some());
 }
 
