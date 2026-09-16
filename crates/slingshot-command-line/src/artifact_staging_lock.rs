@@ -26,7 +26,7 @@ pub const LOCK_SUFFIX: &str = ".slingshot-lock";
 
 /// The separator between the parts of a derived name.
 const PART_SEPARATOR: char = '.';
-const MAX_STEM_BYTES: usize = 220;
+const MAXIMUM_STEM_BYTES: usize = 220;
 
 /// Returns the stem every file of one transfer is named from.
 ///
@@ -51,7 +51,7 @@ pub fn stem(
         "{author_target_identity_digest}{PART_SEPARATOR}{selected_environment_revision}\
          {PART_SEPARATOR}{identity}"
     );
-    if rendered.len() <= MAX_STEM_BYTES {
+    if rendered.len() <= MAXIMUM_STEM_BYTES {
         return rendered;
     }
     let digest = Sha256::digest(rendered.as_bytes());

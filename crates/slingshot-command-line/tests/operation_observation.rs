@@ -37,7 +37,7 @@ use slingshot_command_line::operation_observation::{
 
 /// Where the vectors this suite is driven from live.
 const FIXTURES: &str = "tests/fixtures/operation-observation";
-const MAX_FILE_NAME_BYTES: usize = 255;
+const MAXIMUM_FILE_NAME_BYTES: usize = 255;
 
 /// The partition this client serves.
 const TARGET: &str = "target-identity-digest-one";
@@ -236,7 +236,7 @@ fn an_overlong_staging_stem_is_bounded_without_losing_identity() {
         operation_identifier: "d".repeat(128),
     };
     let names = names_beside(destination, &long_target, &long_revision, &long_payload);
-    assert!(names.lock.file_name().unwrap().len() <= MAX_FILE_NAME_BYTES);
+    assert!(names.lock.file_name().unwrap().len() <= MAXIMUM_FILE_NAME_BYTES);
     assert_eq!(
         names,
         names_beside(destination, &long_target, &long_revision, &long_payload),
