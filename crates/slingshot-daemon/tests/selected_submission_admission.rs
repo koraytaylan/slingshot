@@ -2209,8 +2209,11 @@ async fn subscription_reset_stages_two_authenticated_snapshots_before_atomic_ins
                 );
                 submissions.push(submission);
             }
-            submissions.sort_by(|a, b| {
-                a.operation.agent_operation_identifier.cmp(&b.operation.agent_operation_identifier)
+            submissions.sort_by(|left_submission, right_submission| {
+                left_submission
+                    .operation
+                    .agent_operation_identifier
+                    .cmp(&right_submission.operation.agent_operation_identifier)
             });
             let first_local = repository
                 .read(target, &submissions[0].operation.agent_operation_identifier)
