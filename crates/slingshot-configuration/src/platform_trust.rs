@@ -26,6 +26,8 @@ use crate::profile_loader::{ConfigurationDiagnostic, DiagnosticSourceClass, Diag
 
 /// Structural location every decision here is reported at.
 const LOCATION: &str = "platform_trust";
+const TRUST_BUNDLE_BYTE_MULTIPLIER: u64 = 2;
+const TRUST_BUNDLE_ENTRY_MULTIPLIER: u64 = 4;
 
 /// What one provider store says about one record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -255,7 +257,9 @@ fn parse_platform_directory_bundle(source: &[u8]) -> Result<Vec<Vec<u8>>, Config
 fn parse_platform_bundle_raw(source: &[u8]) -> Result<Vec<Vec<u8>>, ConfigurationDiagnostic> {
     let limits = &ProfileAuthenticationContract::embedded().limits;
     if source.len() as u64
-        > limits.maximum_identity_management_trust_canonical_bytes.saturating_mul(2)
+        > limits
+            .maximum_identity_management_trust_canonical_bytes
+            .saturating_mul(TRUST_BUNDLE_BYTE_MULTIPLIER)
     {
         return Err(refusal());
     }
@@ -342,7 +346,9 @@ fn read_bundle(
 ) -> Result<(), ConfigurationDiagnostic> {
     use std::io::Read as _;
     let limits = &ProfileAuthenticationContract::embedded().limits;
-    let maximum = limits.maximum_identity_management_trust_canonical_bytes.saturating_mul(2);
+    let maximum = limits
+        .maximum_identity_management_trust_canonical_bytes
+        .saturating_mul(TRUST_BUNDLE_BYTE_MULTIPLIER);
     let read = |path: &std::path::Path| {
         let file = std::fs::File::open(path).map_err(|_| refusal())?;
         let mut bytes = Vec::new();
@@ -358,7 +364,11 @@ fn read_bundle(
     let entries = std::fs::read_dir(path).map_err(|_| refusal())?;
     let mut bytes = 0_u64;
     for (index, entry) in entries.enumerate() {
-        if index as u64 >= limits.maximum_platform_trust_authorities.saturating_mul(4) {
+        if index as u64
+            >= limits
+                .maximum_platform_trust_authorities
+                .saturating_mul(TRUST_BUNDLE_ENTRY_MULTIPLIER)
+        {
             return Err(refusal());
         }
         let entry = entry.map_err(|_| refusal())?;
@@ -376,7 +386,7 @@ fn read_bundle(
         }
         let source = read(&entry.path())?;
         bytes = bytes.checked_add(source.len() as u64).ok_or_else(refusal)?;
-        if bytes > maximum.saturating_mul(4) {
+        if bytes > maximum.saturating_mul(TRUST_BUNDLE_ENTRY_MULTIPLIER) {
             return Err(refusal());
         }
         consume(&source)?;
