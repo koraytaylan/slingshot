@@ -39,8 +39,10 @@ use slingshot_command_line::exit_classification::{
     EVERY_EXIT, INTERRUPTED, SUCCESS, UNAVAILABLE, USAGE,
 };
 use slingshot_command_line::invocation::{LOCAL_LEAVES, METADATA_ONLY_LEAVES};
+#[cfg(unix)]
+use slingshot_daemon::platform_runtime::endpoint;
 #[cfg(target_os = "linux")]
-use slingshot_daemon::platform_runtime::endpoint::{self, EndpointAddress};
+use slingshot_daemon::platform_runtime::endpoint::EndpointAddress;
 use slingshot_daemon::platform_runtime::locks::OwnerLock;
 #[cfg(target_os = "linux")]
 use slingshot_daemon::runtime_namespace::RuntimeNamespace;
@@ -183,7 +185,7 @@ fn transcript(root: &Path, captured: &CapturedProcess) -> String {
 /// Returns one stream with the two values that move between runs replaced.
 fn normalized(root: &Path, stream: &str) -> String {
     let stream = stream.replace(&root.to_string_lossy().into_owned(), NORMALIZED_ROOT);
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     let stream = stream
         .replace(&endpoint::endpoint_root(root).to_string_lossy().into_owned(), NORMALIZED_ROOT);
     let stream = stream.as_str();
