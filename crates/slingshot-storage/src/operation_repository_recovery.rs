@@ -185,6 +185,21 @@ impl OperationRepository {
             .fold(&OperationFact::Lifecycle { lifecycle_state: OperationLifecycleState::Queued })?;
         let folded = OperationRecord { outstanding_recovery: None, ..folded };
         self.write_folded(&transaction, &current, &folded, None)?;
+        let cleared = transaction.execute(
+            statement("clear one resumed operation's stale scheduler claim"),
+            rusqlite::params![
+                author_target_identity_digest,
+                operation_identifier,
+                encode_word(&OperationLifecycleState::Queued)?,
+                i64::try_from(folded.revision).unwrap_or(i64::MAX),
+            ],
+        )?;
+        if cleared != ONE_ROW {
+            return Err(RepositoryFailure::RevisionMoved {
+                expected: folded.revision,
+                stored: folded.revision,
+            });
+        }
         let written = Self::receipt_within(
             &transaction,
             author_target_identity_digest,
