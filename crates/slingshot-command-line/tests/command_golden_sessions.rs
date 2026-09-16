@@ -183,7 +183,7 @@ fn transcript(root: &Path, captured: &CapturedProcess) -> String {
 /// Returns one stream with the two values that move between runs replaced.
 fn normalized(root: &Path, stream: &str) -> String {
     let stream = stream.replace(&root.to_string_lossy().into_owned(), NORMALIZED_ROOT);
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     let stream = stream
         .replace(&endpoint::endpoint_root(root).to_string_lossy().into_owned(), NORMALIZED_ROOT);
     let stream = stream.as_str();
