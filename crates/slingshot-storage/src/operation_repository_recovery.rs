@@ -203,30 +203,39 @@ impl OperationRepository {
         // manually resumable. A resume does not rewind the operation lifecycle
         // (for example, Running cannot transition back to Queued); the
         // scheduler's committed receipt is the eligibility signal.
-        let Some(recovery) = current.record.outstanding_recovery.as_ref() else {
+        let Some(_recovery) = current.record.outstanding_recovery.as_ref() else {
             return Err(RepositoryFailure::NoSuchOperation {
                 identifier: current.operation_identifier.clone(),
             });
         };
-        let mut activated = recovery.clone();
-        activated.manual_resume_eligible = false;
-        let folded = current.record.fold(&OperationFact::Recovery { recovery: activated })?;
-        self.write_folded(transaction, current, &folded, None)?;
+        let changed = transaction.execute(
+            statement("consume one recovery resume eligibility"),
+            rusqlite::params![
+                &current.author_target_identity_digest,
+                &current.operation_identifier,
+            ],
+        )?;
+        if changed != ONE_ROW {
+            return Err(RepositoryFailure::RevisionMoved {
+                expected: current.record.revision,
+                stored: current.record.revision,
+            });
+        }
         let cleared = transaction.execute(
             statement("clear one resumed operation's stale scheduler claim"),
             rusqlite::params![
                 &current.author_target_identity_digest,
                 &current.operation_identifier,
-                encode_word(&OperationLifecycleState::Queued)?,
-                i64::try_from(folded.revision).unwrap_or(i64::MAX),
+                encode_word(&current.record.lifecycle_state)?,
+                i64::try_from(current.record.revision).unwrap_or(i64::MAX),
             ],
         )?;
         if cleared == ONE_ROW {
             Ok(())
         } else {
             Err(RepositoryFailure::RevisionMoved {
-                expected: folded.revision,
-                stored: folded.revision,
+                expected: current.record.revision,
+                stored: current.record.revision,
             })
         }
     }

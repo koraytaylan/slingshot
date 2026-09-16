@@ -243,6 +243,12 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: 0,
     },
     InventoriedStatement {
+        purpose: "consume one recovery resume eligibility",
+        text: "UPDATE recovery_fact SET manual_resume_eligible = 0 WHERE author_target_identity_digest = ? AND operation_identifier = ? AND manual_resume_eligible = 1",
+        parameters: 2,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
         purpose: "record one recovery-resume receipt",
         text: "INSERT INTO recovery_resume_receipt \
                (applied_operation_revision, author_target_identity_digest, \
