@@ -293,3 +293,51 @@ jobs:
     uses: ./.github/workflows/platform-runtime.yml
     permissions:
       contents: read
+
+  develop-snapshot:
+    name: replace the rolling develop snapshot
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: [release-binary-provenance, release-acceptance, release-notes]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: check out the source for release context
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: take the verified release evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: ${{ runner.temp }}/evidence
+      - name: stage uniquely named archives and attestations
+        env:
+          EVIDENCE_ROOT: ${{ runner.temp }}/evidence
+          STAGING: ${{ runner.temp }}/snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p "$STAGING"
+          while IFS= read -r archive; do
+            name=$(basename "$archive")
+            cp "$archive" "$STAGING/$name"
+            row=$(dirname "$archive")
+            cp "$row/attestation.jsonl" "$STAGING/${name%.tar.gz}.attestation.jsonl" 2>/dev/null || \
+              cp "$row/attestation.jsonl" "$STAGING/${name%.zip}.attestation.jsonl"
+          done < <(find "$EVIDENCE_ROOT" -type f \( -name 'slingshot-*.tar.gz' -o -name 'slingshot-*.zip' \) -print)
+          test "$(find "$STAGING" -maxdepth 1 -type f -name 'slingshot-*' | wc -l)" -eq 6
+      - name: replace the trusted rolling prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_TAG: develop-snapshot
+          SNAPSHOT_TITLE: Slingshot develop snapshot
+        run: |
+          set -euo pipefail
+          notes="Rolling candidate from develop commit $GITHUB_SHA. Assets are replaced after each successful verified build; this is not a stable release."
+          if gh release view "$SNAPSHOT_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${SNAPSHOT_TAG}" -f sha="$GITHUB_SHA" -F force=true
+            gh release edit "$SNAPSHOT_TAG" --repo "$GITHUB_REPOSITORY" --title "$SNAPSHOT_TITLE" --notes "$notes" --prerelease --target "$GITHUB_SHA"
+          else
+            gh release create "$SNAPSHOT_TAG" --repo "$GITHUB_REPOSITORY" --title "$SNAPSHOT_TITLE" --notes "$notes" --prerelease --target "$GITHUB_SHA"
+          fi
+          gh release upload "$SNAPSHOT_TAG" --repo "$GITHUB_REPOSITORY" "$RUNNER_TEMP"/snapshot/* --clobber
