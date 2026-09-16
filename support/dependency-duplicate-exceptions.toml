@@ -158,6 +158,14 @@ owner = "repository-owner"
 review = "remove when product converges"
 [[exception]]
 graph = "fuzz"
+package = "synstructure"
+versions = ["0.13.2", "0.14.0"]
+paths = ["serde_with -> synstructure", "schemars -> synstructure"]
+reason = "inherits product graph"
+owner = "repository-owner"
+review = "remove when product converges"
+[[exception]]
+graph = "fuzz"
 package = "windows-sys"
 versions = ["0.52.0", "0.61.2"]
 paths = ["ring -> windows-sys", "tokio -> windows-sys"]
