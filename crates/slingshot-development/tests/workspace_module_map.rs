@@ -90,6 +90,14 @@ const PLACEHOLDER_BODIES: &[&str] = &["todo!(", "unimplemented!("];
 /// Physical test modules whose Rust declarations use a different nested name.
 const PATH_MODULE_OVERRIDES: &[(&str, &str)] = &[
     (
+        "crates/slingshot-storage/src/operation_repository_mutations.rs",
+        "slingshot_storage::operation_repository::mutations",
+    ),
+    (
+        "crates/slingshot-storage/src/operation_repository_recovery.rs",
+        "slingshot_storage::operation_repository::recovery",
+    ),
+    (
         "crates/slingshot-storage/src/database_inventory.rs",
         "slingshot_storage::database::inventory",
     ),
