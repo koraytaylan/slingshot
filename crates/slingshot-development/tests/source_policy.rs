@@ -248,17 +248,9 @@ fn the_repository_follows_every_rule_through_its_own_command() {
     assert!(stale.is_empty(), "the reviewed baseline contains stale diagnostics: {stale:?}");
     let violations = source_policy::check_repository(&root).expect("the repository reads");
     assert_eq!(violations, Vec::new());
-    let produced = Command::new(slingshot_development::cargo_executable())
+    let produced = Command::new(env!("CARGO_BIN_EXE_slingshot-development"))
         .current_dir(root)
-        .args([
-            "run",
-            "--locked",
-            "--quiet",
-            "--package",
-            "slingshot-development",
-            "--",
-            "source-policy",
-        ])
+        .arg("source-policy")
         .output()
         .expect("the repository command runs");
     assert!(produced.status.success(), "{}", String::from_utf8_lossy(&produced.stdout));

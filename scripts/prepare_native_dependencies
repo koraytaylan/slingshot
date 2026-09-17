@@ -52,4 +52,9 @@ cargo metadata --locked --format-version 1 >/dev/null
 # subsequent `--all-targets --all-features` test command can select. Compiling
 # without running tests is the portable way to force Cargo to materialize that
 # exact graph while the network boundary is still open.
-cargo test --locked --workspace --all-targets --all-features --no-run
+#
+# It compiles with the warning flags the offline gates export, because Cargo
+# fingerprints those flags: a seed built without them is rebuilt in full by the
+# gate that follows, and the compilation this step spends is spent twice.
+RUSTFLAGS="${RUSTFLAGS:-} -D warnings" \
+    cargo test --locked --workspace --all-targets --all-features --no-run
