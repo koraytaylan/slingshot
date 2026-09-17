@@ -62,6 +62,9 @@ pub enum DaemonEntryFailure {
     /// The target does not name a runtime namespace.
     #[error("the target does not name a runtime namespace: {0}")]
     Target(#[from] slingshot_daemon::runtime_namespace::NamespaceFailure),
+    /// The runtime root is not one a daemon may own a namespace in.
+    #[error("the runtime root cannot be used: {0}")]
+    RuntimeRoot(slingshot_daemon::runtime_namespace::NamespaceFailure),
     /// The runtime state could not be prepared.
     #[error("the runtime state could not be prepared: {0}")]
     Runtime(#[from] slingshot_daemon::platform_runtime::failure::PlatformFailure),
@@ -122,6 +125,13 @@ pub async fn run_daemon_entry(
 
 /// Runs the same startup with an explicit configuration tree in a test host.
 /// Neither the product executable nor its argument parser can select this path.
+///
+/// # Errors
+///
+/// Returns [`DaemonEntryFailure`] when the target does not name a namespace,
+/// the runtime root or state cannot be prepared, the supplied configuration
+/// tree does not verify, durable startup refuses, or the endpoint cannot be
+/// served.
 #[cfg(feature = "runtime-test-host")]
 pub async fn run_daemon_entry_for_test(
     contract: &FoundationContract,
@@ -160,7 +170,7 @@ async fn run_with_sources(
         &arguments.profile,
         &arguments.environment,
     )?;
-    namespace.create_runtime_directory()?;
+    namespace.create_runtime_directory().map_err(DaemonEntryFailure::RuntimeRoot)?;
     let owned = match DaemonOwnership::acquire(contract, namespace)? {
         Acquisition::AlreadyOwned(_) => return Ok(DaemonEntryOutcome::AlreadyOwned),
         Acquisition::Owned(owned) => *owned,

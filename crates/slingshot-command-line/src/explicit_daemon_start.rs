@@ -7,7 +7,9 @@
 //! lock is never ownership. Existing-only `daemon ping` takes no part in this:
 //! it probes, reports, and changes nothing.
 
+use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::process::Child;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -23,6 +25,20 @@ use crate::daemon_connection::{self, ExchangeFailure};
 
 /// Internal subcommand a spawned daemon child is started with.
 pub const DAEMON_SERVE_COMMAND: &str = "serve";
+
+/// File-name suffix of the log a started daemon's diagnostic stream goes to.
+///
+/// The child's diagnostic stream is the only place it can say why it did not
+/// come up, and it has no terminal. The elected client truncates this file,
+/// hands it to the child, and quotes its end when the start fails.
+pub const STARTUP_LOG_SUFFIX: &str = ".startup.log";
+
+/// How many bytes from the end of a startup log a failure quotes.
+pub const QUOTED_STARTUP_LOG_BYTES: u64 = 4096;
+
+/// Permission bits of a startup log only its owner may read or write.
+#[cfg(unix)]
+const OWNER_ONLY_FILE_MODE: u32 = 0o600;
 
 /// How a start caller reached the daemon that owns its target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,12 +93,35 @@ pub enum StartFailure {
     /// The runtime state could not be prepared or read.
     #[error("the runtime state could not be used: {0}")]
     Runtime(#[from] PlatformFailure),
+    /// The runtime root is not one a daemon may own a namespace in.
+    #[error("the runtime root cannot be used: {0}")]
+    RuntimeRoot(NamespaceFailure),
     /// The daemon could not be started.
     #[error("the daemon could not be started: {0}")]
     Unstartable(String),
+    /// The daemon this caller started exited before it became responsive.
+    #[error(
+        "the daemon exited before it became responsive ({status}){}",
+        quoted(.diagnostic, .log)
+    )]
+    DaemonExited {
+        /// How it exited, as the operating system reports it.
+        status: String,
+        /// The end of what it wrote to its diagnostic stream.
+        diagnostic: String,
+        /// Where the whole of what it wrote is kept.
+        log: PathBuf,
+    },
     /// The start did not converge inside the contract's total deadline.
-    #[error("no daemon became responsive within {0:?}")]
-    DeadlineElapsed(Duration),
+    #[error("no daemon became responsive within {deadline:?}{}", quoted(.diagnostic, .log))]
+    DeadlineElapsed {
+        /// The contract's total deadline.
+        deadline: Duration,
+        /// The end of what the starting daemon wrote to its diagnostic stream.
+        diagnostic: String,
+        /// Where the whole of what it wrote is kept.
+        log: PathBuf,
+    },
     /// The daemon reported a readiness nonce that is not well formed.
     #[error("the daemon reported the readiness nonce {0:?}, which is not well formed")]
     InvalidReadinessNonce(String),
@@ -100,6 +139,57 @@ pub struct TargetRuntime {
     pub profile: String,
     /// Environment half of the target.
     pub environment: String,
+}
+
+/// Renders what a daemon wrote while starting, and where to read the rest.
+fn quoted(diagnostic: &str, log: &Path) -> String {
+    let log = log.display();
+    if diagnostic.is_empty() {
+        format!(
+            "; it wrote nothing to {log}. Run the same command line with `daemon serve` in \
+             place of `daemon start` to watch it start in the foreground"
+        )
+    } else {
+        format!("; it wrote: {diagnostic} (the whole startup log is {log})")
+    }
+}
+
+/// Returns where the startup log of one runtime namespace lives.
+#[must_use]
+pub fn startup_log_path(runtime_root: &Path, namespace_digest: &str) -> PathBuf {
+    runtime_root.join(format!("{namespace_digest}{STARTUP_LOG_SUFFIX}"))
+}
+
+/// Returns the end of a startup log, or nothing when there is none to read.
+///
+/// Only the end is quoted: a failure is the last thing a daemon says, and a
+/// diagnostic line holding a whole log would bury it.
+#[must_use]
+pub fn startup_log_tail(log: &Path) -> String {
+    let Ok(mut file) = std::fs::File::open(log) else {
+        return String::new();
+    };
+    let length = file.metadata().map(|metadata| metadata.len()).unwrap_or_default();
+    let start = length.saturating_sub(QUOTED_STARTUP_LOG_BYTES);
+    let mut bytes = Vec::new();
+    if file.seek(SeekFrom::Start(start)).is_err() || file.read_to_end(&mut bytes).is_err() {
+        return String::new();
+    }
+    String::from_utf8_lossy(&bytes).trim().to_owned()
+}
+
+/// Opens a fresh startup log that only this user can read.
+fn fresh_startup_log(log: &Path) -> Result<std::fs::File, StartFailure> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, OWNER_ONLY_FILE_MODE);
+    options.open(log).map_err(|failure| {
+        StartFailure::Unstartable(format!(
+            "its startup log {} could not be opened: {failure}",
+            log.display()
+        ))
+    })
 }
 
 /// Resolves the namespace and endpoint of one target.
@@ -149,8 +239,16 @@ fn owner_is_absent(namespace: &RuntimeNamespace) -> Result<bool, PlatformFailure
     Ok(probed.is_some())
 }
 
-/// Starts the daemon child that will own one target.
-fn spawn_daemon(executable: &Path, target: &TargetRuntime) -> Result<(), StartFailure> {
+/// Starts the daemon child that will own one target, writing to `log`.
+///
+/// The handle is returned so the caller can notice the child exiting before it
+/// became responsive, which is the only way a failure it cannot otherwise
+/// report ever reaches the person who asked for the start.
+fn spawn_daemon(
+    executable: &Path,
+    target: &TargetRuntime,
+    log: &Path,
+) -> Result<Child, StartFailure> {
     let arguments = vec![
         "--runtime-root".to_owned(),
         target.runtime_root.display().to_string(),
@@ -161,21 +259,62 @@ fn spawn_daemon(executable: &Path, target: &TargetRuntime) -> Result<(), StartFa
         "daemon".to_owned(),
         DAEMON_SERVE_COMMAND.to_owned(),
     ];
-    crate::platform_runtime::detached_child::spawn_detached(executable, &arguments)
-        .map(|_detached| ())
-        .map_err(|failure| StartFailure::Unstartable(failure.to_string()))
+    let diagnostics = fresh_startup_log(log)?;
+    crate::platform_runtime::detached_child::spawn_detached(executable, &arguments, diagnostics)
+        .map_err(|failure| {
+            StartFailure::Unstartable(format!(
+                "{} could not be run: {failure}",
+                executable.display()
+            ))
+        })
+}
+
+/// Returns why a started child is gone, when it is gone for a reason.
+///
+/// A child that exits because another daemon already owns the namespace has
+/// lost a race rather than failed, so waiting continues for the owner that won
+/// it and this reports nothing.
+fn departure(child: &mut Child, log: &Path) -> Result<Option<StartFailure>, StartFailure> {
+    let exited = child.try_wait().map_err(|failure| {
+        StartFailure::Unstartable(format!("the started daemon could not be observed: {failure}"))
+    })?;
+    Ok(exited
+        .filter(|status| status.code() != Some(i32::from(crate::command_line::EXIT_ALREADY_OWNED)))
+        .map(|status| StartFailure::DaemonExited {
+            status: status.to_string(),
+            diagnostic: startup_log_tail(log),
+            log: log.to_path_buf(),
+        }))
+}
+
+/// Returns the failure a start that ran out of time reports.
+fn deadline_elapsed(contract: &FoundationContract, log: &Path) -> StartFailure {
+    StartFailure::DeadlineElapsed {
+        deadline: contract.startup.explicit_start_total(),
+        diagnostic: startup_log_tail(log),
+        log: log.to_path_buf(),
+    }
 }
 
 /// Waits for a daemon to become responsive, holding whatever this caller holds.
+///
+/// A child this caller started is watched while it waits, so one that exits is
+/// reported at once with what it wrote rather than after the whole deadline.
 async fn await_responsive(
     contract: &FoundationContract,
     address: &EndpointAddress,
     request_identifier: &str,
     deadline: Instant,
+    mut started: Option<(Child, &Path)>,
 ) -> Result<Option<PingResult>, StartFailure> {
     loop {
         if let Some(result) = probe(contract, address, request_identifier).await? {
             return Ok(Some(result));
+        }
+        if let Some((child, log)) = started.as_mut()
+            && let Some(failure) = departure(child, log)?
+        {
+            return Err(failure);
         }
         if Instant::now() >= deadline {
             return Ok(None);
@@ -191,22 +330,26 @@ async fn await_responsive(
 /// only once, and only after the owner lock proves absence. Every caller returns
 /// the same live nonce.
 ///
+/// The runtime root is refused before anything is contended for when it is not
+/// a directory this user alone owns, because the daemon refuses to own a
+/// namespace in one and the refusal would otherwise happen where nobody sees it.
+///
 /// # Errors
 ///
 /// Returns [`StartFailure`] when the target does not name a namespace, the
-/// runtime state cannot be used, the daemon cannot be started, no daemon
-/// becomes responsive inside the contract's total deadline, or the daemon
-/// reports a readiness nonce that is not well formed.
+/// runtime root is not private to this user, the runtime state cannot be used,
+/// the daemon cannot be started or exits before it becomes responsive, no
+/// daemon becomes responsive inside the contract's total deadline, or the
+/// daemon reports a readiness nonce that is not well formed.
 pub async fn explicit_start(
     contract: &FoundationContract,
     target: &TargetRuntime,
     executable: &Path,
     request_identifier: &str,
 ) -> Result<StartReport, StartFailure> {
-    slingshot_daemon::platform_runtime::current_user::create_owner_only_directory(
-        &target.runtime_root,
-    )?;
     let (namespace, address) = resolve(contract, target)?;
+    namespace.create_runtime_directory().map_err(StartFailure::RuntimeRoot)?;
+    let log = startup_log_path(namespace.runtime_root(), namespace.digest());
     let deadline = Instant::now() + contract.startup.explicit_start_total();
     loop {
         if let Some(result) = probe(contract, &address, request_identifier).await? {
@@ -215,7 +358,7 @@ pub async fn explicit_start(
         let elected = StartupElectionLock::acquire(namespace.runtime_root(), namespace.digest())?;
         let Some(election) = elected else {
             if Instant::now() >= deadline {
-                return Err(StartFailure::DeadlineElapsed(contract.startup.explicit_start_total()));
+                return Err(deadline_elapsed(contract, &log));
             }
             tokio::time::sleep(contract.startup.start_retry_maximum_delay()).await;
             continue;
@@ -224,14 +367,17 @@ pub async fn explicit_start(
             drop(election);
             return Ok(report(StartDisposition::Joined, target, &result));
         }
-        if owner_is_absent(&namespace)? {
-            spawn_daemon(executable, target)?;
-        }
-        let observed = await_responsive(contract, &address, request_identifier, deadline).await?;
+        let started = if owner_is_absent(&namespace)? {
+            Some((spawn_daemon(executable, target, &log)?, log.as_path()))
+        } else {
+            None
+        };
+        let observed =
+            await_responsive(contract, &address, request_identifier, deadline, started).await;
         drop(election);
-        return match observed {
+        return match observed? {
             Some(result) => Ok(report(StartDisposition::Started, target, &result)),
-            None => Err(StartFailure::DeadlineElapsed(contract.startup.explicit_start_total())),
+            None => Err(deadline_elapsed(contract, &log)),
         };
     }
 }

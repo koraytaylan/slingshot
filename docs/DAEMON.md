@@ -34,6 +34,19 @@ root and are expected to vanish with a login session. Databases, artifacts, and
 diagnostics live under a persistent per-user state root and must not. Replacing
 the runtime root is a new login; everything durable is still there afterwards.
 
+The runtime root is the platform's per-login runtime directory where it has
+one, and otherwise a `runtime` directory of the product's own below its data
+directory; `--runtime-root` names another. Either way it must be a directory
+this user alone owns. A daemon refuses to own a namespace in any other, and a
+start refuses such a root before it contends for anything, so the refusal
+reaches the person who asked rather than a child with no terminal.
+
+A started daemon's diagnostic stream goes to a startup log beside its locks,
+readable by its owner alone. When the child exits before it answers, or no
+daemon answers inside the start deadline, the start quotes the end of that log
+and names it. `daemon serve`, given the same target and runtime root, runs the
+daemon in the foreground with its diagnostics on the terminal.
+
 ## Reaching readiness
 
 Startup runs in one order and fails closed. Ownership, then the environment

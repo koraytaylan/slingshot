@@ -1247,7 +1247,7 @@ fn metadata(invocation: &Invocation) -> Completion {
     let text = if invocation.verb == VERSION_LEAF {
         format!("{PRODUCT_NAME} {}", env!("CARGO_PKG_VERSION"))
     } else {
-        help_text()
+        crate::invocation::leaf_help(invocation).unwrap_or_else(help_text)
     };
     Completion {
         answer: Answer::Text(text),

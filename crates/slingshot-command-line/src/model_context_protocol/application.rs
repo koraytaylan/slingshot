@@ -379,6 +379,7 @@ impl ServerApplication {
         // quotes around would not match their own request.
         let retry_identifier =
             identifier.as_str().map_or_else(|| identifier_key(identifier), str::to_owned);
+        let mut reason = None;
         let envelope = match self.runner_as_mut() {
             None => MachineOutcomeEnvelope::LocalApplicationError {
                 interruption: local_interruption(&retry_identifier),
@@ -387,6 +388,7 @@ impl ServerApplication {
                 Ok(reached) => reached,
                 Err(detail) => {
                     self.diagnostics.record(&detail);
+                    reason = Some(detail);
                     MachineOutcomeEnvelope::LocalApplicationError {
                         interruption: local_interruption(&retry_identifier),
                     }
@@ -396,14 +398,19 @@ impl ServerApplication {
         // The projection suppresses the CLI-signal tags, because they describe
         // a keystroke at a terminal this server does not have. A local failure
         // is not one of those: it is this build failing to answer a call it
-        // accepted, and the document goes out whole.
+        // accepted, and the document goes out whole. The reason follows it as
+        // a second text item: a host shows a tool result to whoever called the
+        // tool and rarely shows this process's diagnostic stream, so a reason
+        // written only there would reach nobody who can act on it.
         let local_failure = envelope.tag() == "local_application_error";
         if local_failure {
             let text = crate::machine_readable_renderer::render(&envelope)
                 .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
             let structured_content = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
+            let mut content = vec![json!({ "type": "text", "text": text })];
+            content.extend(reason.map(|detail| json!({ "type": "text", "text": detail })));
             return Ok(json!({
-                "content": [{ "type": "text", "text": text }],
+                "content": content,
                 "structuredContent": structured_content,
                 "isError": true,
             }));

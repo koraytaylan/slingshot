@@ -74,6 +74,22 @@ impl ToolRunner for RecordingRunner {
     }
 }
 
+/// A runner that cannot reach a daemon and says why.
+struct UnreachableRunner;
+
+/// What the unreachable runner says.
+const UNREACHABLE_REASON: &str = "the daemon exited before it became responsive";
+
+impl ToolRunner for UnreachableRunner {
+    fn run(
+        &mut self,
+        _tool: &ToolDescriptor,
+        _arguments: &Value,
+    ) -> Result<MachineOutcomeEnvelope, String> {
+        Err(UNREACHABLE_REASON.to_owned())
+    }
+}
+
 /// Completes the older era's handshake on `server`.
 fn handshake(server: &mut ServerApplication) {
     let _ = answered(
@@ -563,4 +579,23 @@ fn the_serve_leaf_is_not_versioned_because_it_starts_no_operation() {
     };
     let service = service_for(&invocation).expect("it routes");
     assert!(!service.is_versioned(), "handing over the streams talks to no daemon by itself");
+}
+
+#[test]
+fn a_tool_call_that_could_not_run_carries_the_reason_to_whoever_called_it() {
+    // A host shows a tool result to its caller and rarely shows this process's
+    // diagnostic stream, so the reason travels in the result as well.
+    let mut server = ServerApplication::over(Some(Box::new(UnreachableRunner)));
+    handshake(&mut server);
+    let answer = answered(
+        &mut server,
+        r#"{"id":"call","method":"tools/call","params":{"name":"operation-list","arguments":{}}}"#,
+    );
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(true));
+    let content = answer["result"]["content"].as_array().expect("a tool result carries content");
+    let text = content[0]["text"].as_str().expect("the document is text");
+    let reparsed: Value = serde_json::from_str(text).expect("the first item is the document");
+    assert_eq!(&reparsed, &answer["result"]["structuredContent"]);
+    assert_eq!(content[1]["text"].as_str(), Some(UNREACHABLE_REASON), "{answer}");
+    assert_eq!(server.take_diagnostics(), vec![UNREACHABLE_REASON.to_owned()]);
 }

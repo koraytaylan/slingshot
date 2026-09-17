@@ -18,13 +18,14 @@ mod runtime_fixture;
 use slingshot_command_line::command_line::{EXIT_SUCCESS, EXIT_TARGET_UNUSABLE};
 #[cfg(target_os = "linux")]
 use slingshot_command_line::daemon_connection;
-use slingshot_command_line::explicit_daemon_start::{self, TargetRuntime};
+use slingshot_command_line::explicit_daemon_start::{self, StartFailure, TargetRuntime};
 #[cfg(target_os = "linux")]
 use slingshot_command_line::explicit_daemon_start::{StartDisposition, StartReport};
 #[cfg(target_os = "linux")]
 use slingshot_daemon::platform_runtime::endpoint;
 #[cfg(target_os = "linux")]
 use slingshot_daemon::platform_runtime::locks::{OwnerLock, StartupElectionLock};
+use slingshot_daemon::runtime_namespace::NamespaceFailure;
 #[cfg(target_os = "linux")]
 use slingshot_daemon::runtime_namespace::RuntimeNamespace;
 #[cfg(target_os = "linux")]
@@ -280,4 +281,140 @@ fn an_invocation_that_names_no_target_exits_distinctly() {
     assert!(rendered.contains("daemon-ping: absent"), "{rendered}");
     assert!(produced.stderr.is_empty(), "a served probe writes no diagnostic");
     std::fs::remove_dir_all(&root).ok();
+}
+
+/// Permission bits of a directory its owner's group and everybody else may enter.
+const SHARED_DIRECTORY_MODE: u32 = 0o755;
+
+/// Permission bits that grant anything to anybody but the owner.
+#[cfg(target_os = "linux")]
+const NOT_OWNER_PERMISSION_BITS: u32 = 0o077;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_runtime_root_others_may_enter_is_refused_before_anything_is_contended_for() {
+    use std::os::unix::fs::PermissionsExt as _;
+    // A daemon refuses to own a namespace in such a root. Were the client to
+    // accept it, the refusal would happen in a child with no terminal and the
+    // caller would see only the whole start deadline elapse.
+    let root = temporary_runtime_root("s");
+    std::fs::create_dir_all(&root).expect("the runtime root is created");
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(SHARED_DIRECTORY_MODE))
+        .expect("the runtime root is shared");
+    let refused = explicit_daemon_start::explicit_start(
+        &FoundationContract::embedded(),
+        &target(&root, ENVIRONMENT),
+        &product_executable(),
+        "shared",
+    )
+    .await
+    .expect_err("a shared runtime root is refused");
+    assert!(
+        matches!(refused, StartFailure::RuntimeRoot(NamespaceFailure::RootNotPrivate { .. })),
+        "{refused}"
+    );
+    assert!(refused.to_string().contains("0700"), "the refusal says what to change: {refused}");
+    let left = std::fs::read_dir(&root).expect("the root is readable").count();
+    assert_eq!(left, 0, "no lock, log, or child was created for a refused root");
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_daemon_that_exits_while_starting_is_reported_with_what_it_wrote() {
+    // No fixture configuration is prepared, so the child refuses to start. The
+    // client must say so, and quote the child, rather than wait out the whole
+    // deadline and report only that nothing answered.
+    let root = temporary_runtime_root("x");
+    let refused = explicit_daemon_start::explicit_start(
+        &FoundationContract::embedded(),
+        &target(&root, ENVIRONMENT),
+        &product_executable(),
+        "exiting",
+    )
+    .await
+    .expect_err("a daemon without configuration does not start");
+    let StartFailure::DaemonExited { diagnostic, log, .. } = &refused else {
+        panic!("the early exit is reported as one: {refused}")
+    };
+    assert!(diagnostic.contains("configuration could not be established"), "{refused}");
+    assert_eq!(
+        &explicit_daemon_start::startup_log_tail(log),
+        diagnostic,
+        "the quoted diagnostic is what the log holds"
+    );
+    assert!(refused.to_string().contains(&log.display().to_string()), "{refused}");
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_daemon_that_starts_leaves_its_startup_log_private_to_its_owner() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let root = temporary_runtime_root("l");
+    runtime_fixture::prepare(&root, PROFILE, &[ENVIRONMENT]);
+    let addressed = target(&root, ENVIRONMENT);
+    start(&addressed, "logged").await;
+    let namespace =
+        RuntimeNamespace::name(&FoundationContract::embedded(), &root, PROFILE, ENVIRONMENT)
+            .expect("it names");
+    let log = explicit_daemon_start::startup_log_path(&root, namespace.digest());
+    let mode = std::fs::metadata(&log).expect("the startup log exists").permissions().mode();
+    assert_eq!(
+        mode & NOT_OWNER_PERMISSION_BITS,
+        0,
+        "nobody but the owner may read what the daemon wrote"
+    );
+    stop_daemon(&addressed).await;
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_start_that_names_no_root_owns_a_directory_of_its_own_beside_shared_data() {
+    use std::os::unix::fs::PermissionsExt as _;
+    // An earlier installation left the product's data directory readable by
+    // everybody, which is what a platform without a per-login runtime
+    // directory falls back to. The default root must not be that directory.
+    let home = temporary_runtime_root("d");
+    let data = home.join("data");
+    let shared = data.join("slingshot");
+    std::fs::create_dir_all(&shared).expect("the shared data directory is created");
+    std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(SHARED_DIRECTORY_MODE))
+        .expect("the data directory is shared");
+    let expected = shared.join(slingshot_command_line::command_line::DEFAULT_RUNTIME_DIRECTORY);
+    runtime_fixture::prepare(&expected, PROFILE, &[ENVIRONMENT]);
+    let produced = Command::new(product_executable())
+        .env("HOME", &home)
+        .env("XDG_DATA_HOME", &data)
+        .env_remove("XDG_RUNTIME_DIR")
+        .args(["--profile", PROFILE, "--environment", ENVIRONMENT, "daemon", "start"])
+        .output()
+        .expect("the executable runs");
+    let diagnostics = String::from_utf8_lossy(&produced.stderr);
+    assert_eq!(produced.status.code(), Some(i32::from(EXIT_SUCCESS)), "{diagnostics}");
+    stop_daemon(&target(&expected, ENVIRONMENT)).await;
+    std::fs::remove_dir_all(&home).ok();
+}
+
+#[test]
+fn a_command_line_that_names_nothing_says_so_and_where_to_look() {
+    let produced = Command::new(product_executable()).output().expect("the executable runs");
+    assert_eq!(produced.status.code(), Some(i32::from(EXIT_TARGET_UNUSABLE)));
+    let diagnostics = String::from_utf8(produced.stderr).expect("the diagnostic is text");
+    assert!(diagnostics.contains("no command was given"), "{diagnostics}");
+    assert!(diagnostics.contains("slingshot help"), "{diagnostics}");
+}
+
+#[test]
+fn help_about_one_leaf_lists_the_options_that_leaf_takes() {
+    let produced = Command::new(product_executable())
+        .args(["help", "daemon", "start"])
+        .output()
+        .expect("the executable runs");
+    assert!(produced.status.success(), "{}", String::from_utf8_lossy(&produced.stderr));
+    let rendered = String::from_utf8(produced.stdout).expect("help is text");
+    assert!(rendered.starts_with("daemon-start"), "{rendered}");
+    for option in ["--profile", "--environment", "--runtime-root"] {
+        assert!(rendered.contains(option), "{option}: {rendered}");
+    }
+    assert!(!rendered.contains("--operation-key"), "a start takes no key: {rendered}");
 }
