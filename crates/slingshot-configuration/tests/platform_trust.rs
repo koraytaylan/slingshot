@@ -5,10 +5,11 @@
 //! something, uninterpretable, and two records for the same bytes that
 //! disagree. None of those can be arranged on the machine running the test, and
 //! reducing any of them to the bytes alone would silently widen provider
-//! policy.
+//! policy. Each is left out of the snapshot while the rest of the store is
+//! still retained, because an ordinary managed machine holds such records.
 //!
-//! The current row also takes its real snapshot, which is an observation about
-//! this environment and nothing else.
+//! The current row also takes its real snapshot. How many roots it retains is
+//! an observation about this environment; that it can take one at all is not.
 
 use std::path::PathBuf;
 
@@ -18,7 +19,9 @@ use slingshot_configuration::platform_trust::{
 use slingshot_configuration::profile_loader::{
     ConfigurationDiagnostic, DiagnosticSourceClass, DiagnosticStage,
 };
-use slingshot_domain::profile_authentication_contract::ConfigurationFailureCode;
+use slingshot_domain::profile_authentication_contract::{
+    ConfigurationFailureCode, ProfileAuthenticationContract,
+};
 
 /// Directory holding the committed certificates.
 const CERTIFICATE_FIXTURES: &str =
@@ -96,25 +99,24 @@ fn only_an_unconditional_decision_is_retained() {
     expected.sort();
     assert_eq!(snapshot.roots(), expected, "the snapshot is not in one order");
 
-    for refused in [
+    for left_out in [
         ProviderDecision::Distrusted,
         ProviderDecision::ExternallyRestricted,
         ProviderDecision::Unevaluable,
     ] {
         let mixed = store(vec![
             record(&roots[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
-            record(&roots[1], refused),
+            record(&roots[1], left_out),
         ]);
-        let diagnostic = PlatformTrustSnapshot::take(&mixed)
-            .map_or_else(|diagnostic| diagnostic, |_| panic!("{refused:?} was retained"));
-        assert_eq!(diagnostic.code, ConfigurationFailureCode::PlatformTrustSnapshotInvalid);
-        assert_eq!(diagnostic.source_class, DiagnosticSourceClass::PlatformTrust);
-        assert_eq!(diagnostic.stage, DiagnosticStage::SnapshotConstruction);
+        let snapshot = PlatformTrustSnapshot::take(&mixed).unwrap_or_else(|diagnostic| {
+            panic!("{left_out:?} failed the snapshot: {diagnostic:?}")
+        });
+        assert_eq!(snapshot.roots(), [roots[0].clone()], "{left_out:?} was retained");
     }
 }
 
 #[test]
-fn two_records_for_one_certificate_that_disagree_fail_the_whole_snapshot() {
+fn two_records_for_one_certificate_that_disagree_leave_it_out() {
     let roots = certificates("one-authority.pem");
     let agreeing = store(vec![
         record(&roots[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
@@ -123,29 +125,100 @@ fn two_records_for_one_certificate_that_disagree_fail_the_whole_snapshot() {
     let snapshot = PlatformTrustSnapshot::take(&agreeing).expect("agreeing records are retained");
     assert_eq!(snapshot.roots().len(), 1, "an agreeing duplicate was retained twice");
 
-    let conflicting = store(vec![
-        record(&roots[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
-        record(&roots[0], ProviderDecision::Distrusted),
-    ]);
-    assert!(
-        PlatformTrustSnapshot::take(&conflicting).is_err(),
-        "a conflicting duplicate was resolved rather than refused"
-    );
+    let other = certificates("two-authorities.pem")
+        .into_iter()
+        .find(|der| *der != roots[0])
+        .expect("a second authority is committed");
+    for (first, second) in [
+        (
+            ProviderDecision::UnconditionallyTrustedForServerAuthentication,
+            ProviderDecision::Distrusted,
+        ),
+        (
+            ProviderDecision::Distrusted,
+            ProviderDecision::UnconditionallyTrustedForServerAuthentication,
+        ),
+    ] {
+        let conflicting = store(vec![
+            record(&roots[0], first),
+            record(&other, ProviderDecision::UnconditionallyTrustedForServerAuthentication),
+            record(&roots[0], second),
+            record(&roots[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
+        ]);
+        let snapshot =
+            PlatformTrustSnapshot::take(&conflicting).expect("a conflict leaves the rest usable");
+        assert_eq!(
+            snapshot.roots(),
+            std::slice::from_ref(&other),
+            "a conflicting duplicate was resolved rather than left out"
+        );
+    }
 }
 
 #[test]
 fn a_retained_root_must_be_an_authority_that_may_authenticate_a_server() {
-    for name in ["end-entity.pem", "other-purpose.pem"] {
-        let ineligible = certificates(name);
-        let claimed = store(vec![record(
-            &ineligible[0],
-            ProviderDecision::UnconditionallyTrustedForServerAuthentication,
-        )]);
-        assert!(
-            PlatformTrustSnapshot::take(&claimed).is_err(),
+    let eligible = certificates("one-authority.pem");
+    let mut claims: Vec<(String, Vec<u8>)> = ["end-entity.pem", "other-purpose.pem"]
+        .into_iter()
+        .map(|name| (name.to_owned(), certificates(name)[0].clone()))
+        .collect();
+    claims.push(("bytes that are not a certificate".to_owned(), b"not a certificate".to_vec()));
+    let mut trailing = eligible[0].clone();
+    trailing.push(0);
+    claims.push(("a certificate followed by trailing bytes".to_owned(), trailing));
+    for (name, claimed) in claims {
+        let mixed = store(vec![
+            record(&claimed, ProviderDecision::UnconditionallyTrustedForServerAuthentication),
+            record(&eligible[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
+        ]);
+        let snapshot = PlatformTrustSnapshot::take(&mixed)
+            .unwrap_or_else(|diagnostic| panic!("{name} failed the snapshot: {diagnostic:?}"));
+        assert_eq!(
+            snapshot.roots(),
+            [eligible[0].clone()],
             "{name} was retained on the store's word alone"
         );
     }
+}
+
+#[test]
+fn a_record_beyond_the_per_authority_bound_is_left_out() {
+    let limit = usize::try_from(
+        ProfileAuthenticationContract::embedded().limits.maximum_platform_trust_authority_der_bytes,
+    )
+    .expect("the bound is addressable");
+    let eligible = certificates("one-authority.pem");
+    let oversized = vec![0_u8; limit + 1];
+    let mixed = store(vec![
+        record(&oversized, ProviderDecision::UnconditionallyTrustedForServerAuthentication),
+        record(&eligible[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
+    ]);
+    let snapshot = PlatformTrustSnapshot::take(&mixed).expect("an oversized record is left out");
+    assert_eq!(snapshot.roots(), [eligible[0].clone()]);
+}
+
+#[test]
+fn a_store_of_many_unusable_records_is_still_a_snapshot() {
+    let maximum = usize::try_from(
+        ProfileAuthenticationContract::embedded().limits.maximum_platform_trust_authorities,
+    )
+    .expect("the bound is addressable");
+    let eligible = certificates("one-authority.pem");
+    let mut records: Vec<ProviderRecord> = (0..=maximum)
+        .map(|index| {
+            record(
+                &index.to_be_bytes(),
+                ProviderDecision::UnconditionallyTrustedForServerAuthentication,
+            )
+        })
+        .collect();
+    records.push(record(
+        &eligible[0],
+        ProviderDecision::UnconditionallyTrustedForServerAuthentication,
+    ));
+    let snapshot = PlatformTrustSnapshot::take(&store(records))
+        .expect("records that are left out do not count toward the authority bound");
+    assert_eq!(snapshot.roots(), [eligible[0].clone()]);
 }
 
 #[test]
@@ -171,9 +244,10 @@ fn an_empty_store_is_a_snapshot_of_nothing_rather_than_a_failure() {
 fn this_row_takes_its_own_snapshot_once() {
     use slingshot_configuration::platform_trust::OperatingSystemTrustSource;
 
-    let Ok(snapshot) = PlatformTrustSnapshot::take(&OperatingSystemTrustSource) else {
-        return;
-    };
+    // A daemon cannot start on a row whose store does not snapshot, so a
+    // failure here is a failure rather than an observation to skip.
+    let snapshot = PlatformTrustSnapshot::take(&OperatingSystemTrustSource)
+        .expect("this row's platform trust store snapshots");
     let again = PlatformTrustSnapshot::take(&OperatingSystemTrustSource)
         .expect("the store answers twice the same way");
     assert_eq!(snapshot, again, "two snapshots of one store disagree");
