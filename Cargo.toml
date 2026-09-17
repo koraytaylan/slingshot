@@ -106,3 +106,11 @@ type_complexity = "allow"
 items_after_test_module = "allow"
 drop_non_drop = "allow"
 result_large_err = "allow"
+
+# Development and test builds keep line tables, so a panic or a backtrace still
+# names its file and line, and drop the rest of the debug information. Every
+# integration test is its own linked executable, and full debug information
+# makes each of them several times larger and slower to link. Hosted gates
+# already compile with none; the release profile is unaffected.
+[profile.dev]
+debug = "line-tables-only"

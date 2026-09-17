@@ -156,34 +156,18 @@ fn an_unreadable_document_is_refused_before_evaluation() {
 
 #[test]
 fn the_repository_command_reports_the_live_workspace() {
-    let produced = Command::new(slingshot_development::cargo_executable())
+    let produced = Command::new(env!("CARGO_BIN_EXE_slingshot-development"))
         .current_dir(workspace_root())
-        .args([
-            "run",
-            "--locked",
-            "--quiet",
-            "--package",
-            "slingshot-development",
-            "--",
-            "dependency-direction",
-        ])
+        .args(["dependency-direction"])
         .output()
         .expect("the repository command runs");
     assert!(produced.status.success(), "{}", String::from_utf8_lossy(&produced.stderr));
     let rendered = String::from_utf8(produced.stdout).expect("the report is text");
     assert!(rendered.contains("follow the dependency contract"), "{rendered}");
 
-    let refused = Command::new(slingshot_development::cargo_executable())
+    let refused = Command::new(env!("CARGO_BIN_EXE_slingshot-development"))
         .current_dir(workspace_root())
-        .args([
-            "run",
-            "--locked",
-            "--quiet",
-            "--package",
-            "slingshot-development",
-            "--",
-            "not-a-command",
-        ])
+        .args(["not-a-command"])
         .output()
         .expect("the repository command runs");
     assert!(!refused.status.success(), "an unknown command is refused");

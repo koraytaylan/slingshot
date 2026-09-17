@@ -227,9 +227,8 @@ fn the_review_command_proposes_bytes_without_changing_or_claiming_anything() {
 
 #[test]
 fn the_verifier_reads_only_the_checkout_the_environment_names() {
-    let produced = Command::new(slingshot_development::cargo_executable())
+    let produced = Command::new(env!("CARGO_BIN_EXE_slingshot-development"))
         .current_dir(workspace_root())
-        .args(["run", "--locked", "--quiet", "--package", "slingshot-development", "--"])
         .arg("rustsec-advisory-pin")
         .env_remove(CHECKOUT_VARIABLE)
         .output()

@@ -32,6 +32,12 @@ jobs:
           - runner: windows-2022
             triple: x86_64-pc-windows-msvc
     timeout-minutes: 30
+    # Every step compiles with the same profile settings, so the seeded build
+    # is the one the gate reuses rather than one it rebuilds.
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -52,7 +58,4 @@ jobs:
         env:
           SLINGSHOT_AUTOMATION_ROW: ${{ matrix.triple }}
           TMPDIR: ${{ runner.temp }}
-          CARGO_INCREMENTAL: "0"
-          CARGO_PROFILE_DEV_DEBUG: "0"
-          CARGO_PROFILE_TEST_DEBUG: "0"
         run: scripts/platform_quality
