@@ -895,21 +895,8 @@ crates/slingshot-command-line/src/daemon_entry.rs	126	fallible-interface-omits-i
 crates/slingshot-command-line/src/model_context_protocol/current_stateless_revision.rs	133	numeric-value-carries-no-name	32_002
 crates/slingshot-command-line/src/model_context_protocol/standard_stream_transport.rs	77	fallible-interface-omits-its-failure-section	read_bounded_line
 crates/slingshot-command-line/src/property_document.rs	119	function-branches-too-many-ways	require_unique_members reaches 18
-crates/slingshot-command-line/tests/artifact_fetch.rs	72	numeric-value-carries-no-name	64
-crates/slingshot-command-line/tests/artifact_fetch.rs	209	function-branches-too-many-ways	stream_artifact reaches 11
-crates/slingshot-command-line/tests/artifact_fetch.rs	230	numeric-value-carries-no-name	16
-crates/slingshot-command-line/tests/artifact_fetch.rs	238	numeric-value-carries-no-name	16
-crates/slingshot-command-line/tests/artifact_fetch.rs	246	numeric-value-carries-no-name	16
-crates/slingshot-command-line/tests/artifact_fetch.rs	250	numeric-value-carries-no-name	16
-crates/slingshot-command-line/tests/artifact_fetch.rs	369	numeric-value-carries-no-name	16
-crates/slingshot-command-line/tests/artifact_fetch.rs	388	numeric-value-carries-no-name	32
-crates/slingshot-command-line/tests/artifact_fetch.rs	403	numeric-value-carries-no-name	16
-crates/slingshot-command-line/tests/artifact_fetch.rs	458	numeric-value-carries-no-name	16
+crates/slingshot-command-line/tests/artifact_fetch.rs	218	function-branches-too-many-ways	stream_artifact reaches 11
 crates/slingshot-command-line/tests/model_context_protocol_tool_arguments.rs	38	function-branches-too-many-ways	value_for reaches 17
-crates/slingshot-command-line/tests/operation_observation.rs	232	numeric-value-carries-no-name	128
-crates/slingshot-command-line/tests/operation_observation.rs	233	numeric-value-carries-no-name	128
-crates/slingshot-command-line/tests/operation_observation.rs	235	numeric-value-carries-no-name	128
-crates/slingshot-command-line/tests/operation_observation.rs	236	numeric-value-carries-no-name	128
 crates/slingshot-command-line/tests/page_mutation_commands.rs	168	numeric-value-carries-no-name	2
 crates/slingshot-command-line/tests/support/runtime_fixture.rs	3	exported-item-is-not-documented	prepare
 crates/slingshot-command-line/tests/support/runtime_fixture.rs	8	numeric-value-carries-no-name	0o700
