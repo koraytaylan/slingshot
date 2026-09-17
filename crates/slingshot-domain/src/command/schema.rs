@@ -925,6 +925,9 @@ fn root(wire_name: &str, role: SchemaRole, body: Value) -> Value {
 
 /// Returns the digest of the committed byte contract.
 ///
+/// Derived once per process, because the contract is embedded and callers ask
+/// for it on every document they check.
+///
 /// # Panics
 ///
 /// Panics when the committed contract is not itself canonical, which is a
@@ -933,9 +936,16 @@ fn root(wire_name: &str, role: SchemaRole, body: Value) -> Value {
 pub fn canonical_contract_digest() -> String {
     /// Bytes of the committed byte contract, embedded at compile time.
     const CONTRACT: &str = include_str!("../../../../schemas/command-canonical-json-1.json");
+    /// The digest, once it has been derived.
+    static DIGEST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
-    let value: Value = serde_json::from_str(CONTRACT).expect("the byte contract is one value");
-    canonical_digest(&write_canonical(&value).expect("the byte contract is canonical"))
+    DIGEST
+        .get_or_init(|| {
+            let value: Value =
+                serde_json::from_str(CONTRACT).expect("the byte contract is one value");
+            canonical_digest(&write_canonical(&value).expect("the byte contract is canonical"))
+        })
+        .clone()
 }
 
 /// Returns the manifest recording every schema's digest.
@@ -945,6 +955,21 @@ pub fn canonical_contract_digest() -> String {
 /// Panics when a schema cannot be written canonically, which is a defect here.
 #[must_use]
 pub fn schema_manifest() -> Value {
+    installed_schema_manifest().clone()
+}
+
+/// Returns the manifest this build installs, derived once per process.
+///
+/// Building it hashes every schema, and an installed identity is read from it
+/// for every document a caller decodes.
+pub(crate) fn installed_schema_manifest() -> &'static Value {
+    /// The manifest, once it has been derived.
+    static MANIFEST: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    MANIFEST.get_or_init(derive_schema_manifest)
+}
+
+/// Derives the manifest recording every schema's digest.
+fn derive_schema_manifest() -> Value {
     let mut roles = serde_json::Map::new();
     for wire_name in COMMAND_WIRE_NAMES {
         let mut command = serde_json::Map::new();

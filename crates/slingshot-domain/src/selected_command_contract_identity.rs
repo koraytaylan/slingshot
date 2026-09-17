@@ -25,7 +25,7 @@ use sha2::{Digest as _, Sha256};
 use crate::command::command_identity::{CommandContract, INITIAL_COMMAND_VERSION};
 use crate::command::schema::{
     CANONICAL_CONTRACT_ANNOTATION, SchemaRole, canonical_contract_digest, command_schema,
-    schema_manifest,
+    installed_schema_manifest,
 };
 
 /// Separator between the fields a submitted-command digest is taken over.
@@ -103,7 +103,7 @@ impl SelectedCommandContractIdentity {
     /// [`ContractIdentityFailure::CanonicalContractAnnotationAbsent`], or
     /// [`ContractIdentityFailure::CanonicalContractAnnotationDrift`].
     pub fn installed(wire_name: &str) -> Result<Self, ContractIdentityFailure> {
-        let manifest = schema_manifest();
+        let manifest = installed_schema_manifest();
         let installed = canonical_contract_digest();
         let digests = manifest["schemas"].get(wire_name).ok_or_else(|| {
             ContractIdentityFailure::UnknownCommand { wire_name: wire_name.to_owned() }
@@ -220,7 +220,10 @@ impl SubmittedCommandDigest {
 /// disagree about what this build's limits are.
 #[must_use]
 pub fn installed_limits_digest() -> String {
-    schema_manifest()["command_contract_limits_sha256"].as_str().unwrap_or_default().to_owned()
+    installed_schema_manifest()["command_contract_limits_sha256"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned()
 }
 
 /// Returns whether the installed limits are the ones `digest` names.
