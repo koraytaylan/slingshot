@@ -9,6 +9,7 @@ depends_on:
 gated: false
 touches:
   - crates/slingshot-agent-connection/src/command_submission.rs
+  - crates/slingshot-agent-connection/src/command_submission_settlement.rs
   - crates/slingshot-agent-connection/src/lib.rs
   - crates/slingshot-agent-connection/tests/fixtures/command-submission/**
   - crates/slingshot-agent-connection/tests/command_submission.rs

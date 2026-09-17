@@ -107,6 +107,10 @@ const PATH_MODULE_OVERRIDES: &[(&str, &str)] = &[
         "slingshot_storage::agent_subscription_ledger::events",
     ),
     (
+        "crates/slingshot-agent-connection/src/command_submission_settlement.rs",
+        "slingshot_agent_connection::command_submission::settlement",
+    ),
+    (
         "crates/slingshot-agent-connection/src/selected_author_http2_tests.rs",
         "slingshot_agent_connection::selected_author_http2::tests",
     ),
@@ -607,8 +611,10 @@ fn every_crate_root_declares_exactly_the_modules_it_owns() {
         expected.entry(row.module.clone()).or_default();
     }
     for row in &rows {
-        if let Some((parent, child)) = row.module.rsplit_once("::") {
+        let mut remainder = row.module.as_str();
+        while let Some((parent, child)) = remainder.rsplit_once("::") {
             expected.entry(parent.to_owned()).or_default().insert(child.to_owned());
+            remainder = parent;
         }
     }
     for row in &rows {
