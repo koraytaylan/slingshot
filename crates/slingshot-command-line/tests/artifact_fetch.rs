@@ -66,10 +66,19 @@ const ARTIFACT_IDENTIFIER: &str = "scenario-artifact";
 /// The media type the artifact declares.
 const MEDIA_TYPE: &str = "application/json";
 
+/// How many labelled chunks make up one test payload.
+const PAYLOAD_CHUNK_COUNT: usize = 64;
+
+/// How many octets a SHA-256 digest occupies.
+const SHA256_DIGEST_OCTETS: usize = 32;
+
+/// How many bytes one streamed artifact chunk carries in these tests.
+const STREAM_CHUNK_BYTES: usize = 16;
+
 /// Returns the bytes one case transfers.
 fn payload() -> Vec<u8> {
     let mut bytes = Vec::new();
-    for index in 0..64 {
+    for index in 0..PAYLOAD_CHUNK_COUNT {
         bytes.extend_from_slice(format!("chunk-{index:04}-").as_bytes());
     }
     bytes
@@ -227,7 +236,7 @@ impl DaemonBoundary for Fakes {
             }
             Answering::AnotherDigest { bytes, declared: named } => {
                 declared(take, bytes.len() as u64, named)?;
-                for chunk in bytes.chunks(16) {
+                for chunk in bytes.chunks(STREAM_CHUNK_BYTES) {
                     take(ArtifactEvent::Chunk(chunk.to_vec()))
                         .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 }
@@ -235,7 +244,7 @@ impl DaemonBoundary for Fakes {
             }
             Answering::Short { bytes, declared_length } => {
                 declared(take, *declared_length, &digest_of(bytes))?;
-                for chunk in bytes.chunks(16) {
+                for chunk in bytes.chunks(STREAM_CHUNK_BYTES) {
                     take(ArtifactEvent::Chunk(chunk.to_vec()))
                         .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 }
@@ -243,11 +252,11 @@ impl DaemonBoundary for Fakes {
             }
             Answering::Repeated { bytes } => {
                 declared(take, bytes.len() as u64, &digest_of(bytes))?;
-                for chunk in bytes.chunks(16) {
+                for chunk in bytes.chunks(STREAM_CHUNK_BYTES) {
                     take(ArtifactEvent::Chunk(chunk.to_vec()))
                         .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 }
-                for chunk in bytes.chunks(16) {
+                for chunk in bytes.chunks(STREAM_CHUNK_BYTES) {
                     take(ArtifactEvent::Chunk(chunk.to_vec()))
                         .map_err(ArtifactStreamRefusal::AbsorbRefused)?;
                 }
@@ -365,8 +374,10 @@ fn staged_beside(root: &Path) -> Vec<PathBuf> {
 #[test]
 fn a_whole_transfer_publishes_exactly_the_bytes_the_daemon_declared() {
     let bytes = payload();
-    let (completion, root) =
-        fetching_with("fetched.bin", Answering::Whole { bytes: bytes.clone(), chunk_bytes: 16 });
+    let (completion, root) = fetching_with(
+        "fetched.bin",
+        Answering::Whole { bytes: bytes.clone(), chunk_bytes: STREAM_CHUNK_BYTES },
+    );
     assert_eq!(completion.exit, 0, "a whole transfer succeeds: {:?}", completion.answer);
     let published = root.join("fetched.bin");
     assert_eq!(std::fs::read(&published).expect("the destination exists"), bytes);
@@ -384,8 +395,10 @@ fn a_whole_transfer_publishes_exactly_the_bytes_the_daemon_declared() {
 #[test]
 fn a_transfer_that_digests_to_something_else_leaves_nothing() {
     let bytes = payload();
-    let (completion, root) =
-        fetching_with("fetched.bin", Answering::AnotherDigest { bytes, declared: "00".repeat(32) });
+    let (completion, root) = fetching_with(
+        "fetched.bin",
+        Answering::AnotherDigest { bytes, declared: "00".repeat(SHA256_DIGEST_OCTETS) },
+    );
     assert!(
         refused_with(&completion, "digest"),
         "a digest that disagrees is refused: {:?}",
@@ -399,8 +412,10 @@ fn a_transfer_that_digests_to_something_else_leaves_nothing() {
 fn a_transfer_that_stops_short_leaves_nothing() {
     let bytes = payload();
     let length = bytes.len() as u64;
-    let (completion, root) =
-        fetching_with("fetched.bin", Answering::Short { bytes, declared_length: length + 16 });
+    let (completion, root) = fetching_with(
+        "fetched.bin",
+        Answering::Short { bytes, declared_length: length + STREAM_CHUNK_BYTES as u64 },
+    );
     assert!(
         refused_with(&completion, "holds"),
         "a short transfer is refused: {:?}",
@@ -454,8 +469,10 @@ fn a_destination_that_already_exists_is_never_replaced() {
     let root = tempfile::tempdir().expect("a temporary root").keep();
     let destination = root.join("fetched.bin");
     std::fs::write(&destination, b"somebody else's bytes").unwrap();
-    let completion =
-        fetch_into(&destination, Answering::Whole { bytes: payload(), chunk_bytes: 16 });
+    let completion = fetch_into(
+        &destination,
+        Answering::Whole { bytes: payload(), chunk_bytes: STREAM_CHUNK_BYTES },
+    );
     assert!(
         refused_with(&completion, "already exists"),
         "an occupied destination is refused: {:?}",

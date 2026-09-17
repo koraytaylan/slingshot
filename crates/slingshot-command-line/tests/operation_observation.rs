@@ -39,6 +39,9 @@ use slingshot_command_line::operation_observation::{
 const FIXTURES: &str = "tests/fixtures/operation-observation";
 const MAXIMUM_FILE_NAME_BYTES: usize = 255;
 
+/// Characters used to make a staging stem that cannot fit a file name.
+const OVERLONG_STEM_COMPONENT_CHARACTERS: usize = 128;
+
 /// The partition this client serves.
 const TARGET: &str = "target-identity-digest-one";
 
@@ -229,11 +232,11 @@ fn the_three_staging_files_are_derived_and_sit_beside_the_destination() {
 #[test]
 fn an_overlong_staging_stem_is_bounded_without_losing_identity() {
     let destination = std::path::Path::new("/tmp/downloads/package.zip");
-    let long_target = "a".repeat(128);
-    let long_revision = "b".repeat(128);
+    let long_target = "a".repeat(OVERLONG_STEM_COMPONENT_CHARACTERS);
+    let long_revision = "b".repeat(OVERLONG_STEM_COMPONENT_CHARACTERS);
     let long_payload = StagedPayload::OperationArtifact {
-        artifact_identifier: "c".repeat(128),
-        operation_identifier: "d".repeat(128),
+        artifact_identifier: "c".repeat(OVERLONG_STEM_COMPONENT_CHARACTERS),
+        operation_identifier: "d".repeat(OVERLONG_STEM_COMPONENT_CHARACTERS),
     };
     let names = names_beside(destination, &long_target, &long_revision, &long_payload);
     assert!(names.lock.file_name().unwrap().len() <= MAXIMUM_FILE_NAME_BYTES);
@@ -244,7 +247,12 @@ fn an_overlong_staging_stem_is_bounded_without_losing_identity() {
     );
     assert_ne!(
         names,
-        names_beside(destination, &"e".repeat(128), &long_revision, &long_payload),
+        names_beside(
+            destination,
+            &"e".repeat(OVERLONG_STEM_COMPONENT_CHARACTERS),
+            &long_revision,
+            &long_payload,
+        ),
         "the fallback still binds every input"
     );
 }
