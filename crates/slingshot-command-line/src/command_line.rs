@@ -17,7 +17,9 @@
 //!
 //! `daemon serve` is how a start creates its child. It is not part of the
 //! command vocabulary, takes no output form, and exits on its own taxonomy,
-//! because the only caller that ever writes it is this executable.
+//! because the caller that normally writes it is this executable. A person may
+//! write it too, with the same target and runtime root a start would use, to
+//! run the daemon in the foreground and read its diagnostics as they happen.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -80,6 +82,15 @@ pub const EXIT_ALREADY_OWNED: u8 = 8;
 
 /// What the daemon's own entry is called once its words are joined.
 const DAEMON_SERVE_LEAF: &str = "daemon-serve";
+
+/// Directory below the product's data directory that is the default runtime
+/// root when the platform offers no per-login runtime directory.
+///
+/// A directory of its own rather than the data directory itself, because a
+/// daemon owns a namespace only in a directory this user alone owns, and the
+/// data directory is shared with durable state and with whatever an earlier
+/// installation created there with wider permissions.
+pub const DEFAULT_RUNTIME_DIRECTORY: &str = "runtime";
 
 /// How many words a leaf may be spelled with.
 const MAXIMUM_LEAF_WORDS: usize = 2;
@@ -307,6 +318,45 @@ impl ToolRunner for ProductToolRunner {
     }
 }
 
+/// Returns what a protocol server's tool calls run through.
+///
+/// A run whose selection or runtime root cannot be resolved still serves the
+/// protocol, and every call it cannot run is told why rather than failing
+/// without a reason.
+fn tool_runner(invocation: &Invocation, executable: &Path) -> Box<dyn ToolRunner> {
+    match (runtime_root(invocation), namespace_of(&invocation.selection)) {
+        (Ok(root), Ok(_)) => Box::new(ProductToolRunner {
+            contract: FoundationContract::embedded(),
+            runtime_root: root,
+            selection: invocation.selection.clone(),
+            executable: executable.to_path_buf(),
+        }),
+        (Err(reason), _) => Box::new(UnavailableToolRunner { reason }),
+        (_, Err(refusal)) => Box::new(UnavailableToolRunner {
+            reason: format!(
+                "this server was started without a usable target ({refusal}); start it with \
+                     `{SERVE_LEAF} {PROFILE_OPTION} <profile> {ENVIRONMENT_OPTION} <environment>`"
+            ),
+        }),
+    }
+}
+
+/// Answers every tool call with the one reason this server cannot run any.
+struct UnavailableToolRunner {
+    /// Why no call can reach a daemon, in words a caller can act on.
+    reason: String,
+}
+
+impl ToolRunner for UnavailableToolRunner {
+    fn run(
+        &mut self,
+        _tool: &ToolDescriptor,
+        _arguments: &serde_json::Value,
+    ) -> Result<MachineOutcomeEnvelope, String> {
+        Err(self.reason.clone())
+    }
+}
+
 /// Returns the invocation one tool call describes.
 ///
 /// The two kinds of tool are answered differently because they are different
@@ -418,13 +468,22 @@ fn complete(invocation: &Invocation, executable: &Path) -> Completion {
 
 /// Returns the runtime root this invocation acts under.
 fn runtime_root(invocation: &Invocation) -> Result<PathBuf, String> {
-    if let Some(named) = invocation.arguments.get(RUNTIME_ROOT_OPTION) {
-        return Ok(PathBuf::from(named));
+    match invocation.arguments.get(RUNTIME_ROOT_OPTION) {
+        Some(named) => Ok(PathBuf::from(named)),
+        None => default_runtime_root(),
     }
+}
+
+/// Returns the runtime root an invocation that names none acts under.
+///
+/// The platform's per-login runtime directory where it has one, and otherwise
+/// a directory of this product's own below its data directory.
+fn default_runtime_root() -> Result<PathBuf, String> {
     let directories = directories::ProjectDirs::from("", "", "slingshot")
         .ok_or_else(|| "this account has no home directory".to_owned())?;
-    let root = directories.runtime_dir().unwrap_or_else(|| directories.data_dir());
-    Ok(root.to_path_buf())
+    Ok(directories
+        .runtime_dir()
+        .map_or_else(|| directories.data_dir().join(DEFAULT_RUNTIME_DIRECTORY), Path::to_path_buf))
 }
 
 /// Writes one completion where each of its parts belongs.
@@ -486,16 +545,7 @@ fn serve_protocol(
     // selection or runtime root cannot be resolved still serves the protocol:
     // the catalog and everything that describes this build answer, and a call
     // that needs a daemon is told there is not one rather than being invented.
-    let runner = match (runtime_root(invocation), namespace_of(&invocation.selection)) {
-        (Ok(root), Ok(_)) => Some(Box::new(ProductToolRunner {
-            contract: FoundationContract::embedded(),
-            runtime_root: root,
-            selection: invocation.selection.clone(),
-            executable: executable.to_path_buf(),
-        }) as Box<dyn ToolRunner>),
-        _ => None,
-    };
-    let mut server = ServerApplication::over(runner);
+    let mut server = ServerApplication::over(Some(tool_runner(invocation, executable)));
     loop {
         let (line, terminal) = match read_bounded_line(input) {
             Ok(BoundedLine::Line(line)) => (line, false),
@@ -535,18 +585,25 @@ fn serve_protocol(
 fn serve(options: &[String], diagnostics: &mut dyn Write) -> i32 {
     let mut profile = String::new();
     let mut environment = String::new();
-    let mut root = PathBuf::new();
+    let mut root = None;
     let mut position = 0;
     while position + 1 < options.len() {
         let value = options[position + 1].clone();
         match options[position].as_str() {
             PROFILE_OPTION => profile = value,
             ENVIRONMENT_OPTION => environment = value,
-            RUNTIME_ROOT_OPTION => root = PathBuf::from(value),
+            RUNTIME_ROOT_OPTION => root = Some(PathBuf::from(value)),
             _ => {}
         }
         position += OPTION_AND_VALUE;
     }
+    let root = match root.map_or_else(default_runtime_root, Ok) {
+        Ok(root) => root,
+        Err(reason) => {
+            write_diagnostic(diagnostics, &reason);
+            return i32::from(EXIT_RUNTIME_UNUSABLE);
+        }
+    };
     let contract = FoundationContract::embedded();
     let entry = DaemonEntryArguments::new(&root, &profile, &environment);
     let shutdown = tokio_util::sync::CancellationToken::new();

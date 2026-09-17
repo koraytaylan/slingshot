@@ -423,7 +423,16 @@ pub const OPERATION_NAMING_LEAVES: &[&str] = &[
 ];
 
 /// The leaves that answer without reaching anything at all.
-pub const METADATA_ONLY_LEAVES: &[&str] = &["help", "version"];
+pub const METADATA_ONLY_LEAVES: &[&str] = &[HELP_LEAF, "version"];
+
+/// The leaf that describes this build's vocabulary, or one leaf of it.
+pub const HELP_LEAF: &str = "help";
+
+/// The argument a help invocation records the leaf it describes under.
+///
+/// Not an option: `help daemon-start` names its subject with a bare word, the
+/// way a person asks, and no leaf takes an option spelled like this one.
+pub const HELP_SUBJECT_ARGUMENT: &str = "subject";
 
 /// How an outcome is written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -485,7 +494,7 @@ impl Invocation {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ParseRefusal {
     /// Nothing was asked for.
-    #[error("a command line names one leaf, and this names none")]
+    #[error("no command was given; `slingshot help` lists the commands this build offers")]
     NoLeaf,
     /// The leaf is not one this build offers.
     #[error("{named} is not a command this build offers")]
@@ -545,8 +554,12 @@ pub enum ParseRefusal {
 ///
 /// Returns [`ParseRefusal`] naming the first thing that is wrong.
 pub fn parse(arguments: &[String]) -> Result<Invocation, ParseRefusal> {
-    let (leaf, rest) = arguments.split_first().ok_or(ParseRefusal::NoLeaf)?;
+    let (leaf, rest) =
+        arguments.split_first().filter(|(leaf, _)| !leaf.is_empty()).ok_or(ParseRefusal::NoLeaf)?;
     require_known_leaf(leaf)?;
+    if let Some(described) = help_subject(leaf, rest)? {
+        return Ok(described);
+    }
     let mut invocation = Invocation {
         arguments: BTreeMap::new(),
         command: None,
@@ -565,6 +578,53 @@ pub fn parse(arguments: &[String]) -> Result<Invocation, ParseRefusal> {
     }
     require_complete(&invocation)?;
     Ok(invocation)
+}
+
+/// Returns the help invocation that describes one leaf, when this is one.
+///
+/// Only a help leaf followed by bare words is: the words are the leaf a person
+/// wants described, spelled either way a leaf may be spelled.
+///
+/// # Errors
+///
+/// Returns [`ParseRefusal::UnknownLeaf`] when the words name no leaf.
+fn help_subject(leaf: &str, rest: &[String]) -> Result<Option<Invocation>, ParseRefusal> {
+    if leaf != HELP_LEAF || rest.is_empty() || rest.iter().any(|word| word.starts_with("--")) {
+        return Ok(None);
+    }
+    let subject = rest.join("-");
+    require_known_leaf(&subject)?;
+    Ok(Some(Invocation {
+        arguments: BTreeMap::from([(HELP_SUBJECT_ARGUMENT.to_owned(), subject)]),
+        command: None,
+        detached: false,
+        operation_key: None,
+        output: None,
+        selection: Selection::default(),
+        verb: leaf.to_owned(),
+    }))
+}
+
+/// Returns what help says about the one leaf a help invocation names.
+///
+/// Read from the same tables the parser enforces, so what help says a leaf
+/// takes is exactly what the parser lets it take.
+#[must_use]
+pub fn leaf_help(invocation: &Invocation) -> Option<String> {
+    let leaf = invocation.arguments.get(HELP_SUBJECT_ARGUMENT)?;
+    let title = CommandCatalog::published()
+        .find(leaf)
+        .map(|descriptor| format!(" - {}", descriptor.title))
+        .unwrap_or_default();
+    let mut lines = vec![format!("{leaf}{title}"), String::new(), "options:".to_owned()];
+    for option in EVERY_OPTION.iter().filter(|option| leaves_taking(option).contains(leaf)) {
+        let required = required_options(leaf).contains(option)
+            || (*option == OPERATION_KEY_OPTION && requires_operation_key(leaf));
+        let value = if takes_a_value(option) { " <value>" } else { "" };
+        let marker = if required { " (required)" } else { "" };
+        lines.push(format!("  {option}{value}{marker}"));
+    }
+    Some(lines.join("\n"))
 }
 
 /// Returns whether `option` is followed by a value.

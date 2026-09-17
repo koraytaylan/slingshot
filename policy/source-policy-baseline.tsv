@@ -891,7 +891,6 @@ crates/slingshot-agent-protocol/tests/subscription_high_water_contract.rs	11	num
 crates/slingshot-agent-protocol/tests/subscription_high_water_contract.rs	17	declared-name-is-not-spelled-in-full	v
 crates/slingshot-command-line/src/application.rs	1294	file-is-longer-than-the-ceiling	1294 lines
 crates/slingshot-command-line/src/daemon_answer.rs	430	numeric-value-carries-no-name	2
-crates/slingshot-command-line/src/daemon_entry.rs	126	fallible-interface-omits-its-failure-section	run_daemon_entry_for_test
 crates/slingshot-command-line/src/model_context_protocol/current_stateless_revision.rs	133	numeric-value-carries-no-name	32_002
 crates/slingshot-command-line/src/model_context_protocol/standard_stream_transport.rs	77	fallible-interface-omits-its-failure-section	read_bounded_line
 crates/slingshot-command-line/src/property_document.rs	119	function-branches-too-many-ways	require_unique_members reaches 18

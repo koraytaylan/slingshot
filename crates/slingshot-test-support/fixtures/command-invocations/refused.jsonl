@@ -15,3 +15,5 @@
 {"arguments": ["operation-restart", "--expected-category", "ambiguous_submission"], "name": "a-restart-without-its-revision", "refusal": "required-option-missing"}
 {"arguments": ["maintenance-apply"], "name": "an-apply-without-its-digest", "refusal": "required-option-missing"}
 {"arguments": ["maintenance-result", "--result-identifier", "one", "--expected-digest", "abc"], "name": "a-result-read-without-a-destination", "refusal": "required-option-missing"}
+{"arguments": [""], "name": "an-empty-leaf-as-the-command-line-normalizes-nothing", "refusal": "no-leaf"}
+{"arguments": ["help", "teleport"], "name": "help-about-a-leaf-nobody-offers", "refusal": "unknown-leaf"}

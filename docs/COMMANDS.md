@@ -14,7 +14,8 @@ configuration it reads is the one in [CONFIGURATION.md](CONFIGURATION.md).
 A leaf may be written as one hyphenated word or as its words separated by
 spaces: `slingshot daemon start` and `slingshot daemon-start` are the same
 invocation. Options may come before the leaf or after it. `--version` and
-`--help` name their leaves.
+`--help` name their leaves. `help` followed by a leaf, spelled either way,
+lists the options that leaf takes.
 
 Standard output carries the answer and standard error carries everything else,
 so either may be redirected without losing the other. With `--machine`, a run

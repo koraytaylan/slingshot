@@ -88,7 +88,10 @@ pub enum NamespaceFailure {
         character: char,
     },
     /// A root is not one this process may use.
-    #[error("{root} is not a directory this user alone owns")]
+    #[error(
+        "{root} is not a directory this user alone owns; restrict it to its owner with mode \
+         0700, or choose another root"
+    )]
     RootNotPrivate {
         /// Which root.
         root: String,

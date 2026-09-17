@@ -5,7 +5,13 @@
 //! client's process group, so the daemon survives the client exiting and no
 //! signal aimed at the client's group reaches it. The client never lends the
 //! child a lock: the daemon acquires its own ownership after it starts.
+//!
+//! The child's diagnostic stream goes to a file the caller names rather than
+//! nowhere. A daemon that cannot start has no terminal, and a failure written
+//! where nobody can read it leaves the person who asked for the start with a
+//! timeout and nothing to act on.
 
+use std::fs::File;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
@@ -42,15 +48,22 @@ fn apply_detachment(command: &mut Command) {
 
 /// Starts one detached daemon child and returns its handle.
 ///
-/// The returned handle is the only way to observe or end the child. Nothing in
-/// this module reads the child's numeric process identifier as authority.
+/// The child's standard input and output are discarded and its diagnostic
+/// stream is written to `diagnostics`. The returned handle is the only way to
+/// observe or end the child. Nothing in this module reads the child's numeric
+/// process identifier as authority.
 ///
 /// # Errors
 ///
 /// Returns the operating-system failure that prevented the child from starting.
-pub fn spawn_detached(executable: &Path, arguments: &[String]) -> std::io::Result<Child> {
+pub fn spawn_detached(
+    executable: &Path,
+    arguments: &[String],
+    diagnostics: File,
+) -> std::io::Result<Child> {
     let mut command = Command::new(executable);
     command.args(arguments);
     detach(&mut command);
+    command.stderr(Stdio::from(diagnostics));
     command.spawn()
 }

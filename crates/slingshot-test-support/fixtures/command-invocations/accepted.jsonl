@@ -10,3 +10,5 @@
 {"arguments": ["maintenance-apply", "--reviewed-digest", "abc"], "name": "a-maintenance-apply", "verb": "maintenance-apply"}
 {"arguments": ["maintenance-result", "--result-identifier", "one", "--expected-digest", "abc", "--destination", "/tmp/out.json"], "name": "a-maintenance-result-read", "verb": "maintenance-result"}
 {"arguments": ["operation-restart", "--expected-revision", "4", "--expected-category", "ambiguous_submission"], "name": "an-operation-restart", "verb": "operation-restart"}
+{"arguments": ["help", "daemon-start"], "metadata_only": true, "name": "help-about-one-leaf", "verb": "help"}
+{"arguments": ["help", "daemon", "start"], "metadata_only": true, "name": "help-about-one-leaf-spelled-as-words", "verb": "help"}

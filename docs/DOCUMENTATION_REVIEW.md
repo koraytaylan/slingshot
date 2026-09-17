@@ -67,6 +67,15 @@ Everything else that names a command is generated from the registry and
 compared byte for byte, so no other document could have drifted without the
 gate saying so.
 
+Reviewed again after a start that could not produce a daemon stopped being
+silent. The architecture note, the daemon document, and the command reference
+now state what the build does: a start refuses a runtime root its user does not
+alone own before it contends for anything, the default root on a platform
+without a per-login runtime directory is a private directory of the product's
+own, a started daemon writes its diagnostics to an owner-only startup log that a
+failed start quotes and names, `daemon serve` runs the daemon in the
+foreground, and `help` followed by a leaf lists what that leaf takes.
+
 ## Reviewed document identities
 
 This review applies only to the complete product documents named below. Each
@@ -77,11 +86,11 @@ cannot inherit this review without an explicit renewed record.
 |---|---|
 | `README.md` | `8a69bafa9663c68fec56e78c38833710a693b232af2f865f9bee32774721468c` |
 | `CONTRIBUTING.md` | `97e3f1a0bd8723865cc4b858606e3a25dafe75d18039e99d49a2eafde2c7be0d` |
-| `ARCHITECTURE.md` | `acaa53946f9299d0f11f32a67969ef2c77e7bcbe93955c34d225cc3b63e4b7aa` |
+| `ARCHITECTURE.md` | `b2c10c698c7ef4a899711dbd29d6f381aa58669555b0311fc26720b9a92384bc` |
 | `docs/AGENT_PROTOCOL.md` | `ece5eae8453303b299635ede39026267888f13749ca718f0a1a528f4ef738806` |
-| `docs/COMMANDS.md` | `dfe0c21d59a198443978220b88e17eb7658df943c649c90d265ab7c58e8b0f5e` |
+| `docs/COMMANDS.md` | `13d3aa65a38a2c3a070a2618c09fb68b568e4770ba5943740ec3b0f49d1413df` |
 | `docs/CONFIGURATION.md` | `775ce5363790d1b44a91fdb7e7b2015d538cce224de5030f5e13edec87b089b3` |
-| `docs/DAEMON.md` | `4d1f7748636d8e0a44195755ab1d8492c561f6c3dedeb5c88e95ebd9ed7df6d6` |
+| `docs/DAEMON.md` | `81ad319858de8e891df00b4712a21ca30ec803215b2d2bb351aa65ce90f65224` |
 | `docs/MODEL_CONTEXT_PROTOCOL.md` | `f946c4b2bb5d2ae1a092827e07e4f2e8d56f6e14a5987e5aee43fb9299183f73` |
 | `docs/RELEASES.md` | `c25a1800a6e20515d29569eec77003a267184a35e88d2a1c21d24630f0501d6a` |
 | `docs/WORKFLOWS.md` | `0bd107a373f258069f2e9472f5c17bea2ccb675aa070ccc581d49ce11c9f3f6e` |

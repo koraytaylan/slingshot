@@ -42,7 +42,8 @@ read the same once joined by a delimiter still name different namespaces.
 
 The namespace has four objects: an endpoint, a lock a daemon holds for its
 whole lifetime, a separate lock an electing client holds while it decides, and
-a readiness record. The two locks are separate operating-system objects with
+a readiness record. A fifth file, the startup log a started daemon's
+diagnostic stream is written to, is a diagnostic and decides nothing. The two locks are separate operating-system objects with
 separate Rust types; neither substitutes for the other, and no client lends
 either to a child.
 
@@ -57,7 +58,8 @@ displace a live owner.
 the election lock, rechecks after winning it, and only then, only once, and
 only after the owner lock proves absence, creates one detached child from its
 own absolute executable. It holds the election through a responsive probe or a
-terminal failure. Callers that lose the election wait, retry the connection,
+terminal failure, and a child that exits before it answers is a terminal
+failure reported with what the child wrote. Callers that lose the election wait, retry the connection,
 and retry the election under the same absolute deadline, so every caller
 returns the same live nonce.
 
