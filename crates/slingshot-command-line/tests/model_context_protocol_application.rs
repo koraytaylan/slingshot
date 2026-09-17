@@ -33,6 +33,9 @@ use slingshot_command_line::model_context_protocol::tool_catalog::ToolDescriptor
 /// The revision the current era speaks.
 const CURRENT: &str = "2026-07-28";
 
+/// The environment revision a recovery document names in these tests.
+const RECOVERY_REVISION: u64 = 2;
+
 /// A writer that accepts each queued response in full.
 struct CompleteSink;
 
@@ -408,7 +411,7 @@ fn recovery_documents_name_the_unknown_cause_that_produced_them() {
         "the operator document must name the cause: {document}"
     );
     assert!(!cause.spelling().is_empty());
-    let completion = recovering(category, document.clone(), 2);
+    let completion = recovering(category, document.clone(), RECOVERY_REVISION);
     match completion.answer {
         slingshot_command_line::application::Answer::Envelope(envelope) => {
             match envelope.as_ref() {
@@ -433,7 +436,7 @@ fn recovery_documents_name_the_unknown_cause_that_produced_them() {
             Ok(MachineOutcomeEnvelope::OperationRecoveryRequired {
                 category: "ambiguous_submission".to_owned(),
                 evidence: self.evidence.clone(),
-                revision: 2,
+                revision: RECOVERY_REVISION,
             })
         }
     }

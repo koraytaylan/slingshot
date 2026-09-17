@@ -192,6 +192,11 @@ impl core::ops::Deref for ProductTransport<'_> {
 
 impl<'protocol> ProductAuthorPorts<'protocol> {
     /// Returns the product author boundary over one selected connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SelectedAuthorTransportFailure`] when the selected connection
+    /// cannot become a transport.
     #[must_use]
     pub fn new(
         connection: SelectedAuthorConnection,
