@@ -146,8 +146,8 @@ fn quoted(diagnostic: &str, log: &Path) -> String {
     let log = log.display();
     if diagnostic.is_empty() {
         format!(
-            "; it wrote nothing to {log}. Run the same command line with `daemon serve` in \
-             place of `daemon start` to watch it start in the foreground"
+            "; it wrote nothing to {log}. Run the same command line with `daemon-serve` in \
+             place of `daemon-start` to watch it start in the foreground"
         )
     } else {
         format!("; it wrote: {diagnostic} (the whole startup log is {log})")

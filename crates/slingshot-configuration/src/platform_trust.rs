@@ -9,9 +9,12 @@
 //!
 //! So a record is retained only when the store says, unconditionally, that this
 //! authority may authenticate a server - and when every record for the same
-//! bytes says the same thing. A conflicting duplicate fails the snapshot rather
-//! than being resolved, because resolving it would mean choosing which of the
-//! platform's two answers to believe.
+//! bytes says the same thing. Every other record is left out: a denied,
+//! restricted, or uninterpretable record, bytes that are not a certificate
+//! authority for server authentication, and bytes two records disagree about.
+//! Leaving a record out can only narrow what a verifier accepts, never widen
+//! it, whereas refusing the whole snapshot would leave a host whose store holds
+//! one such record - an ordinary managed machine - unable to start at all.
 //!
 //! The snapshot is taken once. Nothing here reopens the store, so editing the
 //! platform's trust after startup cannot affect a running client; a restart
@@ -82,34 +85,35 @@ impl PlatformTrustSnapshot {
     /// # Errors
     ///
     /// Returns [`ConfigurationFailureCode::PlatformTrustSnapshotInvalid`] when
-    /// the store cannot be enumerated, holds a record whose decision is not
-    /// unconditional, holds two records for the same bytes that disagree, or
-    /// exceeds the contract's count, entry, or aggregate bounds. No record byte,
+    /// the store cannot be enumerated, or when the roots it retains exceed the
+    /// contract's count or aggregate bounds. A record that is not retained is
+    /// not a failure; see [`PlatformTrustSnapshot::roots`]. No record byte,
     /// subject, or provider message survives.
     pub fn take(source: &dyn PlatformTrustSource) -> Result<Self, ConfigurationDiagnostic> {
         let limits = &ProfileAuthenticationContract::embedded().limits;
         let records = source.records()?;
         let mut decided: Vec<(Vec<u8>, ProviderDecision)> = Vec::new();
         for record in records {
-            if u64::try_from(record.der.len()).unwrap_or(u64::MAX)
-                > limits.maximum_platform_trust_authority_der_bytes
-            {
-                return Err(refusal());
-            }
-            match decided.iter().find(|(der, _)| *der == record.der) {
-                Some((_, decision)) if *decision != record.decision => return Err(refusal()),
-                Some(_) => continue,
+            match decided.iter_mut().find(|(der, _)| *der == record.der) {
+                // The platform's two answers cannot be reconciled without
+                // choosing one, so the bytes are treated as unevaluable.
+                Some((_, decision)) if *decision != record.decision => {
+                    *decision = ProviderDecision::Unevaluable;
+                }
+                Some(_) => {}
                 None => decided.push((record.der, record.decision)),
             }
         }
-        let mut roots = Vec::new();
-        for (der, decision) in decided {
-            if decision != ProviderDecision::UnconditionallyTrustedForServerAuthentication {
-                return Err(refusal());
-            }
-            require_eligible_anchor(&der)?;
-            roots.push(der);
-        }
+        let mut roots: Vec<Vec<u8>> = decided
+            .into_iter()
+            .filter(|(der, decision)| {
+                *decision == ProviderDecision::UnconditionallyTrustedForServerAuthentication
+                    && u64::try_from(der.len()).unwrap_or(u64::MAX)
+                        <= limits.maximum_platform_trust_authority_der_bytes
+                    && matches!(anchor_is_eligible(der), Ok(true))
+            })
+            .map(|(der, _)| der)
+            .collect();
         roots.sort();
         if u64::try_from(roots.len()).unwrap_or(u64::MAX)
             > limits.maximum_platform_trust_authorities
@@ -127,14 +131,21 @@ impl PlatformTrustSnapshot {
     }
 
     /// Returns the retained roots, in ascending byte order.
+    ///
+    /// A root is retained only when every record for its bytes is
+    /// unconditionally trusted for server authentication, its bytes are within
+    /// the contract's per-authority bound, and they parse as a certificate
+    /// authority whose Extended Key Usage, when present, includes server
+    /// authentication. Every other record is absent from this list.
     #[must_use]
     pub fn roots(&self) -> &[Vec<u8>] {
         &self.roots
     }
 }
 
-/// Requires one retained anchor to be an authority that may authenticate a
+/// Requires one bundle anchor to be an authority that may authenticate a
 /// server, so accepted bytes fully represent the decision they came with.
+#[cfg(target_os = "linux")]
 fn require_eligible_anchor(der: &[u8]) -> Result<(), ConfigurationDiagnostic> {
     if anchor_is_eligible(der)? {
         return Ok(());
@@ -147,8 +158,8 @@ fn require_eligible_anchor(der: &[u8]) -> Result<(), ConfigurationDiagnostic> {
 /// A platform trust directory can contain valid end-entity certificates (for
 /// example, a host's generated snake-oil certificate) beside its CA anchors.
 /// Those are not trust records and are ignored when reading a directory. A
-/// malformed certificate remains an error so corrupted provider data cannot be
-/// silently accepted.
+/// malformed certificate is an error, so a bundle file holding corrupted data
+/// is refused rather than partly read; a snapshot never retains either kind.
 fn anchor_is_eligible(der: &[u8]) -> Result<bool, ConfigurationDiagnostic> {
     let (remainder, certificate) = X509Certificate::from_der(der).map_err(|_| refusal())?;
     if !remainder.is_empty() {
