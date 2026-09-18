@@ -622,7 +622,7 @@ impl<
             self.delivery = Some(
                 EventDelivery::attached(
                     &head,
-                    &media,
+                    media.as_deref().ok_or(ResponseRefusal)?,
                     self.subscription.clone(),
                     self.generation,
                     self.resolver.take().ok_or(ResponseRefusal)?,
@@ -632,7 +632,7 @@ impl<
             );
             self.ended = self.header_end;
         } else {
-            if !crate::selected_author_submission::json_media_type(&media) {
+            if !crate::selected_author_submission::json_media_type(media.as_deref().unwrap_or("")) {
                 return Err(ResponseRefusal);
             }
             self.error = Some(FiniteResponse::from_decoded_head(status, headers, self.header_end)?);

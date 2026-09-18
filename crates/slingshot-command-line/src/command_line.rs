@@ -523,7 +523,7 @@ fn write_completion(
 }
 
 /// Writes one diagnostic where diagnostics go.
-fn write_diagnostic(diagnostics: &mut dyn Write, message: &str) {
+pub(crate) fn write_diagnostic(diagnostics: &mut dyn Write, message: &str) {
     writeln!(diagnostics, "{DIAGNOSTIC_PREFIX}{message}").unwrap_or_default();
 }
 

@@ -141,6 +141,79 @@ impl preflight::Preflight<'_> {
     }
 }
 
+impl preflight::Preflight<'_> {
+    /// A bodyless 403 to the POST is a caller refusal, in both modes, and is never resent.
+    pub(super) async fn verify_refused_caller(&self, submission: &Submission) {
+        let Self { listener, transport, identity, authentication, async_provider, .. } = *self;
+        for asynchronous in [false, true] {
+            let peer = async {
+                for answer in [
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 27\r\n\r\n{\"token\":\"csrf-test-value\"}",
+                    "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n",
+                ] {
+                    let (mut socket, _) = listener.accept().await.unwrap();
+                    let mut head = Vec::new();
+                    while !head.ends_with(b"\r\n\r\n") {
+                        head.push(socket.read_u8().await.unwrap());
+                    }
+                    let head = String::from_utf8(head).unwrap();
+                    if let Some(length) =
+                        head.lines().find_map(|line| line.strip_prefix("Content-Length: "))
+                    {
+                        let mut body = vec![0; length.parse().unwrap()];
+                        socket.read_exact(&mut body).await.unwrap();
+                    }
+                    socket.write_all(answer.as_bytes()).await.unwrap();
+                }
+            };
+            let (outcome, ()) = timeout(Duration::from_secs(EXCHANGE_TIMEOUT_SECONDS), async {
+                tokio::join!(
+                    async {
+                        if asynchronous {
+                            transport
+                                .send_submission_authenticated_async_guarded(
+                                    identity,
+                                    submission,
+                                    async_provider,
+                                    &async_cases::NoClocks,
+                                    &async_cases::NoClocks,
+                                    1,
+                                    || Ok(()),
+                                )
+                                .await
+                        } else {
+                            transport
+                                .send_submission_with_fresh_token(
+                                    identity,
+                                    submission,
+                                    authentication,
+                                    1,
+                                )
+                                .await
+                        }
+                    },
+                    peer
+                )
+            })
+            .await
+            .unwrap();
+            assert!(
+                matches!(outcome, Ok(SubmissionOutcome::CallerNotPermitted)),
+                "async={asynchronous}: {outcome:?}"
+            );
+            assert!(
+                timeout(
+                    Duration::from_millis(NO_REPEAT_OBSERVATION_MILLISECONDS),
+                    listener.accept()
+                )
+                .await
+                .is_err(),
+                "a refused caller triggered another request"
+            );
+        }
+    }
+}
+
 fn job_sets(media: &str, wrong_echo: bool) -> Vec<serde_json::Value> {
     if media == "application/json" && !wrong_echo {
         serde_json::from_str::<serde_json::Value>(include_str!(

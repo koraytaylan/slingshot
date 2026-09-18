@@ -184,6 +184,8 @@ pub enum HandoffDisposition {
     RecoveryWindowExpired,
     /// This identifier already means something else at the agent.
     Conflict,
+    /// The author refused this caller before the agent read the submission.
+    CallerNotPermitted,
     /// Nothing is settled. Wait this long before lookup-first reconciliation;
     /// a retryable status does not prove the POST had no effect.
     RetryAfter {
@@ -211,6 +213,7 @@ pub fn disposition_of(outcome: &SubmissionOutcome) -> HandoffDisposition {
         | SubmissionOutcome::ConfirmedNotExecuted { .. } => HandoffDisposition::NotExecuted,
         SubmissionOutcome::RecoveryWindowExpired => HandoffDisposition::RecoveryWindowExpired,
         SubmissionOutcome::Conflict => HandoffDisposition::Conflict,
+        SubmissionOutcome::CallerNotPermitted => HandoffDisposition::CallerNotPermitted,
         SubmissionOutcome::RetryAfter { milliseconds } => {
             HandoffDisposition::RetryAfter { milliseconds: *milliseconds }
         }

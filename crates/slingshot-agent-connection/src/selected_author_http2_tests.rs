@@ -466,3 +466,51 @@ async fn live_consumer_heartbeats_outlive_finite_limits_but_ping_traffic_does_no
         }
     }
 }
+
+/// Returns a complete head carrying `status` and a zero content length, with no content type.
+fn bodyless_head(status: &[u8]) -> Vec<u8> {
+    // Literal :status by static name index 8, then content-length by static name index 28.
+    let mut block = vec![0x08, status.len() as u8];
+    block.extend_from_slice(status);
+    block.extend_from_slice(&[0x0f, 0x0d, 1, b'0']);
+    frame(1, END_HEADERS_AND_STREAM_FLAGS, 1, &block)
+}
+
+#[tokio::test]
+async fn a_bodyless_refusal_without_a_content_type_reaches_the_route() {
+    let (stream, mut peer) = tokio::io::duplex(DUPLEX_CAPACITY);
+    let server = async {
+        handshake(&mut peer, INITIAL_STREAM_WINDOW).await;
+        assert_eq!(receive(&mut peer).await.kind, 1);
+        assert_eq!(receive(&mut peer).await.kind, 0);
+        peer.write_all(&bodyless_head(b"403")).await.unwrap();
+        close(&mut peer).await;
+    };
+    let (result, ()) = timeout(Duration::from_secs(TEST_TIMEOUT_SECONDS), async {
+        tokio::join!(client(stream, b"submission", deadlines()), server)
+    })
+    .await
+    .unwrap();
+    let response = result.expect("a refusal is a response, not a malformed head");
+    assert_eq!(response.status, 403);
+    assert!(response.body.is_empty());
+    assert_eq!(response.content_type, None);
+}
+
+#[tokio::test]
+async fn a_successful_status_without_a_content_type_is_still_refused() {
+    let (stream, mut peer) = tokio::io::duplex(DUPLEX_CAPACITY);
+    let server = async {
+        handshake(&mut peer, INITIAL_STREAM_WINDOW).await;
+        assert_eq!(receive(&mut peer).await.kind, 1);
+        peer.write_all(&bodyless_head(b"200")).await.unwrap();
+        // A refused head closes the connection however it closes it.
+        while peer.read(&mut [0; FRAME_HEADER_BYTES]).await.is_ok_and(|read| read > 0) {}
+    };
+    let (result, ()) = timeout(Duration::from_secs(TEST_TIMEOUT_SECONDS), async {
+        tokio::join!(client(stream, b"", deadlines()), server)
+    })
+    .await
+    .unwrap();
+    assert!(matches!(result, Err(FiniteHttpFailure::Head)));
+}

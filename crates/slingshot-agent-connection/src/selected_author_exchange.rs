@@ -73,7 +73,11 @@ pub enum SelectedAuthorExchangeRefusal {
     /// Only a nonredirect final status can reach route interpretation.
     #[error("the author response status is not an acceptable final status")]
     Status,
-    /// Every protocol response must declare its media type.
+    /// A successful protocol response must declare its media type.
+    ///
+    /// An error status may omit it: the platform and the agent both refuse a
+    /// caller with a bodyless status, and a route must see that status rather
+    /// than a malformed head.
     #[error("the author response has no content type")]
     MissingContentType,
     /// The shared response policy refused its head.
@@ -137,25 +141,29 @@ pub fn validate_collected_finite_response(
     Ok(SelectedAuthorFiniteResponse {
         status: parts.status.as_u16(),
         body,
-        content_type: Some(content_type),
+        content_type,
         retry_after: singleton(&parts.headers, "retry-after")?,
         head,
     })
 }
 
 /// The same finite head policy before collecting a streaming transport's body.
+///
+/// Returns the declared content type, which only an error status may omit.
 pub(crate) fn validate_finite_head(
     status: http::StatusCode,
     version: Version,
     headers: &HeaderMap,
-) -> Result<(ResponseHead, String), SelectedAuthorExchangeRefusal> {
+) -> Result<(ResponseHead, Option<String>), SelectedAuthorExchangeRefusal> {
     if status.as_u16() < 200 || status.is_redirection() || status.as_u16() >= 600 {
         return Err(SelectedAuthorExchangeRefusal::Status);
     }
     let head = response_head(version, headers)?;
     head.require_acceptable()?;
-    let content_type = singleton(headers, "content-type")?
-        .ok_or(SelectedAuthorExchangeRefusal::MissingContentType)?;
+    let content_type = singleton(headers, "content-type")?;
+    if content_type.is_none() && !(status.is_client_error() || status.is_server_error()) {
+        return Err(SelectedAuthorExchangeRefusal::MissingContentType);
+    }
     singleton(headers, "retry-after")?;
     Ok((head, content_type))
 }

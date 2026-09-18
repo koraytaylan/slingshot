@@ -437,6 +437,14 @@ pub enum SubmissionOutcome {
     },
     /// This identifier already means a different submission at the agent.
     Conflict,
+    /// The author refused this caller with a bodyless 403 before the agent
+    /// read the submission, so nothing was recorded.
+    ///
+    /// The agent refuses a caller outside the groups its operator permitted
+    /// before it reads a body, and the platform's own forgery and referrer
+    /// filters refuse before any servlet runs; both answer without a body.
+    /// Sending the same request again cannot change the answer.
+    CallerNotPermitted,
     /// Nothing is settled; wait before same-identifier lookup. This response
     /// does not establish nonexecution or authorize another submission.
     RetryAfter {

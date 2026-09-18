@@ -72,11 +72,93 @@ pub trait PlatformTrustSource {
     fn records(&self) -> Result<Vec<ProviderRecord>, ConfigurationDiagnostic>;
 }
 
+/// Why one distinct certificate was left out of a snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LeftOutReason {
+    /// Every record for the bytes denies or distrusts them.
+    Distrusted,
+    /// The store restricts the bytes to some application, policy, or name.
+    ExternallyRestricted,
+    /// The store holds settings for the bytes this build cannot interpret.
+    Unevaluable,
+    /// Two records for the same bytes carry different decisions.
+    ConflictingDecisions,
+    /// The bytes exceed the contract's per-authority bound.
+    Oversized,
+    /// The bytes are not exactly one certificate.
+    Unparseable,
+    /// The certificate is not an authority that may authenticate a server.
+    NotServerAuthenticationAuthority,
+}
+
+impl LeftOutReason {
+    /// Returns how a startup log names this reason.
+    #[must_use]
+    pub fn as_text(self) -> &'static str {
+        match self {
+            Self::Distrusted => "distrusted",
+            Self::ExternallyRestricted => "restricted by the store",
+            Self::Unevaluable => "with settings this build cannot evaluate",
+            Self::ConflictingDecisions => "with conflicting decisions",
+            Self::Oversized => "over the per-authority size bound",
+            Self::Unparseable => "not a parseable certificate",
+            Self::NotServerAuthenticationAuthority => {
+                "not a certificate authority for server authentication"
+            }
+        }
+    }
+}
+
+/// How many distinct certificates a snapshot left out, by reason.
+///
+/// Counts only: which certificate was left out stays on the machine that holds
+/// it, so a startup log can say that something was dropped and why without
+/// naming or fingerprinting anything in the store.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LeftOutRecords {
+    /// Distinct certificates per reason; a reason with none is absent.
+    counts: std::collections::BTreeMap<LeftOutReason, u64>,
+}
+
+impl LeftOutRecords {
+    /// Returns how many distinct certificates were left out in total.
+    #[must_use]
+    pub fn total(&self) -> u64 {
+        self.counts.values().sum()
+    }
+
+    /// Returns how many distinct certificates were left out for `reason`.
+    #[must_use]
+    pub fn count(&self, reason: LeftOutReason) -> u64 {
+        self.counts.get(&reason).copied().unwrap_or_default()
+    }
+
+    /// Counts one more certificate left out for `reason`.
+    fn record(&mut self, reason: LeftOutReason) {
+        let count = self.counts.entry(reason).or_default();
+        *count = count.saturating_add(1);
+    }
+}
+
+impl ::core::fmt::Display for LeftOutRecords {
+    /// Writes each reason with its count, in a fixed order, separated by commas.
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut separator = "";
+        for (reason, count) in &self.counts {
+            write!(formatter, "{separator}{count} {}", reason.as_text())?;
+            separator = ", ";
+        }
+        Ok(())
+    }
+}
+
 /// The immutable platform roots one startup accepted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlatformTrustSnapshot {
     /// Distinct retained roots, in ascending byte order.
     roots: Vec<Vec<u8>>,
+    /// What was left out, counted by reason.
+    left_out: LeftOutRecords,
 }
 
 impl PlatformTrustSnapshot {
@@ -92,28 +174,26 @@ impl PlatformTrustSnapshot {
     pub fn take(source: &dyn PlatformTrustSource) -> Result<Self, ConfigurationDiagnostic> {
         let limits = &ProfileAuthenticationContract::embedded().limits;
         let records = source.records()?;
-        let mut decided: Vec<(Vec<u8>, ProviderDecision)> = Vec::new();
+        // Each distinct certificate with its decision, or with none when two
+        // records disagree: the platform's two answers cannot be reconciled
+        // without choosing one.
+        let mut decided: Vec<(Vec<u8>, Option<ProviderDecision>)> = Vec::new();
         for record in records {
             match decided.iter_mut().find(|(der, _)| *der == record.der) {
-                // The platform's two answers cannot be reconciled without
-                // choosing one, so the bytes are treated as unevaluable.
-                Some((_, decision)) if *decision != record.decision => {
-                    *decision = ProviderDecision::Unevaluable;
-                }
+                Some((_, decision)) if *decision != Some(record.decision) => *decision = None,
                 Some(_) => {}
-                None => decided.push((record.der, record.decision)),
+                None => decided.push((record.der, Some(record.decision))),
             }
         }
-        let mut roots: Vec<Vec<u8>> = decided
-            .into_iter()
-            .filter(|(der, decision)| {
-                *decision == ProviderDecision::UnconditionallyTrustedForServerAuthentication
-                    && u64::try_from(der.len()).unwrap_or(u64::MAX)
-                        <= limits.maximum_platform_trust_authority_der_bytes
-                    && matches!(anchor_is_eligible(der), Ok(true))
-            })
-            .map(|(der, _)| der)
-            .collect();
+        let mut roots = Vec::new();
+        let mut left_out = LeftOutRecords::default();
+        for (der, decision) in decided {
+            match left_out_reason(&der, decision, limits.maximum_platform_trust_authority_der_bytes)
+            {
+                Some(reason) => left_out.record(reason),
+                None => roots.push(der),
+            }
+        }
         roots.sort();
         if u64::try_from(roots.len()).unwrap_or(u64::MAX)
             > limits.maximum_platform_trust_authorities
@@ -127,7 +207,13 @@ impl PlatformTrustSnapshot {
         if aggregate > limits.maximum_identity_management_trust_canonical_bytes {
             return Err(refusal());
         }
-        Ok(Self { roots })
+        Ok(Self { roots, left_out })
+    }
+
+    /// Returns how many distinct certificates were left out, by reason.
+    #[must_use]
+    pub fn left_out(&self) -> &LeftOutRecords {
+        &self.left_out
     }
 
     /// Returns the retained roots, in ascending byte order.
@@ -141,6 +227,33 @@ impl PlatformTrustSnapshot {
     pub fn roots(&self) -> &[Vec<u8>] {
         &self.roots
     }
+}
+
+/// Returns why one distinct certificate is left out, or nothing when it is
+/// retained.
+fn left_out_reason(
+    der: &[u8],
+    decision: Option<ProviderDecision>,
+    maximum_der_bytes: u64,
+) -> Option<LeftOutReason> {
+    let reason = match decision {
+        None => LeftOutReason::ConflictingDecisions,
+        Some(ProviderDecision::Distrusted) => LeftOutReason::Distrusted,
+        Some(ProviderDecision::ExternallyRestricted) => LeftOutReason::ExternallyRestricted,
+        Some(ProviderDecision::Unevaluable) => LeftOutReason::Unevaluable,
+        Some(ProviderDecision::UnconditionallyTrustedForServerAuthentication) => {
+            if u64::try_from(der.len()).unwrap_or(u64::MAX) > maximum_der_bytes {
+                LeftOutReason::Oversized
+            } else {
+                match anchor_is_eligible(der) {
+                    Ok(true) => return None,
+                    Ok(false) => LeftOutReason::NotServerAuthenticationAuthority,
+                    Err(_) => LeftOutReason::Unparseable,
+                }
+            }
+        }
+    };
+    Some(reason)
 }
 
 /// Requires one bundle anchor to be an authority that may authenticate a

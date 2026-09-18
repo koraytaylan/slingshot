@@ -314,6 +314,29 @@ fn an_ordinary_human_outcome_goes_to_standard_output_and_says_what_happened() {
 }
 
 #[test]
+fn a_human_terminal_error_carries_the_explanation_the_daemon_gave() {
+    let explained = render_human(&MachineOutcomeEnvelope::OperationTerminalError {
+        disposition: "AuthoritativeNonExecution".to_owned(),
+        failure: serde_json::json!({ "metadata": "the caller is not permitted" }),
+        kind: "Rejected".to_owned(),
+    });
+    assert!(
+        explained
+            .standard_output
+            .contains("Rejected, AuthoritativeNonExecution: the caller is not permitted"),
+        "{}",
+        explained.standard_output
+    );
+    let unexplained = render_human(&MachineOutcomeEnvelope::OperationTerminalError {
+        disposition: "AuthoritativeNonExecution".to_owned(),
+        failure: serde_json::json!({ "metadata": null }),
+        kind: "Rejected".to_owned(),
+    });
+    assert!(unexplained.standard_output.contains("Rejected, AuthoritativeNonExecution"));
+    assert!(!unexplained.standard_output.contains("AuthoritativeNonExecution:"));
+}
+
+#[test]
 fn progress_goes_to_standard_error_and_only_when_a_person_is_reading() {
     assert_eq!(PROGRESS_STREAM, Stream::StandardError);
     assert_eq!(MACHINE_STREAM, Stream::StandardOutput);

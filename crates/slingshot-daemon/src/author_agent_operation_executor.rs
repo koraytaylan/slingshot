@@ -295,6 +295,7 @@ pub fn outcome_of_handoff(disposition: &HandoffDisposition) -> Option<OperationE
         | HandoffDisposition::Duplicate
         | HandoffDisposition::ReconcileRetained => None,
         HandoffDisposition::NotExecuted => Some(refused("the agent recorded nothing")),
+        HandoffDisposition::CallerNotPermitted => Some(refused(CALLER_NOT_PERMITTED)),
         HandoffDisposition::RecoveryWindowExpired => Some(failed_closed(
             TerminalFailureKind::RemoteStateLost,
             OperationExecutionCertainty::RemoteOutcomeUnknown,
@@ -317,6 +318,11 @@ pub fn outcome_of_handoff(disposition: &HandoffDisposition) -> Option<OperationE
         )),
     }
 }
+
+/// What a refused caller is told, since the refusal itself carries no reason.
+const CALLER_NOT_PERMITTED: &str = "the author refused this caller before the agent read the \
+    submission, and recorded nothing; the caller is most likely in none of the groups the \
+    agent's permitted.groups configuration names";
 
 /// Returns the outcome an authoritative refusal produces.
 fn refused(detail: &str) -> OperationExecutorOutcome {

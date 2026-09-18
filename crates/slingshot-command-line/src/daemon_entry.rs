@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use slingshot_agent_connection::authentication::runtime_snapshot::build_runtime_snapshot;
+use slingshot_agent_connection::authentication::runtime_snapshot::build_reported_runtime_snapshot;
 #[cfg(feature = "runtime-test-host")]
 use slingshot_configuration::platform_trust::ProviderRecord;
 use slingshot_configuration::{
@@ -188,7 +188,18 @@ async fn run_with_sources(
                 .map_err(|_| DaemonEntryFailure::Configuration)?,
         ),
     };
-    let snapshot = build_runtime_snapshot(loaded, &requested, platform)?;
+    let (snapshot, left_out) = build_reported_runtime_snapshot(loaded, &requested, platform)?;
+    // A daemon's diagnostic stream is its startup log. Only counts are written,
+    // so a dropped corporate root is visible there without naming it.
+    if left_out.total() > 0 {
+        crate::command_line::write_diagnostic(
+            &mut std::io::stderr(),
+            &format!(
+                "the platform trust snapshot left out {} certificates: {left_out}",
+                left_out.total()
+            ),
+        );
+    }
     let limits = DaemonRuntimeContract::embedded();
     let runtime = RuntimeBuilder::new(
         snapshot,

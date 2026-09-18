@@ -100,8 +100,14 @@ fn summary(envelope: &MachineOutcomeEnvelope) -> String {
         MachineOutcomeEnvelope::OperationStatus { revision, state } => {
             format!("{state} at revision {revision}")
         }
-        MachineOutcomeEnvelope::OperationTerminalError { disposition, kind, .. } => {
-            format!("{kind}, {disposition}")
+        MachineOutcomeEnvelope::OperationTerminalError { disposition, kind, failure } => {
+            // The daemon's own explanation, where it gave one, is what a person can act on.
+            match failure.get("metadata").and_then(serde_json::Value::as_str) {
+                Some(explanation) if !explanation.is_empty() => {
+                    format!("{kind}, {disposition}: {explanation}")
+                }
+                _ => format!("{kind}, {disposition}"),
+            }
         }
         MachineOutcomeEnvelope::OperationRecoveryRequired { category, evidence, revision } => {
             format!("waiting in {category} at revision {revision}, {evidence}")

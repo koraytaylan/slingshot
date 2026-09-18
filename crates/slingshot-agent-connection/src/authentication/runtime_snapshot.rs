@@ -8,7 +8,7 @@ use crate::transport_policy::{AuthorTrustInput, IdentityManagementTrustInput};
 use slingshot_configuration::{
     additional_certificate_authority::AdditionalAuthorCertificates,
     configuration_generation::SourceRole,
-    platform_trust::{PlatformTrustSnapshot, PlatformTrustSource},
+    platform_trust::{LeftOutRecords, PlatformTrustSnapshot, PlatformTrustSource},
     profile_loader::LoadedProfiles,
     profile_selection::{RequestedSelection, resolve},
 };
@@ -38,11 +38,32 @@ pub enum RuntimeSnapshotRefusal {
 /// Consumes the loaded generation, parses only selected credential/certificate
 /// sources, and snapshots platform trust once. No credential-file reopen, network
 /// exchange, endpoint override or caller-supplied identity crosses this factory.
+///
+/// # Errors
+///
+/// Returns a [`RuntimeSnapshotRefusal`] naming the stage that refused: the
+/// selection, the selected credential or certificate material, the platform
+/// trust snapshot, or the derived target and revision identities.
 pub fn build_runtime_snapshot(
     loaded: LoadedProfiles,
     requested: &RequestedSelection,
     platform: &dyn PlatformTrustSource,
 ) -> Result<SelectedEnvironmentSnapshot, RuntimeSnapshotRefusal> {
+    build_reported_runtime_snapshot(loaded, requested, platform).map(|(snapshot, _)| snapshot)
+}
+
+/// Builds the same snapshot as [`build_runtime_snapshot`], and also returns how
+/// many platform trust records it left out, by reason, for a startup to report.
+///
+/// # Errors
+///
+/// Returns a [`RuntimeSnapshotRefusal`] exactly when [`build_runtime_snapshot`]
+/// does.
+pub fn build_reported_runtime_snapshot(
+    loaded: LoadedProfiles,
+    requested: &RequestedSelection,
+    platform: &dyn PlatformTrustSource,
+) -> Result<(SelectedEnvironmentSnapshot, LeftOutRecords), RuntimeSnapshotRefusal> {
     let selection = resolve(&loaded, requested).map_err(|_| RuntimeSnapshotRefusal::Selection)?;
     let chosen = selection.environment_of(&loaded);
     let (authentication, principal, metascopes) = match chosen.authentication() {
@@ -103,7 +124,7 @@ pub fn build_runtime_snapshot(
             author_trust.identity(),
         )
         .map_err(|_| RuntimeSnapshotRefusal::Identity)?;
-    Ok(SelectedEnvironmentSnapshot::assemble(
+    let snapshot = SelectedEnvironmentSnapshot::assemble(
         &selection,
         SnapshotMaterial {
             author: chosen.author_connection_target().clone(),
@@ -116,5 +137,6 @@ pub fn build_runtime_snapshot(
             identity_management_trust,
             author_trust,
         },
-    ))
+    );
+    Ok((snapshot, platform.left_out().clone()))
 }

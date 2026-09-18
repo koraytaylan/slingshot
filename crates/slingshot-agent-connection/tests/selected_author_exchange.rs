@@ -46,10 +46,26 @@ fn rejects_nonfinal_redirect_and_missing_media_even_without_network_reader() {
             Err(SelectedAuthorExchangeRefusal::Status)
         );
     }
-    assert_eq!(
-        validate_collected_finite_response(collected(Response::new(Vec::new()))),
-        Err(SelectedAuthorExchangeRefusal::MissingContentType)
-    );
+    for status in [200, 204, 299] {
+        let response = Response::builder().status(status).body(Vec::new()).unwrap();
+        assert_eq!(
+            validate_collected_finite_response(collected(response)),
+            Err(SelectedAuthorExchangeRefusal::MissingContentType),
+            "{status}"
+        );
+    }
+}
+
+/// An error status may omit its media type, because refusals are often bodyless.
+#[test]
+fn an_error_status_without_a_content_type_reaches_the_route() {
+    for status in [400, 401, 403, 599] {
+        let response = Response::builder().status(status).body(Vec::new()).unwrap();
+        let accepted = validate_collected_finite_response(collected(response))
+            .unwrap_or_else(|refusal| panic!("{status}: {refusal:?}"));
+        assert_eq!(accepted.status, status);
+        assert_eq!(accepted.content_type, None);
+    }
 }
 
 #[test]
