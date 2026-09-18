@@ -340,7 +340,9 @@ impl OperationRepository {
         };
         Self::require_bounded(&fact)?;
         let folded = stored.record.fold(&fact)?;
-        self.write_folded(&transaction, &stored, &folded, None)?;
+        // Manual resume is the only path that clears a paused checkpoint: it
+        // is the person's proof the scheduler may claim this again.
+        self.write_folded(&transaction, &stored, &folded, None, true)?;
         let activated = self.read_required(
             &transaction,
             &identity.author_target_identity_digest,
