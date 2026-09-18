@@ -14,6 +14,62 @@ use slingshot_domain::{
 };
 
 #[test]
+fn uncertain_outcomes_decode_as_their_reason_and_refuse_any_other_shape() {
+    use slingshot_agent_connection::terminal_failure::decode_uncertain_outcome;
+    use slingshot_domain::command::catalog::Command;
+
+    let command: Command = serde_json::from_value(
+        serde_json::json!({"command":"list_child_pages","root_path":"/content"}),
+    )
+    .unwrap();
+    let expected = ResultExpectation {
+        operation: WireOperationIdentity::of(
+            &"a".repeat(64),
+            &"b".repeat(64),
+            "local-one",
+            AgentEventStoreGeneration::of(7),
+        ),
+        daemon_subscription_identifier: "subscription-one".to_owned(),
+        expected_provenance: ExpectedProvenance {
+            command_contract: SelectedCommandContractIdentity::installed(command.wire_name())
+                .unwrap(),
+            canonical_json_contract_digest:
+                slingshot_domain::command::schema::canonical_contract_digest(),
+            transport_contract_digest: AuthorAgentTransportContract::embedded_digest(),
+        },
+        submitted_command_digest: "c".repeat(64),
+        wire_name: command.wire_name().to_owned(),
+    };
+    let decode = |value: &serde_json::Value| {
+        let document = TerminalFailureDocument {
+            operation: expected.operation.clone(),
+            daemon_subscription_identifier: expected.daemon_subscription_identifier.clone(),
+            provenance: expected.expected_provenance.provenance(),
+            submitted_command_digest: expected.submitted_command_digest.clone(),
+            canonical_failure: slingshot_domain::command::canonical_json::write_canonical(value)
+                .unwrap(),
+        };
+        decode_uncertain_outcome(&serde_json::to_vec(&document).unwrap(), &expected)
+    };
+    for reason in ["result_unavailable", "effects_undetermined"] {
+        assert_eq!(
+            decode(&serde_json::json!({"outcome":"undetermined","reason":reason})).unwrap(),
+            reason,
+            "the agent's own two explicit-uncertainty reasons decode as themselves"
+        );
+    }
+    for invalid in [
+        serde_json::json!({"outcome":"determined","reason":"result_unavailable"}),
+        serde_json::json!({"failure":"result_unavailable"}),
+        serde_json::json!({"outcome":"undetermined","reason":"result_unavailable","extra":true}),
+        serde_json::json!({"outcome":"undetermined"}),
+        serde_json::json!({"outcome":"undetermined","reason":7}),
+    ] {
+        assert!(decode(&invalid).is_err(), "wrongly accepted: {invalid}");
+    }
+}
+
+#[test]
 fn targeted_read_failures_bind_subjects_and_selected_categories() {
     use slingshot_agent_connection::terminal_failure::decode_read_failure;
     use slingshot_domain::command::catalog::{Command, CommandCatalog};

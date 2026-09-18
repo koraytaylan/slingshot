@@ -3,6 +3,24 @@
 use super::*;
 use slingshot_agent_connection::selected_author_lookup::SnapshotLookupReceipt;
 use slingshot_storage::agent_job_repository::AgentSubmission;
+
+/// A read command's failure, whether a declared category or the agent's own
+/// explicit uncertainty about whether it could determine an answer at all.
+/// Either way it settles the same: a command with no side effects has none to
+/// prove absent, so uncertainty about the answer is never uncertainty about
+/// an effect.
+fn no_effect_failure_category(
+    body: &[u8],
+    expectation: &slingshot_agent_connection::structured_job_result::ResultExpectation,
+    decode_declared: impl FnOnce() -> Result<String, DurableLookupRefusal>,
+) -> Result<String, DurableLookupRefusal> {
+    match slingshot_agent_connection::terminal_failure::decode_uncertain_outcome(body, expectation)
+    {
+        Ok(reason) => Ok(format!("uncertain_{reason}")),
+        Err(_) => decode_declared(),
+    }
+}
+
 pub(super) fn reconcile_failed_snapshot(
     repository: &AgentJobRepository,
     operations: &OperationRepository,
@@ -187,13 +205,14 @@ fn classify_failure(
         | Command::ListResourceMappings(_)
         | Command::ListSlingJobQueues(_)
         | Command::ListWorkflowModels(_) => {
-            let failure = slingshot_agent_connection::terminal_failure::decode_read_failure(
-                body,
-                expectation,
-                command,
-            )
-            .map_err(|_| failed_exchange())?;
-            (true, Some(failure.category().to_owned()), None, false)
+            let category = no_effect_failure_category(body, expectation, || {
+                slingshot_agent_connection::terminal_failure::decode_read_failure(
+                    body, expectation, command,
+                )
+                .map(|failure| failure.category().to_owned())
+                .map_err(|_| failed_exchange())
+            })?;
+            (true, Some(category), None, false)
         }
         Command::UpdatePage(_)
         | Command::MovePage(_)
@@ -256,14 +275,20 @@ fn classify_failure(
             (failure.proves_no_effect(), Some(failure.category().to_owned()), None, false)
         }
         Command::LoadContentAsJson(_) => {
-            let failure =
-                decode_load_failure(body, expectation, command).map_err(|_| failed_exchange())?;
-            (true, Some(failure.category().to_owned()), None, false)
+            let category = no_effect_failure_category(body, expectation, || {
+                decode_load_failure(body, expectation, command)
+                    .map(|failure| failure.category().to_owned())
+                    .map_err(|_| failed_exchange())
+            })?;
+            (true, Some(category), None, false)
         }
         Command::InspectOpenServiceGatewayInitiativeConfiguration(_) => {
-            let failure = decode_configuration_failure(body, expectation, command)
-                .map_err(|_| failed_exchange())?;
-            (true, Some(failure.category().to_owned()), None, false)
+            let category = no_effect_failure_category(body, expectation, || {
+                decode_configuration_failure(body, expectation, command)
+                    .map(|failure| failure.category().to_owned())
+                    .map_err(|_| failed_exchange())
+            })?;
+            (true, Some(category), None, false)
         }
         Command::QueryPaths(_)
         | Command::FindPagesByTemplate(_)
@@ -271,13 +296,14 @@ fn classify_failure(
         | Command::FindPagesUsingComponents(_)
         | Command::FindAssetsByMetadata(_)
         | Command::FindAssetsReferencedByPage(_) => {
-            let failure = slingshot_agent_connection::terminal_failure::decode_discovery_failure(
-                body,
-                expectation,
-                command,
-            )
-            .map_err(|_| failed_exchange())?;
-            (true, Some(failure.category().to_owned()), None, false)
+            let category = no_effect_failure_category(body, expectation, || {
+                slingshot_agent_connection::terminal_failure::decode_discovery_failure(
+                    body, expectation, command,
+                )
+                .map(|failure| failure.category().to_owned())
+                .map_err(|_| failed_exchange())
+            })?;
+            (true, Some(category), None, false)
         }
         Command::DownloadContentPackage(_) => {
             let failure = decode_package_failure(body, expectation, command)

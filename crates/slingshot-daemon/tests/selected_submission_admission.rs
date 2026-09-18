@@ -3410,6 +3410,7 @@ async fn selected_failure_lookup_settles_only_validated_no_effect_and_keeps_unkn
             r#"{"failure":"variation_not_found","fragment_path":"/content/dam/example/offer"}"#,
         ),
         ("list_child_pages", r#"{"failure":"root_access_denied","root_path":"/content/example"}"#),
+        ("list_child_pages", r#"{"outcome":"undetermined","reason":"result_unavailable"}"#),
         ("list_group_members", r#"{"failure":"group_not_found","group_identifier":"authors"}"#),
         (
             "list_asset_renditions",
@@ -3603,6 +3604,14 @@ async fn selected_failure_lookup_settles_only_validated_no_effect_and_keeps_unkn
         (
             "find_pages_containing_phrase",
             r#"{"budget":"candidate_nodes","failure":"discovery_budget_exceeded"}"#,
+        ),
+        (
+            "find_pages_containing_phrase",
+            r#"{"outcome":"undetermined","reason":"result_unavailable"}"#,
+        ),
+        (
+            "find_pages_containing_phrase",
+            r#"{"outcome":"undetermined","reason":"effects_undetermined"}"#,
         ),
         (
             "find_pages_using_components",
@@ -4079,6 +4088,11 @@ async fn retained_artifact_completion_case(
                 serde_json::from_str(&document.canonical_failure).unwrap();
             let expected_metadata = if needs_maintenance {
                 slingshot_storage::agent_job_repository::RejectedAgentDiagnosis::PackageStagingCleanupRequired.as_text().to_owned()
+            } else if declared["outcome"].as_str() == Some("undetermined") {
+                format!(
+                    "uncertain_{}",
+                    declared["reason"].as_str().expect("the fixture declares a reason")
+                )
             } else {
                 declared["failure"].as_str().expect("the fixture declares a category").to_owned()
             };
