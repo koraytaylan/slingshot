@@ -207,7 +207,9 @@ fn classify_failure(
         | Command::ListWorkflowModels(_) => {
             let category = no_effect_failure_category(body, expectation, || {
                 slingshot_agent_connection::terminal_failure::decode_read_failure(
-                    body, expectation, command,
+                    body,
+                    expectation,
+                    command,
                 )
                 .map(|failure| failure.category().to_owned())
                 .map_err(|_| failed_exchange())
@@ -298,7 +300,9 @@ fn classify_failure(
         | Command::FindAssetsReferencedByPage(_) => {
             let category = no_effect_failure_category(body, expectation, || {
                 slingshot_agent_connection::terminal_failure::decode_discovery_failure(
-                    body, expectation, command,
+                    body,
+                    expectation,
+                    command,
                 )
                 .map(|failure| failure.category().to_owned())
                 .map_err(|_| failed_exchange())
