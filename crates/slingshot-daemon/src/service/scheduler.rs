@@ -90,6 +90,14 @@ fn prepare(runtime: &DurableRuntime, fence: u64, now: u64) -> Option<ScheduledIn
     };
     let claim = claim?;
     let target = runtime.context().target();
+    let release_unstarted_claim = || {
+        let _ = slingshot_storage::operation::scheduler_claim::release(
+            runtime.database(),
+            &target.author_target_identity_digest,
+            &claim.operation_identifier,
+            fence,
+        );
+    };
     let input = match runtime
         .operations()
         .read_execution_input(&target.author_target_identity_digest, &claim.operation_identifier)
@@ -97,6 +105,7 @@ fn prepare(runtime: &DurableRuntime, fence: u64, now: u64) -> Option<ScheduledIn
         Ok(Some(input)) => input,
         _ => {
             let _ = runtime.diagnostics().record("scheduler input read failed");
+            release_unstarted_claim();
             return None;
         }
     };
@@ -134,6 +143,7 @@ fn prepare(runtime: &DurableRuntime, fence: u64, now: u64) -> Option<ScheduledIn
                 ) {
                     Ok(contract) => contract,
                     Err(_) => {
+                        release_unstarted_claim();
                         return None;
                     }
                 },
@@ -153,6 +163,7 @@ fn prepare(runtime: &DurableRuntime, fence: u64, now: u64) -> Option<ScheduledIn
         &input.canonical_command,
         slingshot_agent_connection::command_submission::ExpectedArtifactManifest::empty(),
     ) else {
+        release_unstarted_claim();
         return None;
     };
 

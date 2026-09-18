@@ -216,6 +216,24 @@ pub fn renew(
     Ok(changed == 1)
 }
 
+/// Releases a fence and lease this side proved but never checkpointed,
+/// abandoning a claim immediately rather than leaving it to lapse only once
+/// the lease it never used against a real attempt expires.
+pub fn release(
+    database: &OperationDatabase,
+    target: &str,
+    operation: &str,
+    fence: u64,
+) -> Result<bool, RepositoryFailure> {
+    let changed = database.connection().execute(
+        statement(
+            "release a scheduler claim this attempt proved but left the operation unchanged",
+        ),
+        rusqlite::params![target, operation, i64::try_from(fence).unwrap_or(i64::MAX)],
+    )?;
+    Ok(changed == 1)
+}
+
 /// Reads lease/checkpoint facts without granting execution authority.
 pub fn facts(
     database: &OperationDatabase,
@@ -248,6 +266,66 @@ pub fn facts(
 mod tests {
     use super::*;
     use crate::database::RequiredSettings;
+
+    #[test]
+    fn release_abandons_a_claim_that_never_reached_its_checkpoint() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("release.sqlite");
+        let settings = RequiredSettings {
+            page_bytes: 4096,
+            database_pages: 262_144,
+            busy_timeout_milliseconds: 5000,
+        };
+        let database = OperationDatabase::open(&path, settings).unwrap();
+        let value = "a".repeat(64);
+        database
+            .connection()
+            .execute(
+                statement("admit one operation"),
+                rusqlite::params![
+                    "identity",
+                    value,
+                    Option::<String>::None,
+                    "{}",
+                    value,
+                    "query_paths",
+                    value,
+                    1,
+                    value,
+                    "queued",
+                    "operation",
+                    1,
+                    1,
+                    value,
+                    Option::<String>::None
+                ],
+            )
+            .unwrap();
+        assert_eq!(
+            claim(&database, &value, "operation", "queued", 1, 1, 10, 1).unwrap(),
+            ClaimOutcome::Claimed
+        );
+        assert!(
+            release(&database, &value, "operation", 1).unwrap(),
+            "a fence this call proved was not released"
+        );
+        let facts = facts(&database, &value, "operation").unwrap().unwrap();
+        assert!(facts.scheduler_fence.is_none(), "the released fence is still held");
+        assert!(
+            facts.lease_expires_at_unix_milliseconds.is_none(),
+            "the released lease is still held"
+        );
+        assert!(facts.checkpoint.is_none(), "a claim that never checkpointed now carries one");
+        assert_eq!(
+            claim_next_queued(&database, &value, 2, 10, 2).unwrap(),
+            Some(SelectedClaim { operation_identifier: "operation".to_owned(), expected_revision: 1 }),
+            "the released operation is not immediately reclaimable"
+        );
+        assert!(
+            !release(&database, &value, "operation", 1).unwrap(),
+            "a fence that has since moved on was released as if it were still held"
+        );
+    }
 
     #[test]
     fn claim_is_revision_bound_and_checkpoint_survives_lease_expiry() {
