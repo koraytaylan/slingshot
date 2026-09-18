@@ -65,6 +65,7 @@ touches:
   - crates/slingshot-storage/src/agent_subscription_ledger_events.rs
   - crates/slingshot-storage/src/database_inventory.rs
   - crates/slingshot-storage/src/database_tests.rs
+  - crates/slingshot-storage/src/operation_repository_admission.rs
   - crates/slingshot-storage/src/operation_repository_mutations.rs
   - crates/slingshot-storage/src/operation_repository_recovery.rs
 status: done
