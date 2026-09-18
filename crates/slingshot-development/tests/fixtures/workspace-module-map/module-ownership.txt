@@ -248,6 +248,7 @@ crates/slingshot-domain/src/stream_cursor_order.rs|slingshot-domain|domain|leaf|
 crates/slingshot-storage/src/agent_subscription_ledger_events.rs|slingshot-storage|adapter|leaf|slingshot_storage::agent_subscription_ledger::events|workspace-module-map
 crates/slingshot-storage/src/database_inventory.rs|slingshot-storage|adapter|leaf|slingshot_storage::database::inventory|workspace-module-map
 crates/slingshot-storage/src/database_tests.rs|slingshot-storage|adapter|leaf|slingshot_storage::database::tests|workspace-module-map
+crates/slingshot-storage/src/operation_repository_admission.rs|slingshot-storage|adapter|leaf|slingshot_storage::operation_repository::admission|workspace-module-map
 crates/slingshot-storage/src/operation_repository_mutations.rs|slingshot-storage|adapter|leaf|slingshot_storage::operation_repository::mutations|workspace-module-map
 crates/slingshot-storage/src/operation_repository_recovery.rs|slingshot-storage|adapter|leaf|slingshot_storage::operation_repository::recovery|workspace-module-map
 crates/slingshot-agent-connection/src/authentication/async_access_token_cache.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::authentication::async_access_token_cache|the-product-has-one-author-port
