@@ -114,7 +114,7 @@ async fn receive<Resolver: TerminalExpectationResolver>(
         return Err(FiniteHttpFailure::Head);
     }
     if status != StatusCode::OK {
-        if !crate::selected_author_submission::json_media_type(&media) {
+        if !crate::selected_author_submission::json_media_type(media.as_deref().unwrap_or("")) {
             return Err(FiniteHttpFailure::Head);
         }
         let limit = slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded().limit("maximum_finite_response_body_bytes");
@@ -142,8 +142,14 @@ async fn receive<Resolver: TerminalExpectationResolver>(
         .map(EventHttpOutcome::Response)
         .map_err(|_| FiniteHttpFailure::Body);
     }
-    let mut delivery =
-        EventDelivery::attached(&head, &media, subscription, generation, resolver, consume)?;
+    let mut delivery = EventDelivery::attached(
+        &head,
+        media.as_deref().ok_or(FiniteHttpFailure::Head)?,
+        subscription,
+        generation,
+        resolver,
+        consume,
+    )?;
     match framing {
         BodyFraming::Fixed(length) => part(stream, length, &mut delivery).await?,
         BodyFraming::Chunked => loop {

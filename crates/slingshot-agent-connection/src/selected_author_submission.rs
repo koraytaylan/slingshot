@@ -5,7 +5,7 @@
 //! POST: failures after a possible write return uncertainty for lookup-first
 //! reconciliation. Provider-authenticated CSRF reads may refresh once.
 
-use http::{HeaderMap, HeaderName, HeaderValue, Method};
+use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use slingshot_agent_protocol::identity::WireOperationIdentity;
 use slingshot_agent_protocol::wire_contract::ExpectedProvenance;
 use slingshot_domain::agent_identity::AgentEventStoreGeneration;
@@ -438,7 +438,7 @@ impl SelectedAuthorTransport {
                 }
             }
         } else {
-            return Ok(SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Media });
+            return Ok(outcome_without_an_answer(&response));
         };
         let retry_after_milliseconds = match response.retry_after.as_deref() {
             None => None,
@@ -462,6 +462,25 @@ impl SelectedAuthorTransport {
             trailing_bytes: false,
             unknown_fields: false,
         }))
+    }
+}
+
+/// Returns what a response that is not a JSON answer means.
+///
+/// A bodyless 403 is the one such response that settles something: the agent
+/// refuses a caller outside its permitted groups before it reads a body, and
+/// the platform's forgery and referrer filters refuse before any servlet runs.
+/// Anything else is a response nobody can read as an answer.
+fn outcome_without_an_answer(
+    response: &crate::selected_author_exchange::SelectedAuthorFiniteResponse,
+) -> SubmissionOutcome {
+    if response.status == StatusCode::FORBIDDEN.as_u16()
+        && response.content_type.is_none()
+        && response.body.is_empty()
+    {
+        SubmissionOutcome::CallerNotPermitted
+    } else {
+        SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Media }
     }
 }
 

@@ -113,6 +113,9 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
                 answer: &answer,
             })
             .await;
+        if accepted && media == "application/json" {
+            preflight.verify_refused_caller(&submission).await;
+        }
         for automatic in [false, true] {
             let endpoint = if automatic {
                 format!("https://{}", listener.local_addr().unwrap())

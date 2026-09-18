@@ -423,6 +423,7 @@ impl<Sink: FnMut(&[u8]) -> Result<(), FiniteHttpFailure>> ArtifactResponse<'_, S
         let (head, content_type) =
             validate_finite_head(status, Version::HTTP_2, &headers).map_err(|_| ResponseRefusal)?;
         if status == StatusCode::OK {
+            let content_type = content_type.ok_or(ResponseRefusal)?;
             require_streamable(self.expected, &ArtifactResponseHead { head, content_type })
                 .map_err(|_| ResponseRefusal)?;
             if declared_length(&headers)?.is_some_and(|length| length != self.expected.byte_length)
@@ -436,7 +437,9 @@ impl<Sink: FnMut(&[u8]) -> Result<(), FiniteHttpFailure>> ArtifactResponse<'_, S
                 status,
                 StatusCode::UNAUTHORIZED | StatusCode::NOT_FOUND | StatusCode::GONE
             ) || head.location.is_some()
-                || !crate::selected_author_submission::json_media_type(&content_type)
+                || !crate::selected_author_submission::json_media_type(
+                    content_type.as_deref().unwrap_or(""),
+                )
             {
                 return Err(ResponseRefusal);
             }

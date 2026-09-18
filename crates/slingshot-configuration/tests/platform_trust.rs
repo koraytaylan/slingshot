@@ -14,7 +14,7 @@
 use std::path::PathBuf;
 
 use slingshot_configuration::platform_trust::{
-    PlatformTrustSnapshot, PlatformTrustSource, ProviderDecision, ProviderRecord,
+    LeftOutReason, PlatformTrustSnapshot, PlatformTrustSource, ProviderDecision, ProviderRecord,
 };
 use slingshot_configuration::profile_loader::{
     ConfigurationDiagnostic, DiagnosticSourceClass, DiagnosticStage,
@@ -99,10 +99,12 @@ fn only_an_unconditional_decision_is_retained() {
     expected.sort();
     assert_eq!(snapshot.roots(), expected, "the snapshot is not in one order");
 
-    for left_out in [
-        ProviderDecision::Distrusted,
-        ProviderDecision::ExternallyRestricted,
-        ProviderDecision::Unevaluable,
+    assert_eq!(snapshot.left_out().total(), 0, "nothing was left out");
+
+    for (left_out, reason) in [
+        (ProviderDecision::Distrusted, LeftOutReason::Distrusted),
+        (ProviderDecision::ExternallyRestricted, LeftOutReason::ExternallyRestricted),
+        (ProviderDecision::Unevaluable, LeftOutReason::Unevaluable),
     ] {
         let mixed = store(vec![
             record(&roots[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
@@ -112,6 +114,8 @@ fn only_an_unconditional_decision_is_retained() {
             panic!("{left_out:?} failed the snapshot: {diagnostic:?}")
         });
         assert_eq!(snapshot.roots(), [roots[0].clone()], "{left_out:?} was retained");
+        assert_eq!(snapshot.left_out().count(reason), 1, "{left_out:?} was not counted");
+        assert_eq!(snapshot.left_out().total(), 1, "{left_out:?} was counted twice");
     }
 }
 
@@ -152,21 +156,37 @@ fn two_records_for_one_certificate_that_disagree_leave_it_out() {
             std::slice::from_ref(&other),
             "a conflicting duplicate was resolved rather than left out"
         );
+        assert_eq!(snapshot.left_out().count(LeftOutReason::ConflictingDecisions), 1);
+        assert_eq!(snapshot.left_out().total(), 1, "one certificate is counted once");
     }
 }
 
 #[test]
 fn a_retained_root_must_be_an_authority_that_may_authenticate_a_server() {
     let eligible = certificates("one-authority.pem");
-    let mut claims: Vec<(String, Vec<u8>)> = ["end-entity.pem", "other-purpose.pem"]
+    let mut claims: Vec<(String, Vec<u8>, LeftOutReason)> = ["end-entity.pem", "other-purpose.pem"]
         .into_iter()
-        .map(|name| (name.to_owned(), certificates(name)[0].clone()))
+        .map(|name| {
+            (
+                name.to_owned(),
+                certificates(name)[0].clone(),
+                LeftOutReason::NotServerAuthenticationAuthority,
+            )
+        })
         .collect();
-    claims.push(("bytes that are not a certificate".to_owned(), b"not a certificate".to_vec()));
+    claims.push((
+        "bytes that are not a certificate".to_owned(),
+        b"not a certificate".to_vec(),
+        LeftOutReason::Unparseable,
+    ));
     let mut trailing = eligible[0].clone();
     trailing.push(0);
-    claims.push(("a certificate followed by trailing bytes".to_owned(), trailing));
-    for (name, claimed) in claims {
+    claims.push((
+        "a certificate followed by trailing bytes".to_owned(),
+        trailing,
+        LeftOutReason::Unparseable,
+    ));
+    for (name, claimed, reason) in claims {
         let mixed = store(vec![
             record(&claimed, ProviderDecision::UnconditionallyTrustedForServerAuthentication),
             record(&eligible[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
@@ -178,6 +198,7 @@ fn a_retained_root_must_be_an_authority_that_may_authenticate_a_server() {
             [eligible[0].clone()],
             "{name} was retained on the store's word alone"
         );
+        assert_eq!(snapshot.left_out().count(reason), 1, "{name} was not counted as {reason:?}");
     }
 }
 
@@ -195,6 +216,7 @@ fn a_record_beyond_the_per_authority_bound_is_left_out() {
     ]);
     let snapshot = PlatformTrustSnapshot::take(&mixed).expect("an oversized record is left out");
     assert_eq!(snapshot.roots(), [eligible[0].clone()]);
+    assert_eq!(snapshot.left_out().count(LeftOutReason::Oversized), 1);
 }
 
 #[test]
@@ -219,6 +241,27 @@ fn a_store_of_many_unusable_records_is_still_a_snapshot() {
     let snapshot = PlatformTrustSnapshot::take(&store(records))
         .expect("records that are left out do not count toward the authority bound");
     assert_eq!(snapshot.roots(), [eligible[0].clone()]);
+    assert_eq!(
+        snapshot.left_out().count(LeftOutReason::Unparseable),
+        u64::try_from(maximum + 1).expect("the count is representable")
+    );
+}
+
+#[test]
+fn left_out_counts_render_as_reasons_without_naming_a_certificate() {
+    let eligible = certificates("one-authority.pem");
+    let end_entity = certificates("end-entity.pem");
+    let snapshot = PlatformTrustSnapshot::take(&store(vec![
+        record(&eligible[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
+        record(b"first", ProviderDecision::Distrusted),
+        record(b"second", ProviderDecision::Distrusted),
+        record(&end_entity[0], ProviderDecision::UnconditionallyTrustedForServerAuthentication),
+    ]))
+    .expect("the store snapshots");
+    assert_eq!(
+        snapshot.left_out().to_string(),
+        "2 distrusted, 1 not a certificate authority for server authentication"
+    );
 }
 
 #[test]
