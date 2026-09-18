@@ -876,8 +876,58 @@ impl OperationRepository {
             }
         }
         require_revision(&stored, expected_revision)?;
-        if let Some((carried, folded, settled)) = change(&stored)? {
-            self.write_folded(&transaction, &carried, &folded, settled)?;
+        match change(&stored)? {
+            Some((carried, folded, settled)) => {
+                // A scheduler-fenced write is the claim it is settling. Releasing
+                // the checkpoint here is what lets a non-terminal outcome (a
+                // recovery fact rather than a result) be claimed and retried
+                // again; leaving it set would make the scheduler's own claim
+                // query skip this operation forever, having already proven at
+                // most the same fence it is now writing under. A recovery fact
+                // that pauses for manual resume is the one exception: its
+                // checkpoint must stay set, or the scheduler would reclaim and
+                // retry it every tick instead of waiting on a person, and only
+                // the manual-resume activation path releases it.
+                let paused = folded
+                    .outstanding_recovery
+                    .as_ref()
+                    .is_some_and(|recovery| recovery.manual_resume_eligible);
+                let release_scheduler_claim = scheduler_fence.is_some() && !paused;
+                self.write_folded(
+                    &transaction,
+                    &carried,
+                    &folded,
+                    settled,
+                    release_scheduler_claim,
+                )?;
+            }
+            None => {
+                // Nothing changed, most often because an unfenced write already
+                // folded this exact fact during the same attempt (a lookup
+                // reconciliation settling ahead of the scheduler's own settle
+                // call). This call still proved it holds the fence above, so it
+                // must still release the claim, or the operation is never
+                // reclaimed again even though its outcome was durably recorded.
+                if let Some(fence) = scheduler_fence {
+                    let paused = stored
+                        .record
+                        .outstanding_recovery
+                        .as_ref()
+                        .is_some_and(|recovery| recovery.manual_resume_eligible);
+                    if !paused {
+                        transaction.execute(
+                            statement(
+                                "release a scheduler claim this attempt proved but left the operation unchanged",
+                            ),
+                            rusqlite::params![
+                                author_target_identity_digest,
+                                operation_identifier,
+                                i64::try_from(fence).unwrap_or(i64::MAX),
+                            ],
+                        )?;
+                    }
+                }
+            }
         }
         let current =
             self.read_required(&transaction, author_target_identity_digest, operation_identifier)?;
@@ -923,16 +973,26 @@ impl OperationRepository {
     }
 
     /// Writes one folded record, its recovery fact, and its settlement.
+    ///
+    /// `release_scheduler_claim` also clears the checkpoint, fence and lease a
+    /// scheduler-fenced caller proved before this write; every other caller
+    /// leaves those three untouched, having never proven one to release.
     fn write_folded(
         &self,
         transaction: &rusqlite::Transaction<'_>,
         stored: &OperationSummary,
         folded: &OperationRecord,
         settled_at_unix_milliseconds: Option<u64>,
+        release_scheduler_claim: bool,
     ) -> Result<(), RepositoryFailure> {
         let terminal = folded.terminal_failure.as_ref();
+        let purpose = if release_scheduler_claim {
+            "record one folded operation under compare-and-set, releasing its scheduler claim"
+        } else {
+            "record one folded operation under compare-and-set"
+        };
         let changed = transaction.execute(
-            statement("record one folded operation under compare-and-set"),
+            statement(purpose),
             rusqlite::params![
                 folded.latest_progress,
                 encode_word(&folded.lifecycle_state)?,

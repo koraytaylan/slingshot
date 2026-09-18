@@ -8,13 +8,20 @@
 
 use slingshot_domain::operation::{
     LifecycleFailure, OperationExecutionCertainty, OperationFact, OperationLifecycleState,
-    RecoveryCategory, RecoveryExecutionEvidence, SuccessfulSettlement, TerminalFailure,
-    TerminalFailureDisposition, TerminalFailureKind,
+    RecoveryCategory, RecoveryExecutionEvidence, RecoveryFact, SuccessfulSettlement,
+    TerminalFailure, TerminalFailureDisposition, TerminalFailureKind,
 };
 use slingshot_storage::database::OperationDatabase;
+use slingshot_storage::operation::scheduler_claim;
 use slingshot_storage::operation_repository::{
     OperationRepository, RepositoryFailure, ResumeEligibilityRefusal, ResumeOutcome,
 };
+
+/// The fence one scheduler-claim fixture uses.
+const CLAIM_FENCE: u64 = 1;
+
+/// The lease expiry one scheduler-claim fixture uses.
+const CLAIM_LEASE_EXPIRES: u64 = NOW + 60_000;
 
 use crate::fixtures::*;
 
@@ -468,4 +475,111 @@ fn concurrent_identical_resume_requests_commit_one_receipt() {
         store.read_resume_receipt(&digest, OPERATION, &source(1)).expect("a read").is_some(),
         "and it is there afterwards"
     );
+}
+
+/// Claims the fixture operation and crosses its no-return checkpoint, the
+/// state a scheduler attempt is in before it settles what it found.
+fn claimed_and_checkpointed(store: &OperationRepository, digest: &str, revision: u64) {
+    assert_eq!(
+        scheduler_claim::claim(
+            store.database(),
+            digest,
+            OPERATION,
+            "queued",
+            revision,
+            CLAIM_FENCE,
+            CLAIM_LEASE_EXPIRES,
+            NOW,
+        )
+        .expect("a claim attempt"),
+        scheduler_claim::ClaimOutcome::Claimed,
+        "the fixture claim succeeds",
+    );
+    assert!(
+        scheduler_claim::checkpoint(
+            store.database(),
+            digest,
+            OPERATION,
+            CLAIM_FENCE,
+            "executor-started"
+        )
+        .expect("a checkpoint attempt"),
+        "the fixture checkpoint succeeds",
+    );
+}
+
+#[test]
+fn a_scheduler_fenced_recovery_releases_its_claim_even_when_the_fact_already_matched() {
+    let store = in_memory();
+    let digest = partition(FIRST_PRINCIPAL);
+    let revision = admitted(&store, &digest);
+    claimed_and_checkpointed(&store, &digest, revision);
+
+    let fact = OperationFact::Recovery {
+        recovery: RecoveryFact {
+            attempt_count: 1,
+            category: RecoveryCategory::OperationLookup,
+            detail: "author lookup did not produce a usable observation".to_owned(),
+            evidence: SUBMISSION_UNKNOWN,
+            manual_resume_eligible: false,
+            retry_delay_milliseconds: 100,
+            retry_observed_at_unix_milliseconds: NOW,
+        },
+    };
+
+    // An unfenced write, standing in for a lookup reconciliation that settles
+    // ahead of the scheduler's own settle call, already recorded this fact.
+    let ahead =
+        store.apply(&digest, OPERATION, revision, &fact, NOW).expect("an unfenced recovery");
+
+    // The scheduler's settle call for the same attempt folds the identical
+    // fact: nothing changes, but it still proved its fence above and must
+    // release the claim, or this operation is never reclaimed again.
+    let settled = store
+        .apply_with_scheduler_fence(
+            &digest,
+            OPERATION,
+            ahead.record.revision,
+            &fact,
+            NOW,
+            CLAIM_FENCE,
+        )
+        .expect("a scheduler-fenced settle");
+    assert_eq!(
+        settled.record.revision, ahead.record.revision,
+        "an identical fact folds to no change"
+    );
+
+    let released = scheduler_claim::facts(store.database(), &digest, OPERATION)
+        .expect("a facts read")
+        .expect("the operation is there");
+    assert!(released.checkpoint.is_none(), "the claim this attempt proved is released");
+    assert!(released.scheduler_fence.is_none(), "and its fence with it");
+}
+
+#[test]
+fn a_paused_scheduler_fenced_recovery_keeps_its_claim_for_a_person_to_release() {
+    let store = in_memory();
+    let digest = partition(FIRST_PRINCIPAL);
+    let revision = admitted(&store, &digest);
+    claimed_and_checkpointed(&store, &digest, revision);
+
+    let paused =
+        recovery(RecoveryCategory::OperationLookup, SUBMISSION_UNKNOWN, ATTEMPTS_ALREADY_MADE);
+    assert!(paused.manual_resume_eligible, "the fixture recovery is paused");
+    let fact = OperationFact::Recovery { recovery: paused };
+
+    let settled = store
+        .apply_with_scheduler_fence(&digest, OPERATION, revision, &fact, NOW, CLAIM_FENCE)
+        .expect("a paused scheduler-fenced settle");
+    assert_eq!(settled.record.revision, revision + 1);
+
+    let held = scheduler_claim::facts(store.database(), &digest, OPERATION)
+        .expect("a facts read")
+        .expect("the operation is there");
+    assert!(
+        held.checkpoint.is_some(),
+        "a paused recovery keeps its claim until a person resumes it"
+    );
+    assert_eq!(held.scheduler_fence, Some(CLAIM_FENCE));
 }

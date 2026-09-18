@@ -156,7 +156,13 @@ impl OperationRepository {
             return Err(refuse());
         }
         let folded = stored.record.fold(&fact)?;
-        self.write_folded(&transaction, &stored, &folded, Self::settlement(&stored, &folded, now))?;
+        self.write_folded(
+            &transaction,
+            &stored,
+            &folded,
+            Self::settlement(&stored, &folded, now),
+            false,
+        )?;
         let result = self.read_required(
             &transaction,
             &identity.author_target_identity_digest,
@@ -267,7 +273,7 @@ impl OperationRepository {
             },
         };
         let folded = stored.record.fold(&fact)?;
-        self.write_folded(&transaction, &stored, &folded, Some(now))?;
+        self.write_folded(&transaction, &stored, &folded, Some(now), false)?;
         let result = self.read_required(
             &transaction,
             &identity.author_target_identity_digest,
@@ -390,7 +396,7 @@ impl OperationRepository {
         };
         Self::require_bounded(&fact)?;
         let folded = stored.record.fold(&fact)?;
-        self.write_folded(&transaction, &stored, &folded, Some(now))?;
+        self.write_folded(&transaction, &stored, &folded, Some(now), false)?;
         crate::agent_job_repository::write_failed_snapshot(
             &transaction,
             expected,
@@ -738,6 +744,7 @@ impl OperationRepository {
             &carried,
             &folded,
             Some(settlement.settled_at_unix_milliseconds),
+            false,
         )?;
         if let Some(snapshot) = snapshot {
             crate::agent_job_repository::write_successful_snapshot(

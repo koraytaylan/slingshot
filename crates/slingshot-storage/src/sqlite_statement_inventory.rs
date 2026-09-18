@@ -215,6 +215,31 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: 0,
     },
     InventoriedStatement {
+        purpose: "record one folded operation under compare-and-set, releasing its scheduler claim",
+        text: "UPDATE operation \
+               SET latest_progress = ?, lifecycle_state = ?, operation_revision = ?, \
+                   result_disposition = ?, result_inline_bytes = ?, \
+                   settled_at_unix_milliseconds = ?, \
+                   terminal_failure_disposition = ?, terminal_failure_kind = ?, \
+                   terminal_failure_metadata = ?, \
+                   scheduler_checkpoint = NULL, scheduler_fence = NULL, \
+                   scheduler_lease_expires_at_unix_milliseconds = NULL \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ? \
+                 AND operation_revision = ?",
+        parameters: 12,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
+        purpose: "release a scheduler claim this attempt proved but left the operation unchanged",
+        text: "UPDATE operation \
+               SET scheduler_checkpoint = NULL, scheduler_fence = NULL, \
+                   scheduler_lease_expires_at_unix_milliseconds = NULL \
+               WHERE author_target_identity_digest = ? AND operation_identifier = ? \
+                 AND scheduler_fence = ?",
+        parameters: 3,
+        maximum_rows: 0,
+    },
+    InventoriedStatement {
         purpose: "record the one recovery fact an operation is waiting on",
         text: "INSERT OR REPLACE INTO recovery_fact \
                (attempt_count, author_target_identity_digest, category, detail, \
