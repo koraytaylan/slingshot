@@ -557,6 +557,31 @@ fn failure_category(
     Ok(value["failure"].as_str().ok_or(TerminalFailureDecodeRefusal)?.to_owned())
 }
 
+/// The reason one explicit-uncertainty outcome names.
+///
+/// The agent spells its own inability to retain or reference an answer safely
+/// as `{"outcome":"undetermined","reason":"<reason>"}` rather than a declared
+/// category, because it is not the command's own failure to categorize - the
+/// command may never have run at all. Validates the same envelope, subscription,
+/// provenance and digest binding every other terminal failure spelling does.
+///
+/// # Errors
+/// Returns [`TerminalFailureDecodeRefusal`] for a failed envelope validation or
+/// a `canonical_failure` body that is not exactly this two-member shape.
+pub fn decode_uncertain_outcome(
+    body: &[u8],
+    expectation: &ResultExpectation,
+) -> Result<String, TerminalFailureDecodeRefusal> {
+    let document = decode_terminal_failure(body, expectation)?;
+    let value: serde_json::Value = serde_json::from_str(&document.canonical_failure)
+        .map_err(|_| TerminalFailureDecodeRefusal)?;
+    let members = value.as_object().ok_or(TerminalFailureDecodeRefusal)?;
+    if members.len() != 2 || value["outcome"].as_str() != Some("undetermined") {
+        return Err(TerminalFailureDecodeRefusal);
+    }
+    Ok(value["reason"].as_str().ok_or(TerminalFailureDecodeRefusal)?.to_owned())
+}
+
 /// Validates the closed load refusal and its requested subtree/depth.
 pub fn decode_load_failure(
     body: &[u8],
