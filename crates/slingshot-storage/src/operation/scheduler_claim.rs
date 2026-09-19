@@ -226,9 +226,7 @@ pub fn release(
     fence: u64,
 ) -> Result<bool, RepositoryFailure> {
     let changed = database.connection().execute(
-        statement(
-            "release a scheduler claim this attempt proved but left the operation unchanged",
-        ),
+        statement("release a scheduler claim this attempt proved but left the operation unchanged"),
         rusqlite::params![target, operation, i64::try_from(fence).unwrap_or(i64::MAX)],
     )?;
     Ok(changed == 1)
@@ -318,7 +316,10 @@ mod tests {
         assert!(facts.checkpoint.is_none(), "a claim that never checkpointed now carries one");
         assert_eq!(
             claim_next_queued(&database, &value, 2, 10, 2).unwrap(),
-            Some(SelectedClaim { operation_identifier: "operation".to_owned(), expected_revision: 1 }),
+            Some(SelectedClaim {
+                operation_identifier: "operation".to_owned(),
+                expected_revision: 1
+            }),
             "the released operation is not immediately reclaimable"
         );
         assert!(
