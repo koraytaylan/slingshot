@@ -1610,13 +1610,18 @@ crates/slingshot-storage/src/operation/scheduler_claim.rs	99	fallible-interface-
 crates/slingshot-storage/src/operation/scheduler_claim.rs	124	numeric-value-carries-no-name	2
 crates/slingshot-storage/src/operation/scheduler_claim.rs	183	fallible-interface-omits-its-failure-section	checkpoint
 crates/slingshot-storage/src/operation/scheduler_claim.rs	198	fallible-interface-omits-its-failure-section	renew
-crates/slingshot-storage/src/operation/scheduler_claim.rs	220	fallible-interface-omits-its-failure-section	facts
-crates/slingshot-storage/src/operation/scheduler_claim.rs	234	numeric-value-carries-no-name	2
-crates/slingshot-storage/src/operation/scheduler_claim.rs	257	numeric-value-carries-no-name	4096
-crates/slingshot-storage/src/operation/scheduler_claim.rs	258	numeric-value-carries-no-name	262_144
-crates/slingshot-storage/src/operation/scheduler_claim.rs	259	numeric-value-carries-no-name	5000
-crates/slingshot-storage/src/operation/scheduler_claim.rs	263	numeric-value-carries-no-name	64
-crates/slingshot-storage/src/operation/scheduler_claim.rs	309	numeric-value-carries-no-name	64
+crates/slingshot-storage/src/operation/scheduler_claim.rs	222	fallible-interface-omits-its-failure-section	release
+crates/slingshot-storage/src/operation/scheduler_claim.rs	236	fallible-interface-omits-its-failure-section	facts
+crates/slingshot-storage/src/operation/scheduler_claim.rs	250	numeric-value-carries-no-name	2
+crates/slingshot-storage/src/operation/scheduler_claim.rs	273	numeric-value-carries-no-name	4096
+crates/slingshot-storage/src/operation/scheduler_claim.rs	274	numeric-value-carries-no-name	262_144
+crates/slingshot-storage/src/operation/scheduler_claim.rs	275	numeric-value-carries-no-name	5000
+crates/slingshot-storage/src/operation/scheduler_claim.rs	278	numeric-value-carries-no-name	64
+crates/slingshot-storage/src/operation/scheduler_claim.rs	336	numeric-value-carries-no-name	4096
+crates/slingshot-storage/src/operation/scheduler_claim.rs	337	numeric-value-carries-no-name	262_144
+crates/slingshot-storage/src/operation/scheduler_claim.rs	338	numeric-value-carries-no-name	5000
+crates/slingshot-storage/src/operation/scheduler_claim.rs	342	numeric-value-carries-no-name	64
+crates/slingshot-storage/src/operation/scheduler_claim.rs	388	numeric-value-carries-no-name	64
 crates/slingshot-storage/src/operation_repository.rs	671	function-branches-too-many-ways	mutate reaches 11
 crates/slingshot-storage/src/persistent_capacity.rs	71	numeric-value-carries-no-name	4096
 crates/slingshot-storage/src/persistent_capacity.rs	72	numeric-value-carries-no-name	262144
