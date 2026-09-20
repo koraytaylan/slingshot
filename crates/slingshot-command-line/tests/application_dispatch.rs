@@ -336,6 +336,8 @@ struct Fakes {
     interrupted: Cell<bool>,
     /// Whether a refused hello is the moment a signal arrives.
     interrupt_on_hello_failure: bool,
+    /// Whether the greeting answers once an owner has been started.
+    greeting_after_start: Cell<bool>,
     /// What was reached.
     reached: Reached,
     /// Invocation identities the operation boundary received.
@@ -361,6 +363,7 @@ impl Default for Fakes {
             owner: Some(NONCE.to_owned()),
             interrupted: Cell::new(false),
             interrupt_on_hello_failure: false,
+            greeting_after_start: Cell::new(false),
             reached: Reached::default(),
             operation_request_identifiers: RefCell::new(Vec::new()),
             invented_identifiers: Cell::new(0),
@@ -395,7 +398,6 @@ impl ProcessBoundary for Fakes {
         Ok(())
     }
 }
-
 impl RequestIdentityBoundary for Fakes {
     fn invent_request_identifier(&self) -> String {
         let sequence = self.invented_identifiers.get() + 1;
@@ -420,6 +422,9 @@ impl DaemonBoundary for Fakes {
         Reached::counted(&self.reached.daemon);
         match &self.greeting {
             Some(greeting) => Ok(greeting.clone()),
+            None if self.greeting_after_start.get() && self.reached.process.get() > 0 => {
+                Ok(greeting(DIGEST, REVISION))
+            }
             None => {
                 if self.interrupt_on_hello_failure {
                     self.interrupted.set(true);
@@ -616,6 +621,27 @@ fn an_interrupted_hello_retries_with_the_callers_durable_operation_key() {
             },
         }))
     );
+}
+
+#[test]
+fn an_absent_daemon_is_started_before_a_versioned_leaf_reaches_it() {
+    // A greeting that is absent at first and present afterwards is exactly an endpoint nobody
+    // was listening on: the run starts the owner and reads the greeting again.
+    let fakes = Fakes { greeting: None, owner: Some(NONCE.to_owned()), ..Fakes::default() };
+    fakes.greeting_after_start.set(true);
+    let _completion = against(&fakes, Provenance::embedded(), &invoking("operation-list", &[]));
+    assert_eq!(fakes.reached.process.get(), 1, "an absent owner was not created");
+    assert!(
+        fakes.reached.operations.get() >= 1,
+        "the versioned request never reached the daemon the run started"
+    );
+}
+
+#[test]
+fn an_existing_daemon_is_never_replaced_by_a_versioned_leaf() {
+    let fakes = Fakes::default();
+    let _completion = against(&fakes, Provenance::embedded(), &invoking("operation-list", &[]));
+    assert_eq!(fakes.reached.process.get(), 0, "a serving owner was replaced rather than adopted");
 }
 
 #[test]

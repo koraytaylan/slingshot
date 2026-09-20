@@ -70,10 +70,48 @@ pub(super) async fn scheduler_loop(
                 }), |current| {
                     guard.settle_execution_with_scheduler_fence(&current, &outcome, unix_milliseconds(), fence)
                 });
+            // The row may already have been settled by an unfenced write
+            // (a lookup reconciliation ahead of this settle call), in which
+            // case the fenced write above refused and the transition still
+            // happened. Publish whatever the row now holds, so a blocked
+            // observer learns the outcome whichever path wrote it.
+            if let Ok(Some(current)) = guard
+                .operations()
+                .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+            {
+                publish_settlement(&guard, &current);
+            }
         } else {
             let _ = guard.diagnostics().record("scheduler execution refused");
         }
     }
+}
+
+/// Tells every local waiter where the operation it is watching has got to.
+///
+/// A wait is a subscription to persisted revisions, and the scheduler is the
+/// only writer on the execution path, so this is where a blocked observer is
+/// released. The durable write has already committed, so a waiter told the
+/// truth here is a waiter whose read can never disagree with the row.
+fn publish_settlement(
+    runtime: &DurableRuntime,
+    current: &slingshot_storage::operation_repository::OperationSummary,
+) {
+    use crate::operation_wait::WaitUpdate;
+    let update = if current.record.lifecycle_state.is_terminal() {
+        WaitUpdate::Terminal { revision: current.record.revision }
+    } else if current.record.outstanding_recovery.is_some() {
+        WaitUpdate::RecoveryRequired { revision: current.record.revision }
+    } else {
+        let detail = current.record.latest_progress.clone().unwrap_or_else(|| {
+            serde_json::to_value(current.record.lifecycle_state)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .unwrap_or_default()
+        });
+        WaitUpdate::Progress { detail, revision: current.record.revision }
+    };
+    runtime.waiters().publish(&current.operation_identifier, &update);
 }
 
 fn prepare(runtime: &DurableRuntime, fence: u64, now: u64) -> Option<ScheduledInvocation> {

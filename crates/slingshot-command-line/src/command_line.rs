@@ -38,7 +38,7 @@ use slingshot_domain::profile_authentication_contract::ConfigurationFailureCode;
 use slingshot_local_protocol::control::{HELLO_METHOD, HelloResult};
 use slingshot_local_protocol::envelope::{ControlRequest, ControlResponse, ResponseOutcome};
 use slingshot_local_protocol::foundation_contract::FoundationContract;
-use slingshot_local_protocol::message::{OperationEnvelope, OperationResponse};
+use slingshot_local_protocol::message::{OperationEnvelope, OperationRequest, OperationResponse};
 use slingshot_local_protocol::ping::STOP_METHOD;
 
 use crate::application::{
@@ -938,6 +938,17 @@ impl DaemonBoundary for ProductDaemon<'_> {
         envelope: &OperationEnvelope,
     ) -> Result<OperationResponse, ExchangeFailure> {
         let address = self.address(namespace)?;
+        // A wait is answered when the observed operation moves, which may be
+        // much later than the deadline that stops a silent daemon from holding
+        // a client. It gets the deadline-free read; every other exchange gets
+        // the ordinary first-frame deadline.
+        if matches!(envelope.request, OperationRequest::Wait { .. }) {
+            return self.driven(daemon_connection::exchange_wait(
+                self.contract,
+                &address,
+                envelope,
+            ));
+        }
         self.driven(daemon_connection::exchange_operation(self.contract, &address, envelope))
     }
 

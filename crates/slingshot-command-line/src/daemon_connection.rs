@@ -162,6 +162,42 @@ pub async fn exchange_operation(
         .map_err(|failure| ExchangeFailure::Unreadable(failure.to_string()))
 }
 
+/// Exchanges one versioned wait with the daemon that owns an endpoint.
+///
+/// A wait is different from every other exchange in exactly one way: its
+/// answer arrives when the observed operation moves rather than when the
+/// daemon reads the request. So the first-frame deadline that exists to stop a
+/// silent daemon from holding a client does not apply to the answer - the wait
+/// has no read deadline once it is attached, and time detaches nobody. The
+/// request itself is still written under the ordinary transport deadlines, and
+/// a daemon that went away is still reported as absence.
+///
+/// # Errors
+///
+/// Returns [`ExchangeFailure::Absent`] when no process is listening or it went
+/// away, and the other variants when the connection or the answer cannot be
+/// used.
+pub async fn exchange_wait(
+    contract: &FoundationContract,
+    address: &EndpointAddress,
+    envelope: &OperationEnvelope,
+) -> Result<OperationResponse, ExchangeFailure> {
+    let mut stream = open(address).await?;
+    let payload = serde_json::to_vec(envelope)
+        .map_err(|failure| ExchangeFailure::Unreadable(failure.to_string()))?;
+    let frame = framing::render(&contract.framing, &payload)
+        .map_err(|failure| ExchangeFailure::Unreadable(failure.to_string()))?;
+    local_server::write_frame(&mut stream, contract, &frame)
+        .await
+        .map_err(|failure| ExchangeFailure::Transport(failure.to_string()))?;
+    let response = local_server::read_frame(&mut stream, contract, false)
+        .await
+        .map_err(|failure: ConnectionFailure| ExchangeFailure::Transport(failure.to_string()))?
+        .ok_or_else(|| ExchangeFailure::Absent(address.display()))?;
+    serde_json::from_slice(&response)
+        .map_err(|failure| ExchangeFailure::Unreadable(failure.to_string()))
+}
+
 /// What one artifact transfer says as it arrives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArtifactEvent {

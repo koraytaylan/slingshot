@@ -58,6 +58,7 @@ use crate::live_adobe_experience_manager::{
 };
 use crate::machine_outcome_envelope::{ArtifactAccess, MachineOutcomeEnvelope, artifact_uri};
 use crate::operation_submission;
+use crate::progress_renderer;
 use crate::target_selection::{
     NAMESPACE_ONLY_LEAVES, NamespacePair, TargetRequirement, namespace_of, requirement_of,
 };
@@ -634,6 +635,12 @@ impl CommandLineApplication<'_> {
     /// answers, it agrees with this build about the contracts and the protocol,
     /// and it serves the target this caller named. A client that skipped the
     /// last would send somebody else's target the work it meant for its own.
+    ///
+    /// An endpoint nobody is listening on is not a refusal. The selected
+    /// executable starts the daemon that owns the namespace and the greeting is
+    /// read again, so an operator who never ran `daemon start` still reaches
+    /// their author; a daemon that is there but refuses stays refused, because
+    /// replacing an owner this client cannot speak to is somebody's decision.
     fn owner(
         &self,
         invocation: &Invocation,
@@ -641,7 +648,14 @@ impl CommandLineApplication<'_> {
     ) -> Result<HelloResult, RunRefusal> {
         let phase =
             Phase::BeforeReceipt { retry_operation_identifier: self.retry_identifier(invocation) };
-        let hello = self.reached(self.daemon.hello(namespace), &phase)?;
+        let hello = match self.daemon.hello(namespace) {
+            Ok(hello) => hello,
+            Err(ExchangeFailure::Absent(_)) => {
+                self.process.start_daemon(namespace).map_err(RunRefusal::Unavailable)?;
+                self.reached(self.daemon.hello(namespace), &phase)?
+            }
+            Err(failure) => return self.reached(Err::<HelloResult, _>(failure), &phase),
+        };
         let spoken = spoken_operation_version();
         let compatibility = operation_compatibility(
             &hello,
@@ -909,8 +923,104 @@ impl CommandLineApplication<'_> {
                 }) {
                     return Ok(halted);
                 }
-                self.receipt(&namespace, &hello, &admitted)
+                match operation_submission::after_admission(invocation) {
+                    operation_submission::AfterAdmission::Detach => {
+                        self.receipt(&namespace, &hello, &admitted)
+                    }
+                    operation_submission::AfterAdmission::Observe => {
+                        self.attended(&namespace, &hello, admitted)
+                    }
+                }
             }
+        }
+    }
+
+    /// Watches one admitted operation until it ends, then reads its answer.
+    ///
+    /// Attached observation is the default for every command, because a caller
+    /// who asked a question wants the answer rather than a receipt. The wait is
+    /// the daemon's own subscription, so a slow operation costs this process a
+    /// blocked read and nothing else; the terminal state is where the result is
+    /// fetched, and every intermediate update is written to the diagnostic
+    /// stream so a person sees progress the machine streams cannot carry.
+    fn attended(
+        &self,
+        namespace: &NamespacePair,
+        hello: &HelloResult,
+        admitted: Admitted,
+    ) -> Result<Completion, RunRefusal> {
+        let mut diagnostics = Vec::new();
+        let mut observed_revision = None;
+        loop {
+            let request = OperationRequest::Wait {
+                observed_revision,
+                operation_identifier: admitted.operation_identifier.clone(),
+            };
+            let response =
+                self.exchange(namespace, hello, request, &admitted.operation_identifier)?;
+            match response {
+                OperationResponse::Status { ref lifecycle_state, operation_revision, .. } => {
+                    observed_revision = Some(operation_revision);
+                    if lifecycle_state == "terminal" {
+                        let completion = self.result_of(namespace, hello, &admitted);
+                        diagnostics.extend(completion.diagnostics);
+                        return Ok(Completion { diagnostics, ..completion });
+                    }
+                    if lifecycle_state == "recovery_required" {
+                        let completion = self.receipt(namespace, hello, &admitted)?;
+                        diagnostics.extend(completion.diagnostics);
+                        return Ok(Completion { diagnostics, ..completion });
+                    }
+                }
+                OperationResponse::Progress { ref detail, operation_revision, .. } => {
+                    observed_revision = Some(operation_revision);
+                    diagnostics.push(progress_renderer::render(&progress_renderer::ProgressNote {
+                        detail: detail.clone(),
+                        operation_identifier: admitted.operation_identifier.clone(),
+                    }));
+                }
+                OperationResponse::ResultInline { .. }
+                | OperationResponse::ResultArtifact { .. }
+                | OperationResponse::TerminalFailure { .. }
+                | OperationResponse::RecoveryRequired { .. } => {
+                    let completion = self.resolved(
+                        namespace,
+                        hello,
+                        &response,
+                        &self.access(namespace, hello, &admitted),
+                    )?;
+                    diagnostics.extend(completion.diagnostics);
+                    return Ok(Completion { diagnostics, ..completion });
+                }
+                other => {
+                    let completion = self.resolved(
+                        namespace,
+                        hello,
+                        &other,
+                        &self.access(namespace, hello, &admitted),
+                    )?;
+                    diagnostics.extend(completion.diagnostics);
+                    return Ok(Completion { diagnostics, ..completion });
+                }
+            }
+        }
+    }
+
+    /// Reads the terminal answer of an operation the daemon says has ended.
+    fn result_of(
+        &self,
+        namespace: &NamespacePair,
+        hello: &HelloResult,
+        admitted: &Admitted,
+    ) -> Completion {
+        let request = OperationRequest::Result {
+            operation_identifier: admitted.operation_identifier.clone(),
+        };
+        match self.exchange(namespace, hello, request, &admitted.operation_identifier) {
+            Ok(response) => self
+                .resolved(namespace, hello, &response, &self.access(namespace, hello, admitted))
+                .unwrap_or_else(RunRefusal::completion),
+            Err(refusal) => refusal.completion(),
         }
     }
 

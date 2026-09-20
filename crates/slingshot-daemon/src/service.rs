@@ -253,6 +253,10 @@ impl DaemonService {
             )?;
             (waiter, operation)
         };
+        // An observer attached to work that has already moved is told at once,
+        // and one attached to work that moved between the attach and this read
+        // is told on the first turn. Both are the current durable row, which is
+        // what a wait promises: never a state the row has left behind.
         let update = waiter.next(cancellation).await.ok_or(OperationResponse::InternalFailure {
             detail: "the wait observer was cancelled before an update".to_owned(),
         })?;
