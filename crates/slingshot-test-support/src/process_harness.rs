@@ -503,6 +503,8 @@ pub struct RetainedChild {
     instance: InstanceHandle,
     #[cfg(unix)]
     terminal: Option<std::thread::JoinHandle<String>>,
+    /// The thread feeding the child its input, when it was given any.
+    feeder: Option<std::thread::JoinHandle<()>>,
     identifier: u32,
     reaped: bool,
 }
@@ -512,6 +514,18 @@ impl RetainedChild {
     #[must_use]
     pub fn identifier(&self) -> u32 {
         self.identifier
+    }
+
+    /// Waits for everything this harness fed the child to finish being written.
+    ///
+    /// A child that has stopped reading leaves this thread blocked on a full
+    /// pipe, which is not a failure of the harness: the input was what the case
+    /// meant to send, and the case is about the child's own behavior once its
+    /// input goes away.
+    fn join_feeder(&mut self) {
+        if let Some(feeder) = self.feeder.take() {
+            feeder.join().ok();
+        }
     }
 
     /// Reports whether this child has been waited for.
@@ -552,6 +566,9 @@ impl RetainedChild {
             match self.child.try_wait().map_err(unusable)? {
                 Some(status) => {
                     self.reaped = true;
+                    // The child is gone, so whatever it did not read is no longer
+                    // anybody's: the writer is released by the closed pipe.
+                    self.join_feeder();
                     return Ok(status);
                 }
                 None if started.elapsed() >= deadline => {
@@ -682,9 +699,11 @@ impl ProcessHarness {
         #[cfg(target_os = "linux")]
         let instance = retain_instance(&child)?;
         #[cfg(target_os = "linux")]
-        let mut retained = RetainedChild { child, instance, terminal, identifier, reaped: false };
+        let mut retained =
+            RetainedChild { child, instance, terminal, feeder: None, identifier, reaped: false };
         #[cfg(all(unix, not(target_os = "linux")))]
-        let mut retained = RetainedChild { child, terminal, identifier, reaped: false };
+        let mut retained =
+            RetainedChild { child, terminal, feeder: None, identifier, reaped: false };
         #[cfg(not(unix))]
         let mut retained = {
             if request.attachment == StreamAttachment::Terminal {
@@ -692,14 +711,20 @@ impl ProcessHarness {
                     "this platform has no portable pseudo-terminal API".to_owned(),
                 ));
             }
-            RetainedChild { child, identifier, reaped: false }
+            RetainedChild { child, feeder: None, identifier, reaped: false }
         };
         if !request.input.is_empty() {
-            write_and_close(&mut retained, &request.input)?;
+            // Fed from a thread of its own: a child that answers as it reads fills
+            // its output pipe long before the input ends, and a parent that wrote
+            // the rest first would be waiting on a pipe the child cannot drain
+            // because the child is waiting on the parent. The writer owns the
+            // handle and closes it when the input ends, which is what tells the
+            // child its input is over.
+            retained.feeder =
+                Some(feed_on_thread(retained.child.stdin.take(), request.input.clone())?);
         }
         Ok(retained)
     }
-
     /// Points one command's three streams at a fresh pseudo-terminal and
     /// returns the thread already draining that master end, because a
     /// pseudo-terminal may drop what it buffered when the last follower end
@@ -753,16 +778,20 @@ impl ProcessHarness {
     }
 }
 
-/// Writes one child's whole input and closes it.
-fn write_and_close(retained: &mut RetainedChild, input: &[u8]) -> Result<(), HarnessFailure> {
-    use std::io::Write;
-    let mut writing = retained
-        .child
-        .stdin
-        .take()
-        .ok_or_else(|| HarnessFailure::Unusable("this child reads nothing".to_owned()))?;
-    writing.write_all(input).map_err(unusable)?;
-    writing.flush().map_err(unusable)
+/// Writes one child's whole input and closes it on a thread of its own.
+///
+/// Returns the thread so a caller that wants the input finished can wait for it.
+fn feed_on_thread(
+    writing: Option<std::process::ChildStdin>,
+    input: Vec<u8>,
+) -> Result<std::thread::JoinHandle<()>, HarnessFailure> {
+    use std::io::Write as _;
+    let mut writing =
+        writing.ok_or_else(|| HarnessFailure::Unusable("this child reads nothing".to_owned()))?;
+    Ok(std::thread::spawn(move || {
+        writing.write_all(&input).ok();
+        writing.flush().ok();
+    }))
 }
 
 /// Reads one stream to its end on a thread of its own.

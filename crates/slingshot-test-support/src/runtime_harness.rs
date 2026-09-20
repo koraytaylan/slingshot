@@ -57,6 +57,7 @@ impl TemporaryRuntimeRoot {
         let path = runtime_root_path(label);
         std::fs::remove_dir_all(&path).ok();
         std::fs::create_dir_all(&path)?;
+        restrict_to_owner(&path)?;
         Ok(Self { path })
     }
 
@@ -126,6 +127,33 @@ impl Drop for TemporaryRuntimeRoot {
     fn drop(&mut self) {
         self.remove().ok();
     }
+}
+
+/// Restricts one directory to its owner, whatever the ambient umask was.
+///
+/// A runtime root a daemon may own must be one this user alone owns, and the
+/// ambient umask is a property of whoever ran the test rather than of the test.
+/// A harness that inherited a permissive umask would produce a root no daemon
+/// can use, which turns a test of the product into a test of the shell it was
+/// started from.
+/// The mode a runtime root must have for a daemon to own it.
+///
+/// The daemon names the same value for the directories it creates. This crate cannot depend on the
+/// daemon crate, so the value is stated here for the roots this harness creates; a root built to a
+/// different mode is one no daemon will accept.
+#[cfg(unix)]
+const OWNER_ONLY_DIRECTORY_MODE: u32 = 0o700;
+
+#[cfg(unix)]
+fn restrict_to_owner(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(OWNER_ONLY_DIRECTORY_MODE))
+}
+
+/// Restricts one directory to its owner on platforms without Unix modes.
+#[cfg(not(unix))]
+fn restrict_to_owner(_path: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// Waits until a condition holds, or reports that the deadline elapsed.
