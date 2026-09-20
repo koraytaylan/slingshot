@@ -1014,6 +1014,12 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
+    InventoriedStatement {
+        purpose: "clear every scheduler claim a dead instance left behind",
+        text: "UPDATE operation SET scheduler_checkpoint = NULL, scheduler_fence = NULL, scheduler_lease_expires_at_unix_milliseconds = NULL WHERE author_target_identity_digest = ? AND lifecycle_state NOT IN ('succeeded', 'failed') AND (scheduler_checkpoint IS NOT NULL OR scheduler_fence IS NOT NULL OR scheduler_lease_expires_at_unix_milliseconds IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM recovery_fact WHERE recovery_fact.author_target_identity_digest = operation.author_target_identity_digest AND recovery_fact.operation_identifier = operation.operation_identifier AND recovery_fact.manual_resume_eligible = 1)",
+        parameters: 1,
+        maximum_rows: 0,
+    },
 ];
 
 /// Returns the text of the statement with `purpose`.

@@ -502,6 +502,11 @@ impl RuntimeBuilder {
         drop(transaction);
         let operations = OperationRepository::new(database);
         let remote = AgentJobRepository::new(remote_database);
+        slingshot_storage::operation::scheduler_claim::recover_abandoned_claims(
+            operations.database(),
+            &self.target.author_target_identity_digest,
+        )
+        .map_err(|_| RuntimeBuildRefusal::Resources)?;
         let mut recovered_operations = Vec::new();
         let mut publication_owners = Vec::new();
         for summary in operations

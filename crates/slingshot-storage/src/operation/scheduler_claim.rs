@@ -232,6 +232,28 @@ pub fn release(
     Ok(changed == 1)
 }
 
+/// Clears every scheduler claim a previous instance left on nonterminal work.
+///
+/// A claim survives the claim query until its checkpoint is released, and a
+/// process that died holding one never gets to release it. The startup sweep
+/// is what turns those rows back into claimable work, because no later tick
+/// will ever select a checkpointed operation. A recovery fact paused for a
+/// person is left alone: its checkpoint is the hold that keeps the scheduler
+/// from retrying it ahead of that person, and manual resume releases it.
+///
+/// # Errors
+///
+/// Returns [`RepositoryFailure`] when the database refuses the write.
+pub fn recover_abandoned_claims(
+    database: &OperationDatabase,
+    target: &str,
+) -> Result<usize, RepositoryFailure> {
+    Ok(database.connection().execute(
+        statement("clear every scheduler claim a dead instance left behind"),
+        rusqlite::params![target],
+    )?)
+}
+
 /// Reads lease/checkpoint facts without granting execution authority.
 pub fn facts(
     database: &OperationDatabase,
