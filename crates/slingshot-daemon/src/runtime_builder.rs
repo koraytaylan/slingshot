@@ -35,6 +35,7 @@ pub use publication_recovery::RecoveredPublication;
 
 use crate::{
     ownership::DaemonOwnership,
+    platform_runtime::locks::StateLease,
     runtime_namespace::{PersistentTargetPaths, RuntimeNamespace},
     startup::SelectedTarget,
 };
@@ -117,6 +118,11 @@ pub enum RuntimeBuildRefusal {
     /// A required local runtime resource could not be initialized or verified.
     #[error("the selected runtime resources could not be established")]
     Resources,
+    /// Another daemon already writes this target's durable state.
+    #[error(
+        "another daemon already owns this target's state; stop it before starting this one,          because two writers would corrupt one database"
+    )]
+    StateAlreadyHeld,
 }
 
 /// Audited durable state retaining the configuration and namespace ownership.
@@ -139,6 +145,10 @@ pub struct DurableRuntime {
         Option<slingshot_storage::persistent_capacity::MaintenancePublicationRecovery>,
     installation: InstallationIdentifier,
     paths: PersistentTargetPaths,
+    // The right to write this target's state, which is one directory however
+    // many runtime roots exist. Retained for this runtime's lifetime, so a
+    // second daemon under another login cannot open the same database.
+    _state_lease: StateLease,
     // Database and its resources close before namespace ownership is released.
     builder: RuntimeBuilder,
 }
@@ -416,6 +426,15 @@ impl RuntimeBuilder {
         let installation_failure = |_| RuntimeBuildRefusal::Installation;
         crate::runtime_namespace::create_private_directory(&self.state_root)
             .map_err(installation_failure)?;
+        // The state root is shared by every runtime root, so an owner lock
+        // under one login proves nothing about who writes this database. This
+        // lease is the question that matters, and it is taken before the
+        // installation ledger, the database, or any artifact is opened.
+        let Some(state_lease) = StateLease::acquire(&self.state_root, self.namespace().digest())
+            .map_err(|_| RuntimeBuildRefusal::Installation)?
+        else {
+            return Err(RuntimeBuildRefusal::StateAlreadyHeld);
+        };
         let state = InstallationState::at(&self.state_root);
         let mut transaction = state.transaction().map_err(|_| RuntimeBuildRefusal::Installation)?;
         let mut record = Self::installation_record(&transaction)?;
@@ -571,6 +590,7 @@ impl RuntimeBuilder {
             maintenance_publication_recovery,
             installation,
             paths,
+            _state_lease: state_lease,
             builder: self,
         })
     }

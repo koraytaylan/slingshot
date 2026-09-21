@@ -7179,3 +7179,64 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
         );
     }
 }
+
+#[test]
+fn one_target_s_state_has_one_writer_however_many_runtime_roots_exist() {
+    use slingshot_daemon::{
+        ownership::{Acquisition, DaemonOwnership},
+        runtime_builder::{RuntimeBuildRefusal, RuntimeBuilder},
+        runtime_namespace::RuntimeNamespace,
+    };
+    use slingshot_local_protocol::foundation_contract::FoundationContract;
+    use slingshot_storage::database::RequiredSettings;
+    let directory = tempfile::tempdir().unwrap();
+    let state_root = directory.path().join("state");
+    let contract = FoundationContract::embedded();
+    // Two logins, two runtime roots, and one target. Each root gives its
+    // daemon its own owner lock and its own endpoint, so nothing about the
+    // owner locks stops both from running. What must stop them is the state
+    // itself, because there is one database and two writers would corrupt it.
+    let first_root = directory.path().join("runtime-one");
+    let second_root = directory.path().join("runtime-two");
+    let first = RuntimeNamespace::name(&contract, &first_root, "remote-site", "staging").unwrap();
+    let second = RuntimeNamespace::name(&contract, &second_root, "remote-site", "staging").unwrap();
+    first.create_runtime_directory().unwrap();
+    second.create_runtime_directory().unwrap();
+    assert_eq!(first.digest(), second.digest(), "one target has one name");
+    let settings = RequiredSettings {
+        page_bytes: slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+            .limit("sqlite_page_bytes"),
+        database_pages: slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded(
+        )
+        .limit("maximum_sqlite_database_pages"),
+        busy_timeout_milliseconds:
+            slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                .limit("database_busy_timeout_milliseconds"),
+    };
+    let build = |namespace: RuntimeNamespace| {
+        let Acquisition::Owned(owner) = DaemonOwnership::acquire(&contract, namespace).unwrap()
+        else {
+            panic!("a fresh runtime root has no owner")
+        };
+        RuntimeBuilder::new(
+            selected_snapshot("http://127.0.0.1:9"),
+            *owner,
+            state_root.clone(),
+            settings,
+        )
+        .unwrap()
+    };
+    let held = build(first.clone()).establish_durable().unwrap();
+    // The second root's owner lock is free, so this attempt reaches durable
+    // establishment. The state lease is what refuses it, and it refuses before
+    // the installation ledger or the database is opened.
+    let refused = build(second.clone()).establish_durable().unwrap_err();
+    assert_eq!(
+        refused,
+        RuntimeBuildRefusal::StateAlreadyHeld,
+        "a second daemon under another runtime root opened one target's database"
+    );
+    drop(held);
+    let resumed = build(second).establish_durable();
+    assert!(resumed.is_ok(), "the state is writable again once its writer left: {resumed:?}");
+}

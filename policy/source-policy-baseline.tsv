@@ -1079,7 +1079,7 @@ crates/slingshot-daemon/src/retained_author_protocol.rs	318	declared-name-is-not
 crates/slingshot-daemon/src/retained_author_protocol.rs	319	declared-name-is-not-spelled-in-full	a
 crates/slingshot-daemon/src/retained_author_protocol.rs	320	declared-name-is-not-spelled-in-full	a
 crates/slingshot-daemon/src/retained_author_protocol.rs	321	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/runtime_builder.rs	163	fallible-interface-omits-its-failure-section	execute_retained_with_claim
+crates/slingshot-daemon/src/runtime_builder.rs	173	fallible-interface-omits-its-failure-section	execute_retained_with_claim
 crates/slingshot-daemon/src/runtime_builder/publication_recovery.rs	25	declared-name-is-not-spelled-in-full	a
 crates/slingshot-daemon/src/runtime_builder/publication_recovery.rs	28	declared-name-is-not-spelled-in-full	a
 crates/slingshot-daemon/src/runtime_builder/publication_recovery.rs	91	numeric-value-carries-no-name	2
@@ -1407,7 +1407,7 @@ crates/slingshot-daemon/tests/selected_submission_admission.rs	7007	numeric-valu
 crates/slingshot-daemon/tests/selected_submission_admission.rs	7007	numeric-value-carries-no-name	410
 crates/slingshot-daemon/tests/selected_submission_admission.rs	7019	numeric-value-carries-no-name	4
 crates/slingshot-daemon/tests/selected_submission_admission.rs	7026	numeric-value-carries-no-name	5
-crates/slingshot-daemon/tests/selected_submission_admission.rs	7181	file-is-longer-than-the-ceiling	7181 lines
+crates/slingshot-daemon/tests/selected_submission_admission.rs	7242	file-is-longer-than-the-ceiling	7242 lines
 crates/slingshot-development/src/release_acceptance.rs	1047	file-is-longer-than-the-ceiling	1047 lines
 crates/slingshot-development/tests/concrete_author_boundaries.rs	167	numeric-value-carries-no-name	7
 crates/slingshot-development/tests/concrete_author_boundaries.rs	291	numeric-value-carries-no-name	7
@@ -1517,13 +1517,13 @@ crates/slingshot-storage/src/database.rs	649	unchecked-block	unsafe
 crates/slingshot-storage/src/database.rs	657	unchecked-block	unsafe
 crates/slingshot-storage/src/database.rs	771	suppression-marker-silences-a-rule	#[allow(
 crates/slingshot-storage/src/database.rs	776	unchecked-block	unsafe
-crates/slingshot-storage/src/installation_state.rs	71	declared-name-is-not-spelled-in-full	fmt
-crates/slingshot-storage/src/installation_state.rs	78	fallible-interface-omits-its-failure-section	read
-crates/slingshot-storage/src/installation_state.rs	83	fallible-interface-omits-its-failure-section	replace
-crates/slingshot-storage/src/installation_state.rs	102	fallible-interface-omits-its-failure-section	transaction
-crates/slingshot-storage/src/installation_state.rs	240	numeric-value-carries-no-name	0o600
-crates/slingshot-storage/src/installation_state.rs	322	numeric-value-carries-no-name	0o400
-crates/slingshot-storage/src/installation_state.rs	322	numeric-value-carries-no-name	0o400_000
+crates/slingshot-storage/src/installation_state.rs	79	declared-name-is-not-spelled-in-full	fmt
+crates/slingshot-storage/src/installation_state.rs	86	fallible-interface-omits-its-failure-section	read
+crates/slingshot-storage/src/installation_state.rs	91	fallible-interface-omits-its-failure-section	replace
+crates/slingshot-storage/src/installation_state.rs	110	fallible-interface-omits-its-failure-section	transaction
+crates/slingshot-storage/src/installation_state.rs	252	numeric-value-carries-no-name	0o600
+crates/slingshot-storage/src/installation_state.rs	334	numeric-value-carries-no-name	0o400
+crates/slingshot-storage/src/installation_state.rs	334	numeric-value-carries-no-name	0o400_000
 crates/slingshot-storage/src/maintenance.rs	387	function-branches-too-many-ways	remove_and_record reaches 13
 crates/slingshot-storage/src/maintenance.rs	549	numeric-value-carries-no-name	2
 crates/slingshot-storage/src/maintenance.rs	554	numeric-value-carries-no-name	2

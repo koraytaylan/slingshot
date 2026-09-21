@@ -25,6 +25,14 @@ pub const RECORD_FILE_NAME: &str = "installation-state.json";
 /// Name of the lock that serializes first start and registration.
 pub const LOCK_FILE_NAME: &str = "installation-state.lock";
 
+/// The suffix every lock file this product keeps under a state root carries.
+///
+/// A lock coordinates writers; it is not durable state. The occupancy question
+/// asks whether anything durable exists, so a lock left in place by a running or
+/// departed process must not be mistaken for evidence of a prior installation -
+/// and a state lease one daemon holds is exactly that kind of file.
+pub const LOCK_SUFFIX: &str = ".lock";
+
 /// Suffix a partly written record carries until it is published.
 const STAGING_SUFFIX: &str = ".staging";
 
@@ -138,7 +146,11 @@ impl InstallationState {
                 entries
                     .collect::<Result<Vec<_>, _>>()
                     .map(|entries| {
-                        entries.into_iter().any(|entry| entry.file_name() != LOCK_FILE_NAME)
+                        entries.into_iter().any(|entry| {
+                            let name = entry.file_name();
+                            let name = name.to_string_lossy();
+                            name != LOCK_FILE_NAME && !name.ends_with(LOCK_SUFFIX)
+                        })
                     })
                     .unwrap_or(true)
             })
