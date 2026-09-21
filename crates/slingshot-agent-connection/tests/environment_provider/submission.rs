@@ -192,7 +192,7 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
             "granted_retention_milliseconds":120000,"attempt":1,"progress":10,"sequence":2,"kind":"progress",
         }).to_string();
             let capability=serde_json::json!({
-            "format":"slingshot.agent/1","agent_event_store_generation":7,
+            "format":"slingshot.agent/1","capability_revision":slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,"agent_event_store_generation":7,
             "canonical_json_contract_digest":expected.canonical_json_contract_digest,
             "transport_contract_digest":expected.transport_contract_digest,
             "command_contracts":[slingshot_agent_protocol::identity::WireContractIdentity::from(&expected.command_contract)],

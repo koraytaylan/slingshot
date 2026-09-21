@@ -9,6 +9,7 @@
 use slingshot_agent_connection::capability_discovery::{
     AdvertisedCapabilities, DiscoveryRefusal, RequiredCapabilities,
 };
+use slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION;
 
 #[test]
 fn closed_capability_document_refuses_ambiguous_or_incomplete_wire_evidence() {
@@ -16,6 +17,7 @@ fn closed_capability_document_refuses_ambiguous_or_incomplete_wire_evidence() {
     let held = matching();
     let document = serde_json::json!({
         "format": "slingshot.agent/1",
+        "capability_revision": held.capability_revision,
         "agent_event_store_generation": held.agent_event_store_generation,
         "canonical_json_contract_digest": held.canonical_json_contract_digest,
         "command_contracts": held.command_contracts,
@@ -37,6 +39,8 @@ fn closed_capability_document_refuses_ambiguous_or_incomplete_wire_evidence() {
     }
     for (key, value) in [
         ("format", serde_json::json!("slingshot.agent/2")),
+        ("capability_revision", serde_json::json!(0)),
+        ("capability_revision", serde_json::json!(REQUIRED_CAPABILITY_REVISION + 1)),
         ("agent_event_store_generation", serde_json::json!(0)),
         ("agent_event_store_generation", serde_json::json!(GENERATION + 1)),
         ("continuation_authority_ready", serde_json::json!(false)),
@@ -111,6 +115,7 @@ fn required(expected_generation: Option<u64>) -> RequiredCapabilities {
 fn matching() -> AdvertisedCapabilities {
     AdvertisedCapabilities {
         agent_event_store_generation: GENERATION,
+        capability_revision: REQUIRED_CAPABILITY_REVISION,
         canonical_json_contract_digest: canonical_contract_digest(),
         command_contracts: vec![WireContractIdentity::from(&installed())],
         continuation_authority_ready: true,
@@ -134,6 +139,7 @@ fn transport_disagreement_is_reported_before_anything_else_is_looked_at() {
         command_contracts: Vec::new(),
         continuation_authority_ready: false,
         agent_event_store_generation: GENERATION + 1,
+        capability_revision: REQUIRED_CAPABILITY_REVISION,
     };
     assert!(
         matches!(
@@ -241,4 +247,44 @@ fn a_store_rebuilt_under_a_daemon_that_has_rows_is_refused() {
     required(None)
         .require_compatible(&rebuilt)
         .expect("while a daemon holding nothing has nothing stranded by a rebuild");
+}
+
+#[test]
+fn an_agent_built_before_a_behavioural_fix_is_refused_before_work_is_sent() {
+    // Every digest agrees here: this is the deployed agent that speaks the
+    // right format and holds the right contracts and still answers a refusal in
+    // a shape this client cannot read. Only the behavioural revision tells the
+    // two apart, and the refusal says which direction the build is behind.
+    let older = AdvertisedCapabilities {
+        capability_revision: REQUIRED_CAPABILITY_REVISION - 1,
+        ..matching()
+    };
+    let refused = required(Some(GENERATION)).require_compatible(&older);
+    assert!(
+        matches!(
+            refused,
+            Err(DiscoveryRefusal::CapabilityRevisionTooOld { advertised, required })
+                if advertised == REQUIRED_CAPABILITY_REVISION - 1
+                    && required == REQUIRED_CAPABILITY_REVISION
+        ),
+        "an agent that predates a behavioural fix was treated as compatible: {refused:?}"
+    );
+}
+
+#[test]
+fn an_agent_built_for_a_newer_client_is_refused_as_this_build_being_old() {
+    let newer = AdvertisedCapabilities {
+        capability_revision: REQUIRED_CAPABILITY_REVISION + 1,
+        ..matching()
+    };
+    let refused = required(Some(GENERATION)).require_compatible(&newer);
+    assert!(
+        matches!(
+            refused,
+            Err(DiscoveryRefusal::CapabilityRevisionTooNew { advertised, required })
+                if advertised == REQUIRED_CAPABILITY_REVISION + 1
+                    && required == REQUIRED_CAPABILITY_REVISION
+        ),
+        "an agent ahead of this client is a different finding from one behind it: {refused:?}"
+    );
 }

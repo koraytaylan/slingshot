@@ -1379,7 +1379,7 @@ async fn selected_live_events_commit_only_the_believed_prefix() {
                         )
                         .unwrap(),
                     );
-                    let capabilities = serde_json::json!({"format":"slingshot.agent/1","agent_event_store_generation":if defect=="terminal-capability-error" {9} else {7},
+                    let capabilities = serde_json::json!({"format":"slingshot.agent/1","capability_revision":slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,"agent_event_store_generation":if defect=="terminal-capability-error" {9} else {7},
                     "canonical_json_contract_digest":expected.canonical_json_contract_digest,"transport_contract_digest":expected.transport_contract_digest,
                     "command_contracts":[slingshot_agent_protocol::identity::WireContractIdentity::from(&expected.command_contract)],"continuation_authority_ready":true});
                     let mut snapshot = serde_json::json!({"provenance":submission.provenance,"agent_event_store_generation":if defect.starts_with("terminal-lookup-error") {9} else {7},
@@ -3963,7 +3963,7 @@ async fn retained_artifact_completion_case(
             submitted_command_digest: submission.submitted_command_digest.clone(),
         };
         let capabilities = serde_json::json!({
-            "format":"slingshot.agent/1", "agent_event_store_generation":7,
+            "format":"slingshot.agent/1", "capability_revision":slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION, "agent_event_store_generation":7,
             "canonical_json_contract_digest":provenance.canonical_json_contract_digest,
             "transport_contract_digest":provenance.transport_contract_digest,
             "command_contracts":[slingshot_agent_protocol::identity::WireContractIdentity::from(&provenance.command_contract)],
@@ -4612,7 +4612,7 @@ async fn retained_artifact_completion_case(
         let peer = async {
             if accepted {
                 let capabilities = serde_json::json!({
-                    "format":"slingshot.agent/1", "agent_event_store_generation":7,
+                    "format":"slingshot.agent/1", "capability_revision":slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION, "agent_event_store_generation":7,
                     "canonical_json_contract_digest":provenance.canonical_json_contract_digest,
                     "transport_contract_digest":provenance.transport_contract_digest,
                     "command_contracts":[slingshot_agent_protocol::identity::WireContractIdentity::from(&provenance.command_contract)],
@@ -5672,6 +5672,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
     );
     let compatible = serde_json::json!({
         "format": "slingshot.agent/1",
+        "capability_revision": slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,
         "agent_event_store_generation": 7,
         "canonical_json_contract_digest": expected.canonical_json_contract_digest,
         "transport_contract_digest": expected.transport_contract_digest,
@@ -5694,6 +5695,11 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
             match field {
                 "agent_event_store_generation" => incompatible[field] = serde_json::json!(8),
                 "continuation_authority_ready" => incompatible[field] = serde_json::json!(false),
+                "capability_revision" => {
+                    incompatible[field] = serde_json::json!(
+                        slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION - 1
+                    )
+                }
                 "transport_contract_digest" | "canonical_json_contract_digest" => {
                     incompatible[field] = serde_json::json!("0".repeat(DIGEST_HEX_CHARACTERS))
                 }

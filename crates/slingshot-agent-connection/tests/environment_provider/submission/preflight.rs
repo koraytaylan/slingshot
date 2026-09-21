@@ -108,6 +108,7 @@ impl Preflight<'_> {
             ] {
                 let document = serde_json::json!({
                 "format": "slingshot.agent/1",
+                "capability_revision": slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,
                 "agent_event_store_generation": generation,
                 "canonical_json_contract_digest": expected.canonical_json_contract_digest,
                 "transport_contract_digest": expected.transport_contract_digest,

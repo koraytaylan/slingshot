@@ -328,7 +328,7 @@ async fn owned_cloud_discovery_refresh_and_refusals_use_only_the_selected_tls_pe
                     request
                         .contains(&format!("Authorization: Bearer outer-cloud-{generation}\r\n"))
                 );
-                let body = serde_json::json!({"format":"slingshot.agent/1","agent_event_store_generation":7,
+                let body = serde_json::json!({"format":"slingshot.agent/1","capability_revision":slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,"agent_event_store_generation":7,
                     "canonical_json_contract_digest":canonical_contract_digest(),"transport_contract_digest":AuthorAgentTransportContract::embedded_digest(),
                     "command_contracts":[WireContractIdentity::from(&SelectedCommandContractIdentity::installed("query_paths").unwrap())],"continuation_authority_ready":true}).to_string();
                 let redirect = if status == 302 {
@@ -602,7 +602,7 @@ async fn rotated_secret_is_loaded_only_by_a_new_provider_and_never_shares_its_ca
         }
     };
     let author_peer = async {
-        let body = serde_json::json!({"format":"slingshot.agent/1","agent_event_store_generation":7,
+        let body = serde_json::json!({"format":"slingshot.agent/1","capability_revision":slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,"agent_event_store_generation":7,
             "canonical_json_contract_digest":canonical_contract_digest(),"transport_contract_digest":AuthorAgentTransportContract::embedded_digest(),
             "command_contracts":[WireContractIdentity::from(&SelectedCommandContractIdentity::installed("query_paths").unwrap())],"continuation_authority_ready":true}).to_string();
         for token in [0, 1, 0, 2, 1] {
@@ -706,7 +706,7 @@ async fn pending_cloud_exchange_does_not_block_or_contaminate_basic_and_caches_s
             .is_err()
     );
     assert_eq!(clock.0.load(Ordering::SeqCst), 0);
-    let body = serde_json::json!({"format":"slingshot.agent/1","agent_event_store_generation":7,
+    let body = serde_json::json!({"format":"slingshot.agent/1","capability_revision":slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,"agent_event_store_generation":7,
         "canonical_json_contract_digest":canonical_contract_digest(),"transport_contract_digest":AuthorAgentTransportContract::embedded_digest(),
         "command_contracts":[WireContractIdentity::from(&SelectedCommandContractIdentity::installed("query_paths").unwrap())],"continuation_authority_ready":true}).to_string();
     let (ims_started, ready) = tokio::sync::oneshot::channel();

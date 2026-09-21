@@ -220,7 +220,7 @@ async fn concrete_basic_discovery_is_author_only_and_refusals_never_redirect_or_
                 provider.authenticate(&publisher, &NoTokenClocks, &NoTokenClocks).await.is_err()
             );
             assert!(timeout(Duration::from_millis(10), author.accept()).await.is_err());
-            let body=serde_json::json!({"format":"slingshot.agent/1","agent_event_store_generation":7,
+            let body=serde_json::json!({"format":"slingshot.agent/1","capability_revision":slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,"agent_event_store_generation":7,
             "canonical_json_contract_digest":canonical_contract_digest(),"transport_contract_digest":AuthorAgentTransportContract::embedded_digest(),
             "command_contracts":[WireContractIdentity::from(&SelectedCommandContractIdentity::installed("query_paths").unwrap())],"continuation_authority_ready":true}).to_string();
             let peer = async {

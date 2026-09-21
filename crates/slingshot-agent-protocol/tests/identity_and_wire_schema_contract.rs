@@ -36,6 +36,7 @@ fn capability_wire_members_match_the_closed_schema() {
     use slingshot_agent_protocol::capabilities::Capabilities;
     let document = Capabilities {
         format: AGENT_FORMAT.to_owned(),
+        capability_revision: slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,
         agent_event_store_generation: 1,
         canonical_json_contract_digest: canonical_contract_digest(),
         command_contracts: vec![WireContractIdentity::from(&expected().command_contract)],

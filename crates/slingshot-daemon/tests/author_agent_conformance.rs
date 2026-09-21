@@ -142,6 +142,7 @@ fn advertised() -> AdvertisedCapabilities {
     let installed = installed();
     AdvertisedCapabilities {
         agent_event_store_generation: GENERATION,
+        capability_revision: slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,
         canonical_json_contract_digest: installed.canonical_json_contract_digest.clone(),
         command_contracts: vec![(&installed.command_contract).into()],
         continuation_authority_ready: true,
@@ -222,6 +223,10 @@ fn the_daemon_and_the_author_agree_about_which_contracts_are_installed() {
 fn drift(field: &str, advertised: &mut AdvertisedCapabilities) {
     let contract = advertised.command_contracts.first_mut().expect("one contract");
     match field {
+        "capability_revision" => {
+            advertised.capability_revision =
+                slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION - 1;
+        }
         "transport_contract_digest" => {
             advertised.transport_contract_digest = SUBSTITUTED_DIGEST.to_owned();
         }

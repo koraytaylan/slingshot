@@ -26,6 +26,8 @@ use slingshot_domain::selected_command_contract_identity::SelectedCommandContrac
 pub struct AdvertisedCapabilities {
     /// Which incarnation of its event store it is serving.
     pub agent_event_store_generation: u64,
+    /// Which behavioural revision it was built with.
+    pub capability_revision: u64,
     /// The canonical-byte contract its schemas were written under.
     pub canonical_json_contract_digest: String,
     /// The command contracts it holds, in wire order.
@@ -82,6 +84,28 @@ pub enum DiscoveryRefusal {
     /// The agent's continuation-key authority is not ready.
     #[error("this agent's continuation-key authority is not ready, so its tokens would not last")]
     ContinuationAuthorityNotReady,
+    /// The agent was built before a behavioural fix this client depends on.
+    #[error(
+        "this agent declares capability revision {advertised}, and this build requires \
+         {required}: it was built before a change this client depends on"
+    )]
+    CapabilityRevisionTooOld {
+        /// What the agent declared.
+        advertised: u64,
+        /// What this build requires.
+        required: u64,
+    },
+    /// The agent was built for a client newer than this one.
+    #[error(
+        "this agent declares capability revision {advertised}, and this build knows only \
+         {required}: it was built for a newer client"
+    )]
+    CapabilityRevisionTooNew {
+        /// What the agent declared.
+        advertised: u64,
+        /// What this build knows.
+        required: u64,
+    },
     /// The agent's event store was rebuilt.
     #[error(
         "this agent serves generation {advertised}, and this daemon holds rows from {expected}"
@@ -101,7 +125,7 @@ impl RequiredCapabilities {
     /// first, because two sides that cannot agree on how to talk have nothing
     /// to say about what they hold; then the canonical contract, because it
     /// decides what a well-formed document even is; then the command contract,
-    /// readiness, and the generation.
+    /// readiness, the behavioural revision, and the generation.
     ///
     /// # Errors
     ///
@@ -133,6 +157,28 @@ impl RequiredCapabilities {
         }
         if !advertised.continuation_authority_ready {
             return Err(DiscoveryRefusal::ContinuationAuthorityNotReady);
+        }
+        // A behavioural revision is checked after every digest and before the
+        // generation, because a build older than this client answers refusals
+        // this client cannot read even when every digest agrees. The two
+        // directions are separate refusals: an agent behind this client is a
+        // deployment that needs updating, and one ahead of it is an agent this
+        // client is too old to use.
+        if advertised.capability_revision
+            < slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION
+        {
+            return Err(DiscoveryRefusal::CapabilityRevisionTooOld {
+                advertised: advertised.capability_revision,
+                required: slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,
+            });
+        }
+        if advertised.capability_revision
+            > slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION
+        {
+            return Err(DiscoveryRefusal::CapabilityRevisionTooNew {
+                advertised: advertised.capability_revision,
+                required: slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,
+            });
         }
         if let Some(expected) = self.expected_generation
             && advertised.agent_event_store_generation != expected
@@ -204,6 +250,7 @@ pub fn decode_capabilities(
     }
     let advertised = AdvertisedCapabilities {
         agent_event_store_generation: document.agent_event_store_generation,
+        capability_revision: document.capability_revision,
         canonical_json_contract_digest: document.canonical_json_contract_digest,
         command_contracts: document.command_contracts,
         continuation_authority_ready: document.continuation_authority_ready,
