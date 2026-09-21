@@ -39,6 +39,9 @@ use slingshot_storage::database::{OperationDatabase, RequiredSettings};
 /// Two-character pairs in a sixty-four-character hexadecimal value.
 const DIGEST_PAIRS: usize = 32;
 
+/// The instant a recovery fact in this suite was observed at.
+const OBSERVED_AT: u64 = 123_456;
+
 /// Bytes one page occupies, from the runtime contract.
 const PAGE_BYTES: u64 = 4096;
 
@@ -252,11 +255,31 @@ fn a_handoff_that_settles_nothing_never_asks_the_agent_what_happened() {
             vec!["submit"],
             "{disposition:?}: nothing after a handoff that already answered"
         );
+        // The retry delay is drawn from a bounded random range, so the two facts are compared on
+        // everything except that one number: two calls to the same function legitimately produce
+        // two different delays, and asserting equality would be asserting that a jitter source is
+        // not random.
+        let (Some(concluded), Some(expected)) = (Some(outcome), outcome_of_handoff(&disposition))
+        else {
+            panic!("{disposition:?}: the executor concludes what the handoff does")
+        };
         assert_eq!(
-            Some(outcome),
-            outcome_of_handoff(&disposition),
+            without_delay(&concluded),
+            without_delay(&expected),
             "{disposition:?}: the executor concludes exactly what the handoff does"
         );
+    }
+}
+
+/// Returns one outcome with its retry delay removed, which is the jittered field.
+fn without_delay(outcome: &OperationExecutorOutcome) -> OperationExecutorOutcome {
+    match outcome {
+        OperationExecutorOutcome::RecoveryRequired { recovery } => {
+            let mut held = recovery.clone();
+            held.retry_delay_milliseconds = 0;
+            OperationExecutorOutcome::RecoveryRequired { recovery: held }
+        }
+        other => other.clone(),
     }
 }
 
@@ -281,7 +304,12 @@ fn an_unclear_submission_is_outstanding_work_rather_than_an_ending() {
         recovery.category.admits(recovery.evidence),
         "the category and the evidence are a pairing the domain permits"
     );
-    assert!(recovery.manual_resume_eligible, "and a person can release it");
+    // One unanswered attempt is the first attempt, not the last. The automatic budget decides when
+    // a person is asked, and a fact that paused work on the first unanswered submission would turn
+    // one transient timeout into an operation nothing retries - and, because the scheduler holds
+    // one execution slot per target, into a queue that never drains.
+    assert!(!recovery.manual_resume_eligible, "one attempt does not exhaust the budget");
+    assert_eq!(recovery.attempt_count, 1, "the first unanswered attempt is charged as one");
 }
 
 #[test]
@@ -573,7 +601,7 @@ fn artifact_capacity_pause_is_not_replaced_with_an_automatic_transfer_retry() {
         detail: "persistent capacity unavailable".to_owned(),
         manual_resume_eligible: true,
         retry_delay_milliseconds: 0,
-        retry_observed_at_unix_milliseconds: 123456,
+        retry_observed_at_unix_milliseconds: OBSERVED_AT,
     };
     let mut ports = ScriptedPorts::answering(
         HandoffDisposition::ReconcileRetained,

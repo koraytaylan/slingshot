@@ -30,7 +30,7 @@ use slingshot_storage::{
 use tokio_util::sync::CancellationToken;
 
 mod publication_recovery;
-mod execution;
+pub(crate) mod execution;
 pub use publication_recovery::RecoveredPublication;
 
 use crate::{

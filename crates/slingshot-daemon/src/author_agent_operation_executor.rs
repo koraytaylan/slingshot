@@ -237,17 +237,14 @@ impl AuthorPorts for ProductAuthorPorts<'_> {
         if self.transport.require_execution(identity).is_err() {
             return Box::pin(async {
                 AgentSettlement::Outstanding {
-                    recovery: RecoveryFact {
-                        category: RecoveryCategory::OperationLookup,
-                        evidence: RecoveryExecutionEvidence::ExecutionCertainty {
+                    recovery: retrying(
+                        RecoveryCategory::OperationLookup,
+                        RecoveryExecutionEvidence::ExecutionCertainty {
                             certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
                         },
-                        attempt_count: 0,
-                        detail: String::new(),
-                        manual_resume_eligible: true,
-                        retry_delay_milliseconds: 0,
-                        retry_observed_at_unix_milliseconds: 0,
-                    },
+                        String::new(),
+                        0,
+                    ),
                 }
             });
         }
@@ -356,6 +353,14 @@ fn failed_closed(
 }
 
 /// Returns the outcome unresolved work produces.
+///
+/// The attempt is bounded here rather than paused on the first failure. An
+/// attempt that produced no answer is exactly the case the automatic budget
+/// exists for: asking again is cheap and safe, and it is only once that budget
+/// is spent that a person is asked. Pausing on the first unanswered attempt
+/// would turn one transient timeout into work nobody is retrying, and - because
+/// the scheduler holds one execution slot per target - into a queue that never
+/// drains at all.
 fn unresolved(
     category: RecoveryCategory,
     certainty: OperationExecutionCertainty,
@@ -363,30 +368,57 @@ fn unresolved(
     retry_delay_milliseconds: u64,
 ) -> OperationExecutorOutcome {
     OperationExecutorOutcome::RecoveryRequired {
-        recovery: RecoveryFact {
-            attempt_count: 0,
+        recovery: retrying(
             category,
+            RecoveryExecutionEvidence::ExecutionCertainty { certainty },
             detail,
-            evidence: RecoveryExecutionEvidence::ExecutionCertainty { certainty },
-            manual_resume_eligible: true,
             retry_delay_milliseconds,
-            retry_observed_at_unix_milliseconds: 0,
+        ),
+    }
+}
+
+/// One recovery fact for an attempt that produced no answer yet.
+///
+/// The first attempt is the first, not the last: the automatic budget decides
+/// when a person is asked, and the delay grows with the attempt so a failing
+/// author is not hammered while it is failing.
+fn retrying(
+    category: RecoveryCategory,
+    evidence: RecoveryExecutionEvidence,
+    detail: String,
+    retry_delay_milliseconds: u64,
+) -> RecoveryFact {
+    use crate::operation::recovery_and_event_supervisor::jitter_ceiling_milliseconds;
+    use rand::RngExt;
+    let attempt = 1;
+    RecoveryFact {
+        attempt_count: attempt,
+        category,
+        detail,
+        evidence,
+        manual_resume_eligible: false,
+        retry_delay_milliseconds: if retry_delay_milliseconds == 0 {
+            rand::rng().random_range(0..=jitter_ceiling_milliseconds(u64::from(attempt)))
+        } else {
+            retry_delay_milliseconds
         },
+        retry_observed_at_unix_milliseconds: 0,
     }
 }
 
 /// Returns the outcome work that provably succeeded but is not here produces.
+///
+/// The remote fact is already proven, so nothing about it is in question; what
+/// remains is local retrieval, and a retrieval that has not happened yet is an
+/// attempt to make again rather than a person to ask.
 fn awaiting_retrieval(category: RecoveryCategory) -> ArtifactCompletion {
     ArtifactCompletion::Recovery {
-        recovery: RecoveryFact {
-            attempt_count: 0,
+        recovery: retrying(
             category,
-            detail: String::new(),
-            evidence: RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
-            manual_resume_eligible: true,
-            retry_delay_milliseconds: 0,
-            retry_observed_at_unix_milliseconds: 0,
-        },
+            RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
+            String::new(),
+            0,
+        ),
     }
 }
 

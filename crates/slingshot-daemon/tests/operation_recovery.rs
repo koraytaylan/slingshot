@@ -472,3 +472,77 @@ fn two_resumes_of_one_operation_at_different_points_are_two_sources() {
     assert_ne!(first, other, "and resuming another category is another again");
     assert_ne!(first, another_operation, "and another operation has another receipt source");
 }
+
+#[test]
+fn a_detached_attempt_is_charged_and_pauses_at_the_automatic_budget() {
+    use slingshot_daemon::operation::durable_author_lookup::record_detached_attempt;
+    use slingshot_domain::operation_executor::ExecutionIdentity;
+
+    let repository = repository();
+    let digest = partition(FIRST_PRINCIPAL);
+    let admitted = admitted(&repository, &digest);
+    let identity = ExecutionIdentity {
+        attempt: 1,
+        author_target_identity_digest: digest.clone(),
+        selected_environment_revision: REVISION.to_owned(),
+        operation_identifier: OPERATION.to_owned(),
+    };
+
+    // One detached attempt is one durable charge, and the evidence it leaves
+    // behind is uncertainty about the remote rather than a local ending.
+    let charged = record_detached_attempt(&repository, &identity, admitted.record.revision, NOW)
+        .expect("a detached attempt is chargeable");
+    let fact = charged.record.outstanding_recovery.as_ref().expect("a recovery fact");
+    assert_eq!(fact.attempt_count, 1, "the attempt was not charged");
+    assert!(!fact.manual_resume_eligible, "one attempt is not exhaustion");
+    assert_eq!(
+        fact.evidence,
+        RecoveryExecutionEvidence::ExecutionCertainty {
+            certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
+        },
+        "a local timeout must never claim the remote did or did not run"
+    );
+    assert!(!charged.record.lifecycle_state.is_terminal(), "and never ends the operation");
+
+    // Exhausting the automatic budget pauses the work for a person instead of
+    // reclaiming and detaching it forever.
+    let cap = slingshot_daemon::operation::recovery_and_event_supervisor::automatic_attempt_cap();
+    let mut summary = charged;
+    for _ in 1..cap {
+        summary = record_detached_attempt(&repository, &identity, summary.record.revision, LATER)
+            .expect("a further detached attempt is chargeable");
+    }
+    let fact = summary.record.outstanding_recovery.as_ref().expect("a recovery fact");
+    assert_eq!(u64::from(fact.attempt_count), cap, "the budget was not reached");
+    assert!(fact.manual_resume_eligible, "exhaustion must ask a person");
+    assert!(!summary.record.lifecycle_state.is_terminal(), "and still never ends the operation");
+}
+
+#[test]
+fn a_charged_remote_success_stays_a_result_acquisition() {
+    use slingshot_daemon::operation::durable_author_lookup::record_detached_attempt;
+    use slingshot_domain::operation_executor::ExecutionIdentity;
+
+    let repository = repository();
+    let digest = partition(FIRST_PRINCIPAL);
+    let proven = paused(&repository, &digest, RecoveryCategory::ResultAcquisition, false);
+    let identity = ExecutionIdentity {
+        attempt: SECOND_ATTEMPT,
+        author_target_identity_digest: digest.clone(),
+        selected_environment_revision: REVISION.to_owned(),
+        operation_identifier: OPERATION.to_owned(),
+    };
+    let charged = record_detached_attempt(&repository, &identity, proven.record.revision, NOW)
+        .expect("a detached attempt is chargeable");
+    let fact = charged.record.outstanding_recovery.as_ref().expect("a recovery fact");
+    assert_eq!(
+        fact.evidence,
+        RecoveryExecutionEvidence::AuthoritativeRemoteSuccess,
+        "a local timeout must not retract a provable remote success"
+    );
+    assert_eq!(
+        fact.category,
+        RecoveryCategory::ResultAcquisition,
+        "so what remains outstanding is still the local result, never the remote work"
+    );
+}

@@ -203,6 +203,86 @@ pub fn record_missing_lookup(
         .map_err(|_| DurableLookupRefusal)
 }
 
+/// Charges one detached attempt against the operation's automatic budget.
+///
+/// An attempt the scheduler detached produced no outcome this daemon may
+/// publish, so the operation must not be reported as anything at all. What it
+/// must do is count: without a durable charge the same work would be detached
+/// and reclaimed forever, and the automatic budget that exists to ask a person
+/// would never be reached. The evidence stays whatever it already was, because
+/// a local timeout says nothing about the remote system, and exhaustion pauses
+/// the work for manual recovery rather than deciding it.
+///
+/// # Errors
+/// Returns `DurableLookupRefusal` for stale or terminal state, an established
+/// remote success whose local half is what is outstanding, or a repository
+/// refusal.
+pub fn record_detached_attempt(
+    operations: &OperationRepository,
+    identity: &ExecutionIdentity,
+    expected_revision: u64,
+    now_unix_milliseconds: u64,
+) -> Result<OperationSummary, DurableLookupRefusal> {
+    use crate::operation::recovery_and_event_supervisor::{
+        automatic_attempt_cap, jitter_ceiling_milliseconds,
+    };
+    let held = operations
+        .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+        .map_err(|_| DurableLookupRefusal)?
+        .ok_or(DurableLookupRefusal)?;
+    if held.record.revision != expected_revision
+        || held.record.lifecycle_state.is_terminal()
+        || held.selected_environment_revision != identity.selected_environment_revision
+        || now_unix_milliseconds < held.recorded_at_unix_milliseconds
+    {
+        return Err(DurableLookupRefusal);
+    }
+    let previous = held.record.outstanding_recovery.as_ref();
+    if previous.is_some_and(automatic_recovery_paused) {
+        return Ok(held);
+    }
+    let evidence = previous.map_or(
+        RecoveryExecutionEvidence::ExecutionCertainty {
+            certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
+        },
+        |fact| fact.evidence,
+    );
+    let attempt_count = previous.map_or(1, |fact| fact.attempt_count.saturating_add(1));
+    let paused = u64::from(attempt_count) >= automatic_attempt_cap();
+    let recovery = RecoveryFact {
+        attempt_count,
+        category: if evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess {
+            RecoveryCategory::ResultAcquisition
+        } else {
+            RecoveryCategory::OperationLookup
+        },
+        detail: if paused {
+            "the execution budget is exhausted and the operation requires manual recovery"
+                .to_owned()
+        } else {
+            "the attempt was detached locally and the operation remains outstanding".to_owned()
+        },
+        evidence,
+        manual_resume_eligible: paused,
+        retry_delay_milliseconds: if paused {
+            0
+        } else {
+            use rand::RngExt;
+            rand::rng().random_range(0..=jitter_ceiling_milliseconds(u64::from(attempt_count)))
+        },
+        retry_observed_at_unix_milliseconds: now_unix_milliseconds,
+    };
+    operations
+        .apply(
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+            expected_revision,
+            &OperationFact::Recovery { recovery },
+            now_unix_milliseconds,
+        )
+        .map_err(|_| DurableLookupRefusal)
+}
+
 /// Charges one failed exchange only after the full retained binding passed.
 fn record_lookup_failure(
     operations: &OperationRepository,
