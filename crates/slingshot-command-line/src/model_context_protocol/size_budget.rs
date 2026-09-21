@@ -92,3 +92,32 @@ pub fn is_carriable(bytes: u64) -> bool {
     carriage_of(bytes) == Carriage::Externalized
         || worst_case_message_of(bytes) < maximum_queued_bytes() as u64
 }
+
+/// The largest artifact body one resource read may carry.
+///
+/// A resource read answers one line, and a line has a bound. Binary artifacts
+/// travel base64, which costs four characters per three bytes, so the byte
+/// budget for an artifact body is the line bound less the address, the media
+/// type, and the era's decoration, divided by that ratio. An artifact past this
+/// bound is refused at its declared length, which is the one moment a refusal
+/// can happen before the memory is spent.
+#[must_use]
+pub fn maximum_resource_blob_bytes() -> u64 {
+    use crate::model_context_protocol::standard_stream_transport::maximum_line_bytes;
+    let line = maximum_line_bytes() as u64;
+    let reserved = MAXIMUM_ADDRESS_BYTES
+        .saturating_add(MAXIMUM_DECORATION_BYTES)
+        .saturating_add(MAXIMUM_MESSAGE_OVERHEAD_BYTES)
+        .saturating_add(MEDIA_TYPE_ALLOWANCE_BYTES);
+    let available = line.saturating_sub(reserved);
+    available.saturating_mul(BASE64_INPUT_BYTES).saturating_div(BASE64_OUTPUT_BYTES)
+}
+
+/// How many bytes one media type and the members around it may take.
+const MEDIA_TYPE_ALLOWANCE_BYTES: u64 = 1_024;
+
+/// How many input bytes one base64 group carries.
+const BASE64_INPUT_BYTES: u64 = 3;
+
+/// How many characters one base64 group is written as.
+const BASE64_OUTPUT_BYTES: u64 = 4;

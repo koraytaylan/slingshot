@@ -28,7 +28,7 @@ use slingshot_domain::command::catalog::CommandCatalog;
 use slingshot_local_protocol::control::{HelloResult, operation_compatibility};
 use slingshot_local_protocol::message::{OperationEnvelope, OperationRequest, OperationResponse};
 
-use crate::artifact_download::{Arrival, DownloadRefusal};
+use crate::artifact_download::{Arrival, DeclaredArtifact, DownloadRefusal};
 use crate::artifact_staging_lock;
 use crate::artifact_staging_metadata::StagedPayload;
 use crate::configuration_check::CheckReport;
@@ -469,6 +469,19 @@ impl RunRefusal {
             Self::Local(message) => (message, exit_classification::LOCAL_FAILURE),
         };
         Completion { answer: Answer::Refusal(message), diagnostics: Vec::new(), exit }
+    }
+
+    /// Returns the words this refusal says, in the vocabulary it closed over.
+    ///
+    /// A caller that already knows which kind of refusal it holds reads the
+    /// message rather than rendering a whole completion, which is what a
+    /// boundary handing a failure to another in-process caller needs.
+    #[must_use]
+    pub fn message(&self) -> &str {
+        match self {
+            Self::Usage(message) | Self::Unavailable(message) | Self::Local(message) => message,
+            Self::Halted(_) => "somebody asked this run to stop",
+        }
     }
 }
 
@@ -1138,6 +1151,64 @@ impl CommandLineApplication<'_> {
         let response =
             self.exchange(&namespace, &hello, request, &admitted.operation_identifier)?;
         self.resolved(&namespace, &hello, &response, &self.access(&namespace, &hello, &admitted))
+    }
+
+    /// Fetches one operation's artifact into memory, verified whole.
+    ///
+    /// A protocol resource read has no destination to publish to and no reason
+    /// to make one, so this is the same transfer the download path performs
+    /// without a file: the daemon's declared length and digest are checked
+    /// against what actually arrived, and only then are the bytes handed back.
+    /// Nothing partial is ever returned, and nothing is written anywhere.
+    /// `maximum_bytes` is the largest artifact the asking reader can carry, and
+    /// an artifact past it is refused at its declared length rather than after
+    /// the bytes were buffered.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RunRefusal`] when the daemon cannot be reached, when what it
+    /// sent is not a transfer, or when the bytes do not match what it declared.
+    pub fn artifact_bytes(
+        &self,
+        invocation: &Invocation,
+        maximum_bytes: u64,
+    ) -> Result<(DeclaredArtifact, Vec<u8>), RunRefusal> {
+        let namespace = self.namespace(invocation)?;
+        let hello = self.owner(invocation, &namespace)?;
+        let request = observation_request(invocation)?;
+        let operation_identifier = required(invocation, OPERATION_IDENTIFIER_OPTION)?.to_owned();
+        let envelope = OperationEnvelope {
+            author_target_identity_digest: hello.author_target_identity_digest.clone(),
+            daemon_runtime_contract_digest: hello.daemon_runtime_contract_digest.clone(),
+            operation_protocol_version: spoken_operation_version(),
+            request,
+            request_identifier: self.request_identifier(),
+            selected_environment_revision: hello.selected_environment_revision.clone(),
+        };
+        envelope.require_well_formed().map_err(|failure| RunRefusal::Local(failure.to_string()))?;
+        let mut collected = crate::artifact_download::Collected::bounded(maximum_bytes);
+        let answer = {
+            let mut take = |event: ArtifactEvent| collected.take(event);
+            let streamed = self.daemon.stream_artifact(&namespace, &envelope, &mut take);
+            self.reached_stream(
+                streamed,
+                &Phase::FetchingArtifact {
+                    artifact_identifier: required(invocation, ARTIFACT_OPTION)?.to_owned(),
+                    operation_identifier,
+                },
+            )
+        };
+        if collected.declared().is_none() {
+            // The daemon answered something other than a transfer, which is its
+            // answer to this request rather than bytes this read can return.
+            let response = answer?;
+            return Err(RunRefusal::Local(format!(
+                "that daemon answered an artifact read with {response:?}"
+            )));
+        }
+        let (declared, bytes) =
+            collected.verified().map_err(|refusal| RunRefusal::Unavailable(refusal.to_string()))?;
+        Ok((declared.clone(), bytes.to_vec()))
     }
 
     /// Fetches one operation's artifact to a destination the caller named.

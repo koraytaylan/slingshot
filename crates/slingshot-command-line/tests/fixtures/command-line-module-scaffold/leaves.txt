@@ -25,6 +25,7 @@ crates/slingshot-command-line/src/operation_observation.rs|crate-root|top-level
 crates/slingshot-command-line/src/operation_submission.rs|crate-root|top-level
 crates/slingshot-command-line/src/predicate_arguments.rs|crate-root|top-level
 crates/slingshot-command-line/src/progress_renderer.rs|crate-root|top-level
+crates/slingshot-command-line/src/protocol_tool_runner.rs|crate-root|top-level
 crates/slingshot-command-line/src/property_document.rs|crate-root|top-level
 crates/slingshot-command-line/src/target_selection.rs|crate-root|top-level
 crates/slingshot-command-line/src/commands/content.rs|commands|0

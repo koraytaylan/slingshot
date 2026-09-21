@@ -145,6 +145,18 @@ that member makes strict MCP clients reject otherwise valid calls.
 
 <!-- end generated: resource-templates -->
 
+An operation address answers that operation's outcome, exactly as the
+`operation-result` tool would. An artifact address answers the artifact's own
+bytes, verified against the length and digest the daemon declared before the
+transfer began: a JSON or textual artifact arrives as `text` and every other
+media type as base64 in `blob`. This is how a result too large to inline is
+read, because such a result is answered with an address rather than its bytes.
+An artifact read quotes an expected digest, and the address itself names no
+digest, so the operation's own committed result is read first: it is the
+document that describes the operation's artifacts, and the digest it declares
+for the named artifact is the one the read carries. A result naming no such
+artifact is a local failure and no partial contents.
+
 A maintenance result belongs to a target rather than to any command, so its
 address names a target and an identifier and nothing else. Reading one asks for
 its metadata first and checks what the read starts against what the lookup

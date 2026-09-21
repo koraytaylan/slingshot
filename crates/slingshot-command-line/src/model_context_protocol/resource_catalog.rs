@@ -57,7 +57,7 @@ pub enum ResourceAddress {
         /// Which operation.
         operation_identifier: String,
     },
-    /// One artifact an operation produced, described and never streamed.
+    /// One artifact an operation produced, addressed so its bytes can be read.
     Artifact {
         /// Which namespace.
         namespace: Namespace,

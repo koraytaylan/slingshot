@@ -175,6 +175,67 @@ pub trait ToolRunner {
         tool: &ToolDescriptor,
         arguments: &Value,
     ) -> Result<MachineOutcomeEnvelope, String>;
+
+    /// Fetches one artifact's verified bytes for a resource read.
+    ///
+    /// A result too large to inline is answered with an address rather than its
+    /// bytes, and this is how a client that holds that address reads what it
+    /// names. The bytes are verified against the length and digest the daemon
+    /// declared before they are returned, so a resource a client reads is the
+    /// same document a command line would have received. `maximum_bytes` is the
+    /// largest artifact the asking reader can carry at all, and an artifact
+    /// past it is refused before the transfer begins rather than after its
+    /// memory was spent.
+    ///
+    /// # Errors
+    ///
+    /// Returns what stopped the fetch, in words a caller can act on. The
+    /// default is a refusal, because a runner that cannot reach a daemon has no
+    /// bytes to give and saying so is the only honest answer.
+    fn artifact_bytes(
+        &mut self,
+        namespace: &ResourceNamespace,
+        operation_identifier: &str,
+        artifact_identifier: &str,
+        maximum_bytes: u64,
+    ) -> Result<FetchedArtifact, String> {
+        let _ = (namespace, operation_identifier, artifact_identifier, maximum_bytes);
+        Err("this runner cannot reach the daemon an artifact belongs to".to_owned())
+    }
+}
+
+/// Which target one resource address names.
+///
+/// A resource address carries the profile, the environment, and the target it
+/// is about, because a client may hold an address for a target this process was
+/// not started for. A fetch checks all three rather than assuming the process's
+/// own selection, so an address cannot be answered by a different target that
+/// happens to serve the same operation identifier.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceNamespace {
+    /// Which profile the address names.
+    pub profile: String,
+    /// Which environment the address names.
+    pub environment: String,
+    /// Which target partition the address names.
+    pub author_target_identity_digest: String,
+}
+
+/// One artifact's bytes, exactly as the daemon vouched for them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FetchedArtifact {
+    /// Which artifact these bytes are.
+    pub artifact_identifier: String,
+    /// Which partition they belong to.
+    pub author_target_identity_digest: String,
+    /// How many bytes they are.
+    pub byte_length: u64,
+    /// What they digest to.
+    pub content_digest: String,
+    /// What kind of bytes they are.
+    pub media_type: String,
+    /// The bytes themselves.
+    pub bytes: Vec<u8>,
 }
 
 /// Returns the operation key one accepted argument document supplies.

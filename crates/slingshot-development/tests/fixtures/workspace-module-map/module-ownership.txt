@@ -107,6 +107,7 @@ crates/slingshot-command-line/src/platform_runtime/mod.rs|slingshot-command-line
 crates/slingshot-command-line/src/predicate_arguments.rs|slingshot-command-line|entry|leaf|slingshot_command_line::predicate_arguments|command-line-module-scaffold
 crates/slingshot-command-line/src/progress_renderer.rs|slingshot-command-line|entry|leaf|slingshot_command_line::progress_renderer|command-line-module-scaffold
 crates/slingshot-command-line/src/property_document.rs|slingshot-command-line|entry|leaf|slingshot_command_line::property_document|command-line-module-scaffold
+crates/slingshot-command-line/src/protocol_tool_runner.rs|slingshot-command-line|entry|leaf|slingshot_command_line::protocol_tool_runner|protocol-tool-runner-leaf
 crates/slingshot-command-line/src/target_selection.rs|slingshot-command-line|entry|leaf|slingshot_command_line::target_selection|command-line-module-scaffold
 crates/slingshot-configuration/src/additional_certificate_authority.rs|slingshot-configuration|contract|leaf|slingshot_configuration::additional_certificate_authority|profile-authentication-module-scaffold
 crates/slingshot-configuration/src/configuration_generation.rs|slingshot-configuration|contract|leaf|slingshot_configuration::configuration_generation|profile-authentication-module-scaffold

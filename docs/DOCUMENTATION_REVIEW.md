@@ -91,6 +91,6 @@ cannot inherit this review without an explicit renewed record.
 | `docs/COMMANDS.md` | `13d3aa65a38a2c3a070a2618c09fb68b568e4770ba5943740ec3b0f49d1413df` |
 | `docs/CONFIGURATION.md` | `775ce5363790d1b44a91fdb7e7b2015d538cce224de5030f5e13edec87b089b3` |
 | `docs/DAEMON.md` | `81ad319858de8e891df00b4712a21ca30ec803215b2d2bb351aa65ce90f65224` |
-| `docs/MODEL_CONTEXT_PROTOCOL.md` | `f946c4b2bb5d2ae1a092827e07e4f2e8d56f6e14a5987e5aee43fb9299183f73` |
+| `docs/MODEL_CONTEXT_PROTOCOL.md` | `e489bc317e1358d6aaad58e11d8b89ad83483af74093a70a7e3a0fb368245d56` |
 | `docs/RELEASES.md` | `c25a1800a6e20515d29569eec77003a267184a35e88d2a1c21d24630f0501d6a` |
 | `docs/WORKFLOWS.md` | `0bd107a373f258069f2e9472f5c17bea2ccb675aa070ccc581d49ce11c9f3f6e` |

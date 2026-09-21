@@ -35,5 +35,6 @@ pub mod operation_submission;
 pub mod platform_runtime;
 pub mod predicate_arguments;
 pub mod progress_renderer;
+pub mod protocol_tool_runner;
 pub mod property_document;
 pub mod target_selection;

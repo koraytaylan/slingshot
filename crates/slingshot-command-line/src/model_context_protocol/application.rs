@@ -309,8 +309,11 @@ impl ServerApplication {
     /// after a successful parse would look like a present empty document, so a
     /// server that cannot reach the daemon answers a local-application-error
     /// document instead. An operation address is asked of the runner as
-    /// `operation-result`; other published shapes that this process cannot
-    /// fetch are the same local failure rather than invented bytes.
+    /// `operation-result`. An artifact address is fetched as bytes and verified
+    /// against the length and digest the daemon declared, because a result too
+    /// large to inline is otherwise unreachable to a client holding its
+    /// address. A maintenance result, which this process has no read path for,
+    /// remains the same local failure rather than invented bytes.
     fn resources_read(&mut self, identifier: &Value, parameters: &Value) -> Result<Value, Refusal> {
         let uri = parameters.get("uri").and_then(Value::as_str).ok_or_else(|| {
             Refusal::ParametersUnusable {
@@ -321,38 +324,121 @@ impl ServerApplication {
             .map_err(|failure| Refusal::ParametersUnusable { detail: failure.to_string() })?;
         let retry_identifier =
             identifier.as_str().map_or_else(|| identifier_key(identifier), str::to_owned);
-        let result_tool = self.tools.iter().find(|held| held.name == "operation-result").cloned();
-        let envelope = match (self.runner_as_mut(), address, result_tool) {
-            (
-                Some(runner),
-                crate::model_context_protocol::resource_catalog::ResourceAddress::Operation {
-                    operation_identifier,
-                    ..
+        match address {
+            crate::model_context_protocol::resource_catalog::ResourceAddress::Artifact {
+                namespace,
+                operation_identifier,
+                artifact_identifier,
+            } => self.read_artifact_resource(
+                uri,
+                &operation_execution::ResourceNamespace {
+                    profile: namespace.profile,
+                    environment: namespace.environment,
+                    author_target_identity_digest: namespace.author_target_identity_digest,
                 },
-                Some(tool),
-            ) => {
-                match runner.run(&tool, &json!({ "operation_identifier": operation_identifier })) {
-                    Ok(reached) => reached,
-                    Err(detail) => {
-                        self.diagnostics.record(&detail);
-                        MachineOutcomeEnvelope::LocalApplicationError {
-                            interruption: local_interruption(&retry_identifier),
-                        }
-                    }
+                &operation_identifier,
+                &artifact_identifier,
+                &retry_identifier,
+            ),
+            crate::model_context_protocol::resource_catalog::ResourceAddress::Operation {
+                operation_identifier,
+                ..
+            } => {
+                let envelope =
+                    self.read_operation_outcome(&operation_identifier, &retry_identifier);
+                Ok(answered_resource(uri, &envelope))
+            }
+            crate::model_context_protocol::resource_catalog::ResourceAddress::MaintenanceResult {
+                ..
+            } => Ok(answered_resource(
+                uri,
+                &MachineOutcomeEnvelope::LocalApplicationError {
+                    interruption: local_interruption(&retry_identifier),
+                },
+            )),
+        }
+    }
+
+    /// Runs the observation one operation address names.
+    fn read_operation_outcome(
+        &mut self,
+        operation_identifier: &str,
+        retry_identifier: &str,
+    ) -> MachineOutcomeEnvelope {
+        let result_tool = self.tools.iter().find(|held| held.name == "operation-result").cloned();
+        let Some(runner) = self.runner_as_mut() else {
+            return MachineOutcomeEnvelope::LocalApplicationError {
+                interruption: local_interruption(retry_identifier),
+            };
+        };
+        let Some(tool) = result_tool else {
+            return MachineOutcomeEnvelope::LocalApplicationError {
+                interruption: local_interruption(retry_identifier),
+            };
+        };
+        match runner.run(&tool, &json!({ "operation_identifier": operation_identifier })) {
+            Ok(reached) => reached,
+            Err(detail) => {
+                self.diagnostics.record(&detail);
+                MachineOutcomeEnvelope::LocalApplicationError {
+                    interruption: local_interruption(retry_identifier),
                 }
             }
-            _ => MachineOutcomeEnvelope::LocalApplicationError {
-                interruption: local_interruption(&retry_identifier),
-            },
+        }
+    }
+
+    /// Reads one artifact's bytes and answers them as resource contents.
+    ///
+    /// The bytes come from the same boundary a tool call reaches, verified
+    /// against the length and digest the daemon declared before the transfer
+    /// began. JSON and textual artifacts are answered as text; every other
+    /// media type is answered base64 in `blob`, which is the only encoding a
+    /// resource may carry bytes in. Nothing partial is ever returned: a refused
+    /// or mismatched transfer is a local failure and no contents.
+    fn read_artifact_resource(
+        &mut self,
+        uri: &str,
+        namespace: &operation_execution::ResourceNamespace,
+        operation_identifier: &str,
+        artifact_identifier: &str,
+        retry_identifier: &str,
+    ) -> Result<Value, Refusal> {
+        let fetched = match self.runner_as_mut() {
+            Some(runner) => runner.artifact_bytes(
+                namespace,
+                operation_identifier,
+                artifact_identifier,
+                crate::model_context_protocol::size_budget::maximum_resource_blob_bytes(),
+            ),
+            None => Err("this server reaches no daemon".to_owned()),
         };
-        let text = crate::machine_readable_renderer::render(&envelope)
-            .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
-        let is_error = envelope.tag() == "local_application_error"
-            || envelope.tag() == "operation_terminal_error";
-        Ok(json!({
-            "contents": [{ "uri": uri, "mimeType": "application/json", "text": text }],
-            "isError": is_error,
-        }))
+        let fetched = match fetched {
+            Ok(fetched) => fetched,
+            Err(detail) => {
+                self.diagnostics.record(&detail);
+                return Ok(answered_resource(
+                    uri,
+                    &MachineOutcomeEnvelope::LocalApplicationError {
+                        interruption: local_interruption(retry_identifier),
+                    },
+                ));
+            }
+        };
+        if fetched.artifact_identifier != artifact_identifier {
+            let detail = format!(
+                "the daemon answered an artifact read for {artifact_identifier} with {}",
+                fetched.artifact_identifier
+            );
+            self.diagnostics.record(&detail);
+            return Ok(answered_resource(
+                uri,
+                &MachineOutcomeEnvelope::LocalApplicationError {
+                    interruption: local_interruption(retry_identifier),
+                },
+            ));
+        }
+        let content = resource_content(uri, &fetched.media_type, &fetched.bytes);
+        Ok(json!({ "contents": [content], "isError": false }))
     }
 
     /// Runs one `tools/call` through the runner both eras share.
@@ -491,6 +577,41 @@ fn legacy_refusal(refusal: LegacyRefusal) -> Refusal {
 /// that and nothing about why.
 fn local_interruption(retry_identifier: &str) -> Interruption {
     Interruption::PreReceipt { retry_identifier: retry_identifier.to_owned() }
+}
+
+/// Returns one envelope answered as one canonical resource content.
+///
+/// The text is the command line's own rendering of the same document, so a
+/// client reading the resource and a caller reading the command line cannot
+/// disagree about what happened.
+fn answered_resource(uri: &str, envelope: &MachineOutcomeEnvelope) -> Value {
+    let text = crate::machine_readable_renderer::render(envelope).unwrap_or_default();
+    let is_error =
+        envelope.tag() == "local_application_error" || envelope.tag() == "operation_terminal_error";
+    json!({
+        "contents": [{ "uri": uri, "mimeType": "application/json", "text": text }],
+        "isError": is_error,
+    })
+}
+
+/// Returns one artifact carried as the resource content its media type allows.
+///
+/// A JSON or textual artifact travels as `text` so a client reads exactly the
+/// bytes a command line would have parsed. Every other media type travels
+/// base64 in `blob`, because that is the only member a resource carries bytes
+/// in and a media type this build cannot promise is textual would otherwise be
+/// corrupted by an encoding guessed at here.
+fn resource_content(uri: &str, media_type: &str, bytes: &[u8]) -> Value {
+    let textual = media_type == "application/json"
+        || media_type.starts_with("text/")
+        || media_type.ends_with("+json");
+    if textual {
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        return json!({ "uri": uri, "mimeType": media_type, "text": text });
+    }
+    use base64::Engine as _;
+    let blob = base64::engine::general_purpose::STANDARD.encode(bytes);
+    json!({ "uri": uri, "mimeType": media_type, "blob": blob })
 }
 
 /// Returns one rendered result line.

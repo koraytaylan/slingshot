@@ -26,14 +26,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use serde_json::Value;
-
 use slingshot_configuration::profile_loader::{
     ConfigurationDiagnostic, DiagnosticSourceClass, DiagnosticStage, LoadedProfiles,
 };
 use slingshot_daemon::platform_runtime::endpoint::{self, EndpointAddress};
 use slingshot_daemon::runtime_namespace::RuntimeNamespace;
-use slingshot_domain::command::catalog::{Command, CommandCatalog};
 use slingshot_domain::profile_authentication_contract::ConfigurationFailureCode;
 use slingshot_local_protocol::control::{HELLO_METHOD, HelloResult};
 use slingshot_local_protocol::envelope::{ControlRequest, ControlResponse, ResponseOutcome};
@@ -56,17 +53,20 @@ use crate::invocation::{
     self, ENVIRONMENT_OPTION, Invocation, OutputForm, PROFILE_OPTION, RUNTIME_ROOT_OPTION,
     SERVE_LEAF, Selection,
 };
-use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
 use crate::machine_readable_renderer;
 use crate::model_context_protocol::application::{Served, ServerApplication};
-use crate::model_context_protocol::operation_execution::{self, ToolRunner};
-use crate::model_context_protocol::schema_projection;
 use crate::model_context_protocol::standard_stream_transport::{
     BoundedLine, LineSink, OutputFailure, Written, read_bounded_line,
 };
-use crate::model_context_protocol::tool_catalog::{KeyPresence, ToolDescriptor};
+use crate::protocol_tool_runner::tool_runner;
+
+/// Returns the invocation one tool call describes.
+///
+/// Re-exported from the module that owns the translation, because this is where
+/// the tool-called-a-leaf surface has always been reached from and a caller
+/// that reaches it there must not have to learn about a file split.
+pub use crate::protocol_tool_runner::tool_invocation;
 use crate::target_selection::NamespacePair;
-use crate::target_selection::namespace_of;
 
 /// Exit status of a command that finished.
 pub const EXIT_SUCCESS: u8 = 0;
@@ -90,6 +90,7 @@ const DAEMON_SERVE_LEAF: &str = "daemon-serve";
 /// daemon owns a namespace only in a directory this user alone owns, and the
 /// data directory is shared with durable state and with whatever an earlier
 /// installation created there with wider permissions.
+/// The runtime directory a namespace gets when the platform names none.
 pub const DEFAULT_RUNTIME_DIRECTORY: &str = "runtime";
 
 /// How many words a leaf may be spelled with.
@@ -260,175 +261,6 @@ pub fn serves_protocol(arguments: &[String]) -> bool {
     invocation::parse(&named).is_ok_and(|invocation| invocation.verb == SERVE_LEAF)
 }
 
-/// Runs one tool call as the invocation a command line would have made.
-///
-/// The protocol server and the command line reach the same daemon through the
-/// same application, so a tool call is turned into the invocation its
-/// arguments describe and run through it. A second path to an author would be
-/// a second place the same checks live, and the two would eventually disagree
-/// about what a request did.
-struct ProductToolRunner {
-    /// The contract every frame is written under.
-    contract: FoundationContract,
-    /// Where this run's daemon objects live.
-    runtime_root: PathBuf,
-    /// Which profile and environment the process was started for.
-    selection: Selection,
-    /// The executable a daemon would be started from, when one is.
-    executable: PathBuf,
-}
-
-impl ToolRunner for ProductToolRunner {
-    fn run(
-        &mut self,
-        tool: &ToolDescriptor,
-        arguments: &serde_json::Value,
-    ) -> Result<MachineOutcomeEnvelope, String> {
-        let invocation = tool_invocation(tool, arguments, &self.selection)?;
-        let contract = &self.contract;
-        let executable = &self.executable;
-        let request_identity = ProductRequestIdentity;
-        let configuration = ProductConfiguration;
-        let filesystem = ProductFilesystem;
-        let network = ProductNetwork;
-        let signals = ProductSignals::watching();
-        let daemon = ProductDaemon::new(contract, &self.runtime_root, signals.flag());
-        let process = ProductProcess {
-            contract,
-            executable: executable.to_path_buf(),
-            runtime_root: self.runtime_root.clone(),
-        };
-        let application = CommandLineApplication {
-            request_identity: &request_identity,
-            configuration: &configuration,
-            daemon: &daemon,
-            filesystem: &filesystem,
-            network: &network,
-            process: &process,
-            provenance: Provenance::embedded(),
-            signals: &signals,
-        };
-        match complete_over(&application, &invocation).answer {
-            Answer::Envelope(envelope) => Ok(*envelope),
-            Answer::Refusal(message) => Err(message),
-            Answer::Text(text) => {
-                Err(format!("{} answered text rather than an outcome: {text}", tool.name))
-            }
-        }
-    }
-}
-
-/// Returns what a protocol server's tool calls run through.
-///
-/// A run whose selection or runtime root cannot be resolved still serves the
-/// protocol, and every call it cannot run is told why rather than failing
-/// without a reason.
-fn tool_runner(invocation: &Invocation, executable: &Path) -> Box<dyn ToolRunner> {
-    match (runtime_root(invocation), namespace_of(&invocation.selection)) {
-        (Ok(root), Ok(_)) => Box::new(ProductToolRunner {
-            contract: FoundationContract::embedded(),
-            runtime_root: root,
-            selection: invocation.selection.clone(),
-            executable: executable.to_path_buf(),
-        }),
-        (Err(reason), _) => Box::new(UnavailableToolRunner { reason }),
-        (_, Err(refusal)) => Box::new(UnavailableToolRunner {
-            reason: format!(
-                "this server was started without a usable target ({refusal}); start it with \
-                     `{SERVE_LEAF} {PROFILE_OPTION} <profile> {ENVIRONMENT_OPTION} <environment>`"
-            ),
-        }),
-    }
-}
-
-/// Answers every tool call with the one reason this server cannot run any.
-struct UnavailableToolRunner {
-    /// Why no call can reach a daemon, in words a caller can act on.
-    reason: String,
-}
-
-impl ToolRunner for UnavailableToolRunner {
-    fn run(
-        &mut self,
-        _tool: &ToolDescriptor,
-        _arguments: &serde_json::Value,
-    ) -> Result<MachineOutcomeEnvelope, String> {
-        Err(self.reason.clone())
-    }
-}
-
-/// Returns the invocation one tool call describes.
-///
-/// The two kinds of tool are answered differently because they are different
-/// things. A registry command carries the command's own argument document,
-/// which is exactly what the tool's declared `inputSchema` describes, so a call
-/// becomes the typed command the schema names rather than a command line spelled
-/// with options: `root_path` is the command's member and `--path` is the option
-/// that fills it, and renaming one into the other would be inventing a mapping
-/// the registry never declared. A control is not a command at all - it is one of
-/// the observation or maintenance leaves - so its declared members are mapped to
-/// the options those leaves read, in one table both sides can find.
-///
-/// # Errors
-///
-/// Returns what stopped the call, in words a caller can act on.
-pub fn tool_invocation(
-    tool: &ToolDescriptor,
-    arguments: &serde_json::Value,
-    selection: &Selection,
-) -> Result<Invocation, String> {
-    let held = arguments.as_object().ok_or_else(|| "a tool call carries an object".to_owned())?;
-    let detached = schema_projection::detached(arguments);
-    // A key the caller supplies identifies an operation whose rerun must be
-    // that same operation, which is exactly what a command that cannot repeat
-    // harmlessly needs. A command that may omit its key is given one by the
-    // command line instead: the declared schema offers the member as optional,
-    // so a caller's spelling of it is a preference rather than a request the
-    // command line has a rule for.
-    let operation_key = match tool.operation_key {
-        KeyPresence::Required => operation_execution::supplied_key(arguments).map(str::to_owned),
-        KeyPresence::Optional | KeyPresence::Absent => None,
-    };
-    let is_command = CommandCatalog::published().find(&tool.name).is_some();
-    let (arguments, command) = if is_command {
-        (std::collections::BTreeMap::new(), Some(tool_command(tool, held)?))
-    } else {
-        (schema_projection::control_options(tool, arguments)?, None)
-    };
-    Ok(Invocation {
-        arguments,
-        command,
-        detached,
-        operation_key,
-        output: Some(OutputForm::Machine),
-        selection: selection.clone(),
-        verb: tool.name.clone(),
-    })
-}
-
-/// Returns the typed command one tool call's arguments describe.
-///
-/// The arguments are the command's own document, so this is a deserialization
-/// rather than a translation: a member the command does not declare is an error
-/// the command itself names, and a value outside the command's own vocabulary
-/// fails where the command's own constructor would have refused it.
-fn tool_command(
-    tool: &ToolDescriptor,
-    held: &serde_json::Map<String, Value>,
-) -> Result<Command, String> {
-    let mut document = held.clone();
-    document.remove(schema_projection::OPERATION_KEY_MEMBER);
-    document.remove(schema_projection::DETACHED_MEMBER);
-    document.insert("command".to_owned(), Value::String(tool.name.clone()));
-    serde_json::from_value::<Command>(Value::Object(document))
-        .map_err(|failure| format!("{} did not accept these arguments: {failure}", tool.name))
-}
-
-/// Returns what one parsed invocation produced against an application.
-fn complete_over(application: &CommandLineApplication<'_>, invocation: &Invocation) -> Completion {
-    application.run(invocation)
-}
-
 /// Returns what one parsed invocation produced against the real boundaries.
 fn complete(invocation: &Invocation, executable: &Path) -> Completion {
     let contract = FoundationContract::embedded();
@@ -467,7 +299,7 @@ fn complete(invocation: &Invocation, executable: &Path) -> Completion {
 }
 
 /// Returns the runtime root this invocation acts under.
-fn runtime_root(invocation: &Invocation) -> Result<PathBuf, String> {
+pub(crate) fn runtime_root(invocation: &Invocation) -> Result<PathBuf, String> {
     match invocation.arguments.get(RUNTIME_ROOT_OPTION) {
         Some(named) => Ok(PathBuf::from(named)),
         None => default_runtime_root(),
@@ -631,7 +463,7 @@ fn serve(options: &[String], diagnostics: &mut dyn Write) -> i32 {
 
 /// The product's collision-resistant invocation identity generator.
 #[derive(Debug)]
-struct ProductRequestIdentity;
+pub(crate) struct ProductRequestIdentity;
 
 impl RequestIdentityBoundary for ProductRequestIdentity {
     fn invent_request_identifier(&self) -> String {
@@ -641,7 +473,7 @@ impl RequestIdentityBoundary for ProductRequestIdentity {
 
 /// The configuration this account has.
 #[derive(Debug)]
-struct ProductConfiguration;
+pub(crate) struct ProductConfiguration;
 
 impl ConfigurationBoundary for ProductConfiguration {
     fn check(&self, selection: &Selection) -> CheckReport {
@@ -715,7 +547,7 @@ fn authority_diagnostic(
 
 /// The filesystem a caller asked something to be written to.
 #[derive(Debug)]
-struct ProductFilesystem;
+pub(crate) struct ProductFilesystem;
 
 impl FilesystemBoundary for ProductFilesystem {
     fn place(&self, destination: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -725,7 +557,7 @@ impl FilesystemBoundary for ProductFilesystem {
 
 /// The network, which nothing here reaches.
 #[derive(Debug)]
-struct ProductNetwork;
+pub(crate) struct ProductNetwork;
 
 impl NetworkBoundary for ProductNetwork {
     fn authority_answers(&self, _authority: &str) -> bool {
@@ -735,7 +567,7 @@ impl NetworkBoundary for ProductNetwork {
 
 /// Whether somebody has asked this run to stop.
 #[derive(Debug)]
-struct ProductSignals {
+pub(crate) struct ProductSignals {
     /// Set once, by the thread that waits for the signal.
     requested: Arc<AtomicBool>,
 }
@@ -746,12 +578,12 @@ impl ProductSignals {
     /// Shared with the exchanges, so a signal that arrives while one is waiting
     /// ends the wait instead of being noticed after it. A run blocked on a
     /// daemon that never answers is exactly when somebody presses this.
-    fn flag(&self) -> Arc<AtomicBool> {
+    pub(crate) fn flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.requested)
     }
 
     /// Returns a boundary watching for the interrupt a person types.
-    fn watching() -> Self {
+    pub(crate) fn watching() -> Self {
         let requested = Arc::new(AtomicBool::new(false));
         let armed = Arc::clone(&requested);
         std::thread::spawn(move || {
@@ -774,13 +606,13 @@ impl SignalBoundary for ProductSignals {
 }
 
 /// Creating the daemon that owns a namespace.
-struct ProductProcess<'contract> {
+pub(crate) struct ProductProcess<'contract> {
     /// The contract a start runs under.
-    contract: &'contract FoundationContract,
+    pub(crate) contract: &'contract FoundationContract,
     /// This executable, which the child is created from.
-    executable: PathBuf,
+    pub(crate) executable: PathBuf,
     /// Where the namespace's objects live.
-    runtime_root: PathBuf,
+    pub(crate) runtime_root: PathBuf,
 }
 
 impl ProcessBoundary for ProductProcess<'_> {
@@ -814,7 +646,7 @@ async fn stopped(requested: &AtomicBool) {
 }
 
 /// Talking to the daemon that owns a namespace.
-struct ProductDaemon<'contract> {
+pub(crate) struct ProductDaemon<'contract> {
     /// The contract every frame is written under.
     contract: &'contract FoundationContract,
     /// Where the namespace's objects live.
@@ -827,7 +659,7 @@ struct ProductDaemon<'contract> {
 
 impl<'contract> ProductDaemon<'contract> {
     /// Returns a boundary that reaches daemons under one runtime root.
-    fn new(
+    pub(crate) fn new(
         contract: &'contract FoundationContract,
         runtime_root: &Path,
         stop_requested: Arc<AtomicBool>,

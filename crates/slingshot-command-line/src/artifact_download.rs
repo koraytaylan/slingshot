@@ -42,6 +42,14 @@ pub enum DownloadRefusal {
     /// The destination or a staging file is not an ordinary file.
     #[error("a destination is an ordinary file this user owns, and this is not")]
     DestinationUnusable,
+    /// The artifact is larger than the reader that asked for it may carry.
+    #[error("this artifact holds {actual} bytes, and the reader may carry {allowed}")]
+    TooLarge {
+        /// How long it actually is.
+        actual: u64,
+        /// How many bytes the reader may carry.
+        allowed: u64,
+    },
 }
 
 /// One transfer in progress, verified as it goes.
@@ -274,6 +282,149 @@ impl Arrival {
     /// knowledge rather than the caller's.
     pub fn discard(&mut self) {
         std::fs::remove_file(&self.staging_path).ok();
+    }
+}
+
+/// One artifact's whole bytes, verified in memory rather than staged.
+///
+/// The destination-publishing [`Arrival`] exists for a caller who named a file
+/// to land the bytes in. A caller whose reader is the protocol server's answer
+/// has no file to publish to and no reason to create one, so this collects the
+/// same bytes under the same checks and hands them back whole. Nothing is
+/// visible anywhere: a refused transfer leaves no partial artifact, because the
+/// only place the bytes ever lived was this value.
+#[derive(Debug)]
+pub struct Collected {
+    /// What the daemon declared before any bytes arrived.
+    declared: Option<DeclaredArtifact>,
+    /// What the bytes have digested to so far.
+    hasher: sha2::Sha256,
+    /// How much has arrived.
+    received: u64,
+    /// The bytes themselves, in order.
+    bytes: Vec<u8>,
+    /// How many bytes this collector may hold at all.
+    allowed_bytes: u64,
+}
+
+impl Collected {
+    /// Returns an empty collection that has not been told what is coming.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::bounded(u64::MAX)
+    }
+
+    /// Returns an empty collection that refuses an artifact past `allowed_bytes`.
+    ///
+    /// The reader an artifact is being fetched for has its own bound - a
+    /// protocol message, a buffer - and an artifact larger than that bound
+    /// cannot be carried by it however whole the bytes are. Refusing at the
+    /// declared length means the transfer ends before a byte of it is buffered,
+    /// rather than after the memory was already spent.
+    #[must_use]
+    pub fn bounded(allowed_bytes: u64) -> Self {
+        use sha2::Digest as _;
+        Self {
+            declared: None,
+            hasher: sha2::Sha256::new(),
+            received: 0,
+            bytes: Vec::new(),
+            allowed_bytes,
+        }
+    }
+
+    /// Takes one event from the daemon.
+    ///
+    /// # Errors
+    ///
+    /// Returns what is wrong with it as words a caller can act on: a chunk
+    /// before the daemon said what was coming, more bytes than it declared, or
+    /// an artifact past the bound this collector carries.
+    pub fn take(&mut self, event: crate::daemon_connection::ArtifactEvent) -> Result<(), String> {
+        use sha2::Digest as _;
+        match event {
+            crate::daemon_connection::ArtifactEvent::Start {
+                artifact_identifier,
+                byte_length,
+                content_digest,
+                media_type,
+            } => {
+                if self.declared.is_some() {
+                    return Err("the daemon declared the artifact twice".to_owned());
+                }
+                if byte_length > self.allowed_bytes {
+                    return Err(DownloadRefusal::TooLarge {
+                        actual: byte_length,
+                        allowed: self.allowed_bytes,
+                    }
+                    .to_string());
+                }
+                self.declared = Some(DeclaredArtifact {
+                    artifact_identifier,
+                    byte_length,
+                    content_digest,
+                    media_type,
+                });
+                Ok(())
+            }
+            crate::daemon_connection::ArtifactEvent::Chunk(bytes) => {
+                let declared = self.declared.as_ref().ok_or_else(|| {
+                    "the daemon sent bytes before saying what they are".to_owned()
+                })?;
+                let reached = self.received.saturating_add(bytes.len() as u64);
+                if reached > declared.byte_length {
+                    return Err(DownloadRefusal::LengthDrifted {
+                        actual: reached,
+                        expected: declared.byte_length,
+                    }
+                    .to_string());
+                }
+                self.hasher.update(&bytes);
+                self.received = reached;
+                self.bytes.extend_from_slice(&bytes);
+                Ok(())
+            }
+        }
+    }
+
+    /// Returns what the daemon declared, when it declared anything.
+    #[must_use]
+    pub fn declared(&self) -> Option<&DeclaredArtifact> {
+        self.declared.as_ref()
+    }
+
+    /// Returns the whole artifact, or says why what arrived is not it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DownloadRefusal::LengthDrifted`] when less arrived than the
+    /// daemon declared, and [`DownloadRefusal::DigestDrifted`] when the bytes
+    /// are not the ones it described. Consumes nothing: a caller that takes the
+    /// refusal has no bytes to act on, and no partial artifact exists anywhere.
+    pub fn verified(&self) -> Result<(&DeclaredArtifact, &[u8]), DownloadRefusal> {
+        use sha2::Digest as _;
+        let declared = self
+            .declared
+            .as_ref()
+            .ok_or(DownloadRefusal::LengthDrifted { actual: self.received, expected: 0 })?;
+        if self.received != declared.byte_length {
+            return Err(DownloadRefusal::LengthDrifted {
+                actual: self.received,
+                expected: declared.byte_length,
+            });
+        }
+        let digest: String =
+            self.hasher.clone().finalize().iter().map(|byte| format!("{byte:02x}")).collect();
+        if digest != declared.content_digest {
+            return Err(DownloadRefusal::DigestDrifted);
+        }
+        Ok((declared, &self.bytes))
+    }
+}
+
+impl Default for Collected {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

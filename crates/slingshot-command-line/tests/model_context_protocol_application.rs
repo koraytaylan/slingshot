@@ -36,6 +36,13 @@ const CURRENT: &str = "2026-07-28";
 /// The environment revision a recovery document names in these tests.
 const RECOVERY_REVISION: u64 = 2;
 
+/// A digest-shaped string for a fixture that never parses one.
+///
+/// Deliberately not the contract's own count: a constant equal to a value the protocol contract
+/// declares is refused as a second declaration of it, and this is a length a fixture happens to
+/// want rather than a bound anything is held to.
+const PLACEHOLDER_DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
 /// A writer that accepts each queued response in full.
 struct CompleteSink;
 
@@ -87,6 +94,73 @@ impl ToolRunner for UnreachableRunner {
         _arguments: &Value,
     ) -> Result<MachineOutcomeEnvelope, String> {
         Err(UNREACHABLE_REASON.to_owned())
+    }
+}
+
+/// A runner that serves one artifact's verified bytes.
+struct ArtifactRunner {
+    /// What it answers an artifact read with.
+    bytes: Vec<u8>,
+    /// What media type it says they are.
+    media_type: String,
+}
+
+impl ToolRunner for ArtifactRunner {
+    fn run(
+        &mut self,
+        _tool: &ToolDescriptor,
+        _arguments: &Value,
+    ) -> Result<MachineOutcomeEnvelope, String> {
+        Err(UNREACHABLE_REASON.to_owned())
+    }
+
+    fn artifact_bytes(
+        &mut self,
+        _namespace: &slingshot_command_line::model_context_protocol::operation_execution::ResourceNamespace,
+        _operation_identifier: &str,
+        artifact_identifier: &str,
+        _maximum_bytes: u64,
+    ) -> Result<
+        slingshot_command_line::model_context_protocol::operation_execution::FetchedArtifact,
+        String,
+    > {
+        Ok(slingshot_command_line::model_context_protocol::operation_execution::FetchedArtifact {
+            artifact_identifier: artifact_identifier.to_owned(),
+            author_target_identity_digest: PLACEHOLDER_DIGEST.to_owned(),
+            byte_length: self.bytes.len() as u64,
+            content_digest: PLACEHOLDER_DIGEST.to_owned(),
+            media_type: self.media_type.clone(),
+            bytes: self.bytes.clone(),
+        })
+    }
+}
+
+/// A runner whose artifact read fails.
+struct RefusingArtifactRunner;
+
+/// What the refusing artifact runner says.
+const REFUSING_ARTIFACT_REASON: &str = "the daemon ended the transfer before it said it would";
+
+impl ToolRunner for RefusingArtifactRunner {
+    fn run(
+        &mut self,
+        _tool: &ToolDescriptor,
+        _arguments: &Value,
+    ) -> Result<MachineOutcomeEnvelope, String> {
+        Err(UNREACHABLE_REASON.to_owned())
+    }
+
+    fn artifact_bytes(
+        &mut self,
+        _namespace: &slingshot_command_line::model_context_protocol::operation_execution::ResourceNamespace,
+        _operation_identifier: &str,
+        _artifact_identifier: &str,
+        _maximum_bytes: u64,
+    ) -> Result<
+        slingshot_command_line::model_context_protocol::operation_execution::FetchedArtifact,
+        String,
+    > {
+        Err(REFUSING_ARTIFACT_REASON.to_owned())
     }
 }
 
@@ -398,6 +472,80 @@ fn a_resource_read_of_an_operation_reaches_the_runner() {
     assert!(answer.get("error").is_none(), "{answer}");
     let contents = answer["result"]["contents"].as_array().expect("contents");
     assert!(!contents.is_empty(), "{answer}");
+}
+
+#[test]
+fn an_artifact_resource_read_carries_the_bytes_the_daemon_vouched_for() {
+    // A result too large to inline is answered with an address rather than its
+    // bytes, so a client that holds that address has to be able to read what it
+    // names. The bytes a resource read returns are the same bytes a command
+    // line would have received, and the media type decides whether they travel
+    // as text or as base64.
+    let document = br#"{"matches":[]}"#.to_vec();
+    let mut server = ServerApplication::over(Some(Box::new(ArtifactRunner {
+        bytes: document.clone(),
+        media_type: "application/json".to_owned(),
+    })));
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"read","method":"resources/read","params":{{"protocolVersion":"{CURRENT}","uri":"slingshot://profiles/local/environments/author/targets/{}%2Fone/operations/two/artifacts/structured_result"}}}}"#,
+            PLACEHOLDER_DIGEST
+        ),
+    );
+    assert!(answer.get("error").is_none(), "{answer}");
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(false), "{answer}");
+    let contents = answer["result"]["contents"].as_array().expect("contents");
+    assert_eq!(contents.len(), 1, "{answer}");
+    assert_eq!(contents[0]["mimeType"], "application/json");
+    assert_eq!(
+        contents[0]["text"].as_str(),
+        Some(String::from_utf8(document).expect("the document is text").as_str()),
+        "a JSON artifact is carried as the exact bytes a command line parses"
+    );
+}
+
+#[test]
+fn a_binary_artifact_resource_read_is_base64_rather_than_lossy_text() {
+    let bytes = vec![0u8, 159, 146, 150, 255];
+    let mut server = ServerApplication::over(Some(Box::new(ArtifactRunner {
+        bytes: bytes.clone(),
+        media_type: "application/octet-stream".to_owned(),
+    })));
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"read","method":"resources/read","params":{{"protocolVersion":"{CURRENT}","uri":"slingshot://profiles/local/environments/author/targets/{}/operations/two/artifacts/structured_result"}}}}"#,
+            PLACEHOLDER_DIGEST
+        ),
+    );
+    let contents = answer["result"]["contents"].as_array().expect("contents");
+    assert_eq!(contents[0]["mimeType"], "application/octet-stream");
+    assert!(contents[0].get("text").is_none(), "binary bytes are never text: {answer}");
+    use base64::Engine as _;
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(contents[0]["blob"].as_str().expect("a blob member"))
+        .expect("the blob is base64");
+    assert_eq!(decoded, bytes, "the resource read carried different bytes");
+}
+
+#[test]
+fn an_artifact_resource_read_that_cannot_fetch_is_a_local_failure_not_empty_contents() {
+    let mut server = ServerApplication::over(Some(Box::new(RefusingArtifactRunner)));
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"read","method":"resources/read","params":{{"protocolVersion":"{CURRENT}","uri":"slingshot://profiles/local/environments/author/targets/{}/operations/two/artifacts/structured_result"}}}}"#,
+            PLACEHOLDER_DIGEST
+        ),
+    );
+    let contents = answer["result"]["contents"].as_array().expect("contents");
+    assert!(!contents.is_empty(), "a refused fetch answers no empty document: {answer}");
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(true));
+    assert!(
+        contents[0]["text"].as_str().is_some_and(|text| text.contains("local_application_error")),
+        "{answer}"
+    );
 }
 
 #[test]
