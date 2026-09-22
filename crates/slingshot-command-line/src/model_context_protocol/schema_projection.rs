@@ -400,6 +400,79 @@ pub fn output_schema(tool: &ToolDescriptor) -> Value {
     })
 }
 
+/// Returns one call's arguments with every set it carries in the order the byte contract requires.
+///
+/// An array the tool's own schema declares `uniqueItems` is a set: which
+/// members it holds is the question, and the byte contract spells a set in
+/// ascending order with no member twice so that one set has one digest. A
+/// caller writing `["error", "queued"]` or `["queued", "error"]` asks the same
+/// question, so the set is put in that order here rather than refused for the
+/// order its members were written in. Only arrays of strings are ordered, and
+/// only where the schema says the array is a set; every other value is left
+/// exactly as it arrived for the checks that follow to judge.
+#[must_use]
+pub fn ordered_sets(tool: &ToolDescriptor, arguments: Value) -> Value {
+    input_schema(tool).map_or(arguments.clone(), |schema| ordered_against(&schema, arguments))
+}
+
+/// Orders the sets in one value against the schema that describes it.
+fn ordered_against(schema: &Value, value: Value) -> Value {
+    match value {
+        Value::Object(members) => Value::Object(
+            members
+                .into_iter()
+                .map(|(name, held)| {
+                    let described = member_schemas(schema, &name);
+                    let ordered =
+                        described.iter().fold(held, |current, each| ordered_against(each, current));
+                    (name, ordered)
+                })
+                .collect(),
+        ),
+        Value::Array(items) => {
+            let items = match schema.get("items") {
+                Some(item_schema) => {
+                    items.into_iter().map(|item| ordered_against(item_schema, item)).collect()
+                }
+                None => items,
+            };
+            if schema.get("uniqueItems") == Some(&Value::Bool(true))
+                && items.iter().all(Value::is_string)
+            {
+                let mut spelled: Vec<String> =
+                    items.iter().filter_map(Value::as_str).map(str::to_owned).collect();
+                spelled.sort_unstable();
+                spelled.dedup();
+                return Value::Array(spelled.into_iter().map(Value::String).collect());
+            }
+            Value::Array(items)
+        }
+        other => other,
+    }
+}
+
+/// Returns every schema that may describe one member of an object value.
+///
+/// A member described inside alternatives is described by each of them, and
+/// ordering a set under an alternative the value does not match changes
+/// nothing a later check would accept anyway.
+fn member_schemas(schema: &Value, name: &str) -> Vec<Value> {
+    let mut found: Vec<Value> = schema
+        .get("properties")
+        .and_then(|properties| properties.get(name))
+        .into_iter()
+        .cloned()
+        .collect();
+    for combinator in ["oneOf", "anyOf", "allOf"] {
+        if let Some(alternatives) = schema.get(combinator).and_then(Value::as_array) {
+            for alternative in alternatives {
+                found.extend(member_schemas(alternative, name));
+            }
+        }
+    }
+    found
+}
+
 /// Requires one document to pass every check, in order.
 ///
 /// The raw bytes are kept and validated as they arrived. Parsing and

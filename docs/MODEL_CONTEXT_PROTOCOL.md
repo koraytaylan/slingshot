@@ -133,6 +133,11 @@ command does.
 
 <!-- end generated: tools -->
 
+An array a tool's schema declares `uniqueItems` is a set, and a call may write
+its members in any order and more than once: the set is put in ascending order
+with no member twice before anything checks it, because that is how the byte
+contract spells one set. Nothing else a call sends is reordered or rewritten.
+
 A command the registry classifies as not intrinsically idempotent requires an
 operation key. A command that may omit one gets one invented, once: the same
 identifier is reused for every reconnect and retry of that request, because a

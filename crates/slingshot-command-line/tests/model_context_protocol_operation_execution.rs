@@ -107,6 +107,21 @@ fn a_control_invents_nothing_because_it_starts_nothing() {
 }
 
 #[test]
+fn a_set_written_in_any_order_is_the_set_the_contract_spells_in_order() {
+    let written = serde_json::to_vec(&json!({ "states": ["queued", "error", "queued"] }))
+        .expect("the arguments serialize");
+    let (_, decoded) = require_runnable("find_sling_jobs", &written, &Provenance::recomputed())
+        .expect("a set in another order is the same question");
+    assert_eq!(decoded["states"], json!(["error", "queued"]));
+    let ordered = serde_json::to_vec(&json!({ "phrase": "b a", "root_path": "/content" }))
+        .expect("the arguments serialize");
+    let (_, untouched) =
+        require_runnable("find_pages_containing_phrase", &ordered, &Provenance::recomputed())
+            .expect("a call with no set is runnable");
+    assert_eq!(untouched["phrase"], json!("b a"), "a value that is not a set was reordered");
+}
+
+#[test]
 fn nothing_runs_until_provenance_the_tool_and_the_arguments_all_pass() {
     let arguments = canonical(&json!({ OPERATION_KEY_MEMBER: "mine" }));
     let (held, decoded) =

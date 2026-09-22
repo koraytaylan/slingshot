@@ -29,7 +29,7 @@ use serde_json::Value;
 
 use crate::machine_outcome_envelope::MachineOutcomeEnvelope;
 use crate::model_context_protocol::schema_projection::{
-    OPERATION_KEY_MEMBER, ProjectionRefusal, require_acceptable,
+    OPERATION_KEY_MEMBER, ProjectionRefusal, ordered_sets, require_acceptable,
 };
 use crate::model_context_protocol::tool_catalog::{
     KeyPresence, Provenance, ToolDescriptor, derive,
@@ -149,7 +149,13 @@ pub fn require_runnable(
         .into_iter()
         .find(|held| held.name == named)
         .ok_or_else(|| ExecutionRefusal::ToolUnknown(named.to_owned()))?;
-    let arguments = require_acceptable(&tool, raw_arguments)?;
+    // A set written in another order is re-spelled in the contract's order. Everything else is
+    // judged exactly as it arrived, so bytes that were not canonical are still refused as such.
+    let reordered = serde_json::from_slice::<Value>(raw_arguments).ok().and_then(|arguments| {
+        let ordered = ordered_sets(&tool, arguments.clone());
+        (ordered != arguments).then(|| serde_json::to_vec(&ordered).ok()).flatten()
+    });
+    let arguments = require_acceptable(&tool, reordered.as_deref().unwrap_or(raw_arguments))?;
     Ok((tool, arguments))
 }
 
