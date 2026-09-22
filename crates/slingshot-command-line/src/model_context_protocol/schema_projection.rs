@@ -100,7 +100,13 @@ pub fn input_schema(tool: &ToolDescriptor) -> Result<Value, ProjectionRefusal> {
             || ProjectionRefusal::at(Stage::DecodedShape, "properties are an object"),
         )?;
     properties.insert(OPERATION_KEY_MEMBER.to_owned(), operation_key_schema());
-    properties.insert(DETACHED_MEMBER.to_owned(), json!({ "type": "boolean" }));
+    properties.insert(
+        DETACHED_MEMBER.to_owned(),
+        json!({ "type": "boolean", "description": DETACHED_DESCRIPTION }),
+    );
+    if let Some(window) = properties.get_mut(RESULT_WINDOW_MEMBER).and_then(Value::as_object_mut) {
+        window.insert("description".to_owned(), json!(RESULT_WINDOW_DESCRIPTION));
+    }
     if tool.operation_key == KeyPresence::Required {
         let required = object.entry("required").or_insert_with(|| json!([]));
         if let Some(members) = required.as_array_mut() {
@@ -116,8 +122,31 @@ fn operation_key_schema() -> Value {
         "type": "string",
         "minLength": LEAST_OPERATION_KEY_BYTES,
         "maxLength": MOST_OPERATION_KEY_BYTES,
+        "description": OPERATION_KEY_DESCRIPTION,
     })
 }
+
+/// The member a paged command's window is carried in.
+const RESULT_WINDOW_MEMBER: &str = "result_window";
+
+/// What a model host shows beside the operation key.
+///
+/// Descriptions are annotations: a validator ignores them, so adding one
+/// changes what a model reads and nothing a call is checked against.
+const OPERATION_KEY_DESCRIPTION: &str = "A name you choose for this piece of work. Calling again \
+     with the same key and the same arguments is the same operation and returns its outcome \
+     rather than doing the work twice; a new key is new work.";
+
+/// What a model host shows beside the detached flag.
+const DETACHED_DESCRIPTION: &str = "When true, return as soon as the work is accepted, with an \
+     operation identifier to pass to operation-wait or operation-status, instead of waiting for \
+     the outcome.";
+
+/// What a model host shows beside a paged command's window.
+const RESULT_WINDOW_DESCRIPTION: &str = "Which page of results to answer. Omit it for the first \
+     page. Pass {\"mode\":\"initial\",\"offset\":0,\"limit\":n} to choose where the first page \
+     starts and how long it is, or {\"mode\":\"continuation\",\"continuation_token\":t} with \
+     the next_continuation_token a previous page answered with to read the page after it.";
 
 /// Returns the input schema one control declares.
 fn control_input_schema(tool: &ToolDescriptor) -> Result<Value, ProjectionRefusal> {
