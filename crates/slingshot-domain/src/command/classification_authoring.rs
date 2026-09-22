@@ -268,7 +268,8 @@ pub const LIST_COMPONENT_DEFINITIONS: ClassificationRow = ClassificationRow {
     wire_name: "list_component_definitions",
     title: "List component definitions",
     description: "Reports the component definitions under one anchor, each with the resource \
-                  type its path resolves as.",
+                  type its path resolves as. Every component available on an environment is the \
+                  set under /apps, and a request for all of them names that anchor.",
     access: AccessClassification::Read,
     destructive: DestructiveClassification::NonDestructive,
     intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
