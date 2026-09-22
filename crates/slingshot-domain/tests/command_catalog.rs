@@ -43,7 +43,7 @@ fn every_command_appears_once_in_ascending_order() {
     let catalog = CommandCatalog::published();
     let names: Vec<&str> =
         catalog.descriptors().iter().map(|descriptor| descriptor.wire_name.as_str()).collect();
-    assert_eq!(names.len(), 64, "sixty-four commands, and no sixty-fifth");
+    assert_eq!(names.len(), 72, "seventy-two commands, and no seventy-third");
     let mut sorted = names.clone();
     sorted.sort_unstable();
     sorted.dedup();
@@ -267,7 +267,49 @@ fn every_classification_row_is_exactly_what_the_architecture_says() {
             true,
         ),
         (
+            "list_child_nodes",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_child_nodes_by_type",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
             "list_child_pages",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_component_definitions",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_components",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_content_fragment_models",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_content_fragments",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_experience_fragments",
             AccessClassification::Read,
             DestructiveClassification::NonDestructive,
             true,
@@ -286,6 +328,12 @@ fn every_classification_row_is_exactly_what_the_architecture_says() {
         ),
         (
             "list_open_service_gateway_initiative_components",
+            AccessClassification::Read,
+            DestructiveClassification::NonDestructive,
+            true,
+        ),
+        (
+            "list_page_templates",
             AccessClassification::Read,
             DestructiveClassification::NonDestructive,
             true,
@@ -464,7 +512,7 @@ fn every_hint_derives_from_its_own_column_and_no_other() {
         .iter()
         .filter(|descriptor| descriptor.intrinsic_idempotency.idempotent_hint())
         .count();
-    assert_eq!(idempotent, 26, "every read is idempotent except the two that publish an artifact");
+    assert_eq!(idempotent, 34, "every read is idempotent except the two that publish an artifact");
     assert_eq!(
         catalog.descriptors().len() - idempotent,
         38,
@@ -736,7 +784,7 @@ fn a_substitution_with_no_distinguishing_fact_is_deferred_rather_than_claimed() 
 fn the_committed_catalog_names_every_command_and_no_other() {
     let catalog: Value = serde_json::from_str(COMMITTED).expect("the fixture is one value");
     let rows = catalog.as_array().expect("a list of descriptors");
-    assert_eq!(rows.len(), 64);
+    assert_eq!(rows.len(), 72);
     let names: Vec<&str> = rows.iter().map(|row| text(row, "wire_name")).collect();
     assert_eq!(names, COMMAND_WIRE_NAMES);
 }

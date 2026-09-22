@@ -83,10 +83,18 @@ command does.
 | `inspect_sling_job` | true | false | true | optional |
 | `inspect_workflow_instance` | true | false | true | optional |
 | `list_asset_renditions` | true | false | true | optional |
+| `list_child_nodes` | true | false | true | optional |
+| `list_child_nodes_by_type` | true | false | true | optional |
 | `list_child_pages` | true | false | true | optional |
+| `list_component_definitions` | true | false | true | optional |
+| `list_components` | true | false | true | optional |
+| `list_content_fragment_models` | true | false | true | optional |
+| `list_content_fragments` | true | false | true | optional |
+| `list_experience_fragments` | true | false | true | optional |
 | `list_group_members` | true | false | true | optional |
 | `list_open_service_gateway_initiative_bundles` | true | false | true | optional |
 | `list_open_service_gateway_initiative_components` | true | false | true | optional |
+| `list_page_templates` | true | false | true | optional |
 | `list_replication_agents` | true | false | true | optional |
 | `list_resource_mappings` | true | false | true | optional |
 | `list_sling_job_queues` | true | false | true | optional |
@@ -177,6 +185,12 @@ was asked.
 
 The text a client receives and the structured content beside it are the same
 document, and the same bytes a command line writes for the same outcome.
+`operation-artifact` is the one exception. A host that displays only
+`structuredContent` would otherwise repeat the access envelope and never the
+bytes the call was made to fetch, so that tool's structured content is the
+verified artifact body: a JSON document as itself, and every other media type
+as base64 beside its media type. The command line still writes the access
+envelope.
 
 <!-- generated: errors -->
 

@@ -324,8 +324,74 @@ impl AnswersCommand for crate::command::list_asset_renditions::ListAssetRenditio
     }
 }
 
+impl AnswersCommand for crate::command::list_child_nodes::ListChildNodesResult {
+    type Asked = crate::command::list_child_nodes::ListChildNodesCommand;
+
+    fn answers(&self, asked: &Self::Asked) -> bool {
+        self.require_answers(asked).is_ok()
+    }
+}
+
+impl AnswersCommand for crate::command::list_child_nodes::ListChildNodesByTypeResult {
+    type Asked = crate::command::list_child_nodes::ListChildNodesByTypeCommand;
+
+    fn answers(&self, asked: &Self::Asked) -> bool {
+        self.require_answers(asked).is_ok()
+    }
+}
+
 impl AnswersCommand for crate::command::list_child_pages::ListChildPagesResult {
     type Asked = crate::command::list_child_pages::ListChildPagesCommand;
+
+    fn answers(&self, asked: &Self::Asked) -> bool {
+        self.require_answers(asked).is_ok()
+    }
+}
+
+impl AnswersCommand
+    for crate::command::list_content_fragment_models::ListContentFragmentModelsResult
+{
+    type Asked = crate::command::list_content_fragment_models::ListContentFragmentModelsCommand;
+
+    fn answers(&self, asked: &Self::Asked) -> bool {
+        self.require_answers(asked).is_ok()
+    }
+}
+
+impl AnswersCommand for crate::command::list_component_definitions::ListComponentDefinitionsResult {
+    type Asked = crate::command::list_component_definitions::ListComponentDefinitionsCommand;
+
+    fn answers(&self, asked: &Self::Asked) -> bool {
+        self.require_answers(asked).is_ok()
+    }
+}
+
+impl AnswersCommand for crate::command::list_components::ListComponentsResult {
+    type Asked = crate::command::list_components::ListComponentsCommand;
+
+    fn answers(&self, asked: &Self::Asked) -> bool {
+        self.require_answers(asked).is_ok()
+    }
+}
+
+impl AnswersCommand for crate::command::list_content_fragments::ListContentFragmentsResult {
+    type Asked = crate::command::list_content_fragments::ListContentFragmentsCommand;
+
+    fn answers(&self, asked: &Self::Asked) -> bool {
+        self.require_answers(asked).is_ok()
+    }
+}
+
+impl AnswersCommand for crate::command::list_experience_fragments::ListExperienceFragmentsResult {
+    type Asked = crate::command::list_experience_fragments::ListExperienceFragmentsCommand;
+
+    fn answers(&self, asked: &Self::Asked) -> bool {
+        self.require_answers(asked).is_ok()
+    }
+}
+
+impl AnswersCommand for crate::command::list_page_templates::ListPageTemplatesResult {
+    type Asked = crate::command::list_page_templates::ListPageTemplatesCommand;
 
     fn answers(&self, asked: &Self::Asked) -> bool {
         self.require_answers(asked).is_ok()

@@ -74,10 +74,18 @@ pub const COMMAND_WIRE_NAMES: &[&str] = &[
     "inspect_sling_job",
     "inspect_workflow_instance",
     "list_asset_renditions",
+    "list_child_nodes",
+    "list_child_nodes_by_type",
     "list_child_pages",
+    "list_component_definitions",
+    "list_components",
+    "list_content_fragment_models",
+    "list_content_fragments",
+    "list_experience_fragments",
     "list_group_members",
     "list_open_service_gateway_initiative_bundles",
     "list_open_service_gateway_initiative_components",
+    "list_page_templates",
     "list_replication_agents",
     "list_resource_mappings",
     "list_sling_job_queues",
@@ -351,6 +359,24 @@ pub(crate) fn page_match(limits: &CommandContract) -> Value {
         "required": ["repository_path"],
         "properties": {
             "repository_path": repository_path(limits),
+            "title": bounded_string(limits.limit("maximum_page_title_bytes")),
+        },
+    })
+}
+
+/// Returns the schema one component listing match satisfies.
+///
+/// A component listing names the resource type beside the path, because that
+/// spelling is what `add_component` and `find_pages_using_components` take.
+pub(crate) fn component_listing_match(limits: &CommandContract) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repository_path", "resource_type"],
+        "properties": {
+            "repository_path": repository_path(limits),
+            "resource_type":
+                nonempty_string(limits.limit("maximum_component_resource_type_bytes")),
             "title": bounded_string(limits.limit("maximum_page_title_bytes")),
         },
     })

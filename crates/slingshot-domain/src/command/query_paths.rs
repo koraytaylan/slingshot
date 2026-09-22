@@ -105,6 +105,22 @@ pub fn anchor_contains(anchor: &RepositoryPath, path: &RepositoryPath) -> bool {
     anchor == path || path.strip_prefix(anchor).is_some_and(|rest| rest.starts_with('/'))
 }
 
+/// Returns whether `path` is the node directly inside `folders`.
+///
+/// `folders` are the segments immediately above the node, in order. A page
+/// template is the child of `settings` / `wcm` / `templates`, and a content
+/// fragment model is the child of `settings` / `dam` / `cfm` / `models`. A
+/// grandchild of that folder is a part of the template, not another one.
+#[must_use]
+pub fn direct_child_of(path: &RepositoryPath, folders: &[&str]) -> bool {
+    let segments = path.segments();
+    if segments.len() <= folders.len() {
+        return false;
+    }
+    let start = segments.len() - folders.len() - 1;
+    folders.iter().enumerate().all(|(index, folder)| segments[start + index].as_text() == *folder)
+}
+
 /// One request to find nodes under an anchor.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

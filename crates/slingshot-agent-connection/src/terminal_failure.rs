@@ -66,6 +66,12 @@ pub fn decode_read_failure(
         Command::ListSlingJobQueues(command) => Some(&command.result_window),
         Command::ListWorkflowModels(command) => Some(&command.result_window),
         Command::ListChildPages(command) => Some(&command.result_window),
+        Command::ListComponentDefinitions(command) => Some(&command.result_window),
+        Command::ListComponents(command) => Some(&command.result_window),
+        Command::ListContentFragmentModels(command) => Some(&command.result_window),
+        Command::ListContentFragments(command) => Some(&command.result_window),
+        Command::ListExperienceFragments(command) => Some(&command.result_window),
+        Command::ListPageTemplates(command) => Some(&command.result_window),
         Command::ListGroupMembers(command) => Some(&command.result_window),
         Command::ListAssetRenditions(command) => Some(&command.result_window),
         Command::InspectReplicationQueue(command) => Some(&command.result_window),
@@ -127,6 +133,34 @@ pub fn decode_read_failure(
             }
         }
         Command::ListChildPages(command) => {
+            let refusal: slingshot_domain::command::query_paths::AnchorRefusal =
+                serde_json::from_str(&document.canonical_failure)
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
+            if refusal.root_path() != &command.root_path {
+                return Err(TerminalFailureDecodeRefusal);
+            }
+        }
+        Command::ListComponentDefinitions(_)
+        | Command::ListComponents(_)
+        | Command::ListContentFragments(_)
+        | Command::ListExperienceFragments(_)
+        | Command::ListContentFragmentModels(_) => {
+            let refusal: slingshot_domain::command::query_paths::AnchorRefusal =
+                serde_json::from_str(&document.canonical_failure)
+                    .map_err(|_| TerminalFailureDecodeRefusal)?;
+            let root = match command {
+                Command::ListComponentDefinitions(held) => &held.root_path,
+                Command::ListComponents(held) => &held.root_path,
+                Command::ListContentFragments(held) => &held.root_path,
+                Command::ListExperienceFragments(held) => &held.root_path,
+                Command::ListContentFragmentModels(held) => &held.root_path,
+                _ => return Err(TerminalFailureDecodeRefusal),
+            };
+            if refusal.root_path() != root {
+                return Err(TerminalFailureDecodeRefusal);
+            }
+        }
+        Command::ListPageTemplates(command) => {
             let refusal: slingshot_domain::command::query_paths::AnchorRefusal =
                 serde_json::from_str(&document.canonical_failure)
                     .map_err(|_| TerminalFailureDecodeRefusal)?;

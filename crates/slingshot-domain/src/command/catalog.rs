@@ -561,9 +561,30 @@ command_family! {
     /// Ask the author to list asset renditions.
     /// What list asset renditions answered.
     ListAssetRenditions, "list_asset_renditions", crate::command::list_asset_renditions::ListAssetRenditionsCommand, crate::command::list_asset_renditions::ListAssetRenditionsResult;
+    /// List the immediate children of one anchor.
+    /// What listing the immediate children produced.
+    ListChildNodes, "list_child_nodes", crate::command::list_child_nodes::ListChildNodesCommand, crate::command::list_child_nodes::ListChildNodesResult;
+    /// List the immediate children of one anchor that are one primary type.
+    /// What listing the immediate children of one type produced.
+    ListChildNodesByType, "list_child_nodes_by_type", crate::command::list_child_nodes::ListChildNodesByTypeCommand, crate::command::list_child_nodes::ListChildNodesByTypeResult;
     /// Ask the author to list child pages.
     /// What list child pages answered.
     ListChildPages, "list_child_pages", crate::command::list_child_pages::ListChildPagesCommand, crate::command::list_child_pages::ListChildPagesResult;
+    /// List the component definitions under one anchor.
+    /// What listing the component definitions produced.
+    ListComponentDefinitions, "list_component_definitions", crate::command::list_component_definitions::ListComponentDefinitionsCommand, crate::command::list_component_definitions::ListComponentDefinitionsResult;
+    /// List the component instances under one anchor.
+    /// What listing the component instances produced.
+    ListComponents, "list_components", crate::command::list_components::ListComponentsCommand, crate::command::list_components::ListComponentsResult;
+    /// List the content fragment models under one anchor.
+    /// What listing the content fragment models produced.
+    ListContentFragmentModels, "list_content_fragment_models", crate::command::list_content_fragment_models::ListContentFragmentModelsCommand, crate::command::list_content_fragment_models::ListContentFragmentModelsResult;
+    /// List the content fragments under one anchor.
+    /// What listing the content fragments produced.
+    ListContentFragments, "list_content_fragments", crate::command::list_content_fragments::ListContentFragmentsCommand, crate::command::list_content_fragments::ListContentFragmentsResult;
+    /// List the experience fragments under one anchor.
+    /// What listing the experience fragments produced.
+    ListExperienceFragments, "list_experience_fragments", crate::command::list_experience_fragments::ListExperienceFragmentsCommand, crate::command::list_experience_fragments::ListExperienceFragmentsResult;
     /// Ask the author to list group members.
     /// What list group members answered.
     ListGroupMembers, "list_group_members", crate::command::list_group_members::ListGroupMembersCommand, crate::command::list_group_members::ListGroupMembersResult;
@@ -573,6 +594,9 @@ command_family! {
     /// Ask the author to list open service gateway initiative components.
     /// What list open service gateway initiative components answered.
     ListOpenServiceGatewayInitiativeComponents, "list_open_service_gateway_initiative_components", crate::command::list_open_service_gateway_initiative_components::ListOpenServiceGatewayInitiativeComponentsCommand, crate::command::list_open_service_gateway_initiative_components::ListOpenServiceGatewayInitiativeComponentsResult;
+    /// List the editable page templates under one anchor.
+    /// What listing the page templates produced.
+    ListPageTemplates, "list_page_templates", crate::command::list_page_templates::ListPageTemplatesCommand, crate::command::list_page_templates::ListPageTemplatesResult;
     /// Ask the author to list replication agents.
     /// What list replication agents answered.
     ListReplicationAgents, "list_replication_agents", crate::command::replication_agent::ListReplicationAgentsCommand, crate::command::replication_agent::ListReplicationAgentsResult;

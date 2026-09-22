@@ -106,10 +106,18 @@ it did.
 | `inspect_sling_job` | Inspect a Sling job | Read | refused | 262144 bytes |
 | `inspect_workflow_instance` | Inspect a workflow instance | Read | refused | 262144 bytes |
 | `list_asset_renditions` | List asset renditions | Read | refused | 1048576 bytes |
+| `list_child_nodes` | List child nodes | Read | refused | 1048576 bytes |
+| `list_child_nodes_by_type` | List child nodes by type | Read | refused | 1048576 bytes |
 | `list_child_pages` | List child pages | Read | refused | 1048576 bytes |
+| `list_component_definitions` | List component definitions | Read | refused | 1048576 bytes |
+| `list_components` | List component instances | Read | refused | 1048576 bytes |
+| `list_content_fragment_models` | List content fragment models | Read | refused | 1048576 bytes |
+| `list_content_fragments` | List content fragments | Read | refused | 1048576 bytes |
+| `list_experience_fragments` | List experience fragments | Read | refused | 1048576 bytes |
 | `list_group_members` | List group members | Read | refused | 1048576 bytes |
 | `list_open_service_gateway_initiative_bundles` | List bundles | Read | refused | 1048576 bytes |
 | `list_open_service_gateway_initiative_components` | List components | Read | refused | 1048576 bytes |
+| `list_page_templates` | List page templates | Read | refused | 1048576 bytes |
 | `list_replication_agents` | List replication agents | Read | refused | 1048576 bytes |
 | `list_resource_mappings` | List resource mappings | Read | refused | 1048576 bytes |
 | `list_sling_job_queues` | List Sling job queues | Read | refused | 1048576 bytes |
@@ -212,10 +220,18 @@ behaviour.
 | `inspect_sling_job` | `job_not_found`, `job_inventory_failed`, `result_budget_exceeded` |
 | `inspect_workflow_instance` | `instance_not_found`, `instance_access_denied`, `workflow_inventory_failed`, `result_budget_exceeded` |
 | `list_asset_renditions` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `asset_not_found`, `asset_access_denied`, `asset_invalid` |
+| `list_child_nodes` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
+| `list_child_nodes_by_type` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
 | `list_child_pages` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
+| `list_component_definitions` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
+| `list_components` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
+| `list_content_fragment_models` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
+| `list_content_fragments` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
+| `list_experience_fragments` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
 | `list_group_members` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `group_not_found`, `authorizable_kind_mismatch`, `authorizable_access_denied` |
 | `list_open_service_gateway_initiative_bundles` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `bundle_inventory_failed` |
 | `list_open_service_gateway_initiative_components` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `component_inventory_failed` |
+| `list_page_templates` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
 | `list_replication_agents` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `agent_inventory_failed` |
 | `list_resource_mappings` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `mapping_inventory_failed` |
 | `list_sling_job_queues` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `job_inventory_failed` |
@@ -345,8 +361,8 @@ the leaf is refused before a single byte of configuration is read, and the
 directory on this machine.
 
 What it may run is the registry's own answer. A command is admissible when the
-registry calls it a read that replaces nothing, which is twenty-eight of the
-sixty-four rows; the thirty-six that write are refused before anything is
+registry calls it a read that replaces nothing, which is thirty-six of the
+seventy-two rows; the thirty-six that write are refused before anything is
 dispatched. Whether
 running a command twice is running it once never enters into that decision -
 that column says whether a retry is safe, not whether a run may happen.

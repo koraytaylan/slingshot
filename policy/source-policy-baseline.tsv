@@ -888,7 +888,7 @@ crates/slingshot-command-line/src/model_context_protocol/current_stateless_revis
 crates/slingshot-command-line/src/model_context_protocol/standard_stream_transport.rs	77	fallible-interface-omits-its-failure-section	read_bounded_line
 crates/slingshot-command-line/src/property_document.rs	119	function-branches-too-many-ways	require_unique_members reaches 18
 crates/slingshot-command-line/tests/artifact_fetch.rs	218	function-branches-too-many-ways	stream_artifact reaches 11
-crates/slingshot-command-line/tests/model_context_protocol_tool_arguments.rs	38	function-branches-too-many-ways	value_for reaches 17
+crates/slingshot-command-line/tests/model_context_protocol_tool_arguments.rs	38	function-branches-too-many-ways	value_for reaches 18
 crates/slingshot-command-line/tests/page_mutation_commands.rs	168	numeric-value-carries-no-name	2
 crates/slingshot-command-line/tests/support/runtime_fixture.rs	3	exported-item-is-not-documented	prepare
 crates/slingshot-command-line/tests/support/runtime_fixture.rs	8	numeric-value-carries-no-name	0o700

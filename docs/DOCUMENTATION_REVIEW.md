@@ -67,6 +67,19 @@ Everything else that names a command is generated from the registry and
 compared byte for byte, so no other document could have drifted without the
 gate saying so.
 
+Reviewed again after the child listings grew from one row to three. The two new
+rows - every child of an anchor, and the children of one named primary type -
+were rendered into the command reference and the protocol reference from the
+registry itself. One prose statement counted the old surface and was corrected
+rather than left to be discovered: the live-author paragraph in the command
+reference, which had said twenty-eight of sixty-four rows are admissible. The
+live-author leaf's own documentation did not count rows and needed no change.
+
+Reviewed again after four catalogues joined that surface: component definitions,
+component instances, content fragments, and experience fragments. Their rows were
+rendered from the registry into the command reference and the protocol reference.
+The live-author paragraph now counts thirty-six of seventy-two rows as admissible.
+
 Reviewed again after a start that could not produce a daemon stopped being
 silent. The architecture note, the daemon document, and the command reference
 now state what the build does: a start refuses a runtime root its user does not
@@ -86,11 +99,11 @@ cannot inherit this review without an explicit renewed record.
 |---|---|
 | `README.md` | `8a69bafa9663c68fec56e78c38833710a693b232af2f865f9bee32774721468c` |
 | `CONTRIBUTING.md` | `97e3f1a0bd8723865cc4b858606e3a25dafe75d18039e99d49a2eafde2c7be0d` |
-| `ARCHITECTURE.md` | `b2c10c698c7ef4a899711dbd29d6f381aa58669555b0311fc26720b9a92384bc` |
+| `ARCHITECTURE.md` | `7b5fe4d75b11e63bae6c7d4de6c2426009025fc9b03c23d906e899996c5534cb` |
 | `docs/AGENT_PROTOCOL.md` | `ece5eae8453303b299635ede39026267888f13749ca718f0a1a528f4ef738806` |
-| `docs/COMMANDS.md` | `13d3aa65a38a2c3a070a2618c09fb68b568e4770ba5943740ec3b0f49d1413df` |
+| `docs/COMMANDS.md` | `0932820c4a2771eb07f47ee86dbb25dc29f32dd4018df38fcd3fae3dc8090639` |
 | `docs/CONFIGURATION.md` | `775ce5363790d1b44a91fdb7e7b2015d538cce224de5030f5e13edec87b089b3` |
 | `docs/DAEMON.md` | `81ad319858de8e891df00b4712a21ca30ec803215b2d2bb351aa65ce90f65224` |
-| `docs/MODEL_CONTEXT_PROTOCOL.md` | `e489bc317e1358d6aaad58e11d8b89ad83483af74093a70a7e3a0fb368245d56` |
+| `docs/MODEL_CONTEXT_PROTOCOL.md` | `bf8120295338336692714d04dc35effc93502eb960282ae09f2be25c200dd172` |
 | `docs/RELEASES.md` | `c25a1800a6e20515d29569eec77003a267184a35e88d2a1c21d24630f0501d6a` |
 | `docs/WORKFLOWS.md` | `0bd107a373f258069f2e9472f5c17bea2ccb675aa070ccc581d49ce11c9f3f6e` |

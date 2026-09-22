@@ -47,7 +47,7 @@ const GENERATED: &str = "generated-identifier";
 const ROOT: &str = "/content/site";
 
 /// How many published commands repeat harmlessly.
-const IDEMPOTENT_COMMANDS: usize = 26;
+const IDEMPOTENT_COMMANDS: usize = 34;
 
 /// How many need a caller key.
 const NON_IDEMPOTENT_COMMANDS: usize = 38;

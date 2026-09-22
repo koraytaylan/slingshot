@@ -146,7 +146,7 @@ reading, resuming, maintenance, and stopping rules are set out in
 
 ## What is not here
 
-No Adobe Experience Manager behavior. Sixty-four commands are published as
+No Adobe Experience Manager behavior. Seventy-two commands are published as
 contracts - what each is called, what it accepts, what it answers, and what it
 may refuse with - and the agent that carries any of them out is built
 separately and is not in this repository. No aggregate proof across platform

@@ -1,6 +1,6 @@
 //! Pages, components, assets, and fragments.
 //!
-//! Every row here is a write except the two listings, and every write is
+//! Every row here is a write except the listings, and every write is
 //! destructive except a creation: creating something that was not there replaces
 //! nothing, while changing, moving, or removing something replaces or ends what
 //! was already visible.
@@ -207,6 +207,20 @@ pub const DELETE_PAGE: ClassificationRow = ClassificationRow {
     discovery: false,
 };
 
+/// List editable page templates.
+pub const LIST_PAGE_TEMPLATES: ClassificationRow = ClassificationRow {
+    wire_name: "list_page_templates",
+    title: "List page templates",
+    description: "Reports the editable page templates directly inside \
+                  settings/wcm/templates under one anchor.",
+    access: AccessClassification::Read,
+    destructive: DestructiveClassification::NonDestructive,
+    intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
+    result_bytes_limit: "maximum_discovery_result_bytes",
+    failure_categories: ROOT_ANCHOR_FAILURES,
+    discovery: true,
+};
+
 /// List asset renditions.
 pub const LIST_ASSET_RENDITIONS: ClassificationRow = ClassificationRow {
     wire_name: "list_asset_renditions",
@@ -218,6 +232,104 @@ pub const LIST_ASSET_RENDITIONS: ClassificationRow = ClassificationRow {
     intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
     result_bytes_limit: "maximum_discovery_result_bytes",
     failure_categories: &["asset_not_found", "asset_access_denied", "asset_invalid"],
+    discovery: true,
+};
+
+/// List child nodes.
+pub const LIST_CHILD_NODES: ClassificationRow = ClassificationRow {
+    wire_name: "list_child_nodes",
+    title: "List child nodes",
+    description: "Reports the nodes that are immediate children of one anchor, and no \
+                  deeper, whatever their primary type.",
+    access: AccessClassification::Read,
+    destructive: DestructiveClassification::NonDestructive,
+    intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
+    result_bytes_limit: "maximum_discovery_result_bytes",
+    failure_categories: ROOT_ANCHOR_FAILURES,
+    discovery: true,
+};
+
+/// List child nodes by type.
+pub const LIST_CHILD_NODES_BY_TYPE: ClassificationRow = ClassificationRow {
+    wire_name: "list_child_nodes_by_type",
+    title: "List child nodes by type",
+    description: "Reports the immediate children of one anchor that are exactly one named \
+                  primary type, and no deeper.",
+    access: AccessClassification::Read,
+    destructive: DestructiveClassification::NonDestructive,
+    intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
+    result_bytes_limit: "maximum_discovery_result_bytes",
+    failure_categories: ROOT_ANCHOR_FAILURES,
+    discovery: true,
+};
+
+/// List component definitions.
+pub const LIST_COMPONENT_DEFINITIONS: ClassificationRow = ClassificationRow {
+    wire_name: "list_component_definitions",
+    title: "List component definitions",
+    description: "Reports the component definitions under one anchor, each with the resource \
+                  type its path resolves as.",
+    access: AccessClassification::Read,
+    destructive: DestructiveClassification::NonDestructive,
+    intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
+    result_bytes_limit: "maximum_discovery_result_bytes",
+    failure_categories: ROOT_ANCHOR_FAILURES,
+    discovery: true,
+};
+
+/// List component instances.
+pub const LIST_COMPONENTS: ClassificationRow = ClassificationRow {
+    wire_name: "list_components",
+    title: "List component instances",
+    description: "Reports the component instances under one anchor, each with the resource \
+                  type it declares.",
+    access: AccessClassification::Read,
+    destructive: DestructiveClassification::NonDestructive,
+    intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
+    result_bytes_limit: "maximum_discovery_result_bytes",
+    failure_categories: ROOT_ANCHOR_FAILURES,
+    discovery: true,
+};
+
+/// List content fragment models.
+pub const LIST_CONTENT_FRAGMENT_MODELS: ClassificationRow = ClassificationRow {
+    wire_name: "list_content_fragment_models",
+    title: "List content fragment models",
+    description: "Reports the content fragment models directly inside \
+                  settings/dam/cfm/models under one anchor.",
+    access: AccessClassification::Read,
+    destructive: DestructiveClassification::NonDestructive,
+    intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
+    result_bytes_limit: "maximum_discovery_result_bytes",
+    failure_categories: ROOT_ANCHOR_FAILURES,
+    discovery: true,
+};
+
+/// List content fragments.
+pub const LIST_CONTENT_FRAGMENTS: ClassificationRow = ClassificationRow {
+    wire_name: "list_content_fragments",
+    title: "List content fragments",
+    description: "Reports the content fragments under one anchor, and not the assets beside \
+                  them.",
+    access: AccessClassification::Read,
+    destructive: DestructiveClassification::NonDestructive,
+    intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
+    result_bytes_limit: "maximum_discovery_result_bytes",
+    failure_categories: ROOT_ANCHOR_FAILURES,
+    discovery: true,
+};
+
+/// List experience fragments.
+pub const LIST_EXPERIENCE_FRAGMENTS: ClassificationRow = ClassificationRow {
+    wire_name: "list_experience_fragments",
+    title: "List experience fragments",
+    description: "Reports the experience fragments under one anchor, and not the variations \
+                  each fragment holds.",
+    access: AccessClassification::Read,
+    destructive: DestructiveClassification::NonDestructive,
+    intrinsic_idempotency: IntrinsicIdempotencyClassification::IntrinsicallyIdempotent,
+    result_bytes_limit: "maximum_discovery_result_bytes",
+    failure_categories: ROOT_ANCHOR_FAILURES,
     discovery: true,
 };
 

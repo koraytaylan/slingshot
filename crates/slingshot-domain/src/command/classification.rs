@@ -65,7 +65,7 @@ pub const DISCOVERY_FAILURES: &[&str] = &[
 /// Anchor failures the rooted discovery commands allow.
 pub const ROOT_ANCHOR_FAILURES: &[&str] = &["root_not_found", "root_access_denied"];
 
-/// The closed sixty-four-row table, in ascending wire-name order.
+/// The closed seventy-two-row table, in ascending wire-name order.
 pub const CLASSIFICATIONS: &[ClassificationRow] = &[
     classification_foundation::ADD_COMPONENT,
     classification_administration::ADD_GROUP_MEMBER,
@@ -100,10 +100,18 @@ pub const CLASSIFICATIONS: &[ClassificationRow] = &[
     classification_process::INSPECT_SLING_JOB,
     classification_process::INSPECT_WORKFLOW_INSTANCE,
     classification_authoring::LIST_ASSET_RENDITIONS,
+    classification_authoring::LIST_CHILD_NODES,
+    classification_authoring::LIST_CHILD_NODES_BY_TYPE,
     classification_authoring::LIST_CHILD_PAGES,
+    classification_authoring::LIST_COMPONENT_DEFINITIONS,
+    classification_authoring::LIST_COMPONENTS,
+    classification_authoring::LIST_CONTENT_FRAGMENT_MODELS,
+    classification_authoring::LIST_CONTENT_FRAGMENTS,
+    classification_authoring::LIST_EXPERIENCE_FRAGMENTS,
     classification_administration::LIST_GROUP_MEMBERS,
     classification_platform::LIST_BUNDLES,
     classification_platform::LIST_COMPONENTS,
+    classification_authoring::LIST_PAGE_TEMPLATES,
     classification_administration::LIST_REPLICATION_AGENTS,
     classification_platform::LIST_RESOURCE_MAPPINGS,
     classification_process::LIST_SLING_JOB_QUEUES,

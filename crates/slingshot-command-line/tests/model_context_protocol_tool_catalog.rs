@@ -19,10 +19,10 @@ use slingshot_command_line::model_context_protocol::tool_catalog::{
 use slingshot_domain::command::catalog::CommandCatalog;
 
 /// How many commands the registry publishes.
-const PUBLISHED_COMMANDS: usize = 64;
+const PUBLISHED_COMMANDS: usize = 72;
 
 /// How many of them are read-only.
-const READ_ONLY_COMMANDS: usize = 28;
+const READ_ONLY_COMMANDS: usize = 36;
 
 /// How many of them change something.
 const CHANGING_COMMANDS: usize = 36;
@@ -31,7 +31,7 @@ const CHANGING_COMMANDS: usize = 36;
 const DESTRUCTIVE_COMMANDS: usize = 25;
 
 /// How many of them are the same request twice over.
-const IDEMPOTENT_COMMANDS: usize = 26;
+const IDEMPOTENT_COMMANDS: usize = 34;
 
 /// How many of them require the caller's key.
 const KEY_REQUIRING_COMMANDS: usize = 38;

@@ -14,9 +14,10 @@ use serde_json::{Value, json};
 
 use crate::command::command_identity::CommandContract;
 use crate::command::schema::{
-    SchemaRole, bounded_string, closed, content_fragment_elements, deleted_result, discovery_page,
-    inline_binary_payload, listing_page, moved_result, mutation_properties, mutation_result,
-    nonempty_string, page_match, removed_property_names, repository_path, result_window,
+    SchemaRole, bounded_string, closed, component_listing_match, content_fragment_elements,
+    deleted_result, discovery_page, inline_binary_payload, listing_page, moved_result,
+    mutation_properties, mutation_result, nonempty_string, page_match, removed_property_names,
+    repository_path, result_window,
 };
 
 /// Returns the body one command role declares, when this leaf declares it.
@@ -26,6 +27,8 @@ pub fn body(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Opti
         .or_else(|| group_3(wire_name, role, limits))
         .or_else(|| group_4(wire_name, role, limits))
         .or_else(|| group_5(wire_name, role, limits))
+        .or_else(|| group_6(wire_name, role, limits))
+        .or_else(|| group_7(wire_name, role, limits))
 }
 
 /// Returns the body one of `create_asset` through `create_experience_fragment` declares.
@@ -235,18 +238,6 @@ fn group_3(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
                 },
             }),
         ),
-        ("list_child_pages", SchemaRole::Arguments) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "root_path",
-            ],
-            "properties": {
-                "result_window": result_window(limits),
-                "root_path": repository_path(limits),
-            },
-        }),
-        ("list_child_pages", SchemaRole::Result) => discovery_page(limits, page_match(limits)),
         ("move_asset", SchemaRole::Arguments) => json!({
             "type": "object",
             "additionalProperties": false,
@@ -448,4 +439,101 @@ fn group_5(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
         _ => return None,
     };
     Some(body)
+}
+
+/// Returns the body one of the three child listings declares.
+///
+/// The three share an anchor and a window and differ only in what they admit:
+/// every child, the children of one named primary type, or the pages. A typed
+/// listing reports the type each child has, because the type is what
+/// distinguishes a page from the folder beside it.
+fn group_6(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Option<Value> {
+    let body = match (wire_name, role) {
+        ("list_child_nodes", SchemaRole::Arguments)
+        | ("list_child_pages", SchemaRole::Arguments)
+        | ("list_content_fragment_models", SchemaRole::Arguments)
+        | ("list_page_templates", SchemaRole::Arguments) => {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "root_path",
+                ],
+                "properties": {
+                    "result_window": result_window(limits),
+                    "root_path": repository_path(limits),
+                },
+            })
+        }
+        ("list_child_nodes_by_type", SchemaRole::Arguments) => json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "primary_node_type",
+                "root_path",
+            ],
+            "properties": {
+                "primary_node_type":
+                    nonempty_string(limits.limit("maximum_primary_node_type_name_bytes")),
+                "result_window": result_window(limits),
+                "root_path": repository_path(limits),
+            },
+        }),
+        ("list_child_nodes", SchemaRole::Result)
+        | ("list_child_nodes_by_type", SchemaRole::Result) => {
+            discovery_page(limits, child_node_match(limits))
+        }
+        ("list_child_pages", SchemaRole::Result)
+        | ("list_content_fragment_models", SchemaRole::Result)
+        | ("list_page_templates", SchemaRole::Result) => discovery_page(limits, page_match(limits)),
+        _ => return None,
+    };
+    Some(body)
+}
+
+/// Returns the body the four content catalogues declare.
+///
+/// Each takes an anchor and a window. Component definitions and component
+/// instances answer with a resource type; content fragments and experience
+/// fragments answer with a path and a title.
+fn group_7(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Option<Value> {
+    let body = match (wire_name, role) {
+        ("list_component_definitions", SchemaRole::Arguments)
+        | ("list_components", SchemaRole::Arguments)
+        | ("list_content_fragments", SchemaRole::Arguments)
+        | ("list_experience_fragments", SchemaRole::Arguments) => json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["root_path"],
+            "properties": {
+                "result_window": result_window(limits),
+                "root_path": repository_path(limits),
+            },
+        }),
+        ("list_component_definitions", SchemaRole::Result)
+        | ("list_components", SchemaRole::Result) => {
+            discovery_page(limits, component_listing_match(limits))
+        }
+        ("list_content_fragments", SchemaRole::Result)
+        | ("list_experience_fragments", SchemaRole::Result) => {
+            discovery_page(limits, page_match(limits))
+        }
+        _ => return None,
+    };
+    Some(body)
+}
+
+/// Returns the schema one child-node match satisfies.
+fn child_node_match(limits: &CommandContract) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["primary_node_type", "repository_path"],
+        "properties": {
+            "primary_node_type":
+                nonempty_string(limits.limit("maximum_primary_node_type_name_bytes")),
+            "repository_path": repository_path(limits),
+            "title": bounded_string(limits.limit("maximum_page_title_bytes")),
+        },
+    })
 }

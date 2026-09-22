@@ -79,6 +79,7 @@ fn value_for(member: &str, schema: &Value) -> Value {
             let spelled = match member {
                 "media_type" => "text/plain",
                 "encoded_content" | "payload" => "",
+                "primary_node_type" => "cq:Page",
                 "property_path" => "property",
                 "repository_path" | "page_path" | "asset_path" | "source_path"
                 | "fragment_path" | "template_path" | "component_path" => "/content",
