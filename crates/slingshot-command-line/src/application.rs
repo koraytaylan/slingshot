@@ -927,6 +927,18 @@ impl CommandLineApplication<'_> {
             workflow_correlation_identifier: None,
         };
         let response = self.exchange(&namespace, &hello, request, &retry_operation_identifier)?;
+        // The daemon finishes a shipped command inside this exchange, so the
+        // answer is the result rather than an admission receipt. A receipt
+        // still means the work is outstanding and is watched below.
+        if let Some(completion) = self.settled_on_submit(
+            invocation,
+            &namespace,
+            &hello,
+            &response,
+            &retry_operation_identifier,
+        )? {
+            return Ok(completion);
+        }
         match submitted(&response)? {
             Submission::Ended(completion) => Ok(*completion),
             Submission::Admitted(admitted) => {
@@ -945,6 +957,64 @@ impl CommandLineApplication<'_> {
                     }
                 }
             }
+        }
+    }
+
+    /// Returns the completion a submit already settled, when the answer is one.
+    ///
+    /// `None` means the response is an admission or a refusal `submitted` reads.
+    /// A status that is not terminal is still outstanding, so it is watched the
+    /// same way an admission receipt is.
+    fn settled_on_submit(
+        &self,
+        invocation: &Invocation,
+        namespace: &NamespacePair,
+        hello: &HelloResult,
+        response: &OperationResponse,
+        retry_operation_identifier: &str,
+    ) -> Result<Option<Completion>, RunRefusal> {
+        let admitted = |operation_identifier: &str| Admitted {
+            operation_identifier: if operation_identifier.is_empty() {
+                retry_operation_identifier.to_owned()
+            } else {
+                operation_identifier.to_owned()
+            },
+            replayed: false,
+        };
+        match response {
+            OperationResponse::ResultInline { operation_identifier, .. }
+            | OperationResponse::ResultArtifact { operation_identifier, .. }
+            | OperationResponse::TerminalFailure { operation_identifier, .. }
+            | OperationResponse::RecoveryRequired { operation_identifier, .. } => {
+                let admitted = admitted(operation_identifier);
+                self.resolved(namespace, hello, response, &self.access(namespace, hello, &admitted))
+                    .map(Some)
+            }
+            OperationResponse::Status { lifecycle_state, operation_identifier, .. }
+                if lifecycle_state == "terminal" =>
+            {
+                Ok(Some(self.result_of(namespace, hello, &admitted(operation_identifier))))
+            }
+            OperationResponse::Status { lifecycle_state, operation_identifier, .. }
+                if lifecycle_state != "terminal" =>
+            {
+                let admitted = admitted(operation_identifier);
+                if let Some(halted) = self.halted(&Phase::Observing {
+                    operation_identifier: admitted.operation_identifier.clone(),
+                    revision: ADMITTED_REVISION,
+                }) {
+                    return Ok(Some(halted));
+                }
+                match operation_submission::after_admission(invocation) {
+                    operation_submission::AfterAdmission::Detach => {
+                        self.receipt(namespace, hello, &admitted).map(Some)
+                    }
+                    operation_submission::AfterAdmission::Observe => {
+                        self.attended(namespace, hello, admitted).map(Some)
+                    }
+                }
+            }
+            _ => Ok(None),
         }
     }
 

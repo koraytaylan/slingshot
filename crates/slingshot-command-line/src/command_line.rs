@@ -770,11 +770,15 @@ impl DaemonBoundary for ProductDaemon<'_> {
         envelope: &OperationEnvelope,
     ) -> Result<OperationResponse, ExchangeFailure> {
         let address = self.address(namespace)?;
-        // A wait is answered when the observed operation moves, which may be
-        // much later than the deadline that stops a silent daemon from holding
-        // a client. It gets the deadline-free read; every other exchange gets
-        // the ordinary first-frame deadline.
-        if matches!(envelope.request, OperationRequest::Wait { .. }) {
+        // A wait is answered when the observed operation moves, and an execute
+        // is answered when that command finishes inside the same call. Both
+        // can outlast the deadline that stops a silent daemon from holding a
+        // client, so both get the deadline-free read. Every other exchange
+        // gets the ordinary first-frame deadline.
+        if matches!(
+            envelope.request,
+            OperationRequest::Wait { .. } | OperationRequest::Execute { .. }
+        ) {
             return self.driven(daemon_connection::exchange_wait(
                 self.contract,
                 &address,

@@ -149,8 +149,8 @@ impl ToolRunner for ArtifactToolRunner {
         tool: &ToolDescriptor,
         _arguments: &Value,
     ) -> Result<MachineOutcomeEnvelope, String> {
-        if tool.name != "operation-artifact" {
-            return Err(format!("{} is not the artifact read", tool.name));
+        if tool.name != "operation-artifact" && tool.name != "list_components" {
+            return Err(format!("{} is not answered with an artifact", tool.name));
         }
         Ok(MachineOutcomeEnvelope::StructuredResultArtifactAccess {
             artifact: slingshot_command_line::machine_outcome_envelope::ArtifactAccess {
@@ -611,6 +611,28 @@ fn an_operation_artifact_call_returns_the_json_body_in_structured_content() {
     );
     let text = answer["result"]["content"][0]["text"].as_str().expect("the body is text");
     assert_eq!(text, document);
+}
+
+#[test]
+fn a_command_that_answers_with_an_artifact_address_returns_the_body() {
+    let document = r#"{"matches":[{"repository_path":"/apps/acme/components/hero"}]}"#;
+    let mut server = ServerApplication::over(Some(Box::new(ArtifactToolRunner {
+        document: document.to_owned(),
+        refuse: false,
+    })));
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"call","method":"tools/call","params":{{"protocolVersion":"{CURRENT}","name":"list_components","arguments":{{"root_path":"/apps/acme"}}}}}}"#
+        ),
+    );
+    assert!(answer.get("error").is_none(), "{answer}");
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(false), "{answer}");
+    assert_eq!(
+        answer["result"]["structuredContent"]["matches"][0]["repository_path"].as_str(),
+        Some("/apps/acme/components/hero"),
+        "structured content repeated the access envelope: {answer}"
+    );
 }
 
 #[test]

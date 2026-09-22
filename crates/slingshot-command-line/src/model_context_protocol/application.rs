@@ -512,6 +512,16 @@ impl ServerApplication {
         {
             return Ok(inlined);
         }
+        // A command that finished inside the submit call answers with an
+        // artifact address when the result does not fit inline. The host
+        // displays structured content and does not follow that address, so
+        // the body has to be the structured content or the caller sees the
+        // address and not the document.
+        if let MachineOutcomeEnvelope::StructuredResultArtifactAccess { artifact } = &envelope
+            && let Some(inlined) = self.inline_access(identifier, artifact)
+        {
+            return Ok(inlined);
+        }
         let projected = result_projection::projected(&envelope, true, Vec::new())
             .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
         Ok(json!({
@@ -544,6 +554,15 @@ impl ServerApplication {
                 "the digest this call quoted is not the digest the artifact access entry declares",
             ));
         }
+        self.inline_access(identifier, &access)
+    }
+
+    /// Returns one artifact access entry's body as the tool result a host reads.
+    ///
+    /// `None` leaves the access envelope in place when the address cannot be
+    /// read or the body would not fit in one protocol line. A fetch that was
+    /// attempted and failed is a tool result whose structured content says why.
+    fn inline_access(&mut self, identifier: &Value, access: &ArtifactAccess) -> Option<Value> {
         let address = match crate::model_context_protocol::resource_catalog::parse(&access.uri) {
             Ok(address) => address,
             Err(failure) => {
@@ -555,14 +574,14 @@ impl ServerApplication {
         let crate::model_context_protocol::resource_catalog::ResourceAddress::Artifact {
             namespace,
             operation_identifier,
-            artifact_identifier: addressed,
+            artifact_identifier,
         } = address
         else {
             return Some(visible_failure(
                 "the artifact access entry does not name an artifact address",
             ));
         };
-        if addressed != artifact_identifier {
+        if artifact_identifier != access.artifact_identifier {
             return Some(visible_failure(
                 "the artifact access entry names a different artifact than this call",
             ));
@@ -575,7 +594,7 @@ impl ServerApplication {
                     author_target_identity_digest: namespace.author_target_identity_digest,
                 },
                 &operation_identifier,
-                &addressed,
+                &artifact_identifier,
                 crate::model_context_protocol::size_budget::maximum_resource_blob_bytes(),
             ),
             None => Err("this server reaches no daemon".to_owned()),
@@ -587,8 +606,8 @@ impl ServerApplication {
                 return Some(visible_failure(&detail));
             }
         };
-        if fetched.artifact_identifier != artifact_identifier
-            || fetched.content_digest != expected
+        if fetched.artifact_identifier != access.artifact_identifier
+            || fetched.content_digest != access.content_digest
             || fetched.byte_length != access.byte_length
             || fetched.media_type != access.media_type
         {
@@ -596,7 +615,18 @@ impl ServerApplication {
                 "the daemon's artifact bytes do not match the access entry this call quoted",
             ));
         }
-        let (text, structured) = match artifact_body(&fetched.media_type, &fetched.bytes) {
+        self.rendered_artifact(identifier, &fetched.media_type, &fetched.bytes)
+    }
+
+    /// Returns one verified artifact body as a tool result, or nothing when it
+    /// would not fit in one protocol line.
+    fn rendered_artifact(
+        &self,
+        identifier: &Value,
+        media_type: &str,
+        bytes: &[u8],
+    ) -> Option<Value> {
+        let (text, structured) = match artifact_body(media_type, bytes) {
             Ok(rendered) => rendered,
             Err(detail) => return Some(visible_failure(&detail)),
         };

@@ -591,6 +591,26 @@ fn one_invocation_keeps_its_generated_identity_for_the_operation_exchange() {
 }
 
 #[test]
+fn a_command_whose_submit_already_holds_the_result_returns_that_result() {
+    let mut fakes = Fakes::default();
+    let result = serde_json::json!({ "components": [] });
+    fakes.answer = OperationResponse::ResultInline {
+        operation_identifier: "command-line-fixture-1".to_owned(),
+        result: result.clone(),
+    };
+    let completion = against(
+        &fakes,
+        Provenance::embedded(),
+        &invoking("list_components", &[("--path", "/apps/acme")]),
+    );
+    assert_eq!(completion.exit, 0, "{:?}", completion.answer);
+    let Answer::Envelope(envelope) = completion.answer else {
+        panic!("the settled result is the answer");
+    };
+    assert_eq!(*envelope, MachineOutcomeEnvelope::OperationResult { result });
+}
+
+#[test]
 fn one_invocation_produces_one_answer_and_one_exit() {
     let fakes = Fakes::default();
     let completion = against(&fakes, Provenance::embedded(), &invoking("daemon-status", &[]));
