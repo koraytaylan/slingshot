@@ -65,6 +65,8 @@ pub fn decode_read_failure(
         Command::ListResourceMappings(command) => Some(&command.result_window),
         Command::ListSlingJobQueues(command) => Some(&command.result_window),
         Command::ListWorkflowModels(command) => Some(&command.result_window),
+        Command::ListChildNodes(command) => Some(&command.result_window),
+        Command::ListChildNodesByType(command) => Some(&command.result_window),
         Command::ListChildPages(command) => Some(&command.result_window),
         Command::ListComponentDefinitions(command) => Some(&command.result_window),
         Command::ListComponents(command) => Some(&command.result_window),
@@ -132,11 +134,26 @@ pub fn decode_read_failure(
                 return Err(TerminalFailureDecodeRefusal);
             }
         }
-        Command::ListChildPages(command) => {
+        Command::ListChildNodes(
+            slingshot_domain::command::list_child_nodes::ListChildNodesCommand {
+                root_path, ..
+            },
+        )
+        | Command::ListChildNodesByType(
+            slingshot_domain::command::list_child_nodes::ListChildNodesByTypeCommand {
+                root_path,
+                ..
+            },
+        )
+        | Command::ListChildPages(
+            slingshot_domain::command::list_child_pages::ListChildPagesCommand {
+                root_path, ..
+            },
+        ) => {
             let refusal: slingshot_domain::command::query_paths::AnchorRefusal =
                 serde_json::from_str(&document.canonical_failure)
                     .map_err(|_| TerminalFailureDecodeRefusal)?;
-            if refusal.root_path() != &command.root_path {
+            if refusal.root_path() != root_path {
                 return Err(TerminalFailureDecodeRefusal);
             }
         }

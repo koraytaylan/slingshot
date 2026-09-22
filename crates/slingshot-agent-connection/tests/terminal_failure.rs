@@ -98,6 +98,16 @@ fn targeted_read_failures_bind_subjects_and_selected_categories() {
             "/content/example",
         ),
         (
+            serde_json::json!({"command":"list_child_nodes","root_path":"/content/example"}),
+            "root_path",
+            "/content/example",
+        ),
+        (
+            serde_json::json!({"command":"list_child_nodes_by_type","primary_node_type":"cq:Page","root_path":"/content/example"}),
+            "root_path",
+            "/content/example",
+        ),
+        (
             serde_json::json!({"command":"list_group_members","group_identifier":"authors","include_indirect":false}),
             "group_identifier",
             "authors",
@@ -142,6 +152,8 @@ fn targeted_read_failures_bind_subjects_and_selected_categories() {
         let windowed = matches!(
             initial,
             Command::ListChildPages(_)
+                | Command::ListChildNodes(_)
+                | Command::ListChildNodesByType(_)
                 | Command::ListGroupMembers(_)
                 | Command::ListAssetRenditions(_)
                 | Command::InspectReplicationQueue(_)
