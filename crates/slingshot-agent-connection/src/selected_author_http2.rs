@@ -55,18 +55,39 @@ impl SelectedAuthorTransport {
         fields: &HeaderMap,
         body: &[u8],
     ) -> Result<FiniteHttpReceipt, FiniteHttpFailure> {
+        self.finite_http2_query_with_deadlines(
+            method,
+            segments,
+            query,
+            authentication,
+            fields,
+            body,
+            ExchangeDeadlines::embedded(),
+        )
+        .await
+    }
+
+    /// Same exchange as [`Self::finite_http2_query`], with the caller's deadlines.
+    ///
+    /// # Errors
+    /// Fails exactly as [`Self::finite_http2_query`] does, with each phase bounded by
+    /// `deadlines` rather than the embedded ones.
+    pub async fn finite_http2_query_with_deadlines(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, &str)],
+        authentication: &RequestAuthentication,
+        fields: &HeaderMap,
+        body: &[u8],
+        deadlines: ExchangeDeadlines,
+    ) -> Result<FiniteHttpReceipt, FiniteHttpFailure> {
         let head =
             self.encode_http2_request_head(method, segments, query, authentication, fields, body)?;
         let started = Instant::now();
         let prepared = self.prepare_http2().await?;
-        let response = drive(
-            prepared.stream,
-            prepared.negotiated,
-            head.frames(),
-            body,
-            ExchangeDeadlines::embedded(),
-        )
-        .await?;
+        let response =
+            drive(prepared.stream, prepared.negotiated, head.frames(), body, deadlines).await?;
         Ok(FiniteHttpReceipt {
             response,
             elapsed_milliseconds: u64::try_from(

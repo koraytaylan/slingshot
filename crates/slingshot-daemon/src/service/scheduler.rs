@@ -431,18 +431,12 @@ pub(crate) fn complete_submitted(
         .ok()
     });
     let outcome = match outcome {
-        Some(slingshot_domain::operation_executor::OperationExecutorOutcome::RecoveryRequired {
-            ..
-        })
-        | None => slingshot_domain::operation_executor::OperationExecutorOutcome::TerminalFailure {
-            failure: slingshot_domain::operation::TerminalFailure {
-                kind: slingshot_domain::operation::TerminalFailureKind::RetryPolicyExhausted,
-                disposition: slingshot_domain::operation::TerminalFailureDisposition::FailClosedIndeterminate {
-                    certainty: slingshot_domain::operation::OperationExecutionCertainty::RemoteOutcomeUnknown,
-                },
-                metadata: Some("the command finished in the request that submitted it".to_owned()),
+        Some(
+            slingshot_domain::operation_executor::OperationExecutorOutcome::RecoveryRequired {
+                recovery,
             },
-        },
+        ) => unfinished_submission(recovery.detail),
+        None => unfinished_submission(String::new()),
         Some(outcome) => outcome,
     };
     let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -462,6 +456,31 @@ pub(crate) fn complete_submitted(
         });
     if let Some(Ok(current)) = settled {
         publish_settlement(&guard, &current);
+    }
+}
+
+/// Ends an inline submit that produced no terminal result.
+///
+/// There is no queue to leave it on. The detail is the executor's own account
+/// of why, so a response-head deadline stays a deadline.
+fn unfinished_submission(
+    detail: String,
+) -> slingshot_domain::operation_executor::OperationExecutorOutcome {
+    let metadata = if detail.is_empty() {
+        "the author did not finish inside this request".to_owned()
+    } else {
+        detail
+    };
+    slingshot_domain::operation_executor::OperationExecutorOutcome::TerminalFailure {
+        failure: slingshot_domain::operation::TerminalFailure {
+            kind: slingshot_domain::operation::TerminalFailureKind::RetryPolicyExhausted,
+            disposition:
+                slingshot_domain::operation::TerminalFailureDisposition::FailClosedIndeterminate {
+                    certainty:
+                        slingshot_domain::operation::OperationExecutionCertainty::RemoteOutcomeUnknown,
+                },
+            metadata: Some(metadata),
+        },
     }
 }
 

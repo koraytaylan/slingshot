@@ -276,6 +276,22 @@ impl ExchangeDeadlines {
             finite_idle_milliseconds: contract.limit("finite_response_idle_timeout_milliseconds"),
         }
     }
+
+    /// Head wait for a submit that writes its status line after the command.
+    ///
+    /// The ordinary head budget is for a server that accepted the request and
+    /// then said nothing. An inline command is still that request: the status
+    /// line arrives when the command does, so the head wait is the finite
+    /// response budget when that budget is the longer of the two.
+    #[must_use]
+    pub fn inline_submission(self) -> Self {
+        Self {
+            response_header_milliseconds: self
+                .response_header_milliseconds
+                .max(self.finite_total_milliseconds),
+            ..self
+        }
+    }
 }
 
 /// Returns how long to wait before retrying, honouring a server's request.

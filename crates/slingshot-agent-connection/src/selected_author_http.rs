@@ -152,10 +152,37 @@ impl SelectedAuthorTransport {
         fields: &HeaderMap,
         body: &[u8],
     ) -> Result<FiniteHttpReceipt, FiniteHttpFailure> {
+        self.finite_http1_query_with_deadlines(
+            method,
+            segments,
+            query,
+            authentication,
+            fields,
+            body,
+            ExchangeDeadlines::embedded(),
+        )
+        .await
+    }
+
+    /// Same exchange as [`Self::finite_http1_query`], with the caller's deadlines.
+    ///
+    /// # Errors
+    /// Fails exactly as [`Self::finite_http1_query`] does, with each phase bounded by
+    /// `deadlines` rather than the embedded ones.
+    pub async fn finite_http1_query_with_deadlines(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, &str)],
+        authentication: &RequestAuthentication,
+        fields: &HeaderMap,
+        body: &[u8],
+        deadlines: ExchangeDeadlines,
+    ) -> Result<FiniteHttpReceipt, FiniteHttpFailure> {
         let request = encode_request(self, method, segments, query, authentication, fields, body)?;
         let started = Instant::now();
         let stream = self.connect().await.map_err(|_| FiniteHttpFailure::Connect)?;
-        Self::finite_http1_on_stream(stream, &request, started).await
+        Self::finite_http1_on_stream(stream, &request, started, deadlines).await
     }
 
     /// Sends one finite request on the original negotiated connection. Both
@@ -177,6 +204,33 @@ impl SelectedAuthorTransport {
         fields: &HeaderMap,
         body: &[u8],
     ) -> Result<FiniteHttpReceipt, FiniteHttpFailure> {
+        self.finite_negotiated_query_with_deadlines(
+            method,
+            segments,
+            query,
+            authentication,
+            fields,
+            body,
+            ExchangeDeadlines::embedded(),
+        )
+        .await
+    }
+
+    /// Same exchange as [`Self::finite_negotiated_query`], with the caller's deadlines.
+    ///
+    /// # Errors
+    /// Fails exactly as [`Self::finite_negotiated_query`] does, with each phase bounded by
+    /// `deadlines` rather than the embedded ones.
+    pub async fn finite_negotiated_query_with_deadlines(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, &str)],
+        authentication: &RequestAuthentication,
+        fields: &HeaderMap,
+        body: &[u8],
+        deadlines: ExchangeDeadlines,
+    ) -> Result<FiniteHttpReceipt, FiniteHttpFailure> {
         let http1 =
             encode_request(self, method.clone(), segments, query, authentication, fields, body);
         let http2 =
@@ -188,10 +242,9 @@ impl SelectedAuthorTransport {
         let (protocol, mut stream) =
             self.connect_negotiated().await.map_err(|_| FiniteHttpFailure::Connect)?.into_parts();
         if protocol == crate::selected_author_transport::SelectedHttpProtocol::Http1 {
-            return Self::finite_http1_on_stream(stream, &http1?, started).await;
+            return Self::finite_http1_on_stream(stream, &http1?, started, deadlines).await;
         }
         let http2 = http2?;
-        let deadlines = ExchangeDeadlines::embedded();
         let negotiated = crate::selected_author_http2_handshake::negotiate(
             &mut stream,
             Duration::from_millis(deadlines.response_header_milliseconds),
@@ -218,8 +271,8 @@ impl SelectedAuthorTransport {
         mut stream: SelectedAuthorStream,
         request: &[u8],
         started: Instant,
+        deadlines: ExchangeDeadlines,
     ) -> Result<FiniteHttpReceipt, FiniteHttpFailure> {
-        let deadlines = ExchangeDeadlines::embedded();
         timeout(Duration::from_millis(deadlines.request_body_milliseconds), async {
             stream.write_all(request).await?;
             stream.flush().await

@@ -376,33 +376,40 @@ impl SelectedAuthorTransport {
                 HeaderValue::from_str(&value).map_err(|_| SubmissionSendRefusal::Request)?,
             );
         }
+        let deadlines =
+            crate::author_hypertext_transfer_protocol_policy::ExchangeDeadlines::embedded()
+                .inline_submission();
         let exchange = if http2.is_none() {
-            self.finite_negotiated_query(
+            self.finite_negotiated_query_with_deadlines(
                 Method::POST,
                 &["bin", "slingshot", "agent", "submit"],
                 &[],
                 authentication,
                 &fields,
                 &body,
+                deadlines,
             )
             .await
         } else if http2 == Some(true) {
-            self.finite_http2_query(
+            self.finite_http2_query_with_deadlines(
                 Method::POST,
                 &["bin", "slingshot", "agent", "submit"],
                 &[],
                 authentication,
                 &fields,
                 &body,
+                deadlines,
             )
             .await
         } else {
-            self.finite_http1(
+            self.finite_http1_query_with_deadlines(
                 Method::POST,
                 &["bin", "slingshot", "agent", "submit"],
+                &[],
                 authentication,
                 &fields,
                 &body,
+                deadlines,
             )
             .await
         };
