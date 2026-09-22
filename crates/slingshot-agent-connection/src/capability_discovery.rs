@@ -231,6 +231,13 @@ pub enum CapabilityExchangeRefusal {
     /// The author answered with capabilities this build cannot use.
     #[error("the selected author did not provide compatible capabilities")]
     Incompatible,
+    /// The agent advertises no contract of this command's name at all.
+    ///
+    /// Told apart from [`Self::Incompatible`] because the remedy differs: an
+    /// agent holding another version of the command needs redeploying, and one
+    /// that holds no version of it is one this deployment runs without it.
+    #[error("the selected author's agent does not serve this command")]
+    NotServed,
 }
 
 /// The statuses an author answers when it is there and cannot serve right now.
@@ -315,9 +322,16 @@ pub fn decode_capabilities(
         continuation_authority_ready: document.continuation_authority_ready,
         transport_contract_digest: document.transport_contract_digest,
     };
-    required
-        .require_compatible(&advertised)
-        .map_err(|_| CapabilityExchangeRefusal::Incompatible)?;
+    required.require_compatible(&advertised).map_err(|refusal| {
+        let named = &required.command_contract.command_wire_name;
+        let absent = matches!(refusal, DiscoveryRefusal::CommandContractAbsent { .. })
+            && advertised.command_contracts.iter().all(|held| &held.command_wire_name != named);
+        if absent {
+            CapabilityExchangeRefusal::NotServed
+        } else {
+            CapabilityExchangeRefusal::Incompatible
+        }
+    })?;
     Ok(advertised)
 }
 

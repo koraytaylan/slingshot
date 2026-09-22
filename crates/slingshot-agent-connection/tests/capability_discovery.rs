@@ -12,6 +12,39 @@ use slingshot_agent_connection::capability_discovery::{
 use slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION;
 
 #[test]
+fn an_agent_without_the_command_is_told_apart_from_one_holding_another_version() {
+    use slingshot_agent_connection::capability_discovery::{
+        CapabilityExchangeRefusal, decode_capabilities,
+    };
+    let held = matching();
+    let document = |contracts: serde_json::Value| {
+        serde_json::to_vec(&serde_json::json!({
+            "format": "slingshot.agent/1",
+            "capability_revision": held.capability_revision,
+            "agent_event_store_generation": held.agent_event_store_generation,
+            "canonical_json_contract_digest": held.canonical_json_contract_digest,
+            "command_contracts": contracts,
+            "continuation_authority_ready": true,
+            "transport_contract_digest": held.transport_contract_digest,
+        }))
+        .unwrap()
+    };
+    let requirement = required(Some(GENERATION));
+    assert_eq!(
+        decode_capabilities(&document(serde_json::json!([])), &requirement),
+        Err(CapabilityExchangeRefusal::NotServed),
+        "an agent that holds no version of the command does not serve it"
+    );
+    let mut other_version = serde_json::to_value(&held.command_contracts[0]).unwrap();
+    other_version["result_schema_digest"] = serde_json::json!("0".repeat(64));
+    assert_eq!(
+        decode_capabilities(&document(serde_json::json!([other_version])), &requirement),
+        Err(CapabilityExchangeRefusal::Incompatible),
+        "an agent that holds another version of the command is a different build"
+    );
+}
+
+#[test]
 fn closed_capability_document_refuses_ambiguous_or_incomplete_wire_evidence() {
     use slingshot_agent_connection::capability_discovery::decode_capabilities;
     let held = matching();

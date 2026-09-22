@@ -320,6 +320,11 @@ fn a_failed_capability_check_proves_nothing_ran_and_names_its_remedy() {
             TerminalFailureKind::Rejected,
             "deploy the agent built with this client",
         ),
+        (
+            CapabilityExchangeRefusal::NotServed,
+            TerminalFailureKind::Rejected,
+            "does not serve this command",
+        ),
     ] {
         let ports = ScriptedPorts::answering(
             HandoffDisposition::CapabilityCheckFailed { refusal },

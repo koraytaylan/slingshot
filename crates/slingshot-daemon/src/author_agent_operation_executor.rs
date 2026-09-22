@@ -393,6 +393,12 @@ fn unchecked(
                  sent; the credential's account must be in a group the agent permits"
             ),
         ),
+        CapabilityExchangeRefusal::NotServed => (
+            TerminalFailureKind::Rejected,
+            "the agent on this author does not serve this command, so nothing was sent; it is \
+             not one this deployment's agent runs"
+                .to_owned(),
+        ),
         CapabilityExchangeRefusal::Incompatible | CapabilityExchangeRefusal::Preflight => (
             TerminalFailureKind::Rejected,
             "the agent on this author is not the build this client needs - its contracts or \
