@@ -155,7 +155,6 @@ separately from operations and artifacts, so neither can exhaust the other.
 
 ## What is not here
 
-- No operation executor in a product build, so no remote work runs.
 - No maintenance-result associations; the manifest, preview, apply, and receipt
   are here, and the association ownership transfer is not.
 - No automatic retry timer. Retry eligibility is computed, and a scheduler is
