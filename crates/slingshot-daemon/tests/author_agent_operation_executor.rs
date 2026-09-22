@@ -301,6 +301,56 @@ fn an_answer_without_a_usable_submission_leaves_the_queue() {
 }
 
 #[test]
+fn a_failed_capability_check_proves_nothing_ran_and_names_its_remedy() {
+    use slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal;
+    for (refusal, kind, remedy) in [
+        (
+            CapabilityExchangeRefusal::Unanswered,
+            TerminalFailureKind::RetryPolicyExhausted,
+            "new operation key is safe to send",
+        ),
+        (
+            CapabilityExchangeRefusal::Unauthenticated,
+            TerminalFailureKind::Rejected,
+            "check-configuration",
+        ),
+        (CapabilityExchangeRefusal::Refused(403), TerminalFailureKind::Rejected, "status 403"),
+        (
+            CapabilityExchangeRefusal::Incompatible,
+            TerminalFailureKind::Rejected,
+            "deploy the agent built with this client",
+        ),
+    ] {
+        let ports = ScriptedPorts::answering(
+            HandoffDisposition::CapabilityCheckFailed { refusal },
+            AgentSettlement::Succeeded { inline_result: None },
+        );
+        let (outcome, _) = executed(&ports);
+        let OperationExecutorOutcome::TerminalFailure { failure } = outcome else {
+            panic!("{refusal:?}: a check that failed before sending ends the operation")
+        };
+        assert_eq!(failure.kind, kind, "{refusal:?}");
+        assert_eq!(
+            failure.disposition,
+            TerminalFailureDisposition::AuthoritativeNonExecution {
+                certainty: OperationExecutionCertainty::ConfirmedNotExecuted,
+            },
+            "{refusal:?}: nothing was sent, so nothing ran"
+        );
+        assert!(
+            slingshot_domain::operation::terminal_pairing_is_legal(
+                failure.kind,
+                failure.disposition
+            ),
+            "{refusal:?}"
+        );
+        let detail = failure.metadata.unwrap_or_default();
+        assert!(detail.contains(remedy), "{refusal:?} does not name its remedy: {detail}");
+        assert_eq!(*ports.asked.borrow(), vec!["submit"], "{refusal:?}");
+    }
+}
+
+#[test]
 fn a_named_unknown_cause_is_kept_on_recovery_and_never_looks_like_lookup_required() {
     use slingshot_agent_connection::command_submission::{SubmissionOutcome, UnknownCause};
     use slingshot_daemon::operation::remote_submission::disposition_of;

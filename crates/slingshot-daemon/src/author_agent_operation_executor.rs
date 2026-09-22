@@ -293,6 +293,7 @@ pub fn outcome_of_handoff(disposition: &HandoffDisposition) -> Option<OperationE
         | HandoffDisposition::ReconcileRetained => None,
         HandoffDisposition::NotExecuted => Some(refused("the agent recorded nothing")),
         HandoffDisposition::CallerNotPermitted => Some(refused(CALLER_NOT_PERMITTED)),
+        HandoffDisposition::CapabilityCheckFailed { refusal } => Some(unchecked(*refusal)),
         HandoffDisposition::RecoveryWindowExpired => Some(failed_closed(
             TerminalFailureKind::RemoteStateLost,
             OperationExecutionCertainty::RemoteOutcomeUnknown,
@@ -357,6 +358,56 @@ fn refused(detail: &str) -> OperationExecutorOutcome {
             },
             kind: TerminalFailureKind::Rejected,
             metadata: Some(detail.to_owned()),
+        },
+    }
+}
+
+/// Returns the ending of work whose capability check failed before it was sent.
+///
+/// Nothing reached the submission route, so every one of these provably did
+/// not run. What differs is the remedy, and the detail says which: an author
+/// that did not answer is worth asking again, which is the retry policy
+/// running out rather than a refusal; a refused check needs a credential or a
+/// group; and an incompatible agent needs the build that matches this client.
+fn unchecked(
+    refusal: slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal,
+) -> OperationExecutorOutcome {
+    use slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal;
+    let (kind, detail) = match refusal {
+        CapabilityExchangeRefusal::Unanswered => (
+            TerminalFailureKind::RetryPolicyExhausted,
+            "the author did not answer its capability check in time, so nothing was sent and \
+             nothing ran; the same request under a new operation key is safe to send"
+                .to_owned(),
+        ),
+        CapabilityExchangeRefusal::Unauthenticated => (
+            TerminalFailureKind::Rejected,
+            "no credential the author accepts could be obtained, so nothing was sent; check the \
+             profile's credentials with check-configuration"
+                .to_owned(),
+        ),
+        CapabilityExchangeRefusal::Refused(status) => (
+            TerminalFailureKind::Rejected,
+            format!(
+                "the author refused the capability check with status {status}, so nothing was \
+                 sent; the credential's account must be in a group the agent permits"
+            ),
+        ),
+        CapabilityExchangeRefusal::Incompatible | CapabilityExchangeRefusal::Preflight => (
+            TerminalFailureKind::Rejected,
+            "the agent on this author is not the build this client needs - its contracts or \
+             behaviour revision differ - so nothing was sent; deploy the agent built with this \
+             client"
+                .to_owned(),
+        ),
+    };
+    OperationExecutorOutcome::TerminalFailure {
+        failure: TerminalFailure {
+            disposition: TerminalFailureDisposition::AuthoritativeNonExecution {
+                certainty: OperationExecutionCertainty::ConfirmedNotExecuted,
+            },
+            kind,
+            metadata: Some(detail),
         },
     }
 }

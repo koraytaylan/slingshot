@@ -288,6 +288,7 @@ fn disposition_spelling(disposition: &HandoffDisposition) -> &'static str {
         HandoffDisposition::RecoveryWindowExpired => "recovery-window-expired",
         HandoffDisposition::Conflict => "conflict",
         HandoffDisposition::CallerNotPermitted => "caller-not-permitted",
+        HandoffDisposition::CapabilityCheckFailed { .. } => "capability-check-failed",
         HandoffDisposition::RetryAfter { .. } => "retry-after",
         HandoffDisposition::Unknown { .. } => "unknown",
         HandoffDisposition::ReconcileRetained => "reconcile-retained",

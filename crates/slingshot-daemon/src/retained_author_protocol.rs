@@ -273,6 +273,11 @@ impl AuthorAgentProtocol for RetainedAuthorProtocol<'_> {
             .await
             {
                 Ok(outcome) => disposition_of(&outcome),
+                Err(
+                    crate::operation::durable_author_submission::DurableSubmissionRefusal::CapabilityCheck(
+                        refusal,
+                    ),
+                ) => HandoffDisposition::CapabilityCheckFailed { refusal },
                 Err(_) => HandoffDisposition::Unknown { cause: None },
             }
         })

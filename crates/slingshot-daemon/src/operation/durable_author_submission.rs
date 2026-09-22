@@ -32,6 +32,13 @@ pub enum DurableSubmissionRefusal {
     /// The selected connection or request preflight refused.
     #[error("the selected-author submission preflight refused")]
     Preflight,
+    /// The author's capability check failed, so nothing was sent.
+    ///
+    /// Distinct from [`Self::Preflight`] because each of these has a remedy a
+    /// caller can act on - ask again, fix the credential, or deploy the agent -
+    /// and no request reached the submission route or retained a remote child.
+    #[error("the author's capability check failed, and nothing was sent: {0}")]
+    CapabilityCheck(slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal),
 }
 
 /// A first-send claim. Its private fields prevent callers from fabricating a
@@ -348,7 +355,12 @@ pub async fn submit_initial_with_authentication(
         authentication
             .discover(transport, identity, submission)
             .await
-            .map_err(|_| DurableSubmissionRefusal::Preflight)?;
+            .map_err(|refusal| match refusal {
+                slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal::Preflight => {
+                    DurableSubmissionRefusal::Preflight
+                }
+                checked => DurableSubmissionRefusal::CapabilityCheck(checked),
+            })?;
     }
     let elapsed = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     require_local()?;

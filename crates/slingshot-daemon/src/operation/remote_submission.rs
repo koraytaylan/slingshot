@@ -186,6 +186,11 @@ pub enum HandoffDisposition {
     Conflict,
     /// The author refused this caller before the agent read the submission.
     CallerNotPermitted,
+    /// The author's capability check failed, so nothing was sent.
+    CapabilityCheckFailed {
+        /// Which way it failed, which decides what a caller does next.
+        refusal: slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal,
+    },
     /// Nothing is settled. Wait this long before lookup-first reconciliation;
     /// a retryable status does not prove the POST had no effect.
     RetryAfter {

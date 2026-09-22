@@ -207,11 +207,70 @@ impl RequiredCapabilities {
     }
 }
 
-/// A malformed or incompatible network capability response. Remote text is not
+/// Why a capability exchange produced no capabilities. Remote text is not
 /// retained in the error because it is not safe diagnostic material.
+///
+/// The four are kept apart because each has a different remedy: a preflight is
+/// this build's own defect, an unanswered request is worth making again, a
+/// refused one needs a credential or a group, and an incompatible agent needs
+/// deploying again. Nothing was sent to the submission route in any of them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("the selected author did not provide compatible capabilities")]
-pub struct CapabilityExchangeRefusal;
+pub enum CapabilityExchangeRefusal {
+    /// The request could not be built from this build's own selection.
+    #[error("the capability request could not be made from this build's selection")]
+    Preflight,
+    /// The author gave no usable answer in time, or said it was unavailable.
+    #[error("the selected author did not answer the capability request")]
+    Unanswered,
+    /// No credential the author accepts could be obtained for the request.
+    #[error("no credential the selected author accepts could be obtained")]
+    Unauthenticated,
+    /// The author refused the request with this status.
+    #[error("the selected author refused the capability request with status {0}")]
+    Refused(u16),
+    /// The author answered with capabilities this build cannot use.
+    #[error("the selected author did not provide compatible capabilities")]
+    Incompatible,
+}
+
+/// The statuses an author answers when it is there and cannot serve right now.
+const UNAVAILABLE_STATUSES: &[u16] = &[429, 500, 502, 503, 504];
+
+/// The statuses an author answers when it will not serve this caller.
+const REFUSING_STATUSES: &[u16] = &[401, 403];
+
+impl CapabilityExchangeRefusal {
+    /// Returns the refusal one failed bounded exchange amounts to.
+    fn of_exchange(failure: &crate::selected_author_http::FiniteHttpFailure) -> Self {
+        match failure {
+            crate::selected_author_http::FiniteHttpFailure::Request => Self::Preflight,
+            _ => Self::Unanswered,
+        }
+    }
+
+    /// Returns the refusal one failed authenticated read amounts to.
+    fn of_authenticated_read(
+        failure: &crate::selected_author_authenticated_read::AuthenticatedReadFailure,
+    ) -> Self {
+        use crate::selected_author_authenticated_read::AuthenticatedReadFailure;
+        match failure {
+            AuthenticatedReadFailure::Selection(_) => Self::Preflight,
+            AuthenticatedReadFailure::Authentication(_) => Self::Unauthenticated,
+            AuthenticatedReadFailure::Transport(exchange) => Self::of_exchange(exchange),
+        }
+    }
+
+    /// Returns the refusal an answer with this status amounts to.
+    fn of_status(status: u16) -> Self {
+        if UNAVAILABLE_STATUSES.contains(&status) {
+            Self::Unanswered
+        } else if REFUSING_STATUSES.contains(&status) {
+            Self::Refused(status)
+        } else {
+            Self::Incompatible
+        }
+    }
+}
 
 /// Decodes the closed, bounded capability document before any generation is
 /// used to derive work. Duplicate command names cannot hide conflicting entries.
@@ -223,14 +282,14 @@ pub fn decode_capabilities(
     if body.len() as u64
         > AuthorAgentTransportContract::embedded().limit("maximum_agent_protocol_document_bytes")
     {
-        return Err(CapabilityExchangeRefusal);
+        return Err(CapabilityExchangeRefusal::Incompatible);
     }
     let document: Capabilities =
-        serde_json::from_slice(body).map_err(|_| CapabilityExchangeRefusal)?;
+        serde_json::from_slice(body).map_err(|_| CapabilityExchangeRefusal::Incompatible)?;
     if document.format != slingshot_agent_protocol::identity::AGENT_FORMAT
         || document.agent_event_store_generation == 0
     {
-        return Err(CapabilityExchangeRefusal);
+        return Err(CapabilityExchangeRefusal::Incompatible);
     }
     let mut names = std::collections::BTreeSet::new();
     for command in &document.command_contracts {
@@ -245,7 +304,7 @@ pub fn decode_capabilities(
             || !digest(&command.result_schema_digest)
             || !digest(&command.command_contract_limits_digest)
         {
-            return Err(CapabilityExchangeRefusal);
+            return Err(CapabilityExchangeRefusal::Incompatible);
         }
     }
     let advertised = AdvertisedCapabilities {
@@ -256,7 +315,9 @@ pub fn decode_capabilities(
         continuation_authority_ready: document.continuation_authority_ready,
         transport_contract_digest: document.transport_contract_digest,
     };
-    required.require_compatible(&advertised).map_err(|_| CapabilityExchangeRefusal)?;
+    required
+        .require_compatible(&advertised)
+        .map_err(|_| CapabilityExchangeRefusal::Incompatible)?;
     Ok(advertised)
 }
 
@@ -330,9 +391,9 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         source: &dyn crate::authentication::access_token_cache::AccessTokenSource,
         reading: u64,
     ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
-        self.require_execution(identity).map_err(|_| CapabilityExchangeRefusal)?;
+        self.require_execution(identity).map_err(|_| CapabilityExchangeRefusal::Preflight)?;
         let command = SelectedCommandContractIdentity::installed(command_wire_name)
-            .map_err(|_| CapabilityExchangeRefusal)?;
+            .map_err(|_| CapabilityExchangeRefusal::Preflight)?;
         let required = RequiredCapabilities::of(
             command,
             &slingshot_domain::command::schema::canonical_contract_digest(),
@@ -348,7 +409,7 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
                 &http::HeaderMap::new(),
             )
             .await
-            .map_err(|_| CapabilityExchangeRefusal)?;
+            .map_err(|failure| CapabilityExchangeRefusal::of_authenticated_read(&failure))?;
         Self::decode_capability_receipt(receipt, &required)
     }
 
@@ -366,9 +427,9 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         Clock: crate::authentication::identity_management_exchange::MonotonicClock + Sync,
         Utc: crate::authentication::token_assertion::CoordinatedUniversalTimeClock + Sync,
     {
-        self.require_execution(identity).map_err(|_| CapabilityExchangeRefusal)?;
+        self.require_execution(identity).map_err(|_| CapabilityExchangeRefusal::Preflight)?;
         let command = SelectedCommandContractIdentity::installed(command_wire_name)
-            .map_err(|_| CapabilityExchangeRefusal)?;
+            .map_err(|_| CapabilityExchangeRefusal::Preflight)?;
         let required = RequiredCapabilities::of(
             command,
             &slingshot_domain::command::schema::canonical_contract_digest(),
@@ -384,7 +445,7 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
                 &http::HeaderMap::new(),
             )
             .await
-            .map_err(|_| CapabilityExchangeRefusal)?;
+            .map_err(|failure| CapabilityExchangeRefusal::of_authenticated_read(&failure))?;
         Self::decode_capability_receipt(receipt, &required)
     }
 
@@ -396,9 +457,9 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         authentication: &crate::authentication::environment_provider::RequestAuthentication,
         http2: Option<bool>,
     ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
-        self.require_execution(identity).map_err(|_| CapabilityExchangeRefusal)?;
+        self.require_execution(identity).map_err(|_| CapabilityExchangeRefusal::Preflight)?;
         let command = SelectedCommandContractIdentity::installed(command_wire_name)
-            .map_err(|_| CapabilityExchangeRefusal)?;
+            .map_err(|_| CapabilityExchangeRefusal::Preflight)?;
         let required = RequiredCapabilities::of(
             command,
             &slingshot_domain::command::schema::canonical_contract_digest(),
@@ -434,7 +495,7 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
             )
             .await
         }
-        .map_err(|_| CapabilityExchangeRefusal)?;
+        .map_err(|failure| CapabilityExchangeRefusal::of_exchange(&failure))?;
         Self::decode_capability_receipt(receipt, &required)
     }
 
@@ -442,13 +503,15 @@ impl crate::selected_author_transport::SelectedAuthorTransport {
         receipt: crate::selected_author_http::FiniteHttpReceipt,
         required: &RequiredCapabilities,
     ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
-        if receipt.response.status != 200
-            || receipt.response.head.location.is_some()
+        if receipt.response.status != 200 {
+            return Err(CapabilityExchangeRefusal::of_status(receipt.response.status));
+        }
+        if receipt.response.head.location.is_some()
             || !crate::selected_author_submission::json_media_type(
                 receipt.response.content_type.as_deref().unwrap_or(""),
             )
         {
-            return Err(CapabilityExchangeRefusal);
+            return Err(CapabilityExchangeRefusal::Incompatible);
         }
         decode_capabilities(&receipt.response.body, required)
     }
