@@ -7,6 +7,10 @@ depends_on: []
 gated: false
 touches:
   - crates/slingshot-domain/src/command/list_child_nodes.rs
+  - crates/slingshot-domain/src/command/list_component_definitions.rs
+  - crates/slingshot-domain/src/command/list_components.rs
+  - crates/slingshot-domain/src/command/list_content_fragments.rs
+  - crates/slingshot-domain/src/command/list_experience_fragments.rs
   - crates/slingshot-domain/src/command/list_content_fragment_models.rs
   - crates/slingshot-domain/src/command/list_page_templates.rs
   - crates/slingshot-domain/src/command/mod.rs

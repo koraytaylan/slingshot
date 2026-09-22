@@ -182,7 +182,7 @@ pub(crate) fn repository_path(limits: &CommandContract) -> Value {
 }
 
 /// Returns the schema one relative repository path satisfies.
-fn relative_path(limits: &CommandContract) -> Value {
+pub(crate) fn relative_path(limits: &CommandContract) -> Value {
     json!({
         "type": "string",
         "pattern": "^[^/]",
@@ -284,7 +284,7 @@ pub(crate) fn property_value(limits: &CommandContract) -> Value {
 }
 
 /// Returns the schema one predicate collection satisfies.
-fn property_predicates(limits: &CommandContract) -> Value {
+pub(crate) fn property_predicates(limits: &CommandContract) -> Value {
     json!({
         "type": "array",
         "maxItems": limits.limit("maximum_property_predicates"),
@@ -383,7 +383,11 @@ pub(crate) fn component_listing_match(limits: &CommandContract) -> Value {
 }
 
 /// Returns the schema a discovery command's arguments satisfy.
-fn discovery_arguments(limits: &CommandContract, extra: Value, required: Value) -> Value {
+pub(crate) fn discovery_arguments(
+    limits: &CommandContract,
+    extra: Value,
+    required: Value,
+) -> Value {
     let mut properties = json!({
         "root_path": repository_path(limits),
         "result_window": result_window(limits),
@@ -579,7 +583,7 @@ pub(crate) fn content_fragment_elements(limits: &CommandContract) -> Value {
 pub fn command_schema(wire_name: &str, role: SchemaRole) -> Value {
     let limits = CommandContract::embedded();
     let body = page_search_body(wire_name, role, limits)
-        .or_else(|| asset_search_body(wire_name, role, limits))
+        .or_else(|| crate::command::schema_authoring::asset_search_body(wire_name, role, limits))
         .or_else(|| inspection_body(wire_name, role, limits))
         .or_else(|| action_body(wire_name, role, limits))
         .or_else(|| crate::command::schema_authoring::body(wire_name, role, limits))
@@ -641,47 +645,6 @@ fn page_search_body(wire_name: &str, role: SchemaRole, limits: &CommandContract)
             | "find_pages_using_components",
             SchemaRole::Result,
         ) => discovery_page(limits, page_match(limits)),
-        _ => return None,
-    };
-    Some(body)
-}
-
-/// Returns the body the two asset searches declare, when this is one of them.
-fn asset_search_body(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Option<Value> {
-    let body = match (wire_name, role) {
-        ("find_assets_by_metadata", SchemaRole::Arguments) => {
-            find_assets_by_metadata_arguments(limits)
-        }
-        ("find_assets_by_metadata", SchemaRole::Result) => {
-            discovery_page(limits, asset_match(limits))
-        }
-        ("find_assets_referenced_by_page", SchemaRole::Arguments) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["page_path"],
-            "properties": {
-                "page_path": repository_path(limits),
-                "result_window": result_window(limits),
-            },
-        }),
-        ("find_assets_referenced_by_page", SchemaRole::Result) => discovery_page(
-            limits,
-            json!({
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["reference_paths", "repository_path"],
-                "properties": {
-                    "reference_paths": {
-                        "type": "array",
-                        "minItems": 1,
-                        "uniqueItems": true,
-                        "maxItems": limits.limit("maximum_asset_reference_paths"),
-                        "items": relative_path(limits),
-                    },
-                    "repository_path": repository_path(limits),
-                },
-            }),
-        ),
         _ => return None,
     };
     Some(body)
@@ -845,61 +808,6 @@ pub(crate) fn mutation_properties(limits: &CommandContract) -> Value {
         "maxProperties": limits.limit("maximum_mutation_properties"),
         "additionalProperties": property_value(limits),
     })
-}
-
-/// Returns the schema one asset match satisfies.
-fn asset_match(limits: &CommandContract) -> Value {
-    json!({
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["repository_path"],
-        "properties": {
-            "byte_length": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": limits.limit("maximum_asset_byte_length"),
-            },
-            "media_format": nonempty_string(limits.limit("maximum_media_format_bytes")),
-            "repository_path": repository_path(limits),
-            "tags": {
-                "type": "array",
-                "uniqueItems": true,
-                "maxItems": limits.limit("maximum_requested_asset_tags"),
-                "items": nonempty_string(limits.limit("maximum_asset_tag_bytes")),
-            },
-        },
-    })
-}
-
-/// Returns the schema the asset search's arguments satisfy.
-fn find_assets_by_metadata_arguments(limits: &CommandContract) -> Value {
-    let byte_length = json!({
-        "type": "integer",
-        "minimum": 0,
-        "maximum": limits.limit("maximum_asset_byte_length"),
-    });
-    discovery_arguments(
-        limits,
-        json!({
-            "maximum_byte_length": byte_length,
-            "minimum_byte_length": byte_length,
-            "media_formats": {
-                "type": "array",
-                "uniqueItems": true,
-                "maxItems": limits.limit("maximum_requested_media_formats"),
-                "items": nonempty_string(limits.limit("maximum_media_format_bytes")),
-            },
-            "property_predicates": property_predicates(limits),
-            "tag_match_mode": {"enum": ["any", "all"]},
-            "tags": {
-                "type": "array",
-                "uniqueItems": true,
-                "maxItems": limits.limit("maximum_requested_asset_tags"),
-                "items": nonempty_string(limits.limit("maximum_asset_tag_bytes")),
-            },
-        }),
-        json!(["root_path"]),
-    )
 }
 
 /// Returns the schema the package command's arguments satisfy.

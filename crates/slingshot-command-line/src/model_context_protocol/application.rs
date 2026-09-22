@@ -546,9 +546,7 @@ impl ServerApplication {
     ) -> Option<Value> {
         let artifact_identifier = arguments.get("artifact_identifier").and_then(Value::as_str)?;
         let expected = arguments.get("expected_content_digest").and_then(Value::as_str)?;
-        let Some(access) = named_access(envelope, artifact_identifier) else {
-            return None;
-        };
+        let access = named_access(envelope, artifact_identifier)?;
         if access.content_digest != expected {
             return Some(visible_failure(
                 "the digest this call quoted is not the digest the artifact access entry declares",

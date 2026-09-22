@@ -164,21 +164,21 @@ impl RequiredCapabilities {
         // directions are separate refusals: an agent behind this client is a
         // deployment that needs updating, and one ahead of it is an agent this
         // client is too old to use.
-        if advertised.capability_revision
-            < slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION
-        {
-            return Err(DiscoveryRefusal::CapabilityRevisionTooOld {
-                advertised: advertised.capability_revision,
-                required: slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,
-            });
-        }
-        if advertised.capability_revision
-            > slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION
-        {
-            return Err(DiscoveryRefusal::CapabilityRevisionTooNew {
-                advertised: advertised.capability_revision,
-                required: slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION,
-            });
+        let required = slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION;
+        match advertised.capability_revision.cmp(&required) {
+            std::cmp::Ordering::Less => {
+                return Err(DiscoveryRefusal::CapabilityRevisionTooOld {
+                    advertised: advertised.capability_revision,
+                    required,
+                });
+            }
+            std::cmp::Ordering::Greater => {
+                return Err(DiscoveryRefusal::CapabilityRevisionTooNew {
+                    advertised: advertised.capability_revision,
+                    required,
+                });
+            }
+            std::cmp::Ordering::Equal => {}
         }
         if let Some(expected) = self.expected_generation
             && advertised.agent_event_store_generation != expected

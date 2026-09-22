@@ -15,9 +15,9 @@ use serde_json::{Value, json};
 use crate::command::command_identity::CommandContract;
 use crate::command::schema::{
     SchemaRole, bounded_string, closed, component_listing_match, content_fragment_elements,
-    deleted_result, discovery_page, inline_binary_payload, listing_page, moved_result,
-    mutation_properties, mutation_result, nonempty_string, page_match, removed_property_names,
-    repository_path, result_window,
+    deleted_result, discovery_arguments, discovery_page, inline_binary_payload, listing_page,
+    moved_result, mutation_properties, mutation_result, nonempty_string, page_match,
+    property_predicates, relative_path, removed_property_names, repository_path, result_window,
 };
 
 /// Returns the body one command role declares, when this leaf declares it.
@@ -536,4 +536,104 @@ fn child_node_match(limits: &CommandContract) -> Value {
             "title": bounded_string(limits.limit("maximum_page_title_bytes")),
         },
     })
+}
+
+/// Returns the body the two asset searches declare, when this is one of them.
+pub(crate) fn asset_search_body(
+    wire_name: &str,
+    role: SchemaRole,
+    limits: &CommandContract,
+) -> Option<Value> {
+    let body = match (wire_name, role) {
+        ("find_assets_by_metadata", SchemaRole::Arguments) => {
+            find_assets_by_metadata_arguments(limits)
+        }
+        ("find_assets_by_metadata", SchemaRole::Result) => {
+            discovery_page(limits, asset_match(limits))
+        }
+        ("find_assets_referenced_by_page", SchemaRole::Arguments) => json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["page_path"],
+            "properties": {
+                "page_path": repository_path(limits),
+                "result_window": result_window(limits),
+            },
+        }),
+        ("find_assets_referenced_by_page", SchemaRole::Result) => discovery_page(
+            limits,
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["reference_paths", "repository_path"],
+                "properties": {
+                    "reference_paths": {
+                        "type": "array",
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "maxItems": limits.limit("maximum_asset_reference_paths"),
+                        "items": relative_path(limits),
+                    },
+                    "repository_path": repository_path(limits),
+                },
+            }),
+        ),
+        _ => return None,
+    };
+    Some(body)
+}
+
+/// Returns the schema one asset match satisfies.
+fn asset_match(limits: &CommandContract) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repository_path"],
+        "properties": {
+            "byte_length": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": limits.limit("maximum_asset_byte_length"),
+            },
+            "media_format": nonempty_string(limits.limit("maximum_media_format_bytes")),
+            "repository_path": repository_path(limits),
+            "tags": {
+                "type": "array",
+                "uniqueItems": true,
+                "maxItems": limits.limit("maximum_requested_asset_tags"),
+                "items": nonempty_string(limits.limit("maximum_asset_tag_bytes")),
+            },
+        },
+    })
+}
+
+/// Returns the schema the asset search's arguments satisfy.
+fn find_assets_by_metadata_arguments(limits: &CommandContract) -> Value {
+    let byte_length = json!({
+        "type": "integer",
+        "minimum": 0,
+        "maximum": limits.limit("maximum_asset_byte_length"),
+    });
+    discovery_arguments(
+        limits,
+        json!({
+            "maximum_byte_length": byte_length,
+            "minimum_byte_length": byte_length,
+            "media_formats": {
+                "type": "array",
+                "uniqueItems": true,
+                "maxItems": limits.limit("maximum_requested_media_formats"),
+                "items": nonempty_string(limits.limit("maximum_media_format_bytes")),
+            },
+            "property_predicates": property_predicates(limits),
+            "tag_match_mode": {"enum": ["any", "all"]},
+            "tags": {
+                "type": "array",
+                "uniqueItems": true,
+                "maxItems": limits.limit("maximum_requested_asset_tags"),
+                "items": nonempty_string(limits.limit("maximum_asset_tag_bytes")),
+            },
+        }),
+        json!(["root_path"]),
+    )
 }

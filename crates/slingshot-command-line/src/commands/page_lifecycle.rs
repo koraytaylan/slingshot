@@ -127,6 +127,14 @@ fn build_page(invocation: &Invocation) -> Option<Result<Command, RequestRefusal>
         UPDATE_PAGE => update_page(invocation),
         DELETE_PAGE => delete_page(invocation),
         MOVE_PAGE => move_page(invocation),
+        _ => return build_listing(invocation),
+    };
+    Some(built)
+}
+
+/// Returns the listing one invocation describes, when it describes one.
+fn build_listing(invocation: &Invocation) -> Option<Result<Command, RequestRefusal>> {
+    let built = match invocation.verb.as_str() {
         LIST_CHILD_NODES => list_child_nodes(invocation),
         LIST_CHILD_NODES_BY_TYPE => list_child_nodes_by_type(invocation),
         LIST_CHILD_PAGES => list_child_pages(invocation),

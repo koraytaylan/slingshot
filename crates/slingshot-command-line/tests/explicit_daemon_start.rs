@@ -49,6 +49,12 @@ const CONVERGING_CLIENT_COUNT: usize = 12;
 #[cfg(target_os = "linux")]
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
+/// How long the departing owner holds its lock after the start begins waiting.
+const HOLDER_DEPARTS_AFTER_MILLISECONDS: u64 = 400;
+
+/// How long a start may take once the lock it waited on is released.
+const START_SETTLES_WITHIN_SECONDS: u64 = 5;
+
 /// Returns the product executable this assertion drives.
 fn product_executable() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_slingshot-runtime-test-host"))
@@ -257,9 +263,9 @@ async fn a_start_creates_the_daemon_once_a_departing_owner_releases_its_lock() {
         .expect("the owner lock is free");
     let started_target = addressed.clone();
     let pending = tokio::spawn(async move { start(&started_target, "after-departure").await });
-    tokio::time::sleep(Duration::from_millis(400)).await;
+    tokio::time::sleep(Duration::from_millis(HOLDER_DEPARTS_AFTER_MILLISECONDS)).await;
     drop(held);
-    let created = tokio::time::timeout(Duration::from_secs(5), pending)
+    let created = tokio::time::timeout(Duration::from_secs(START_SETTLES_WITHIN_SECONDS), pending)
         .await
         .expect("the start does not sit out the whole deadline")
         .expect("the start task finishes");

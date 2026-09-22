@@ -254,10 +254,8 @@ fn an_agent_built_before_a_behavioural_fix_is_refused_before_work_is_sent() {
     // right format and holds the right contracts and still answers a refusal in
     // a shape this client cannot read. Only the behavioural revision tells the
     // two apart, and the refusal says which direction the build is behind.
-    let older = AdvertisedCapabilities {
-        capability_revision: REQUIRED_CAPABILITY_REVISION,
-        ..matching()
-    };
+    let older =
+        AdvertisedCapabilities { capability_revision: REQUIRED_CAPABILITY_REVISION, ..matching() };
     let refused = required(Some(GENERATION)).require_compatible(&older);
     assert!(
         matches!(
