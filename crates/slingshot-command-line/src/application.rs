@@ -980,9 +980,11 @@ impl CommandLineApplication<'_> {
                         return Ok(Completion { diagnostics, ..completion });
                     }
                     if lifecycle_state == "recovery_required" {
-                        let completion = self.receipt(namespace, hello, &admitted)?;
-                        diagnostics.extend(completion.diagnostics);
-                        return Ok(Completion { diagnostics, ..completion });
+                        // A retry the daemon is still making is not an answer.
+                        // Leaving here is what turns a listing into "queued,
+                        // which does not permit this" the moment anything tries
+                        // to read it. Stay until the operation actually ends.
+                        continue;
                     }
                 }
                 OperationResponse::Progress { ref detail, operation_revision, .. } => {
@@ -1148,9 +1150,75 @@ impl CommandLineApplication<'_> {
                 "an artifact download needs the artifact it is fetching".to_owned(),
             ));
         }
+        if invocation.verb == ARTIFACT_LEAF_NAME {
+            return self.artifact_when_settled(&namespace, &hello, request, &admitted);
+        }
         let response =
             self.exchange(&namespace, &hello, request, &admitted.operation_identifier)?;
         self.resolved(&namespace, &hello, &response, &self.access(&namespace, &hello, &admitted))
+    }
+
+    /// Reads an artifact once the operation that owns it has ended.
+    ///
+    /// A read issued while the operation is still queued is not a refusal of
+    /// the work. The daemon is still getting the answer, often because the
+    /// author asked it to try the submission again, and the bytes do not exist
+    /// yet. Waiting and then reading is the request the caller made. A failed
+    /// operation has no artifact, so that case returns the failure itself.
+    fn artifact_when_settled(
+        &self,
+        namespace: &NamespacePair,
+        hello: &HelloResult,
+        request: OperationRequest,
+        admitted: &Admitted,
+    ) -> Result<Completion, RunRefusal> {
+        let mut observed_revision = None;
+        loop {
+            let response =
+                self.exchange(namespace, hello, request.clone(), &admitted.operation_identifier)?;
+            let OperationResponse::InvalidTransition { lifecycle_state, .. } = &response else {
+                return self.resolved(
+                    namespace,
+                    hello,
+                    &response,
+                    &self.access(namespace, hello, admitted),
+                );
+            };
+            if lifecycle_state == "failed" {
+                return Ok(self.result_of(namespace, hello, admitted));
+            }
+            if lifecycle_state == "succeeded" {
+                return self.resolved(
+                    namespace,
+                    hello,
+                    &response,
+                    &self.access(namespace, hello, admitted),
+                );
+            }
+            let waited = self.exchange(
+                namespace,
+                hello,
+                OperationRequest::Wait {
+                    observed_revision,
+                    operation_identifier: admitted.operation_identifier.clone(),
+                },
+                &admitted.operation_identifier,
+            )?;
+            match waited {
+                OperationResponse::Status { operation_revision, .. }
+                | OperationResponse::Progress { operation_revision, .. } => {
+                    observed_revision = Some(operation_revision);
+                }
+                settled => {
+                    return self.resolved(
+                        namespace,
+                        hello,
+                        &settled,
+                        &self.access(namespace, hello, admitted),
+                    );
+                }
+            }
+        }
     }
 
     /// Fetches one operation's artifact into memory, verified whole.

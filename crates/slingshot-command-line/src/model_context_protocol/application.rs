@@ -21,7 +21,7 @@
 
 use serde_json::{Value, json};
 
-use crate::machine_outcome_envelope::{Interruption, MachineOutcomeEnvelope};
+use crate::machine_outcome_envelope::{ArtifactAccess, Interruption, MachineOutcomeEnvelope};
 use crate::model_context_protocol::active_request_registry::{
     ActiveRequestRegistry, AdmissionRefusal,
 };
@@ -501,6 +501,17 @@ impl ServerApplication {
                 "isError": true,
             }));
         }
+        // A host such as OpenCode displays `structuredContent` and ignores the
+        // text items and resource links beside it. `operation-artifact` exists
+        // to fetch the bytes an access envelope only names, so those bytes have
+        // to be the structured content or the host repeats the envelope and
+        // never shows the document. Every other tool keeps the command line's
+        // envelope, which is what that host should see for those calls.
+        if name == "operation-artifact"
+            && let Some(inlined) = self.artifact_tool_result(identifier, &envelope, &accepted)
+        {
+            return Ok(inlined);
+        }
         let projected = result_projection::projected(&envelope, true, Vec::new())
             .map_err(|refusal| Refusal::ParametersUnusable { detail: refusal.to_string() })?;
         Ok(json!({
@@ -508,6 +519,99 @@ impl ServerApplication {
             "structuredContent": projected.structured_content,
             "isError": projected.is_error,
         }))
+    }
+
+    /// Returns the artifact body as the tool result a structured-content host reads.
+    ///
+    /// `None` leaves the access envelope in place: the call did not name an
+    /// artifact this process can inline, or the body would not fit in one
+    /// protocol line. A fetch that was attempted and failed is a tool result
+    /// whose structured content says why, because a host that only displays
+    /// that member would otherwise report the access envelope as success.
+    fn artifact_tool_result(
+        &mut self,
+        identifier: &Value,
+        envelope: &MachineOutcomeEnvelope,
+        arguments: &Value,
+    ) -> Option<Value> {
+        let artifact_identifier = arguments.get("artifact_identifier").and_then(Value::as_str)?;
+        let expected = arguments.get("expected_content_digest").and_then(Value::as_str)?;
+        let Some(access) = named_access(envelope, artifact_identifier) else {
+            return None;
+        };
+        if access.content_digest != expected {
+            return Some(visible_failure(
+                "the digest this call quoted is not the digest the artifact access entry declares",
+            ));
+        }
+        let address = match crate::model_context_protocol::resource_catalog::parse(&access.uri) {
+            Ok(address) => address,
+            Err(failure) => {
+                return Some(visible_failure(&format!(
+                    "the artifact access entry names an address this server cannot read: {failure}"
+                )));
+            }
+        };
+        let crate::model_context_protocol::resource_catalog::ResourceAddress::Artifact {
+            namespace,
+            operation_identifier,
+            artifact_identifier: addressed,
+        } = address
+        else {
+            return Some(visible_failure(
+                "the artifact access entry does not name an artifact address",
+            ));
+        };
+        if addressed != artifact_identifier {
+            return Some(visible_failure(
+                "the artifact access entry names a different artifact than this call",
+            ));
+        }
+        let fetched = match self.runner_as_mut() {
+            Some(runner) => runner.artifact_bytes(
+                &operation_execution::ResourceNamespace {
+                    profile: namespace.profile,
+                    environment: namespace.environment,
+                    author_target_identity_digest: namespace.author_target_identity_digest,
+                },
+                &operation_identifier,
+                &addressed,
+                crate::model_context_protocol::size_budget::maximum_resource_blob_bytes(),
+            ),
+            None => Err("this server reaches no daemon".to_owned()),
+        };
+        let fetched = match fetched {
+            Ok(fetched) => fetched,
+            Err(detail) => {
+                self.diagnostics.record(&detail);
+                return Some(visible_failure(&detail));
+            }
+        };
+        if fetched.artifact_identifier != artifact_identifier
+            || fetched.content_digest != expected
+            || fetched.byte_length != access.byte_length
+            || fetched.media_type != access.media_type
+        {
+            return Some(visible_failure(
+                "the daemon's artifact bytes do not match the access entry this call quoted",
+            ));
+        }
+        let (text, structured) = match artifact_body(&fetched.media_type, &fetched.bytes) {
+            Ok(rendered) => rendered,
+            Err(detail) => return Some(visible_failure(&detail)),
+        };
+        let result = json!({
+            "content": [{ "type": "text", "text": text }],
+            "structuredContent": structured,
+            "isError": false,
+        });
+        let carried = current_stateless_revision::decorated("tools/call", result.clone());
+        if rendered_result(identifier, carried).len()
+            > crate::model_context_protocol::standard_stream_transport::maximum_line_bytes()
+        {
+            return None;
+        }
+        Some(result)
     }
 
     /// Ends everything, once, and says what was detached.
@@ -592,6 +696,79 @@ fn answered_resource(uri: &str, envelope: &MachineOutcomeEnvelope) -> Value {
         "contents": [{ "uri": uri, "mimeType": "application/json", "text": text }],
         "isError": is_error,
     })
+}
+
+/// Returns the access entry one outcome names for one artifact.
+fn named_access(
+    envelope: &MachineOutcomeEnvelope,
+    artifact_identifier: &str,
+) -> Option<ArtifactAccess> {
+    match envelope {
+        MachineOutcomeEnvelope::StructuredResultArtifactAccess { artifact }
+            if artifact.artifact_identifier == artifact_identifier =>
+        {
+            Some(artifact.clone())
+        }
+        MachineOutcomeEnvelope::CommandArtifactAccess { artifacts, .. } => artifacts
+            .iter()
+            .find(|access| access.artifact_identifier == artifact_identifier)
+            .cloned(),
+        _ => None,
+    }
+}
+
+/// Returns a tool failure whose structured content states the reason.
+///
+/// The reason is the structured content, not a second text item, because a
+/// host that displays only structured content never shows the second item.
+fn visible_failure(detail: &str) -> Value {
+    let structured = json!({
+        "outcome": "local_application_error",
+        "detail": detail,
+    });
+    let text = structured.to_string();
+    json!({
+        "content": [{ "type": "text", "text": text }],
+        "structuredContent": structured,
+        "isError": true,
+    })
+}
+
+/// Returns the artifact body as text plus the structured content a host displays.
+///
+/// JSON becomes the parsed document, so a host that shows structured content
+/// shows the document rather than an access envelope. Any other media type
+/// becomes base64 beside its media type. The text is that same document, so
+/// the two members cannot disagree.
+///
+/// # Errors
+///
+/// Returns why the bytes are not a document this result can carry.
+fn artifact_body(media_type: &str, bytes: &[u8]) -> Result<(String, Value), String> {
+    if media_type == "application/json" || media_type.ends_with("+json") {
+        let text = std::str::from_utf8(bytes)
+            .map_err(|_| "the artifact is declared JSON and is not UTF-8".to_owned())?;
+        let document: Value = serde_json::from_str(text)
+            .map_err(|_| "the artifact is declared JSON and is not a JSON document".to_owned())?;
+        // A JSON object is the structured content itself. Anything else is
+        // wrapped, because structured content is an object and a host that
+        // displays it would otherwise have nothing to show for an array.
+        if document.is_object() {
+            return Ok((text.to_owned(), document));
+        }
+        let structured = json!({ "document": document });
+        return Ok((structured.to_string(), structured));
+    }
+    if media_type.starts_with("text/") {
+        let text = std::str::from_utf8(bytes)
+            .map_err(|_| "the artifact is declared text and is not UTF-8".to_owned())?;
+        let structured = json!({ "media_type": media_type, "text": text });
+        return Ok((structured.to_string(), structured));
+    }
+    use base64::Engine as _;
+    let blob = base64::engine::general_purpose::STANDARD.encode(bytes);
+    let structured = json!({ "media_type": media_type, "encoding": "base64", "blob": blob });
+    Ok((structured.to_string(), structured))
 }
 
 /// Returns one artifact carried as the resource content its media type allows.

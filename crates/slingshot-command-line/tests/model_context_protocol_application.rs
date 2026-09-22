@@ -135,6 +135,62 @@ impl ToolRunner for ArtifactRunner {
     }
 }
 
+/// A runner whose `operation-artifact` call returns an access envelope and bytes.
+struct ArtifactToolRunner {
+    /// The JSON document the artifact holds.
+    document: String,
+    /// Whether the byte fetch fails.
+    refuse: bool,
+}
+
+impl ToolRunner for ArtifactToolRunner {
+    fn run(
+        &mut self,
+        tool: &ToolDescriptor,
+        _arguments: &Value,
+    ) -> Result<MachineOutcomeEnvelope, String> {
+        if tool.name != "operation-artifact" {
+            return Err(format!("{} is not the artifact read", tool.name));
+        }
+        Ok(MachineOutcomeEnvelope::StructuredResultArtifactAccess {
+            artifact: slingshot_command_line::machine_outcome_envelope::ArtifactAccess {
+                artifact_identifier: "structured_result".to_owned(),
+                author_target_identity_digest: PLACEHOLDER_DIGEST.to_owned(),
+                byte_length: self.document.len() as u64,
+                content_digest: PLACEHOLDER_DIGEST.to_owned(),
+                media_type: "application/json".to_owned(),
+                operation_identifier: "two".to_owned(),
+                uri: format!(
+                    "slingshot://profiles/local/environments/author/targets/{PLACEHOLDER_DIGEST}/operations/two/artifacts/structured_result"
+                ),
+            },
+        })
+    }
+
+    fn artifact_bytes(
+        &mut self,
+        _namespace: &slingshot_command_line::model_context_protocol::operation_execution::ResourceNamespace,
+        _operation_identifier: &str,
+        artifact_identifier: &str,
+        _maximum_bytes: u64,
+    ) -> Result<
+        slingshot_command_line::model_context_protocol::operation_execution::FetchedArtifact,
+        String,
+    > {
+        if self.refuse {
+            return Err(REFUSING_ARTIFACT_REASON.to_owned());
+        }
+        Ok(slingshot_command_line::model_context_protocol::operation_execution::FetchedArtifact {
+            artifact_identifier: artifact_identifier.to_owned(),
+            author_target_identity_digest: PLACEHOLDER_DIGEST.to_owned(),
+            byte_length: self.document.len() as u64,
+            content_digest: PLACEHOLDER_DIGEST.to_owned(),
+            media_type: "application/json".to_owned(),
+            bytes: self.document.as_bytes().to_vec(),
+        })
+    }
+}
+
 /// A runner whose artifact read fails.
 struct RefusingArtifactRunner;
 
@@ -527,6 +583,54 @@ fn a_binary_artifact_resource_read_is_base64_rather_than_lossy_text() {
         .decode(contents[0]["blob"].as_str().expect("a blob member"))
         .expect("the blob is base64");
     assert_eq!(decoded, bytes, "the resource read carried different bytes");
+}
+
+#[test]
+fn an_operation_artifact_call_returns_the_json_body_in_structured_content() {
+    // OpenCode displays structuredContent and ignores text items and resource
+    // links. The access envelope is what a command line writes; the tool the
+    // host calls to fetch the artifact has to put the body where that host
+    // looks, or the fetch looks successful and the document stays invisible.
+    let document = r#"{"matches":[{"repository_path":"/content/dam"}]}"#;
+    let mut server = ServerApplication::over(Some(Box::new(ArtifactToolRunner {
+        document: document.to_owned(),
+        refuse: false,
+    })));
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"call","method":"tools/call","params":{{"protocolVersion":"{CURRENT}","name":"operation-artifact","arguments":{{"artifact_identifier":"structured_result","expected_content_digest":"{PLACEHOLDER_DIGEST}","operation_identifier":"two"}}}}}}"#
+        ),
+    );
+    assert!(answer.get("error").is_none(), "{answer}");
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(false), "{answer}");
+    assert_eq!(
+        answer["result"]["structuredContent"]["matches"][0]["repository_path"].as_str(),
+        Some("/content/dam"),
+        "structured content repeated the access envelope: {answer}"
+    );
+    let text = answer["result"]["content"][0]["text"].as_str().expect("the body is text");
+    assert_eq!(text, document);
+}
+
+#[test]
+fn an_operation_artifact_call_that_cannot_fetch_says_so_in_structured_content() {
+    let mut server = ServerApplication::over(Some(Box::new(ArtifactToolRunner {
+        document: "{}".to_owned(),
+        refuse: true,
+    })));
+    let answer = answered(
+        &mut server,
+        &format!(
+            r#"{{"id":"call","method":"tools/call","params":{{"protocolVersion":"{CURRENT}","name":"operation-artifact","arguments":{{"artifact_identifier":"structured_result","expected_content_digest":"{PLACEHOLDER_DIGEST}","operation_identifier":"two"}}}}}}"#
+        ),
+    );
+    assert_eq!(answer["result"]["isError"].as_bool(), Some(true), "{answer}");
+    assert_eq!(
+        answer["result"]["structuredContent"]["detail"].as_str(),
+        Some(REFUSING_ARTIFACT_REASON),
+        "the failure stayed in a text item the host does not display: {answer}"
+    );
 }
 
 #[test]
