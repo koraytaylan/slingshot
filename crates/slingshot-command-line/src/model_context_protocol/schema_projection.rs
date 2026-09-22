@@ -184,6 +184,11 @@ const fn optional(member: &'static str, option: &'static str) -> ControlMember {
     ControlMember { member, option, kind: MemberKind::Text, required: false }
 }
 
+/// One declared whole-number member the leaf supplies a default for.
+const fn optional_count(member: &'static str, option: &'static str) -> ControlMember {
+    ControlMember { member, option, kind: MemberKind::Count, required: false }
+}
+
 /// The member naming the operation a control acts on.
 const OPERATION: &str = "operation_identifier";
 
@@ -199,7 +204,13 @@ const OPERATION: &str = "operation_identifier";
 /// satisfy; requiring one the leaf defaults would make a caller name something
 /// they need not know.
 const CONTROL_MEMBERS: &[(&str, &[ControlMember])] = &[
-    ("operation-list", &[]),
+    (
+        "operation-list",
+        &[
+            optional_count("limit", crate::invocation::LIMIT_OPTION),
+            optional("continuation_token", crate::invocation::CONTINUATION_TOKEN_OPTION),
+        ],
+    ),
     (
         "operation-status",
         &[needed(OPERATION, crate::invocation::OPERATION_IDENTIFIER_OPTION, MemberKind::Text)],
@@ -245,6 +256,7 @@ const CONTROL_MEMBERS: &[(&str, &[ControlMember])] = &[
         &[
             optional("author_target_identity_digest", crate::invocation::TARGET_DIGEST_OPTION),
             needed("before_unix_milliseconds", crate::invocation::BEFORE_OPTION, MemberKind::Count),
+            optional_count("limit", crate::invocation::LIMIT_OPTION),
         ],
     ),
     (

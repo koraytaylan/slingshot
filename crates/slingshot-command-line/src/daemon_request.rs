@@ -30,7 +30,7 @@ use crate::invocation::{
     OPERATION_IDENTIFIER_OPTION, RESULT_IDENTIFIER_OPTION, REVIEWED_DIGEST_OPTION,
     TARGET_DIGEST_OPTION,
 };
-use crate::operation_maintenance::{MAXIMUM_PAGE_SIZE, MAXIMUM_PREVIEW_LIMIT};
+use crate::operation_maintenance::{DEFAULT_PAGE_SIZE, MAXIMUM_PAGE_SIZE, MAXIMUM_PREVIEW_LIMIT};
 
 /// Returns the typed command one catalog invocation describes.
 ///
@@ -164,7 +164,7 @@ pub fn maintenance_request(
             caller_identity: None,
             cursor: invocation.arguments.get(CONTINUATION_TOKEN_OPTION).cloned(),
             lifecycle_states: Vec::new(),
-            page_size: paged(invocation, MAXIMUM_PAGE_SIZE)?,
+            page_size: paged_or(invocation, MAXIMUM_PAGE_SIZE, DEFAULT_PAGE_SIZE)?,
             terminal: None,
             workflow_correlation_identifier: None,
         }),
@@ -197,7 +197,16 @@ pub fn maintenance_request(
 ///
 /// Returns [`RunRefusal::Usage`] when the asked-for page is outside the bound.
 pub fn paged(invocation: &Invocation, bound: u64) -> Result<u32, RunRefusal> {
-    let asked = counted(invocation, LIMIT_OPTION, bound)?;
+    paged_or(invocation, bound, bound)
+}
+
+/// Returns the page size one invocation asks for, or `absent` when it names none.
+///
+/// # Errors
+///
+/// Returns [`RunRefusal::Usage`] when the asked-for page is outside the bound.
+pub fn paged_or(invocation: &Invocation, bound: u64, absent: u64) -> Result<u32, RunRefusal> {
+    let asked = counted(invocation, LIMIT_OPTION, absent)?;
     if asked == 0 || asked > bound {
         return Err(RunRefusal::Usage(format!("{LIMIT_OPTION} is between one and {bound}")));
     }

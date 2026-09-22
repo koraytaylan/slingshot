@@ -28,6 +28,14 @@ use crate::machine_outcome_envelope::MAXIMUM_MACHINE_OUTCOME_ENVELOPE_BYTES;
 /// How many operations one page may carry.
 pub const MAXIMUM_PAGE_SIZE: u64 = 200;
 
+/// How many operations a page carries when the caller names no limit.
+///
+/// A page is answered inside one machine envelope, and a continuation token
+/// already takes about a quarter of it. Twenty-five identifiers of ordinary
+/// length fit beside one; the maximum page does not, so a caller who asks for
+/// more than this is asking for a page only short identifiers can fill.
+pub const DEFAULT_PAGE_SIZE: u64 = 25;
+
 /// How many operations one maintenance run may select.
 pub const MAXIMUM_PREVIEW_LIMIT: u64 = 64;
 

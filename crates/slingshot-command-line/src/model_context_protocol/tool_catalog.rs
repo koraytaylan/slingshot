@@ -247,7 +247,7 @@ fn control_tool(named: &str) -> ToolDescriptor {
     ToolDescriptor {
         name: named.to_owned(),
         title: named.replace('-', " "),
-        description: format!("The {} control of one target's operations.", named.replace('-', " ")),
+        description: control_description(named).to_owned(),
         read_only_hint: !CHANGING_CONTROLS.contains(&named),
         destructive_hint: DESTRUCTIVE_CONTROLS.contains(&named),
         idempotent_hint: true,
@@ -260,3 +260,68 @@ const CHANGING_CONTROLS: &[&str] = &["operation-restart", "maintenance-apply"];
 
 /// The controls that may remove something.
 const DESTRUCTIVE_CONTROLS: &[&str] = &["maintenance-apply"];
+
+/// What each control does, in the words a model host shows the model choosing it.
+///
+/// A control is chosen by what it says it does, and the controls are only
+/// distinguishable by when a caller needs each one. Each description therefore
+/// names the situation it answers and where its arguments come from.
+const CONTROL_DESCRIPTIONS: &[(&str, &str)] = &[
+    (
+        "operation-list",
+        "Lists the identifiers of this target's operations, most recent first, twenty-five at a \
+         time unless limit says otherwise. Pass the continuation_token a page answered with to \
+         read the next one. Use it to find an operation identifier you no longer hold, then ask \
+         operation-status about it.",
+    ),
+    (
+        "operation-status",
+        "Reports where one operation has got to: its lifecycle state, its latest progress, and, \
+         when it is paused for a person, the recovery category and revision operation-restart \
+         needs. Takes the operation_identifier a detached call or operation-list returned.",
+    ),
+    (
+        "operation-wait",
+        "Waits for one operation to end and answers with its result or its terminal failure. \
+         Use it after a call made with detached set to true, with the operation_identifier that \
+         call returned.",
+    ),
+    (
+        "operation-restart",
+        "Makes one operation that is paused for manual recovery eligible to run again. \
+         expected_operation_revision and expected_recovery_category are the values \
+         operation-status reported, so a restart applies only to the state that was reviewed.",
+    ),
+    (
+        "operation-result",
+        "Answers with one succeeded operation's committed result: the document itself when it \
+         fits inline, otherwise the artifact identifier and content digest operation-artifact \
+         reads it with.",
+    ),
+    (
+        "operation-artifact",
+        "Answers with the bytes of one artifact an operation produced, verified against the \
+         content digest its result declared. artifact_identifier and expected_content_digest \
+         come from the operation's result.",
+    ),
+    (
+        "maintenance-preview",
+        "Previews which ended operations recorded before before_unix_milliseconds local \
+         maintenance would release, at most limit of them, and changes nothing. The preview's \
+         manifest digest is what maintenance-apply takes.",
+    ),
+    (
+        "maintenance-apply",
+        "Releases exactly the ended operations one preview listed, and nothing else. \
+         reviewed_manifest_digest is the digest maintenance-preview answered with; a manifest \
+         that has changed since is refused. Nothing on the author is touched.",
+    ),
+];
+
+/// Returns what one control does.
+fn control_description(named: &str) -> &'static str {
+    CONTROL_DESCRIPTIONS
+        .iter()
+        .find(|(control, _)| *control == named)
+        .map_or("", |(_, description)| description)
+}
