@@ -113,14 +113,12 @@ pub enum StartFailure {
         log: PathBuf,
     },
     /// The start did not converge inside the contract's total deadline.
-    #[error("no daemon became responsive within {deadline:?}{}", quoted(.diagnostic, .log))]
+    #[error("no daemon became responsive within {deadline:?}{detail}")]
     DeadlineElapsed {
         /// The contract's total deadline.
         deadline: Duration,
-        /// The end of what the starting daemon wrote to its diagnostic stream.
-        diagnostic: String,
-        /// Where the whole of what it wrote is kept.
-        log: PathBuf,
+        /// What the person who asked can inspect, already phrased for the message.
+        detail: String,
     },
     /// The daemon reported a readiness nonce that is not well formed.
     #[error("the daemon reported the readiness nonce {0:?}, which is not well formed")]
@@ -291,8 +289,15 @@ fn departure(child: &mut Child, log: &Path) -> Result<Option<StartFailure>, Star
 fn deadline_elapsed(contract: &FoundationContract, log: &Path) -> StartFailure {
     StartFailure::DeadlineElapsed {
         deadline: contract.startup.explicit_start_total(),
-        diagnostic: startup_log_tail(log),
-        log: log.to_path_buf(),
+        detail: quoted(&startup_log_tail(log), log),
+    }
+}
+
+/// Returns the failure a start reports when a departing owner never let go.
+fn owner_held(contract: &FoundationContract) -> StartFailure {
+    StartFailure::DeadlineElapsed {
+        deadline: contract.startup.explicit_start_total(),
+        detail: "; the owner lock stayed held, so this start did not create a daemon".to_owned(),
     }
 }
 
@@ -300,18 +305,29 @@ fn deadline_elapsed(contract: &FoundationContract, log: &Path) -> StartFailure {
 ///
 /// A child this caller started is watched while it waits, so one that exits is
 /// reported at once with what it wrote rather than after the whole deadline.
+/// `launch` is asked whenever no child has been started yet. It returns a child
+/// when the owner lock is free, and nothing when a departing owner still holds
+/// that lock, so a start keeps waiting for the lock instead of giving up after
+/// the first look.
 async fn await_responsive(
     contract: &FoundationContract,
     address: &EndpointAddress,
     request_identifier: &str,
     deadline: Instant,
-    mut started: Option<(Child, &Path)>,
+    log: &Path,
+    mut launch: impl FnMut() -> Result<Option<Child>, StartFailure>,
 ) -> Result<Option<PingResult>, StartFailure> {
+    let mut started = None;
     loop {
         if let Some(result) = probe(contract, address, request_identifier).await? {
             return Ok(Some(result));
         }
-        if let Some((child, log)) = started.as_mut()
+        if started.is_none()
+            && let Some(child) = launch()?
+        {
+            started = Some(child);
+        }
+        if let Some(child) = started.as_mut()
             && let Some(failure) = departure(child, log)?
         {
             return Err(failure);
@@ -327,8 +343,9 @@ async fn await_responsive(
 ///
 /// The caller prepares the runtime root, connects first, then contends for the
 /// startup-election lock, then rechecks, and only the elected caller spawns, and
-/// only once, and only after the owner lock proves absence. Every caller returns
-/// the same live nonce.
+/// only once, and only after the owner lock proves absence. A lock a departing
+/// owner still holds is retried until the deadline, and the daemon is created
+/// once that lock is free. Every caller returns the same live nonce.
 ///
 /// The runtime root is refused before anything is contended for when it is not
 /// a directory this user alone owns, because the daemon refuses to own a
@@ -367,17 +384,21 @@ pub async fn explicit_start(
             drop(election);
             return Ok(report(StartDisposition::Joined, target, &result));
         }
-        let started = if owner_is_absent(&namespace)? {
-            Some((spawn_daemon(executable, target, &log)?, log.as_path()))
-        } else {
-            None
-        };
+        let mut launched = false;
         let observed =
-            await_responsive(contract, &address, request_identifier, deadline, started).await;
+            await_responsive(contract, &address, request_identifier, deadline, &log, || {
+                if launched || !owner_is_absent(&namespace)? {
+                    return Ok(None);
+                }
+                launched = true;
+                spawn_daemon(executable, target, &log).map(Some)
+            })
+            .await;
         drop(election);
         return match observed? {
             Some(result) => Ok(report(StartDisposition::Started, target, &result)),
-            None => Err(deadline_elapsed(contract, &log)),
+            None if launched => Err(deadline_elapsed(contract, &log)),
+            None => Err(owner_held(contract)),
         };
     }
 }

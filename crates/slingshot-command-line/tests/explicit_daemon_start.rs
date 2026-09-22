@@ -243,6 +243,31 @@ async fn a_successor_starts_one_daemon_once_an_abandoned_election_is_released() 
     std::fs::remove_dir_all(&root).ok();
 }
 
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_start_creates_the_daemon_once_a_departing_owner_releases_its_lock() {
+    let contract = FoundationContract::embedded();
+    let root = temporary_runtime_root("o");
+    runtime_fixture::prepare(&root, PROFILE, &[ENVIRONMENT]);
+    let addressed = target(&root, ENVIRONMENT);
+    let namespace =
+        RuntimeNamespace::name(&contract, &root, PROFILE, ENVIRONMENT).expect("it names");
+    let held = OwnerLock::acquire(&root, namespace.digest())
+        .expect("the lock file opens")
+        .expect("the owner lock is free");
+    let started_target = addressed.clone();
+    let pending = tokio::spawn(async move { start(&started_target, "after-departure").await });
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    drop(held);
+    let created = tokio::time::timeout(Duration::from_secs(5), pending)
+        .await
+        .expect("the start does not sit out the whole deadline")
+        .expect("the start task finishes");
+    assert_eq!(created.disposition, StartDisposition::Started);
+    stop_daemon(&addressed).await;
+    std::fs::remove_dir_all(&root).ok();
+}
+
 #[test]
 fn help_and_version_create_no_runtime_state() {
     let root = temporary_runtime_root("h");
