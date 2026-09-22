@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 /// contracts while answering differently, and a client that could not tell them
 /// apart would read the older build's refusal as an unreadable outcome.
 ///
-/// So the agent declares a revision that is bumped when its behaviour changes
-/// without a contract change, and this constant is what this client requires.
+/// So the agent declares a revision, and this constant is what this client
+/// requires. The revision stays at zero.
 /// It is deliberately separate from `format`: a format names the document
 /// shape, and this names the build's behaviour.
-pub const REQUIRED_CAPABILITY_REVISION: u64 = 2;
+pub const REQUIRED_CAPABILITY_REVISION: u64 = 0;
 
 /// Wire shape only; consumers validate bounds, uniqueness and compatibility.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]

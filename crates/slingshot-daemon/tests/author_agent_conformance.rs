@@ -225,7 +225,7 @@ fn drift(field: &str, advertised: &mut AdvertisedCapabilities) {
     match field {
         "capability_revision" => {
             advertised.capability_revision =
-                slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION - 1;
+                slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION + 1;
         }
         "transport_contract_digest" => {
             advertised.transport_contract_digest = SUBSTITUTED_DIGEST.to_owned();

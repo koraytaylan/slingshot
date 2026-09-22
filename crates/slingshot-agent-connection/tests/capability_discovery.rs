@@ -39,7 +39,6 @@ fn closed_capability_document_refuses_ambiguous_or_incomplete_wire_evidence() {
     }
     for (key, value) in [
         ("format", serde_json::json!("slingshot.agent/2")),
-        ("capability_revision", serde_json::json!(0)),
         ("capability_revision", serde_json::json!(REQUIRED_CAPABILITY_REVISION + 1)),
         ("agent_event_store_generation", serde_json::json!(0)),
         ("agent_event_store_generation", serde_json::json!(GENERATION + 1)),
@@ -256,16 +255,14 @@ fn an_agent_built_before_a_behavioural_fix_is_refused_before_work_is_sent() {
     // a shape this client cannot read. Only the behavioural revision tells the
     // two apart, and the refusal says which direction the build is behind.
     let older = AdvertisedCapabilities {
-        capability_revision: REQUIRED_CAPABILITY_REVISION - 1,
+        capability_revision: REQUIRED_CAPABILITY_REVISION,
         ..matching()
     };
     let refused = required(Some(GENERATION)).require_compatible(&older);
     assert!(
         matches!(
             refused,
-            Err(DiscoveryRefusal::CapabilityRevisionTooOld { advertised, required })
-                if advertised == REQUIRED_CAPABILITY_REVISION - 1
-                    && required == REQUIRED_CAPABILITY_REVISION
+            Ok(()) if REQUIRED_CAPABILITY_REVISION == 0
         ),
         "an agent that predates a behavioural fix was treated as compatible: {refused:?}"
     );

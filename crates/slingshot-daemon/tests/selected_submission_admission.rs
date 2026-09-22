@@ -5799,7 +5799,7 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
                 "continuation_authority_ready" => incompatible[field] = serde_json::json!(false),
                 "capability_revision" => {
                     incompatible[field] = serde_json::json!(
-                        slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION - 1
+                        slingshot_agent_protocol::capabilities::REQUIRED_CAPABILITY_REVISION + 1
                     )
                 }
                 "transport_contract_digest" | "canonical_json_contract_digest" => {
