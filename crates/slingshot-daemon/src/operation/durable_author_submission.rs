@@ -8,6 +8,7 @@
 use super::author_authentication::AuthorAuthentication;
 use super::subscription_reset::ResetTransport;
 use slingshot_agent_connection::authentication::environment_provider::RequestAuthentication;
+use slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal;
 use slingshot_agent_connection::command_submission::{Submission, SubmissionOutcome, UnknownCause};
 use slingshot_agent_connection::selected_author_submission::{
     SubmissionSendRefusal, require_submission_derivation,
@@ -38,7 +39,7 @@ pub enum DurableSubmissionRefusal {
     /// caller can act on - ask again, fix the credential, or deploy the agent -
     /// and no request reached the submission route or retained a remote child.
     #[error("the author's capability check failed, and nothing was sent: {0}")]
-    CapabilityCheck(slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal),
+    CapabilityCheck(CapabilityExchangeRefusal),
 }
 
 /// A first-send claim. Its private fields prevent callers from fabricating a
@@ -133,9 +134,12 @@ impl InitialSubmissionPermit<'_> {
         require_local()?;
         transport.require_submission(&self.identity, &self.submission)?;
         authentication
-            .discover(transport, &self.identity, &self.submission)
+            .discover_before_submitting(transport, &self.identity, &self.submission)
             .await
-            .map_err(|_| SubmissionSendRefusal::Request)?;
+            .map_err(|refusal| match refusal {
+                CapabilityExchangeRefusal::Preflight => SubmissionSendRefusal::Request,
+                checked => SubmissionSendRefusal::CapabilityCheck(checked),
+            })?;
         let mut outcome = authentication
             .submit(
                 transport,
@@ -352,15 +356,12 @@ pub async fn submit_initial_with_authentication(
         )
         .map_err(|_| DurableSubmissionRefusal::Storage)?;
     if existing.is_none() {
-        authentication
-            .discover(transport, identity, submission)
-            .await
-            .map_err(|refusal| match refusal {
-                slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal::Preflight => {
-                    DurableSubmissionRefusal::Preflight
-                }
+        authentication.discover_before_submitting(transport, identity, submission).await.map_err(
+            |refusal| match refusal {
+                CapabilityExchangeRefusal::Preflight => DurableSubmissionRefusal::Preflight,
                 checked => DurableSubmissionRefusal::CapabilityCheck(checked),
-            })?;
+            },
+        )?;
     }
     let elapsed = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     require_local()?;
@@ -376,7 +377,12 @@ pub async fn submit_initial_with_authentication(
                 now_unix_milliseconds,
             )
             .await
-            .map_err(|_| DurableSubmissionRefusal::Preflight),
+            .map_err(|refusal| match refusal {
+                SubmissionSendRefusal::CapabilityCheck(checked) => {
+                    DurableSubmissionRefusal::CapabilityCheck(checked)
+                }
+                _ => DurableSubmissionRefusal::Preflight,
+            }),
         None => Ok(SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::LookupRequired }),
     }
 }

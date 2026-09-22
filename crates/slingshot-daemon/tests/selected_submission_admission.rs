@@ -12,6 +12,12 @@ const COMPLETE_PROGRESS_PERCENT: u64 = 100;
 const PEER_READ_BUFFER_BYTES: usize = 4096;
 const DIGEST_BYTE_PAIRS: usize = 32;
 const NO_REQUEST_OBSERVATION_MILLISECONDS: u64 = 20;
+
+/// How many times a submission asks an author that does not answer its capability check.
+const CAPABILITY_CHECK_ATTEMPTS: usize = 2;
+
+/// How long a submission whose capability check is never answered may take here.
+const UNANSWERED_CHECK_SECONDS: u64 = 5;
 const MAINTENANCE_AT: u64 = 10000;
 const CLEANUP_PAGE_SIZE: u64 = 100;
 
@@ -5882,6 +5888,62 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
             );
         }
     }
+    // An author that does not answer the capability check is asked exactly once
+    // more, because the check is a read with no effect; still unanswered, the
+    // submission ends before anything is retained or posted.
+    let unavailable = async {
+        for _ in 0..CAPABILITY_CHECK_ATTEMPTS {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut head = Vec::new();
+            while !head.ends_with(b"\r\n\r\n") {
+                head.push(socket.read_u8().await.unwrap());
+            }
+            assert!(head.starts_with(b"GET /aem/bin/slingshot/agent/capabilities HTTP/1.1\r\n"));
+            socket
+                .write_all(b"HTTP/1.1 503 Unavailable\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}")
+                .await
+                .unwrap();
+        }
+    };
+    let (unanswered, ()) = timeout(Duration::from_secs(UNANSWERED_CHECK_SECONDS), async {
+        tokio::join!(
+            submit_initial(
+                &repository,
+                &operations,
+                1,
+                &transport,
+                &identity,
+                &submission,
+                &authentication,
+                1
+            ),
+            unavailable
+        )
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        unanswered.unwrap_err(),
+        slingshot_daemon::operation::durable_author_submission::DurableSubmissionRefusal::CapabilityCheck(
+            slingshot_agent_connection::capability_discovery::CapabilityExchangeRefusal::Unanswered
+        )
+    );
+    assert!(
+        repository
+            .read(
+                &identity.author_target_identity_digest,
+                &submission.operation.agent_operation_identifier
+            )
+            .unwrap()
+            .is_none(),
+        "an unanswered capability check retained a child"
+    );
+    assert!(
+        timeout(Duration::from_millis(NO_REQUEST_OBSERVATION_MILLISECONDS), listener.accept())
+            .await
+            .is_err(),
+        "an unanswered capability check was asked a third time"
+    );
     drop(prepare_initial_submission(&repository, &identity, &submission, 1).unwrap().unwrap());
     drop(repository);
     let repository = AgentJobRepository::new(OperationDatabase::open(&path, settings()).unwrap());

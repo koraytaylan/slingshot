@@ -444,6 +444,28 @@ impl AuthorAuthentication<'_> {
         }
     }
 
+    /// Discovers the author's capabilities before a submission, asking once
+    /// more when it did not answer.
+    ///
+    /// The capability request is a read with no effect, so asking again cannot
+    /// cause anything, and an author that stalls on one request very often
+    /// answers the next in milliseconds. Only an unanswered request is asked
+    /// again: a refusal or an incompatible agent would answer the same way.
+    /// A lookup does not use this, because it has a retry budget of its own.
+    pub(crate) async fn discover_before_submitting(
+        self,
+        transport: &SelectedAuthorTransport,
+        identity: &ExecutionIdentity,
+        submission: &Submission,
+    ) -> Result<AdvertisedCapabilities, CapabilityExchangeRefusal> {
+        match self.discover(transport, identity, submission).await {
+            Err(CapabilityExchangeRefusal::Unanswered) => {
+                self.discover(transport, identity, submission).await
+            }
+            answered => answered,
+        }
+    }
+
     pub(crate) async fn discover(
         self,
         transport: &SelectedAuthorTransport,

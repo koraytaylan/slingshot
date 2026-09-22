@@ -34,6 +34,9 @@ pub enum SubmissionSendRefusal {
     /// Request bytes, derived headers, or the held CSRF token are invalid.
     #[error("the submission request cannot be constructed")]
     Request,
+    /// The capability check before the POST failed, so no POST was written.
+    #[error("the capability check before the submission failed: {0}")]
+    CapabilityCheck(crate::capability_discovery::CapabilityExchangeRefusal),
 }
 
 impl SelectedAuthorTransport {
