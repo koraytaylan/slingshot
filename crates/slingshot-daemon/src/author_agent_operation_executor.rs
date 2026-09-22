@@ -15,13 +15,12 @@
 //! convenience: it is the same separation that lets the executor be composed at
 //! startup, before any connection exists, and refuse work it must not resume.
 //!
-//! # Nothing unresolved is reported as an ending
+//! # A host that does not answer is the only wait
 //!
-//! A submission whose fate is unclear, a stream that dropped, an artifact that
-//! is not there yet - each is outstanding work with a recovery category, not a
-//! failure. Reporting one as terminal would settle an operation on this
-//! daemon's own difficulty, which is the mistake the whole recovery vocabulary
-//! exists to make hard.
+//! An answer, including a retryable status and a body this build cannot use,
+//! ends the operation. Leaving it queued would stop the operations behind it.
+//! A deadline with no answer is the host not responding, and that one stays
+//! outstanding until its retry budget ends.
 
 use slingshot_agent_connection::authentication::environment_provider::SelectedAuthorConnection;
 use slingshot_agent_connection::command_submission::UnknownCause;
@@ -282,9 +281,10 @@ impl<'ports> AuthorAgentOperationExecutor<'ports> {
 
 /// Returns the outcome one handoff disposition produces on its own.
 ///
-/// Only two of them end anything before the agent has said what happened. The
-/// rest are outstanding work: reporting them as endings would settle an
-/// operation on a transport difficulty rather than on a remote fact.
+/// A retryable status and an answer this build cannot use both end the
+/// operation. The author responded, so the row must leave the queue. A
+/// deadline with no answer is the host not responding, and that one stays
+/// outstanding for another attempt.
 #[must_use]
 pub fn outcome_of_handoff(disposition: &HandoffDisposition) -> Option<OperationExecutorOutcome> {
     match disposition {
@@ -301,18 +301,45 @@ pub fn outcome_of_handoff(disposition: &HandoffDisposition) -> Option<OperationE
             TerminalFailureKind::IntegrityFailure,
             OperationExecutionCertainty::RemoteOutcomeUnknown,
         )),
-        HandoffDisposition::RetryAfter { milliseconds } => Some(unresolved(
-            RecoveryCategory::AmbiguousSubmission,
-            OperationExecutionCertainty::SubmissionUnknown,
-            String::new(),
-            *milliseconds,
-        )),
-        HandoffDisposition::Unknown { cause } => Some(unresolved(
+        HandoffDisposition::RetryAfter { .. } => {
+            Some(answered("the author answered with a retryable status"))
+        }
+        HandoffDisposition::Unknown { cause } if host_did_not_respond(*cause) => Some(unresolved(
             RecoveryCategory::AmbiguousSubmission,
             OperationExecutionCertainty::SubmissionUnknown,
             cause.map_or_else(String::new, UnknownCause::spelling),
             0,
         )),
+        HandoffDisposition::Unknown { cause } => {
+            let detail = match cause {
+                Some(cause) => cause.spelling(),
+                None => "the author answered without a usable submission".to_owned(),
+            };
+            Some(answered_owned(detail))
+        }
+    }
+}
+
+/// Returns whether `cause` is a host that produced no answer.
+fn host_did_not_respond(cause: Option<UnknownCause>) -> bool {
+    matches!(cause, Some(UnknownCause::Deadline(_)))
+}
+
+/// Returns the ending an author response produces when the queue must move on.
+fn answered(detail: &str) -> OperationExecutorOutcome {
+    answered_owned(detail.to_owned())
+}
+
+/// Returns the ending an author response produces when the queue must move on.
+fn answered_owned(detail: String) -> OperationExecutorOutcome {
+    OperationExecutorOutcome::TerminalFailure {
+        failure: TerminalFailure {
+            disposition: TerminalFailureDisposition::FailClosedIndeterminate {
+                certainty: OperationExecutionCertainty::SubmissionUnknown,
+            },
+            kind: TerminalFailureKind::RetryPolicyExhausted,
+            metadata: Some(detail),
+        },
     }
 }
 

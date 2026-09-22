@@ -46,6 +46,45 @@ pub struct SelectedClaim {
     pub expected_revision: u64,
 }
 
+/// One queued operation a person was left to resume.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PausedQueueRow {
+    /// The operation.
+    pub operation_identifier: String,
+    /// The revision a terminal fact must name.
+    pub revision: u64,
+    /// The fence still holding the claim, when one remains.
+    pub fence: Option<u64>,
+    /// The stored evidence kind.
+    pub evidence_kind: String,
+}
+
+/// Returns queued operations whose recovery is waiting on a person.
+///
+/// # Errors
+/// Returns [`RepositoryFailure`] when the inventory statement cannot be run.
+pub fn paused_queued(
+    database: &OperationDatabase,
+    target: &str,
+) -> Result<Vec<PausedQueueRow>, RepositoryFailure> {
+    let mut statement = database
+        .connection()
+        .prepare(statement("select queued operations paused for manual recovery"))
+        .map_err(|_| RepositoryFailure::NoSuchOperation { identifier: target.to_owned() })?;
+    let rows = statement
+        .query_map(rusqlite::params![target], |row| {
+            Ok(PausedQueueRow {
+                operation_identifier: row.get(0)?,
+                revision: u64::try_from(row.get::<_, i64>(1)?).unwrap_or(0),
+                fence: row.get::<_, Option<i64>>(2)?.and_then(|fence| u64::try_from(fence).ok()),
+                evidence_kind: row.get(3)?,
+            })
+        })
+        .map_err(|_| RepositoryFailure::NoSuchOperation { identifier: target.to_owned() })?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|_| RepositoryFailure::NoSuchOperation { identifier: target.to_owned() })
+}
+
 /// Selects and claims the oldest queued operation atomically.
 ///
 /// This is the scheduler's process-safe handoff: two ticks may select at the
@@ -66,7 +105,7 @@ pub fn claim_next_queued(
     let candidate: Option<(String, String, i64)> = transaction
         .query_row(
             statement("select one queued operation for scheduler claim"),
-            rusqlite::params![target, now],
+            rusqlite::params![target, now, now],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?;

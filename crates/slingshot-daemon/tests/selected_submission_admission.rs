@@ -1531,7 +1531,97 @@ async fn selected_live_events_commit_only_the_believed_prefix() {
                     );
                     let local_after =
                         operations.read(target, &identity.operation_identifier).unwrap().unwrap();
-                    if defect == "terminal" || defect.starts_with("terminal-no-result") {
+                    if defect == "terminal-no-result-cap" {
+                        assert!(local_after.record.lifecycle_state.is_terminal());
+                        assert!(local_after.record.outstanding_recovery.is_none());
+                        assert_eq!(
+                            local_after
+                                .record
+                                .terminal_failure
+                                .as_ref()
+                                .map(|failure| failure.kind),
+                            Some(
+                                slingshot_domain::operation::TerminalFailureKind::ResultUnavailable
+                            )
+                        );
+                        use slingshot_daemon::{
+                            author_agent_operation_executor::{
+                                AuthorAgentOperationExecutor, ProductAuthorPorts,
+                            },
+                            retained_author_protocol::RetainedAuthorProtocol,
+                        };
+                        use slingshot_domain::operation_executor::{
+                            OperationExecutor, OperationExecutorOutcome, ProgressPort,
+                        };
+                        use slingshot_storage::{
+                            artifact_store::ArtifactStore,
+                            persistent_capacity::PersistentCapacityAccount,
+                        };
+                        struct Progress;
+                        impl ProgressPort for Progress {
+                            fn report(&self, _: &str) {}
+                        }
+                        let store =
+                            ArtifactStore::open(&root.path().join("paused-artifacts")).unwrap();
+                        let command=serde_json::from_value(serde_json::json!({"command":"query_paths","root_path":"/content/example"})).unwrap();
+                        let ended = local_after.record.terminal_failure.clone().unwrap();
+                        for (now, attempt) in [(1000, identity.attempt), (9_000_000, 99)] {
+                            let reopened_operations = OperationRepository::new(
+                                OperationDatabase::open(&path, settings()).unwrap(),
+                            );
+                            let reopened_remote = AgentJobRepository::new(
+                                OperationDatabase::open(&path, settings()).unwrap(),
+                            );
+                            let capacity=PersistentCapacityAccount::new(reopened_operations.database(),slingshot_domain::persistent_capacity::PersistentCapacityPolicy::embedded());
+                            let mut resumed_identity = identity.clone();
+                            resumed_identity.attempt = attempt;
+                            let protocol = RetainedAuthorProtocol::new(
+                                &reopened_operations,
+                                &reopened_remote,
+                                &store,
+                                &capacity,
+                                &authentication,
+                                resumed_identity.clone(),
+                                submission.clone(),
+                                now,
+                            )
+                            .unwrap();
+                            let ports = ProductAuthorPorts::new(
+                                provider.snapshot().author_connection(),
+                                &protocol,
+                            )
+                            .unwrap();
+                            let outcome = timeout(
+                                Duration::from_secs(1),
+                                AuthorAgentOperationExecutor::over(&ports).execute(
+                                    &resumed_identity,
+                                    &command,
+                                    &Progress,
+                                ),
+                            )
+                            .await
+                            .unwrap();
+                            assert_eq!(
+                                outcome,
+                                OperationExecutorOutcome::TerminalFailure {
+                                    failure: ended.clone()
+                                }
+                            );
+                            assert_eq!(
+                                reopened_operations
+                                    .read(target, &identity.operation_identifier)
+                                    .unwrap()
+                                    .unwrap(),
+                                local_after
+                            );
+                            assert!(
+                                timeout(Duration::from_millis(10), listener.accept())
+                                    .await
+                                    .is_err(),
+                                "a finished operation opened a socket"
+                            );
+                        }
+                    } else if defect == "terminal" || defect.starts_with("terminal-no-result") {
                         let retry = local_after.record.outstanding_recovery.as_ref().unwrap();
                         assert_eq!(retry.evidence,slingshot_domain::operation::RecoveryExecutionEvidence::AuthoritativeRemoteSuccess);
                         assert_eq!(
@@ -4255,13 +4345,32 @@ async fn retained_artifact_completion_case(
             })
             .await
             .unwrap();
+            if attempt == automatic_attempt_cap() {
+                let AgentSettlement::Terminal { failure } = settlement else {
+                    panic!("exhausting the lookup budget ends the operation")
+                };
+                assert_eq!(
+                    failure.kind,
+                    slingshot_domain::operation::TerminalFailureKind::ResultUnavailable
+                );
+                let saved = operations
+                    .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+                    .unwrap()
+                    .unwrap();
+                assert!(saved.record.lifecycle_state.is_terminal());
+                assert!(saved.record.outstanding_recovery.is_none());
+                break;
+            }
             let AgentSettlement::Outstanding { recovery } = settlement else {
                 panic!("failed lookup remains recoverable")
             };
             assert_eq!(u64::from(recovery.attempt_count), attempt);
             assert_eq!(recovery.evidence, RecoveryExecutionEvidence::AuthoritativeRemoteSuccess);
             assert_eq!(recovery.category, RecoveryCategory::ResultAcquisition);
-            assert_eq!(recovery.manual_resume_eligible, attempt == automatic_attempt_cap());
+            assert!(
+                !recovery.manual_resume_eligible,
+                "the budget ends the operation instead of pausing it"
+            );
             if attempt == 0 {
                 assert_eq!(
                     recovery.retry_observed_at_unix_milliseconds, RECOVERY_OBSERVED_AT,
@@ -4286,13 +4395,6 @@ async fn retained_artifact_completion_case(
                         .saturating_add(1),
                 )
                 .saturating_add(1);
-            if recovery.manual_resume_eligible {
-                assert_eq!(
-                    protocol.settle(&transport, &identity).await,
-                    AgentSettlement::Outstanding { recovery }
-                );
-                assert!(timeout(Duration::from_millis(10), listener.accept()).await.is_err());
-            }
             operations =
                 OperationRepository::new(OperationDatabase::open_live(&path, settings()).unwrap());
         }

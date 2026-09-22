@@ -1010,9 +1010,15 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
     },
     InventoriedStatement {
         purpose: "select one queued operation for scheduler claim",
-        text: "SELECT operation_identifier, lifecycle_state, operation_revision FROM operation WHERE author_target_identity_digest = ? AND lifecycle_state = 'queued' AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds <= ?) ORDER BY enqueue_sequence ASC, operation_identifier ASC LIMIT 1",
-        parameters: 2,
+        text: "SELECT operation_identifier, lifecycle_state, operation_revision FROM operation WHERE author_target_identity_digest = ? AND lifecycle_state = 'queued' AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds <= ?) AND NOT EXISTS (SELECT 1 FROM recovery_fact WHERE recovery_fact.author_target_identity_digest = operation.author_target_identity_digest AND recovery_fact.operation_identifier = operation.operation_identifier AND recovery_fact.retry_delay_milliseconds > 0 AND recovery_fact.retry_observed_at_unix_milliseconds + recovery_fact.retry_delay_milliseconds > ?) ORDER BY enqueue_sequence ASC, operation_identifier ASC LIMIT 1",
+        parameters: 3,
         maximum_rows: SINGLE_ROW,
+    },
+    InventoriedStatement {
+        purpose: "select queued operations paused for manual recovery",
+        text: "SELECT operation.operation_identifier, operation.operation_revision, operation.scheduler_fence, recovery_fact.evidence_kind FROM operation INNER JOIN recovery_fact ON recovery_fact.author_target_identity_digest = operation.author_target_identity_digest AND recovery_fact.operation_identifier = operation.operation_identifier WHERE operation.author_target_identity_digest = ? AND operation.lifecycle_state = 'queued' AND recovery_fact.manual_resume_eligible = 1",
+        parameters: 1,
+        maximum_rows: LISTING_ROWS,
     },
     InventoriedStatement {
         purpose: "clear every scheduler claim a dead instance left behind",

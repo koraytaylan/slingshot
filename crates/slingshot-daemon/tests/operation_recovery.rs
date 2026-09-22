@@ -474,7 +474,7 @@ fn two_resumes_of_one_operation_at_different_points_are_two_sources() {
 }
 
 #[test]
-fn a_detached_attempt_is_charged_and_pauses_at_the_automatic_budget() {
+fn a_detached_attempt_is_charged_and_ends_at_the_automatic_budget() {
     use slingshot_daemon::operation::durable_author_lookup::record_detached_attempt;
     use slingshot_domain::operation_executor::ExecutionIdentity;
 
@@ -504,18 +504,19 @@ fn a_detached_attempt_is_charged_and_pauses_at_the_automatic_budget() {
     );
     assert!(!charged.record.lifecycle_state.is_terminal(), "and never ends the operation");
 
-    // Exhausting the automatic budget pauses the work for a person instead of
-    // reclaiming and detaching it forever.
+    // Exhausting the automatic budget ends the operation so the queue can move.
     let cap = slingshot_daemon::operation::recovery_and_event_supervisor::automatic_attempt_cap();
     let mut summary = charged;
     for _ in 1..cap {
         summary = record_detached_attempt(&repository, &identity, summary.record.revision, LATER)
             .expect("a further detached attempt is chargeable");
     }
-    let fact = summary.record.outstanding_recovery.as_ref().expect("a recovery fact");
-    assert_eq!(u64::from(fact.attempt_count), cap, "the budget was not reached");
-    assert!(fact.manual_resume_eligible, "exhaustion must ask a person");
-    assert!(!summary.record.lifecycle_state.is_terminal(), "and still never ends the operation");
+    assert!(summary.record.lifecycle_state.is_terminal(), "exhaustion ends the operation");
+    assert!(summary.record.outstanding_recovery.is_none(), "a finished operation is not queued");
+    assert_eq!(
+        summary.record.terminal_failure.as_ref().map(|failure| failure.kind),
+        Some(slingshot_domain::operation::TerminalFailureKind::RetryPolicyExhausted)
+    );
 }
 
 #[test]

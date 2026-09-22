@@ -728,7 +728,14 @@ pub async fn complete_retained_snapshot_result_with_authentication(
                 acquisition_started.get().ok_or(TerminalResultDecodeRefusal)?.saturating_add(
                     slingshot_agent_connection::artifact_download::missing_grace_milliseconds(),
                 );
-            if evidence.reason() == slingshot_agent_protocol::artifact_unavailable::UnavailableReason::RetentionExpired || observed_at >= grace_end {
+            let attempt = held
+                .record
+                .outstanding_recovery
+                .as_ref()
+                .map_or(1, |fact| fact.attempt_count.saturating_add(1));
+            let paused =
+                u64::from(attempt) >= super::recovery_and_event_supervisor::automatic_attempt_cap();
+            if evidence.reason() == slingshot_agent_protocol::artifact_unavailable::UnavailableReason::RetentionExpired || observed_at >= grace_end || paused {
                 use slingshot_domain::operation::{TerminalFailure, TerminalFailureDisposition, TerminalFailureKind};
                 return operations.apply_for_retained_agent(retained, expected_revision, &OperationFact::Terminal {
                     failure: TerminalFailure {
@@ -739,13 +746,6 @@ pub async fn complete_retained_snapshot_result_with_authentication(
                 }, observed_at).map(Some).map_err(|_| TerminalResultDecodeRefusal);
             }
             use rand::RngExt;
-            let attempt = held
-                .record
-                .outstanding_recovery
-                .as_ref()
-                .map_or(1, |fact| fact.attempt_count.saturating_add(1));
-            let paused =
-                u64::from(attempt) >= super::recovery_and_event_supervisor::automatic_attempt_cap();
             let ceiling = super::recovery_and_event_supervisor::jitter_ceiling_milliseconds(
                 u64::from(attempt),
             )
@@ -761,12 +761,8 @@ pub async fn complete_retained_snapshot_result_with_authentication(
                             attempt_count: attempt,
                             detail: "waiting for the saved missing-artifact grace interval"
                                 .to_owned(),
-                            manual_resume_eligible: paused,
-                            retry_delay_milliseconds: if paused {
-                                0
-                            } else {
-                                rand::rng().random_range(0..=ceiling)
-                            },
+                            manual_resume_eligible: false,
+                            retry_delay_milliseconds: rand::rng().random_range(0..=ceiling),
                             retry_observed_at_unix_milliseconds: observed_at,
                         },
                     },

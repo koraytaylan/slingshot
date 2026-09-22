@@ -26,13 +26,19 @@ impl DaemonService {
             Ok(bound) => bound,
             Err(response) => return self.render_operation(response),
         };
+        if matches!(bound.request(), OperationRequest::Execute { .. }) {
+            drop(guard);
+            return self.finish_execute(&bound, runtime);
+        }
         match bound.request() {
             OperationRequest::ArtifactRead { .. } => self.answer_artifact(&bound, &guard),
             OperationRequest::MaintenanceResultRead { .. } => {
                 self.answer_maintenance_stream(&bound, &guard)
             }
             OperationRequest::Wait { .. } => self.answer_ready_wait(&bound, &guard),
-            OperationRequest::Execute { .. } => self.answer_execute(&bound, &guard),
+            OperationRequest::Execute { .. } => {
+                unreachable!("an execute request is finished before dispatch")
+            }
             OperationRequest::TerminalMaintenancePreview {
                 before_unix_milliseconds,
                 maximum_operations,
@@ -147,12 +153,13 @@ impl DaemonService {
         self.render_operation(response)
     }
 
-    fn answer_execute(
+    fn finish_execute(
         &self,
         bound: &crate::operation_dispatch::BoundRequest,
-        guard: &DurableRuntime,
+        runtime: &std::sync::Arc<std::sync::Mutex<DurableRuntime>>,
     ) -> ServiceOutcome {
-        let response = {
+        let admitted = {
+            let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let prepared = match bound.prepare_admission(guard.installation()) {
                 Ok(Some(prepared)) => prepared,
                 Ok(None) => {
@@ -170,6 +177,20 @@ impl DaemonService {
                 },
             )
         };
+        let operation_identifier = match &admitted {
+            OperationResponse::Accepted { operation_identifier }
+            | OperationResponse::Replayed { operation_identifier } => operation_identifier.clone(),
+            other => return self.render_operation(other.clone()),
+        };
+        crate::service::scheduler::complete_submitted(runtime, &operation_identifier);
+        let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let target = guard.context().target().author_target_identity_digest.clone();
+        let response = crate::operation_dispatch::settled_answer(
+            guard.operations(),
+            guard.installation(),
+            &target,
+            &operation_identifier,
+        );
         self.render_operation(response)
     }
 

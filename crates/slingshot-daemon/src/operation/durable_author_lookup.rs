@@ -15,7 +15,7 @@ use slingshot_agent_connection::selected_author_lookup::OperationLookupReceipt;
 use slingshot_agent_connection::selected_author_transport::SelectedAuthorTransport;
 use slingshot_domain::operation::{
     OperationExecutionCertainty, OperationFact, RecoveryCategory, RecoveryExecutionEvidence,
-    RecoveryFact,
+    RecoveryFact, TerminalFailure, TerminalFailureDisposition, TerminalFailureKind,
 };
 use slingshot_domain::operation_executor::ExecutionIdentity;
 use slingshot_domain::remote_job::RemoteJobObservation;
@@ -160,17 +160,24 @@ pub fn record_missing_lookup(
         return Ok(held);
     }
     let attempt_count = previous.map_or(1, |fact| fact.attempt_count.saturating_add(1));
+    if u64::from(attempt_count) >= automatic_attempt_cap() {
+        return apply_terminal(
+            operations,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+            expected_revision,
+            exhausted_without_an_answer(),
+            now_unix_milliseconds,
+        );
+    }
     let grace_end = request_start_unix_milliseconds
         .checked_add(missing_grace_milliseconds())
         .ok_or(DurableLookupRefusal)?;
     let grace_remaining = grace_end.saturating_sub(now_unix_milliseconds);
-    let paused = u64::from(attempt_count) >= automatic_attempt_cap();
     let recovery = RecoveryFact {
         attempt_count,
         category: RecoveryCategory::OperationLookup,
-        detail: if paused {
-            "operation lookup requires manual recovery"
-        } else if grace_remaining > 0 {
+        detail: if grace_remaining > 0 {
             "waiting for the saved missing-operation grace interval"
         } else {
             "operation remains missing; lookup is required before any resend"
@@ -182,10 +189,8 @@ pub fn record_missing_lookup(
             },
             |fact| fact.evidence,
         ),
-        manual_resume_eligible: paused,
-        retry_delay_milliseconds: if paused {
-            0
-        } else {
+        manual_resume_eligible: false,
+        retry_delay_milliseconds: {
             use rand::RngExt;
             let ceiling = jitter_ceiling_milliseconds(u64::from(attempt_count));
             grace_remaining.max(rand::rng().random_range(0..=ceiling))
@@ -248,7 +253,16 @@ pub fn record_detached_attempt(
         |fact| fact.evidence,
     );
     let attempt_count = previous.map_or(1, |fact| fact.attempt_count.saturating_add(1));
-    let paused = u64::from(attempt_count) >= automatic_attempt_cap();
+    if u64::from(attempt_count) >= automatic_attempt_cap() {
+        return apply_terminal(
+            operations,
+            &identity.author_target_identity_digest,
+            &identity.operation_identifier,
+            expected_revision,
+            failure_when_the_budget_ends(&evidence),
+            now_unix_milliseconds,
+        );
+    }
     let recovery = RecoveryFact {
         attempt_count,
         category: if evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess {
@@ -256,17 +270,10 @@ pub fn record_detached_attempt(
         } else {
             RecoveryCategory::OperationLookup
         },
-        detail: if paused {
-            "the execution budget is exhausted and the operation requires manual recovery"
-                .to_owned()
-        } else {
-            "the attempt was detached locally and the operation remains outstanding".to_owned()
-        },
+        detail: "the attempt was detached locally and the operation remains outstanding".to_owned(),
         evidence,
-        manual_resume_eligible: paused,
-        retry_delay_milliseconds: if paused {
-            0
-        } else {
+        manual_resume_eligible: false,
+        retry_delay_milliseconds: {
             use rand::RngExt;
             rand::rng().random_range(0..=jitter_ceiling_milliseconds(u64::from(attempt_count)))
         },
@@ -332,11 +339,83 @@ fn record_lookup_recovery(
             |fact| fact.evidence,
         )
     };
+    let attempt_count = previous.map_or(1, |fact| fact.attempt_count.saturating_add(1));
+    if u64::from(attempt_count)
+        >= crate::operation::recovery_and_event_supervisor::automatic_attempt_cap()
+    {
+        return apply_terminal_retained(
+            operations,
+            retained,
+            expected_revision,
+            failure_when_the_budget_ends(&evidence),
+            now,
+        );
+    }
     operations
         .apply_for_retained_agent(
             retained,
             expected_revision,
             &OperationFact::Recovery { recovery: next_lookup_recovery(previous, evidence, now) },
+            now,
+        )
+        .map_err(|_| DurableLookupRefusal)
+}
+
+/// Ends one operation the author has already answered, or whose retry budget ended.
+fn failure_when_the_budget_ends(evidence: &RecoveryExecutionEvidence) -> TerminalFailure {
+    if *evidence == RecoveryExecutionEvidence::AuthoritativeRemoteSuccess {
+        TerminalFailure {
+            kind: TerminalFailureKind::ResultUnavailable,
+            disposition: TerminalFailureDisposition::AuthoritativeRemoteSuccess,
+            metadata: Some("the author answered and the result was not obtained".to_owned()),
+        }
+    } else {
+        exhausted_without_an_answer()
+    }
+}
+
+/// Ends one operation whose host never produced an answer inside the retry budget.
+fn exhausted_without_an_answer() -> TerminalFailure {
+    TerminalFailure {
+        kind: TerminalFailureKind::RetryPolicyExhausted,
+        disposition: TerminalFailureDisposition::FailClosedIndeterminate {
+            certainty: OperationExecutionCertainty::RemoteOutcomeUnknown,
+        },
+        metadata: Some("the author did not answer before the retry budget ended".to_owned()),
+    }
+}
+
+fn apply_terminal(
+    operations: &OperationRepository,
+    author_target_identity_digest: &str,
+    operation_identifier: &str,
+    expected_revision: u64,
+    failure: TerminalFailure,
+    now: u64,
+) -> Result<OperationSummary, DurableLookupRefusal> {
+    operations
+        .apply(
+            author_target_identity_digest,
+            operation_identifier,
+            expected_revision,
+            &OperationFact::Terminal { failure },
+            now,
+        )
+        .map_err(|_| DurableLookupRefusal)
+}
+
+fn apply_terminal_retained(
+    operations: &OperationRepository,
+    retained: &slingshot_storage::agent_job_repository::AgentSubmission,
+    expected_revision: u64,
+    failure: TerminalFailure,
+    now: u64,
+) -> Result<OperationSummary, DurableLookupRefusal> {
+    operations
+        .apply_for_retained_agent(
+            retained,
+            expected_revision,
+            &OperationFact::Terminal { failure },
             now,
         )
         .map_err(|_| DurableLookupRefusal)

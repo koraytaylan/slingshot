@@ -108,14 +108,14 @@ fn missing_lookup_grace_survives_restart_and_exhaustion_never_proves_nonexecutio
         held = record_missing_lookup(&store, &identity, held.record.revision, NOW, NOW + 40000)
             .unwrap();
     }
-    let recovery = held.record.outstanding_recovery.as_ref().unwrap();
-    assert!(recovery.manual_resume_eligible);
-    assert!(!held.record.lifecycle_state.is_terminal());
-    assert_eq!(recovery.attempt_count as u64, automatic_attempt_cap());
-    assert_eq!(recovery.evidence, grace.evidence);
+    assert!(held.record.lifecycle_state.is_terminal(), "exhaustion ends the lookup");
+    assert!(held.record.outstanding_recovery.is_none(), "a finished lookup is not queued");
     assert_eq!(
-        record_missing_lookup(&store, &identity, held.record.revision, NOW, NOW + 90000).unwrap(),
-        held
+        held.record.terminal_failure.as_ref().map(|failure| failure.kind),
+        Some(slingshot_domain::operation::TerminalFailureKind::RetryPolicyExhausted)
+    );
+    assert!(
+        record_missing_lookup(&store, &identity, held.record.revision, NOW, NOW + 90000).is_err()
     );
 }
 

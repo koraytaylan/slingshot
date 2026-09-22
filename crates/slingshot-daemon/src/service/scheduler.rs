@@ -31,6 +31,8 @@ struct ScheduledInvocation {
 /// How often an idle scheduler looks for newly eligible work.
 const SCHEDULER_POLL_MILLISECONDS: u64 = 50;
 
+static NEXT_FENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
 /// How many executions may be in the air at once.
 ///
 /// Read from the runtime contract rather than chosen here: a scheduler that
@@ -78,7 +80,6 @@ pub(super) async fn scheduler_loop(
     runtime: std::sync::Arc<std::sync::Mutex<DurableRuntime>>,
     shutdown: CancellationToken,
 ) {
-    static NEXT_FENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let interval = std::time::Duration::from_millis(SCHEDULER_POLL_MILLISECONDS);
     let mut in_flight: Vec<InFlight> = Vec::new();
     loop {
@@ -90,6 +91,10 @@ pub(super) async fn scheduler_loop(
                 let _ = held.handle.await;
             }
             return;
+        }
+        {
+            let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            heal_paused_queue(&guard, unix_milliseconds());
         }
         while in_flight.len() < maximum_in_flight() {
             let fence = NEXT_FENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed).max(1);
@@ -306,6 +311,160 @@ fn publish_settlement(
     runtime.waiters().publish(&current.operation_identifier, &update);
 }
 
+/// Settles queued work that was paused for a person.
+///
+/// A paused row never becomes eligible again on its own, and its claim keeps
+/// the scheduler from choosing it. Ending it is what lets the queue heal.
+fn heal_paused_queue(runtime: &DurableRuntime, now: u64) {
+    let target = runtime.context().target().author_target_identity_digest.clone();
+    let Ok(paused) =
+        slingshot_storage::operation::scheduler_claim::paused_queued(runtime.database(), &target)
+    else {
+        return;
+    };
+    for row in paused {
+        let failure = if row.evidence_kind == "authoritative_remote_success" {
+            slingshot_domain::operation::TerminalFailure {
+                kind: slingshot_domain::operation::TerminalFailureKind::ResultUnavailable,
+                disposition:
+                    slingshot_domain::operation::TerminalFailureDisposition::AuthoritativeRemoteSuccess,
+                metadata: Some("the author answered and the result was not obtained".to_owned()),
+            }
+        } else {
+            slingshot_domain::operation::TerminalFailure {
+                kind: slingshot_domain::operation::TerminalFailureKind::RetryPolicyExhausted,
+                disposition: slingshot_domain::operation::TerminalFailureDisposition::FailClosedIndeterminate {
+                    certainty:
+                        slingshot_domain::operation::OperationExecutionCertainty::RemoteOutcomeUnknown,
+                },
+                metadata: Some("the author did not answer before the retry budget ended".to_owned()),
+            }
+        };
+        let Ok(summary) = runtime.operations().apply(
+            &target,
+            &row.operation_identifier,
+            row.revision,
+            &slingshot_domain::operation::OperationFact::Terminal { failure },
+            now,
+        ) else {
+            continue;
+        };
+        if let Some(fence) = row.fence {
+            let _ = slingshot_storage::operation::scheduler_claim::release(
+                runtime.database(),
+                &target,
+                &row.operation_identifier,
+                fence,
+            );
+        }
+        publish_settlement(runtime, &summary);
+    }
+}
+
+/// Runs one admitted command to a terminal result inside the request that submitted it.
+///
+/// The author finishes a shipped command in that same call. Leaving the row
+/// queued would make the caller poll a handle, so a result that is not terminal
+/// is ended here instead of being handed to a worker.
+pub(crate) fn complete_submitted(
+    runtime: &std::sync::Arc<std::sync::Mutex<DurableRuntime>>,
+    operation_identifier: &str,
+) {
+    let fence = NEXT_FENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed).max(1);
+    let now = unix_milliseconds();
+    let prepared = {
+        let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let target = guard.context().target().author_target_identity_digest.clone();
+        let Some(summary) = guard.operations().read(&target, operation_identifier).ok().flatten()
+        else {
+            return;
+        };
+        if summary.record.lifecycle_state.is_terminal() {
+            return;
+        }
+        let lease = now.saturating_add(
+            slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded()
+                .limit("worker_execution_lease_milliseconds"),
+        );
+        let claimed = slingshot_storage::operation::scheduler_claim::claim(
+            guard.database(),
+            &target,
+            operation_identifier,
+            "queued",
+            summary.record.revision,
+            fence,
+            lease,
+            now,
+        );
+        if !matches!(
+            claimed,
+            Ok(slingshot_storage::operation::scheduler_claim::ClaimOutcome::Claimed)
+        ) {
+            return;
+        }
+        let Some(input) =
+            guard.operations().read_execution_input(&target, operation_identifier).ok().flatten()
+        else {
+            return;
+        };
+        let invocation = schedule_invocation(&guard, &input, now, fence);
+        let execution = guard.execution().ok();
+        invocation.zip(execution)
+    };
+    let Some((invocation, execution)) = prepared else {
+        return;
+    };
+    struct SilentProgress;
+    impl slingshot_domain::operation_executor::ProgressPort for SilentProgress {
+        fn report(&self, _detail: &str) {}
+    }
+    let outcome = tokio::runtime::Handle::try_current().ok().and_then(|handle| {
+        tokio::task::block_in_place(|| {
+            handle.block_on(execution.execute_retained_with_claim(
+                &invocation.identity,
+                invocation.submission.clone(),
+                &SilentProgress,
+                fence,
+                now,
+            ))
+        })
+        .ok()
+    });
+    let outcome = match outcome {
+        Some(slingshot_domain::operation_executor::OperationExecutorOutcome::RecoveryRequired {
+            ..
+        })
+        | None => slingshot_domain::operation_executor::OperationExecutorOutcome::TerminalFailure {
+            failure: slingshot_domain::operation::TerminalFailure {
+                kind: slingshot_domain::operation::TerminalFailureKind::RetryPolicyExhausted,
+                disposition: slingshot_domain::operation::TerminalFailureDisposition::FailClosedIndeterminate {
+                    certainty: slingshot_domain::operation::OperationExecutionCertainty::RemoteOutcomeUnknown,
+                },
+                metadata: Some("the command finished in the request that submitted it".to_owned()),
+            },
+        },
+        Some(outcome) => outcome,
+    };
+    let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let identity = &invocation.identity;
+    let settled = guard
+        .operations()
+        .read(&identity.author_target_identity_digest, &identity.operation_identifier)
+        .ok()
+        .flatten()
+        .map(|current| {
+            guard.settle_execution_with_scheduler_fence(
+                &current,
+                &outcome,
+                unix_milliseconds(),
+                fence,
+            )
+        });
+    if let Some(Ok(current)) = settled {
+        publish_settlement(&guard, &current);
+    }
+}
+
 fn prepare(runtime: &DurableRuntime, fence: u64, now: u64) -> Option<ScheduledInvocation> {
     let lease = now.saturating_add(
         slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded()
@@ -319,25 +478,38 @@ fn prepare(runtime: &DurableRuntime, fence: u64, now: u64) -> Option<ScheduledIn
         }
     };
     let claim = claim?;
-    let target = runtime.context().target();
+    let target = runtime.context().target().author_target_identity_digest.clone();
+    let input =
+        match runtime.operations().read_execution_input(&target, &claim.operation_identifier) {
+            Ok(Some(input)) => input,
+            _ => {
+                let _ = runtime.diagnostics().record("scheduler input read failed");
+                let _ = slingshot_storage::operation::scheduler_claim::release(
+                    runtime.database(),
+                    &target,
+                    &claim.operation_identifier,
+                    fence,
+                );
+                return None;
+            }
+        };
+    schedule_invocation(runtime, &input, now, fence)
+}
+
+/// Builds the submission for one already claimed operation.
+fn schedule_invocation(
+    runtime: &DurableRuntime,
+    input: &slingshot_storage::operation_repository::RetainedExecutionInput,
+    now: u64,
+    fence: u64,
+) -> Option<ScheduledInvocation> {
     let release_unstarted_claim = || {
         let _ = slingshot_storage::operation::scheduler_claim::release(
             runtime.database(),
-            &target.author_target_identity_digest,
-            &claim.operation_identifier,
+            &input.summary.author_target_identity_digest,
+            &input.summary.operation_identifier,
             fence,
         );
-    };
-    let input = match runtime
-        .operations()
-        .read_execution_input(&target.author_target_identity_digest, &claim.operation_identifier)
-    {
-        Ok(Some(input)) => input,
-        _ => {
-            let _ = runtime.diagnostics().record("scheduler input read failed");
-            release_unstarted_claim();
-            return None;
-        }
     };
     let attempt = input
         .summary

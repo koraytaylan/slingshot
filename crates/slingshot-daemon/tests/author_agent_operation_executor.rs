@@ -284,32 +284,20 @@ fn without_delay(outcome: &OperationExecutorOutcome) -> OperationExecutorOutcome
 }
 
 #[test]
-fn an_unclear_submission_is_outstanding_work_rather_than_an_ending() {
+fn an_answer_without_a_usable_submission_leaves_the_queue() {
     let ports = ScriptedPorts::answering(
         HandoffDisposition::Unknown { cause: None },
         AgentSettlement::Succeeded { inline_result: None },
     );
     let (outcome, _) = executed(&ports);
-    let OperationExecutorOutcome::RecoveryRequired { recovery } = outcome else {
-        panic!("an unclear submission settles nothing")
+    let OperationExecutorOutcome::TerminalFailure { failure } = outcome else {
+        panic!("an answer that cannot be used ends the operation")
     };
-    assert_eq!(recovery.category, RecoveryCategory::AmbiguousSubmission);
     assert_eq!(
-        recovery.evidence,
-        RecoveryExecutionEvidence::ExecutionCertainty {
-            certainty: OperationExecutionCertainty::SubmissionUnknown
-        }
+        failure.kind,
+        slingshot_domain::operation::TerminalFailureKind::RetryPolicyExhausted
     );
-    assert!(
-        recovery.category.admits(recovery.evidence),
-        "the category and the evidence are a pairing the domain permits"
-    );
-    // One unanswered attempt is the first attempt, not the last. The automatic budget decides when
-    // a person is asked, and a fact that paused work on the first unanswered submission would turn
-    // one transient timeout into an operation nothing retries - and, because the scheduler holds
-    // one execution slot per target, into a queue that never drains.
-    assert!(!recovery.manual_resume_eligible, "one attempt does not exhaust the budget");
-    assert_eq!(recovery.attempt_count, 1, "the first unanswered attempt is charged as one");
+    assert_eq!(*ports.asked.borrow(), vec!["submit"]);
 }
 
 #[test]
@@ -331,13 +319,11 @@ fn a_named_unknown_cause_is_kept_on_recovery_and_never_looks_like_lookup_require
     let ports =
         ScriptedPorts::answering(handoff, AgentSettlement::Succeeded { inline_result: None });
     let (outcome, _) = executed(&ports);
-    let OperationExecutorOutcome::RecoveryRequired { recovery } = outcome else {
-        panic!("a named unknown cause is outstanding recovery")
+    let OperationExecutorOutcome::TerminalFailure { failure } = outcome else {
+        panic!("a named unknown cause from an answer ends the operation")
     };
-    assert_eq!(recovery.category, RecoveryCategory::AmbiguousSubmission);
-    assert_eq!(recovery.detail, cause.spelling());
-    assert!(!recovery.detail.is_empty(), "a known cause must not vanish into an empty detail");
-    assert_eq!(*ports.asked.borrow(), vec!["submit"], "Unknown still does not settle");
+    assert_eq!(failure.metadata.as_deref(), Some(cause.spelling().as_str()));
+    assert_eq!(*ports.asked.borrow(), vec!["submit"], "an answered submission does not settle");
 }
 
 #[test]
@@ -457,22 +443,17 @@ fn settlement_preserves_terminal_effect_evidence_without_fetching_artifacts() {
 }
 
 #[test]
-fn a_throttled_handoff_carries_the_delay_it_was_given() {
+fn a_throttled_handoff_leaves_the_queue() {
     let ports = ScriptedPorts::answering(
         HandoffDisposition::RetryAfter { milliseconds: RETRY_DELAY },
         AgentSettlement::Succeeded { inline_result: None },
     );
     let (outcome, _) = executed(&ports);
-    let OperationExecutorOutcome::RecoveryRequired { recovery } = outcome else {
-        panic!("a throttled handoff settles nothing")
+    let OperationExecutorOutcome::TerminalFailure { failure } = outcome else {
+        panic!("a retryable status is an answer, so the operation ends")
     };
-    assert_eq!(recovery.retry_delay_milliseconds, RETRY_DELAY);
-    assert_eq!(
-        recovery.evidence,
-        RecoveryExecutionEvidence::ExecutionCertainty {
-            certainty: OperationExecutionCertainty::SubmissionUnknown
-        }
-    );
+    assert_eq!(failure.kind, TerminalFailureKind::RetryPolicyExhausted);
+    assert_eq!(failure.metadata.as_deref(), Some("the author answered with a retryable status"));
 }
 
 #[test]

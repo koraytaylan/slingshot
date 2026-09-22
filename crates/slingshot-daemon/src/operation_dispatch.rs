@@ -14,6 +14,7 @@ mod listing;
 mod maintenance;
 mod recovery;
 mod result;
+pub(crate) use result::settled_answer;
 mod wait;
 pub use admission::PreparedAdmission;
 pub use artifact::ArtifactResponseStream;
