@@ -1031,7 +1031,6 @@ crates/slingshot-daemon/src/operation_dispatch.rs	683	numeric-value-carries-no-n
 crates/slingshot-daemon/src/operation_dispatch.rs	736	numeric-value-carries-no-name	3
 crates/slingshot-daemon/src/operation_dispatch.rs	830	numeric-value-carries-no-name	2
 crates/slingshot-daemon/src/operation_dispatch/admission.rs	31	function-branches-too-many-ways	prepare_admission reaches 13
-crates/slingshot-daemon/src/operation_dispatch/artifact.rs	64	function-branches-too-many-ways	artifact reaches 13
 crates/slingshot-daemon/src/operation_dispatch/listing.rs	61	function-branches-too-many-ways	decode reaches 12
 crates/slingshot-daemon/src/operation_dispatch/listing.rs	235	numeric-value-carries-no-name	2
 crates/slingshot-daemon/src/operation_dispatch/listing.rs	236	numeric-value-carries-no-name	2
@@ -1052,9 +1051,9 @@ crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	240	numeric-valu
 crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	324	numeric-value-carries-no-name	2
 crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	348	numeric-value-carries-no-name	2
 crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	399	numeric-value-carries-no-name	2
-crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	549	numeric-value-carries-no-name	2
-crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	552	numeric-value-carries-no-name	2
-crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	594	numeric-value-carries-no-name	2
+crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	603	numeric-value-carries-no-name	2
+crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	606	numeric-value-carries-no-name	2
+crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	648	numeric-value-carries-no-name	2
 crates/slingshot-daemon/src/operation_dispatch/wait.rs	19	function-branches-too-many-ways	wait reaches 13
 crates/slingshot-daemon/src/operation_submission.rs	227	fallible-interface-omits-its-failure-section	settle_with_scheduler_fence
 crates/slingshot-daemon/src/retained_author_protocol.rs	52	declared-name-is-not-spelled-in-full	fmt

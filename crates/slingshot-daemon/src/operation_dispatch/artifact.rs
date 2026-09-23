@@ -100,27 +100,18 @@ impl BoundRequest {
                 operation_identifier: operation_identifier.clone(),
             });
         }
-        let metadata = ArtifactAssociations::new(repository.database())
+        let associations = ArtifactAssociations::new(repository.database());
+        let metadata = match associations
             .read_identifier(target, operation_identifier, &identifier)
             .map_err(|_| read_failure())?
-            .ok_or_else(read_failure)?;
-        if metadata.artifact_identifier != identifier
-            || ArtifactIdentifier::derive(
-                installation,
-                target,
-                operation_identifier,
-                &metadata.artifact_slot,
-            ) != identifier
-            || metadata.artifact_slot.is_empty()
-            || metadata.artifact_slot.len()
-                > slingshot_storage::artifact_store::maximum_artifact_slot_bytes()
-            || metadata.media_type.is_empty()
-            || metadata.media_type.len()
-                > slingshot_storage::artifact_store::maximum_media_type_bytes()
-            || metadata.byte_length
-                > slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
-                    .formula("maximum_individual_artifact_bytes")
         {
+            Some(found) if found.artifact_identifier == identifier => found,
+            Some(_) => return Err(read_failure()),
+            None => {
+                result_named(&associations, target, operation_identifier, expected_content_digest)?
+            }
+        };
+        if !admissible(&metadata, installation, target, operation_identifier) {
             return Err(read_failure());
         }
         let (transfer, _) = ArtifactTransfer::open(
@@ -139,6 +130,8 @@ impl BoundRequest {
             TransferFailure::Artifact(_) => read_failure(),
         })?;
         Ok(Some(ArtifactResponseStream {
+            // The start echoes the name the caller used, which is the one the
+            // operation's result gave it, whichever of the two names it is.
             start: Some(OperationResponse::ArtifactStart {
                 artifact_identifier: identifier.as_text().to_owned(),
                 byte_length: metadata.byte_length,
@@ -148,6 +141,59 @@ impl BoundRequest {
             transfer: Some(transfer),
             offset: *starting_byte_offset,
         }))
+    }
+}
+
+/// Returns whether one retained association is one this installation made for
+/// this operation, with a slot, media type and length inside their bounds.
+fn admissible(
+    metadata: &slingshot_storage::artifact_store::ArtifactMetadata,
+    installation: &InstallationIdentifier,
+    target: &str,
+    operation_identifier: &str,
+) -> bool {
+    ArtifactIdentifier::derive(installation, target, operation_identifier, &metadata.artifact_slot)
+        == metadata.artifact_identifier
+        && !metadata.artifact_slot.is_empty()
+        && metadata.artifact_slot.len()
+            <= slingshot_storage::artifact_store::maximum_artifact_slot_bytes()
+        && !metadata.media_type.is_empty()
+        && metadata.media_type.len()
+            <= slingshot_storage::artifact_store::maximum_media_type_bytes()
+        && metadata.byte_length
+            <= slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded()
+                .formula("maximum_individual_artifact_bytes")
+}
+
+/// Resolves an artifact the operation's own result names by the agent's
+/// identifier rather than this installation's.
+///
+/// A command whose result carries an artifact descriptor names the artifact as
+/// the agent published it, and the daemon retains the fetched bytes in the slot
+/// the descriptor fills under an identifier of its own. The name alone is
+/// therefore not enough to find it; the declared slots of this one operation
+/// are, and exactly one of them must hold content with the digest the caller
+/// quoted - which the caller took from that same result. Nothing outside the
+/// addressed operation and target is consulted.
+fn result_named(
+    associations: &ArtifactAssociations<'_>,
+    target: &str,
+    operation_identifier: &str,
+    expected_content_digest: &str,
+) -> Result<slingshot_storage::artifact_store::ArtifactMetadata, OperationResponse> {
+    let mut held = Vec::new();
+    for declaration in slingshot_domain::command::artifact::ArtifactSlotDeclaration::declared() {
+        if let Some(found) = associations
+            .read(target, operation_identifier, declaration.slot.as_text())
+            .map_err(|_| read_failure())?
+            && found.content_digest == expected_content_digest
+        {
+            held.push(found);
+        }
+    }
+    match <[_; 1]>::try_from(held) {
+        Ok([found]) => Ok(found),
+        Err(_) => Err(read_failure()),
     }
 }
 

@@ -463,6 +463,60 @@ fn pending_inline_and_invalid_retained_results_are_read_without_mutation_after_r
 }
 
 #[test]
+fn an_artifact_named_by_the_agent_is_read_from_the_slot_its_digest_fills() {
+    use slingshot_storage::artifact_store::{ArtifactStore, InstallationRequest};
+    let root = tempfile::tempdir().unwrap();
+    let repository = open(&root.path().join("named.sqlite"));
+    let store = ArtifactStore::open(root.path()).unwrap();
+    let target = served().author_target_identity_digest;
+    admit(&repository, "operation");
+    let content = b"package bytes";
+    let metadata = store
+        .install(
+            &InstallationRequest {
+                artifact_slot: slingshot_domain::command::artifact::CONTENT_PACKAGE_SLOT.to_owned(),
+                author_target_identity_digest: target.clone(),
+                descriptor: None,
+                installation_identifier: installation(),
+                media_type: "application/zip".to_owned(),
+                operation_identifier: "operation".to_owned(),
+            },
+            &mut content.as_slice(),
+        )
+        .unwrap();
+    settle(
+        &repository,
+        "operation",
+        Some("{}".to_owned()),
+        vec![ProducedArtifact {
+            artifact_identifier: metadata.artifact_identifier.as_text().to_owned(),
+            artifact_slot: metadata.artifact_slot.clone(),
+            byte_length: metadata.byte_length,
+            content_digest: metadata.content_digest.clone(),
+            media_type: metadata.media_type.clone(),
+        }],
+    );
+    // The agent names the package by its own identifier, which is not the one
+    // this installation derived for the slot it retained the bytes in.
+    let named_by_the_agent = metadata.content_digest.clone();
+    assert_ne!(named_by_the_agent, metadata.artifact_identifier.as_text());
+    let mut value = envelope();
+    value["request"] = serde_json::json!({"request":"artifact_read", "operation_identifier":"operation", "artifact_identifier":named_by_the_agent, "expected_content_digest":metadata.content_digest, "preferred_chunk_bytes":16, "starting_byte_offset":0});
+    let mut stream =
+        bind(&value).unwrap().artifact(&repository, &installation(), &store).unwrap().unwrap();
+    assert!(matches!(
+        stream.next(),
+        Some(OperationResponse::ArtifactStart { artifact_identifier, .. })
+            if artifact_identifier == named_by_the_agent
+    ));
+    value["request"]["expected_content_digest"] = "e".repeat(metadata.content_digest.len()).into();
+    assert!(
+        bind(&value).unwrap().artifact(&repository, &installation(), &store).is_err(),
+        "a name nothing retained was resolved by a digest the operation does not hold"
+    );
+}
+
+#[test]
 fn artifact_result_requires_the_structured_slot_and_installation_bound_identity() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("artifacts.sqlite");
