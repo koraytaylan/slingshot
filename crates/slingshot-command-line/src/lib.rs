@@ -22,6 +22,7 @@ pub mod daemon_entry;
 pub mod daemon_process;
 pub mod exit_classification;
 pub mod explicit_daemon_start;
+pub mod failure_remedy;
 pub mod human_renderer;
 pub mod interrupt;
 pub mod invocation;

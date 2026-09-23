@@ -21,6 +21,7 @@ use slingshot_local_protocol::message::{
 
 use crate::application::{Answer, Completion, RunRefusal};
 use crate::exit_classification::{self, TerminalDisposition};
+use crate::failure_remedy;
 use crate::machine_outcome_envelope::{
     ArtifactAccess, MachineOutcomeEnvelope, MaintenanceResultAccess,
 };
@@ -291,7 +292,7 @@ fn ended(response: &OperationResponse) -> Option<Completion> {
                 answer: Answer::Envelope(Box::new(
                     MachineOutcomeEnvelope::OperationTerminalError {
                         disposition: format!("{disposition:?}"),
-                        failure: serde_json::json!({ "metadata": metadata }),
+                        failure: failure_document(metadata.as_deref()),
                         kind: format!("{kind:?}"),
                     },
                 )),
@@ -299,6 +300,15 @@ fn ended(response: &OperationResponse) -> Option<Completion> {
             })
         }
         _ => None,
+    }
+}
+
+/// Returns the failure one terminal answer reports, with its remedy when the
+/// category has one.
+fn failure_document(metadata: Option<&str>) -> serde_json::Value {
+    match metadata.and_then(failure_remedy::remedy) {
+        Some(remedy) => serde_json::json!({ "metadata": metadata, "remedy": remedy }),
+        None => serde_json::json!({ "metadata": metadata }),
     }
 }
 
