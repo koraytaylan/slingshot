@@ -273,11 +273,38 @@ fn duplicates_and_worker_saturation_leave_original_waiters_reserved() {
     assert!(session.detached.try_recv().is_err(), "refusals do not detach admitted requests");
 }
 
+/// An output peer that fails every write once armed, on any platform's socket semantics.
+struct BreakableOutput {
+    stream: UnixStream,
+    broken: Arc<AtomicBool>,
+}
+
+impl Write for BreakableOutput {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if self.broken.load(Ordering::SeqCst) {
+            return Err(std::io::ErrorKind::BrokenPipe.into());
+        }
+        self.stream.write(bytes)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        if self.broken.load(Ordering::SeqCst) {
+            return Err(std::io::ErrorKind::BrokenPipe.into());
+        }
+        self.stream.flush()
+    }
+}
+
 #[test]
 fn output_failure_detaches_active_work_without_waiting_for_input_to_end() {
-    let mut session = Session::start(SUPPORTED_REVISIONS[0]);
+    let broken = Arc::new(AtomicBool::new(false));
+    let output_broken = Arc::clone(&broken);
+    let mut session = Session::over(SUPPORTED_REVISIONS[0], |stream| BreakableOutput {
+        stream,
+        broken: output_broken,
+    });
     session.wait_for("waiting");
-    session.output.shutdown(std::net::Shutdown::Both).unwrap();
+    broken.store(true, Ordering::SeqCst);
     session.request("broken", "ping", json!({}));
     session.finished.recv_timeout(shutdown_deadline()).expect("output failure stops intake");
     assert_eq!(session.detached.recv_timeout(shutdown_deadline()).unwrap(), "waiting");
