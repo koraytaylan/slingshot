@@ -277,7 +277,7 @@ fn duplicates_and_worker_saturation_leave_original_waiters_reserved() {
 fn output_failure_detaches_active_work_without_waiting_for_input_to_end() {
     let mut session = Session::start(SUPPORTED_REVISIONS[0]);
     session.wait_for("waiting");
-    session.output.shutdown(std::net::Shutdown::Read).unwrap();
+    session.output.shutdown(std::net::Shutdown::Both).unwrap();
     session.request("broken", "ping", json!({}));
     session.finished.recv_timeout(shutdown_deadline()).expect("output failure stops intake");
     assert_eq!(session.detached.recv_timeout(shutdown_deadline()).unwrap(), "waiting");
