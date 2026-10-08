@@ -611,7 +611,8 @@ fn compatibility_needs_all_five_and_not_four() {
         },
         {
             let mut other = descriptor.clone();
-            other.command_semantic_contract_version = INITIAL_COMMAND_VERSION.to_owned();
+            other.command_semantic_contract_version =
+                format!("{INITIAL_COMMAND_VERSION}+another-build");
             other
         },
         {

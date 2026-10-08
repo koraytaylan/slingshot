@@ -194,8 +194,10 @@ fn a_document_naming_another_command_contract_is_refused_whichever_field_differs
         WireContractIdentity { result_schema_digest: digest("ff"), ..installed.clone() },
         WireContractIdentity { command_contract_limits_digest: digest("ff"), ..installed.clone() },
         WireContractIdentity {
-            command_semantic_contract_version:
-                slingshot_domain::command::command_identity::INITIAL_COMMAND_VERSION.to_owned(),
+            command_semantic_contract_version: format!(
+                "{}+another-build",
+                slingshot_domain::command::command_identity::INITIAL_COMMAND_VERSION
+            ),
             ..installed.clone()
         },
         WireContractIdentity { command_wire_name: "create_page".to_owned(), ..installed.clone() },

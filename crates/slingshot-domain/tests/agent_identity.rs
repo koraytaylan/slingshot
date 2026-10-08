@@ -213,8 +213,10 @@ fn the_installed_identity_is_five_fields_and_all_of_them_count() {
             ..identity.clone()
         },
         SelectedCommandContractIdentity {
-            command_semantic_contract_version:
-                slingshot_domain::command::command_identity::INITIAL_COMMAND_VERSION.to_owned(),
+            command_semantic_contract_version: format!(
+                "{}+another-build",
+                slingshot_domain::command::command_identity::INITIAL_COMMAND_VERSION
+            ),
             ..identity.clone()
         },
         SelectedCommandContractIdentity {

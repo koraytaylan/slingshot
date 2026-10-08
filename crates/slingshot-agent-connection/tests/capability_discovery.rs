@@ -211,8 +211,10 @@ fn an_agent_holding_a_different_build_s_command_is_refused_by_name() {
             ..WireContractIdentity::from(&installed())
         },
         WireContractIdentity {
-            command_semantic_contract_version:
-                slingshot_domain::command::command_identity::INITIAL_COMMAND_VERSION.to_owned(),
+            command_semantic_contract_version: format!(
+                "{}+another-build",
+                slingshot_domain::command::command_identity::INITIAL_COMMAND_VERSION
+            ),
             ..WireContractIdentity::from(&installed())
         },
     ] {
