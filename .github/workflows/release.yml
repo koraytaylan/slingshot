@@ -148,7 +148,7 @@ jobs:
             triple: x86_64-unknown-linux-gnu
             coordinator: true
             archive_profile: tar.gz
-          - runner: macos-14
+          - runner: macos-15
             triple: aarch64-apple-darwin
             archive_profile: tar.gz
           - runner: windows-2022

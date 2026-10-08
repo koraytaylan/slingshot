@@ -59,9 +59,9 @@ finite-state-machine = true
 
 [[row]]
 triple = "aarch64-apple-darwin"
-runner-selector = "macos-14"
+runner-selector = "macos-15"
 runner-class = "github-hosted"
-observed-image = "macos-14"
+observed-image = "macos-15"
 architecture = "aarch64"
 toolchain = "1.98.0"
 linker = "cc"
