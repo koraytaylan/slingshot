@@ -34,19 +34,24 @@ pub const CONTRACT_DURATION_UNIT: &str = "milliseconds";
 /// The first published command version.
 pub const INITIAL_COMMAND_VERSION: &str = "0.0.0";
 
-/// Patch version recording the shared contract metadata migration without changed behavior.
+/// Patch version recording the shared contract metadata migration, and the shared contracts
+/// that no longer name the five commands removed from the registry, without changed behavior.
 pub const SHARED_METADATA_COMMAND_VERSION: &str = "0.0.0";
 
-/// Version implementing bounded live discovery with explicit page completeness.
+/// Version implementing bounded live discovery with explicit page completeness, patched for the
+/// shared contracts that no longer name the five removed commands.
 pub const INCREMENTAL_DISCOVERY_VERSION: &str = "0.0.0";
 
-/// Patch version binding existing bounded discovery to the revised shared byte contract.
+/// Patch version binding existing bounded discovery to the revised shared byte contract, and to
+/// the shared contracts that no longer name the five removed commands.
 pub const INCREMENTAL_DISCOVERY_METADATA_VERSION: &str = "0.0.0";
 
-/// Version implementing bounded phrase and nearest-page component searches.
+/// Version implementing bounded phrase and nearest-page component searches, patched for the
+/// shared contracts that no longer name the five removed commands.
 pub const PAGE_SEARCH_VERSION: &str = "0.0.0";
 
-/// Version implementing bounded asset traversal and explicit page completeness.
+/// Version implementing bounded asset traversal and explicit page completeness, patched for the
+/// shared contracts that no longer name the five removed commands.
 pub const ASSET_DISCOVERY_VERSION: &str = "0.0.0";
 
 /// Core identifiers every version carries.
