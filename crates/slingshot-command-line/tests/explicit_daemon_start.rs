@@ -50,9 +50,11 @@ const CONVERGING_CLIENT_COUNT: usize = 12;
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// How long the departing owner holds its lock after the start begins waiting.
+#[cfg(target_os = "linux")]
 const HOLDER_DEPARTS_AFTER_MILLISECONDS: u64 = 400;
 
 /// How long a start may take once the lock it waited on is released.
+#[cfg(target_os = "linux")]
 const START_SETTLES_WITHIN_SECONDS: u64 = 5;
 
 /// Returns the product executable this assertion drives.
