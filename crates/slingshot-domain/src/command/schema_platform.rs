@@ -14,44 +14,17 @@ use serde_json::{Value, json};
 
 use crate::command::command_identity::CommandContract;
 use crate::command::schema::{
-    SchemaRole, closed, configuration_value, count, listing_page, nonempty_string, repository_path,
-    result_window,
+    SchemaRole, closed, count, listing_page, nonempty_string, repository_path, result_window,
 };
 
 /// Returns the body one command role declares, when this leaf declares it.
 pub fn body(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Option<Value> {
-    group_1(wire_name, role, limits)
-        .or_else(|| group_2(wire_name, role, limits))
-        .or_else(|| group_3(wire_name, role, limits))
+    group_1(wire_name, role, limits).or_else(|| group_2(wire_name, role, limits))
 }
 
-/// Returns the body one of `delete_open_service_gateway_initiative_configuration` through `list_open_service_gateway_initiative_components` declares.
+/// Returns the body one of `find_open_service_gateway_initiative_configurations` through `list_open_service_gateway_initiative_components` declares.
 fn group_1(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Option<Value> {
     let body = match (wire_name, role) {
-        ("delete_open_service_gateway_initiative_configuration", SchemaRole::Arguments) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "persistent_identifier",
-            ],
-            "properties": {
-                "persistent_identifier": nonempty_string(limits.limit("maximum_configuration_persistent_identifier_bytes")),
-            },
-        }),
-        ("delete_open_service_gateway_initiative_configuration", SchemaRole::Result) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "persistent_identifier",
-                "was_a_factory_instance",
-            ],
-            "properties": {
-                "persistent_identifier": nonempty_string(limits.limit("maximum_configuration_persistent_identifier_bytes")),
-                "was_a_factory_instance": {
-                    "type": "boolean",
-                },
-            },
-        }),
         ("find_open_service_gateway_initiative_configurations", SchemaRole::Arguments) => json!({
             "type": "object",
             "additionalProperties": false,
@@ -161,7 +134,7 @@ fn group_1(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
     Some(body)
 }
 
-/// Returns the body one of `list_resource_mappings` through `set_open_service_gateway_initiative_bundle_state` declares.
+/// Returns the body one of `list_resource_mappings` through `resolve_resource_path` declares.
 fn group_2(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Option<Value> {
     let body = match (wire_name, role) {
         ("list_resource_mappings", SchemaRole::Arguments) => json!({
@@ -278,76 +251,7 @@ fn group_2(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
                 },
             },
         }),
-        ("set_open_service_gateway_initiative_bundle_state", SchemaRole::Arguments) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "symbolic_name",
-                "transition",
-            ],
-            "properties": {
-                "symbolic_name": nonempty_string(limits.limit("maximum_bundle_symbolic_name_bytes")),
-                "transition": closed(&["refresh", "start", "stop"]),
-            },
-        }),
-        ("set_open_service_gateway_initiative_bundle_state", SchemaRole::Result) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "observed_state",
-                "symbolic_name",
-            ],
-            "properties": {
-                "observed_state": closed(&["active", "installed", "resolved", "starting", "stopping", "uninstalled"]),
-                "symbolic_name": nonempty_string(limits.limit("maximum_bundle_symbolic_name_bytes")),
-            },
-        }),
-        _ => return None,
-    };
-    Some(body)
-}
 
-/// Returns the body one of `update_open_service_gateway_initiative_configuration` through `update_open_service_gateway_initiative_configuration` declares.
-fn group_3(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Option<Value> {
-    let body = match (wire_name, role) {
-        ("update_open_service_gateway_initiative_configuration", SchemaRole::Arguments) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "persistent_identifier",
-            ],
-            "properties": {
-                "assignments": {
-                    "type": "object",
-                    "maxProperties": limits.limit("maximum_inspected_configuration_properties"),
-                    "additionalProperties": configuration_value(limits),
-                },
-                "persistent_identifier": nonempty_string(limits.limit("maximum_configuration_persistent_identifier_bytes")),
-                "removed_property_keys": {
-                    "type": "array",
-                    "minItems": 1,
-                    "uniqueItems": true,
-                    "maxItems": limits.limit("maximum_inspected_configuration_properties"),
-                    "items": nonempty_string(limits.limit("maximum_configuration_property_key_bytes")),
-                },
-            },
-        }),
-        ("update_open_service_gateway_initiative_configuration", SchemaRole::Result) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "changed_property_key_count",
-                "persistent_identifier",
-            ],
-            "properties": {
-                "changed_property_key_count": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": limits.limit("maximum_inspected_configuration_properties"),
-                },
-                "persistent_identifier": nonempty_string(limits.limit("maximum_configuration_persistent_identifier_bytes")),
-            },
-        }),
         _ => return None,
     };
     Some(body)

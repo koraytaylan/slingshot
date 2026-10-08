@@ -199,26 +199,6 @@ pub const REMOVE_GROUP_MEMBER: ClassificationRow = ClassificationRow {
     discovery: false,
 };
 
-/// Retry a replication queue entry.
-pub const RETRY_REPLICATION_QUEUE_ENTRY: ClassificationRow = ClassificationRow {
-    wire_name: "retry_replication_queue_entry",
-    title: "Retry a replication queue entry",
-    description: "Puts one queued entry back to be tried again and reports whether it was \
-                  actually resubmitted.",
-    access: AccessClassification::Write,
-    destructive: DestructiveClassification::NonDestructive,
-    intrinsic_idempotency: IntrinsicIdempotencyClassification::NotIntrinsicallyIdempotent,
-    result_bytes_limit: "maximum_mutation_success_result_bytes",
-    failure_categories: &[
-        "agent_not_found",
-        "agent_access_denied",
-        "entry_not_found",
-        "platform_control_rejected",
-        "platform_control_outcome_unknown",
-    ],
-    discovery: false,
-};
-
 /// Disable or enable a user.
 pub const SET_USER_DISABLED: ClassificationRow = ClassificationRow {
     wire_name: "set_user_disabled",

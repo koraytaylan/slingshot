@@ -152,7 +152,6 @@ it did.
 | `delete_component` | Delete a component | Write | required | 16384 bytes |
 | `delete_content_fragment` | Delete a content fragment | Write | required | 16384 bytes |
 | `delete_experience_fragment` | Delete an experience fragment | Write | required | 16384 bytes |
-| `delete_open_service_gateway_initiative_configuration` | Delete a configuration | Write | required | 16384 bytes |
 | `delete_page` | Delete a page | Write | required | 16384 bytes |
 | `download_content_package` | Download a content package | Read | required | 1048576 bytes |
 | `find_assets_by_metadata` | Find assets by metadata | Read | refused | 1048576 bytes |
@@ -188,7 +187,6 @@ it did.
 | `list_workflow_models` | List workflow models | Read | refused | 1048576 bytes |
 | `load_content_as_json` | Load content as JSON | Read | required | 1048576 bytes |
 | `map_resource_path` | Map a resource path | Read | refused | 262144 bytes |
-| `move_asset` | Move an asset | Write | required | 16384 bytes |
 | `move_page` | Move a page | Write | required | 16384 bytes |
 | `query_paths` | Query paths | Read | refused | 1048576 bytes |
 | `read_content_fragment` | Read a content fragment | Read | refused | 262144 bytes |
@@ -196,8 +194,6 @@ it did.
 | `reorder_component` | Reorder a component | Write | required | 16384 bytes |
 | `replicate_content` | Replicate content | Write | required | 16384 bytes |
 | `resolve_resource_path` | Resolve a resource path | Read | refused | 262144 bytes |
-| `retry_replication_queue_entry` | Retry a replication queue entry | Write | required | 16384 bytes |
-| `set_open_service_gateway_initiative_bundle_state` | Set a bundle state | Write | required | 16384 bytes |
 | `set_user_disabled` | Disable or enable a user | Write | required | 16384 bytes |
 | `set_workflow_instance_suspension` | Suspend or resume a workflow instance | Write | required | 16384 bytes |
 | `start_workflow` | Start a workflow | Write | required | 16384 bytes |
@@ -206,7 +202,6 @@ it did.
 | `update_component` | Update a component | Write | required | 16384 bytes |
 | `update_content_fragment` | Update a content fragment | Write | required | 16384 bytes |
 | `update_experience_fragment` | Update an experience fragment | Write | required | 16384 bytes |
-| `update_open_service_gateway_initiative_configuration` | Update a configuration | Write | required | 16384 bytes |
 | `update_page` | Update a page | Write | required | 16384 bytes |
 | `update_user_profile` | Update a user profile | Write | required | 16384 bytes |
 
@@ -266,7 +261,6 @@ behaviour.
 | `delete_component` | `component_not_found`, `component_access_denied`, `component_invalid`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `delete_content_fragment` | `fragment_not_found`, `fragment_access_denied`, `fragment_invalid`, `fragment_is_referenced`, `deletion_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `delete_experience_fragment` | `fragment_not_found`, `fragment_access_denied`, `fragment_invalid`, `fragment_is_referenced`, `deletion_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
-| `delete_open_service_gateway_initiative_configuration` | `configuration_lookup_failed`, `configuration_lookup_mismatch`, `configuration_lookup_ambiguous`, `platform_control_rejected`, `platform_control_outcome_unknown` |
 | `delete_page` | `target_not_found`, `target_access_denied`, `target_not_a_page`, `target_is_referenced`, `deletion_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `download_content_package` | `pattern_rejected`, `filevault_profile_unsupported`, `filevault_filter_unrepresentable`, `root_not_found`, `root_access_denied`, `repository_read_failed`, `filevault_package_failed`, `staging_cleanup_failed`, `artifact_publication_failed`, `artifact_publication_outcome_unknown`, `evaluation_budget_exceeded` |
 | `find_assets_by_metadata` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
@@ -302,7 +296,6 @@ behaviour.
 | `list_workflow_models` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `workflow_inventory_failed` |
 | `load_content_as_json` | `not_found`, `access_denied`, `unsupported_repository_value`, `load_budget_exceeded` |
 | `map_resource_path` | `resolution_failed`, `resolution_budget_exceeded` |
-| `move_asset` | `source_not_found`, `source_access_denied`, `destination_parent_not_found`, `destination_already_exists`, `destination_inside_source`, `reference_adjustment_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `move_page` | `source_not_found`, `source_access_denied`, `destination_parent_not_found`, `destination_already_exists`, `destination_inside_source`, `reference_adjustment_budget_exceeded`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `query_paths` | `discovery_budget_exceeded`, `continuation_token_malformed`, `continuation_token_integrity_invalid`, `continuation_token_wrong_target`, `continuation_token_wrong_query`, `continuation_token_expired`, `root_not_found`, `root_access_denied` |
 | `read_content_fragment` | `fragment_not_found`, `fragment_access_denied`, `fragment_invalid`, `variation_not_found`, `result_budget_exceeded` |
@@ -310,8 +303,6 @@ behaviour.
 | `reorder_component` | `component_not_found`, `component_access_denied`, `parent_not_orderable`, `sibling_not_found`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `replicate_content` | `source_not_found`, `source_access_denied`, `candidate_limit_exceeded`, `traversal_budget_exceeded`, `admission_rejected`, `admission_budget_exceeded`, `admission_outcome_unknown` |
 | `resolve_resource_path` | `resolution_failed`, `resolution_budget_exceeded`, `request_address_rejected` |
-| `retry_replication_queue_entry` | `agent_not_found`, `agent_access_denied`, `entry_not_found`, `platform_control_rejected`, `platform_control_outcome_unknown` |
-| `set_open_service_gateway_initiative_bundle_state` | `bundle_not_found`, `bundle_transition_refused`, `platform_control_rejected`, `platform_control_outcome_unknown` |
 | `set_user_disabled` | `authorizable_not_found`, `authorizable_kind_mismatch`, `authorizable_access_denied`, `platform_control_rejected`, `platform_control_outcome_unknown` |
 | `set_workflow_instance_suspension` | `instance_not_found`, `instance_access_denied`, `instance_not_suspendable`, `platform_control_rejected`, `platform_control_outcome_unknown` |
 | `start_workflow` | `model_not_found`, `model_invalid`, `payload_not_found`, `payload_access_denied`, `metadata_rejected`, `platform_control_rejected`, `platform_control_outcome_unknown` |
@@ -320,7 +311,6 @@ behaviour.
 | `update_component` | `component_not_found`, `component_access_denied`, `component_invalid`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `update_content_fragment` | `fragment_not_found`, `fragment_access_denied`, `fragment_invalid`, `variation_not_found`, `element_unknown`, `element_value_rejected`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `update_experience_fragment` | `variation_not_found`, `variation_access_denied`, `variation_invalid`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, `mutation_outcome_unknown` |
-| `update_open_service_gateway_initiative_configuration` | `configuration_lookup_failed`, `configuration_lookup_mismatch`, `configuration_lookup_ambiguous`, `configuration_value_unsupported`, `configuration_value_malformed`, `platform_control_rejected`, `platform_control_outcome_unknown` |
 | `update_page` | `page_not_found`, `page_access_denied`, `page_invalid`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, `mutation_outcome_unknown` |
 | `update_user_profile` | `authorizable_not_found`, `authorizable_kind_mismatch`, `authorizable_access_denied`, `property_rejected`, `property_not_removable`, `repository_commit_failed`, `mutation_outcome_unknown` |
 
@@ -426,7 +416,7 @@ directory on this machine.
 
 What it may run is the registry's own answer. A command is admissible when the
 registry calls it a read that replaces nothing, which is thirty-six of the
-seventy-two rows; the thirty-six that write are refused before anything is
+sixty-seven rows; the thirty-one that write are refused before anything is
 dispatched. Whether
 running a command twice is running it once never enters into that decision -
 that column says whether a retry is safe, not whether a run may happen.

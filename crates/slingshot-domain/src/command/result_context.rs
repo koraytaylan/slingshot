@@ -235,14 +235,6 @@ impl AnswersCommand for crate::command::delete_experience_fragment::DeleteExperi
     }
 }
 
-impl AnswersCommand for crate::command::delete_open_service_gateway_initiative_configuration::DeleteOpenServiceGatewayInitiativeConfigurationResult {
-    type Asked = crate::command::delete_open_service_gateway_initiative_configuration::DeleteOpenServiceGatewayInitiativeConfigurationCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
 impl AnswersCommand for crate::command::delete_page::DeletePageResult {
     type Asked = crate::command::delete_page::DeletePageCommand;
 
@@ -465,14 +457,6 @@ impl AnswersCommand for crate::command::resource_resolution::MapResourcePathResu
     }
 }
 
-impl AnswersCommand for crate::command::move_asset::MoveAssetResult {
-    type Asked = crate::command::move_asset::MoveAssetCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
 impl AnswersCommand for crate::command::move_page::MovePageResult {
     type Asked = crate::command::move_page::MovePageCommand;
 
@@ -507,24 +491,6 @@ impl AnswersCommand for crate::command::reorder_component::ReorderComponentResul
 
 impl AnswersCommand for crate::command::resource_resolution::ResolveResourcePathResult {
     type Asked = crate::command::resource_resolution::ResolveResourcePathCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand
-    for crate::command::retry_replication_queue_entry::RetryReplicationQueueEntryResult
-{
-    type Asked = crate::command::retry_replication_queue_entry::RetryReplicationQueueEntryCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand for crate::command::set_open_service_gateway_initiative_bundle_state::SetOpenServiceGatewayInitiativeBundleStateResult {
-    type Asked = crate::command::set_open_service_gateway_initiative_bundle_state::SetOpenServiceGatewayInitiativeBundleStateCommand;
 
     fn answers(&self, asked: &Self::Asked) -> bool {
         self.require_answers(asked).is_ok()
@@ -594,14 +560,6 @@ impl AnswersCommand for crate::command::update_content_fragment::UpdateContentFr
 
 impl AnswersCommand for crate::command::update_experience_fragment::UpdateExperienceFragmentResult {
     type Asked = crate::command::update_experience_fragment::UpdateExperienceFragmentCommand;
-
-    fn answers(&self, asked: &Self::Asked) -> bool {
-        self.require_answers(asked).is_ok()
-    }
-}
-
-impl AnswersCommand for crate::command::update_open_service_gateway_initiative_configuration::UpdateOpenServiceGatewayInitiativeConfigurationResult {
-    type Asked = crate::command::update_open_service_gateway_initiative_configuration::UpdateOpenServiceGatewayInitiativeConfigurationCommand;
 
     fn answers(&self, asked: &Self::Asked) -> bool {
         self.require_answers(asked).is_ok()

@@ -1,4 +1,4 @@
-//! Looking at replication agents and their queues, and moving one along.
+//! Looking at replication agents and their queues, and emptying one.
 //!
 //! `--agent` names which agent everywhere. The flush takes an optional
 //! `--expected-entry-count`, which is the whole reason it is safe to run on a
@@ -8,18 +8,15 @@
 use slingshot_domain::command::catalog::Command;
 use slingshot_domain::command::flush_replication_queue::FlushReplicationQueueCommand;
 use slingshot_domain::command::inspect_replication_queue::InspectReplicationQueueCommand;
-use slingshot_domain::command::platform_service_identity::{
-    ReplicationAgentIdentifier, ReplicationQueueEntryIdentifier,
-};
+use slingshot_domain::command::platform_service_identity::ReplicationAgentIdentifier;
 use slingshot_domain::command::replication_agent::{
     InspectReplicationAgentCommand, ListReplicationAgentsCommand,
 };
-use slingshot_domain::command::retry_replication_queue_entry::RetryReplicationQueueEntryCommand;
 
 use crate::commands::content::{RequestRefusal, require_key, required};
 use crate::commands::operational_values::{optional_count, unusable};
 use crate::commands::path_query::window;
-use crate::invocation::{AGENT_OPTION, ENTRY_OPTION, EXPECTED_ENTRY_COUNT_OPTION, Invocation};
+use crate::invocation::{AGENT_OPTION, EXPECTED_ENTRY_COUNT_OPTION, Invocation};
 
 /// The wire name of the agent listing.
 pub const LIST_REPLICATION_AGENTS: &str = "list_replication_agents";
@@ -33,16 +30,12 @@ pub const INSPECT_REPLICATION_QUEUE: &str = "inspect_replication_queue";
 /// The wire name of the flush.
 pub const FLUSH_REPLICATION_QUEUE: &str = "flush_replication_queue";
 
-/// The wire name of the retry.
-pub const RETRY_REPLICATION_QUEUE_ENTRY: &str = "retry_replication_queue_entry";
-
 /// Every command this family builds.
 const NAMES: &[&str] = &[
     LIST_REPLICATION_AGENTS,
     INSPECT_REPLICATION_AGENT,
     INSPECT_REPLICATION_QUEUE,
     FLUSH_REPLICATION_QUEUE,
-    RETRY_REPLICATION_QUEUE_ENTRY,
 ];
 
 /// Returns the typed request one invocation describes.
@@ -73,19 +66,9 @@ pub fn build(invocation: &Invocation) -> Result<Command, RequestRefusal> {
                 result_window: window(invocation)?,
             }))
         }
-        FLUSH_REPLICATION_QUEUE => {
-            Ok(Command::FlushReplicationQueue(FlushReplicationQueueCommand {
-                agent_identifier: agent(invocation)?,
-                expected_entry_count: optional_count(invocation, EXPECTED_ENTRY_COUNT_OPTION)?,
-            }))
-        }
-        _ => Ok(Command::RetryReplicationQueueEntry(RetryReplicationQueueEntryCommand {
+        _ => Ok(Command::FlushReplicationQueue(FlushReplicationQueueCommand {
             agent_identifier: agent(invocation)?,
-            entry_identifier: ReplicationQueueEntryIdentifier::parse(required(
-                invocation,
-                ENTRY_OPTION,
-            )?)
-            .map_err(|_| unusable(ENTRY_OPTION))?,
+            expected_entry_count: optional_count(invocation, EXPECTED_ENTRY_COUNT_OPTION)?,
         })),
     }
 }

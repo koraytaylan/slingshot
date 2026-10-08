@@ -3,8 +3,12 @@
 Review renewed on 2026-09-29 for `CONTRIBUTING.md`, `docs/DAEMON.md`, and
 `docs/MODEL_CONTEXT_PROTOCOL.md`, with a further review of `docs/COMMANDS.md` for
 the incremental discovery migration and renewed on 2026-10-02 for its page-search
-contracts. The unchanged document identities below retain
-their previous reviews; this update makes no fresh workspace-wide review claim.
+contracts. Renewed on 2026-10-08 for `README.md`, `docs/COMMANDS.md`, and
+`docs/MODEL_CONTEXT_PROTOCOL.md` after five commands were removed from the
+registry: the removed rows are gone from every table, and the stated row and
+write counts are the registry's sixty-seven and thirty-one. The unchanged
+document identities below retain their previous reviews; this update makes no
+fresh workspace-wide review claim.
 
 The source-policy checker enforces structural documentation rules and rejects
 new findings against the reviewed baseline. It does not decide whether prose
@@ -131,14 +135,14 @@ cannot inherit this review without an explicit renewed record.
 
 | Document | SHA-256 |
 |---|---|
-| `README.md` | `8a69bafa9663c68fec56e78c38833710a693b232af2f865f9bee32774721468c` |
+| `README.md` | `8c6118c58058691552706ff91a25c4e72f5097d14a1fc1d6fbd8ec203baece06` |
 | `CONTRIBUTING.md` | `5ef483f3b3bfef920a65e432b9c17bcbf92b6b07a69b3a8b8a1653b14ebb2f7b` |
 | `ARCHITECTURE.md` | `7b5fe4d75b11e63bae6c7d4de6c2426009025fc9b03c23d906e899996c5534cb` |
 | `docs/AGENT_PROTOCOL.md` | `66ea30008f51815184794e06d54bfca835ab02e9770b3e806bfe6225beae5b4f` |
-| `docs/COMMANDS.md` | `384e2c23616c0c2f13cc990a600ac9346d3cfaca91d949563f58536e73e2ec55` |
+| `docs/COMMANDS.md` | `e069b1e348c52aca30549f3912c07cee2897fdbb4c647b52e77ddb3baa247ec4` |
 | `docs/CONFIGURATION.md` | `775ce5363790d1b44a91fdb7e7b2015d538cce224de5030f5e13edec87b089b3` |
 | `docs/DAEMON.md` | `6d7b1961643b90e8b19212e836fa87973ae81274b195986f7cf78957af6c4f92` |
-| `docs/MODEL_CONTEXT_PROTOCOL.md` | `a9ef98d045f8ffc127f8c7952cd5c581fb32a673ece618abb533043b8939914b` |
+| `docs/MODEL_CONTEXT_PROTOCOL.md` | `75bea162f13e3756f96cad8ecc78f4fb01fe20bb8d8165726b40c3515bd6841d` |
 | `docs/RELEASES.md` | `c25a1800a6e20515d29569eec77003a267184a35e88d2a1c21d24630f0501d6a` |
 | `docs/WORKFLOWS.md` | `0bd107a373f258069f2e9472f5c17bea2ccb675aa070ccc581d49ce11c9f3f6e` |
 

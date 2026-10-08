@@ -1,4 +1,4 @@
-//! Making, describing, moving, removing, and looking inside assets.
+//! Making, describing, removing, and looking inside assets.
 //!
 //! `--path` names what the command acts on, which is the parent for the two
 //! creations and the asset itself for everything else - the same habit
@@ -15,21 +15,17 @@ use slingshot_domain::command::create_asset::CreateAssetCommand;
 use slingshot_domain::command::create_asset_folder::CreateAssetFolderCommand;
 use slingshot_domain::command::delete_asset::DeleteAssetCommand;
 use slingshot_domain::command::list_asset_renditions::ListAssetRenditionsCommand;
-use slingshot_domain::command::move_asset::MoveAssetCommand;
 use slingshot_domain::command::repository_path::RepositoryName;
 use slingshot_domain::command::resource_mutation::InlineBinaryPayload;
 use slingshot_domain::command::update_asset_metadata::UpdateAssetMetadataCommand;
 
 use crate::commands::content::{RequestRefusal, require_key, required};
 use crate::commands::operational_values::{
-    flag, path, reference_policy, removed_property_names, title, unusable,
+    path, reference_policy, removed_property_names, title, unusable,
 };
 use crate::commands::page_mutation::properties;
 use crate::commands::path_query::window;
-use crate::invocation::{
-    ADJUST_REFERENCES_OPTION, DESTINATION_PATH_OPTION, Invocation, MEDIA_TYPE_OPTION, NAME_OPTION,
-    PATH_OPTION, PAYLOAD_OPTION,
-};
+use crate::invocation::{Invocation, MEDIA_TYPE_OPTION, NAME_OPTION, PATH_OPTION, PAYLOAD_OPTION};
 
 /// The wire name of the folder creation.
 pub const CREATE_ASSET_FOLDER: &str = "create_asset_folder";
@@ -43,9 +39,6 @@ pub const UPDATE_ASSET_METADATA: &str = "update_asset_metadata";
 /// The wire name of the asset deletion.
 pub const DELETE_ASSET: &str = "delete_asset";
 
-/// The wire name of the asset move.
-pub const MOVE_ASSET: &str = "move_asset";
-
 /// The wire name of the rendition listing.
 pub const LIST_ASSET_RENDITIONS: &str = "list_asset_renditions";
 
@@ -55,7 +48,6 @@ const NAMES: &[&str] = &[
     CREATE_ASSET,
     UPDATE_ASSET_METADATA,
     DELETE_ASSET,
-    MOVE_ASSET,
     LIST_ASSET_RENDITIONS,
 ];
 
@@ -78,7 +70,6 @@ pub fn build(invocation: &Invocation) -> Result<Command, RequestRefusal> {
             asset_path: path(invocation, PATH_OPTION)?,
             reference_policy: reference_policy(invocation)?,
         })),
-        MOVE_ASSET => move_asset(invocation),
         _ => Ok(Command::ListAssetRenditions(ListAssetRenditionsCommand {
             asset_path: path(invocation, PATH_OPTION)?,
             result_window: window(invocation)?,
@@ -116,15 +107,6 @@ fn update_metadata(invocation: &Invocation) -> Result<Command, RequestRefusal> {
         asset_path: path(invocation, PATH_OPTION)?,
         properties: properties(invocation, &[])?,
         removed_property_names: removed_property_names(invocation)?,
-    }))
-}
-
-/// Returns the asset move one invocation describes.
-fn move_asset(invocation: &Invocation) -> Result<Command, RequestRefusal> {
-    Ok(Command::MoveAsset(MoveAssetCommand {
-        adjust_references: flag(invocation, ADJUST_REFERENCES_OPTION),
-        destination_path: path(invocation, DESTINATION_PATH_OPTION)?,
-        source_path: path(invocation, PATH_OPTION)?,
     }))
 }
 

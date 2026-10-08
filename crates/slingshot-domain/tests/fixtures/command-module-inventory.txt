@@ -34,7 +34,6 @@ delete_authorizable
 delete_component
 delete_content_fragment
 delete_experience_fragment
-delete_open_service_gateway_initiative_configuration
 delete_page
 discovery_budget
 download_content_package
@@ -70,7 +69,6 @@ list_sling_job_queues
 list_workflow_models
 load_content_as_javascript_object_notation
 loaded_document_reader
-move_asset
 move_page
 operational_listing
 package_selection
@@ -88,14 +86,12 @@ resource_mutation
 resource_resolution
 result_context
 result_window
-retry_replication_queue_entry
 schema
 schema_administration
 schema_authoring
 schema_platform
 schema_process
 search_predicate
-set_open_service_gateway_initiative_bundle_state
 set_user_disabled
 set_workflow_instance_suspension
 start_workflow
@@ -104,6 +100,5 @@ update_asset_metadata
 update_component
 update_content_fragment
 update_experience_fragment
-update_open_service_gateway_initiative_configuration
 update_page
 update_user_profile

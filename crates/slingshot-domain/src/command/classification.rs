@@ -65,7 +65,7 @@ pub const DISCOVERY_FAILURES: &[&str] = &[
 /// Anchor failures the rooted discovery commands allow.
 pub const ROOT_ANCHOR_FAILURES: &[&str] = &["root_not_found", "root_access_denied"];
 
-/// The closed seventy-two-row table, in ascending wire-name order.
+/// The closed sixty-seven-row table, in ascending wire-name order.
 pub const CLASSIFICATIONS: &[ClassificationRow] = &[
     classification_foundation::ADD_COMPONENT,
     classification_administration::ADD_GROUP_MEMBER,
@@ -82,7 +82,6 @@ pub const CLASSIFICATIONS: &[ClassificationRow] = &[
     classification_authoring::DELETE_COMPONENT,
     classification_authoring::DELETE_CONTENT_FRAGMENT,
     classification_authoring::DELETE_EXPERIENCE_FRAGMENT,
-    classification_platform::DELETE_CONFIGURATION,
     classification_authoring::DELETE_PAGE,
     classification_foundation::DOWNLOAD_CONTENT_PACKAGE,
     classification_foundation::FIND_ASSETS_BY_METADATA,
@@ -118,7 +117,6 @@ pub const CLASSIFICATIONS: &[ClassificationRow] = &[
     classification_process::LIST_WORKFLOW_MODELS,
     classification_foundation::LOAD_CONTENT_AS_JSON,
     classification_platform::MAP_RESOURCE_PATH,
-    classification_authoring::MOVE_ASSET,
     classification_authoring::MOVE_PAGE,
     classification_foundation::QUERY_PATHS,
     classification_authoring::READ_CONTENT_FRAGMENT,
@@ -126,8 +124,6 @@ pub const CLASSIFICATIONS: &[ClassificationRow] = &[
     classification_authoring::REORDER_COMPONENT,
     classification_foundation::REPLICATE_CONTENT,
     classification_platform::RESOLVE_RESOURCE_PATH,
-    classification_administration::RETRY_REPLICATION_QUEUE_ENTRY,
-    classification_platform::SET_BUNDLE_STATE,
     classification_administration::SET_USER_DISABLED,
     classification_process::SET_WORKFLOW_INSTANCE_SUSPENSION,
     classification_process::START_WORKFLOW,
@@ -136,7 +132,6 @@ pub const CLASSIFICATIONS: &[ClassificationRow] = &[
     classification_authoring::UPDATE_COMPONENT,
     classification_authoring::UPDATE_CONTENT_FRAGMENT,
     classification_authoring::UPDATE_EXPERIENCE_FRAGMENT,
-    classification_platform::UPDATE_CONFIGURATION,
     classification_authoring::UPDATE_PAGE,
     classification_administration::UPDATE_USER_PROFILE,
 ];

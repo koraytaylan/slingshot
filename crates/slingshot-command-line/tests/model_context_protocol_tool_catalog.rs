@@ -19,22 +19,22 @@ use slingshot_domain::command::catalog::CommandCatalog;
 use slingshot_domain::command::command_identity::CommandContract;
 
 /// How many commands the registry publishes.
-const PUBLISHED_COMMANDS: usize = 72;
+const PUBLISHED_COMMANDS: usize = 67;
 
 /// How many of them are read-only.
 const READ_ONLY_COMMANDS: usize = 36;
 
 /// How many of them change something.
-const CHANGING_COMMANDS: usize = 36;
+const CHANGING_COMMANDS: usize = 31;
 
 /// How many of them may remove something.
-const DESTRUCTIVE_COMMANDS: usize = 25;
+const DESTRUCTIVE_COMMANDS: usize = 21;
 
 /// How many of them are the same request twice over.
 const IDEMPOTENT_COMMANDS: usize = 34;
 
 /// How many of them require the caller's key.
-const KEY_REQUIRING_COMMANDS: usize = 38;
+const KEY_REQUIRING_COMMANDS: usize = 33;
 
 /// The one command that may remove something.
 const DESTRUCTIVE_COMMAND: &str = "replicate_content";

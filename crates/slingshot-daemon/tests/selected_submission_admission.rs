@@ -3541,18 +3541,6 @@ async fn selected_failure_lookup_settles_only_validated_no_effect_and_keeps_unkn
             r#"{"failure":"resolution_budget_exceeded","subject":"/content/example"}"#,
         ),
         (
-            "update_open_service_gateway_initiative_configuration",
-            r#"{"failure":"configuration_lookup_failed","persistent_identifier":"com.example.service.Configuration"}"#,
-        ),
-        (
-            "delete_open_service_gateway_initiative_configuration",
-            r#"{"failure":"platform_control_outcome_unknown","persistent_identifier":"com.example.service.Configuration"}"#,
-        ),
-        (
-            "set_open_service_gateway_initiative_bundle_state",
-            r#"{"failure":"bundle_not_found","symbolic_name":"com.example.bundle"}"#,
-        ),
-        (
             "cancel_sling_job",
             r#"{"failure":"job_not_found","job_identifier":"2024/01/01/example-job-1"}"#,
         ),
@@ -3571,10 +3559,6 @@ async fn selected_failure_lookup_settles_only_validated_no_effect_and_keeps_unkn
         (
             "flush_replication_queue",
             r#"{"agent_identifier":"publish","failure":"queue_expectation_mismatch"}"#,
-        ),
-        (
-            "retry_replication_queue_entry",
-            r#"{"agent_identifier":"publish","entry_identifier":"queue-entry-1","failure":"entry_not_found"}"#,
         ),
         (
             "create_user",
@@ -3639,10 +3623,6 @@ async fn selected_failure_lookup_settles_only_validated_no_effect_and_keeps_unkn
         (
             "create_asset_folder",
             r#"{"failure":"parent_not_found","target_path":"/content/dam/example"}"#,
-        ),
-        (
-            "move_asset",
-            r#"{"destination_path":"/content/dam/archive/logo.png","failure":"source_not_found","source_path":"/content/dam/example/logo.png"}"#,
         ),
         (
             "delete_asset",
@@ -3894,15 +3874,6 @@ async fn retained_artifact_completion_case(
             r#"{"include_trace":false,"request_address":"https://example.test/en/report.html"}"#
         }
         "map_resource_path" => r#"{"include_trace":false,"repository_path":"/content/example"}"#,
-        "update_open_service_gateway_initiative_configuration" => {
-            r#"{"assignments":{"host":{"cardinality":"scalar","type":"string","value":"example.test"}},"persistent_identifier":"com.example.service.Configuration"}"#
-        }
-        "delete_open_service_gateway_initiative_configuration" => {
-            r#"{"persistent_identifier":"com.example.service.Configuration"}"#
-        }
-        "set_open_service_gateway_initiative_bundle_state" => {
-            r#"{"symbolic_name":"com.example.bundle","transition":"start"}"#
-        }
         "cancel_sling_job" => r#"{"job_identifier":"2024/01/01/example-job-1"}"#,
         "start_workflow" => {
             r#"{"model_identifier":"/var/workflow/models/request-for-activation/jcr:content/model","payload_path":"/content/example/en/report"}"#
@@ -3914,9 +3885,6 @@ async fn retained_artifact_completion_case(
             r#"{"instance_identifier":"/var/workflow/instances/server0/2024-01-01/request-for-activation_1","requested_state":"suspended"}"#
         }
         "flush_replication_queue" => r#"{"agent_identifier":"publish","expected_entry_count":1}"#,
-        "retry_replication_queue_entry" => {
-            r#"{"agent_identifier":"publish","entry_identifier":"queue-entry-1"}"#
-        }
         "create_user" => r#"{"authorizable_identifier":"author"}"#,
         "create_group" => r#"{"authorizable_identifier":"author"}"#,
         "delete_authorizable" => r#"{"authorizable_identifier":"author","expected_kind":"group"}"#,
@@ -3952,9 +3920,6 @@ async fn retained_artifact_completion_case(
             r#"{"name":"logo.png","parent_path":"/content/dam/example","payload":{"encoded_content":"aGVsbG8=","media_type":"image/png"}}"#
         }
         "create_asset_folder" => r#"{"name":"example","parent_path":"/content/dam"}"#,
-        "move_asset" => {
-            r#"{"adjust_references":true,"destination_path":"/content/dam/archive/logo.png","source_path":"/content/dam/example/logo.png"}"#
-        }
         "delete_asset" => {
             r#"{"asset_path":"/content/dam/example/logo.png","reference_policy":"refuse_when_referenced"}"#
         }

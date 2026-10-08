@@ -188,7 +188,7 @@ fn group_2(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
     Some(body)
 }
 
-/// Returns the body one of `delete_page` through `move_asset` declares.
+/// Returns the body one of `delete_page` through `list_asset_renditions` declares.
 fn group_3(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Option<Value> {
     let body = match (wire_name, role) {
         ("delete_page", SchemaRole::Arguments) => json!({
@@ -238,23 +238,7 @@ fn group_3(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
                 },
             }),
         ),
-        ("move_asset", SchemaRole::Arguments) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "adjust_references",
-                "destination_path",
-                "source_path",
-            ],
-            "properties": {
-                "adjust_references": {
-                    "type": "boolean",
-                },
-                "destination_path": repository_path(limits),
-                "source_path": repository_path(limits),
-            },
-        }),
-        ("move_asset", SchemaRole::Result) => moved_result(limits),
+
         _ => return None,
     };
     Some(body)

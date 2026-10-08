@@ -66,7 +66,6 @@
 {"name": "delete_component-missing-option", "arguments": ["--profile", "local", "--environment", "author", "delete_component"], "intent": "a component deletion names the component", "kind": "local"}
 {"name": "delete_content_fragment-missing-option", "arguments": ["--profile", "local", "--environment", "author", "delete_content_fragment"], "intent": "a fragment deletion states what happens to references to it", "kind": "local"}
 {"name": "delete_experience_fragment-missing-option", "arguments": ["--profile", "local", "--environment", "author", "delete_experience_fragment"], "intent": "an experience fragment deletion states its reference policy", "kind": "local"}
-{"name": "delete_open_service_gateway_initiative_configuration-missing-option", "arguments": ["--profile", "local", "--environment", "author", "delete_open_service_gateway_initiative_configuration"], "intent": "a configuration removal names the configuration", "kind": "local"}
 {"name": "delete_page-missing-option", "arguments": ["--profile", "local", "--environment", "author", "delete_page"], "intent": "a page deletion states what happens to references to it", "kind": "local"}
 {"name": "find_open_service_gateway_initiative_configurations-missing-option", "arguments": ["--profile", "local", "--environment", "author", "find_open_service_gateway_initiative_configurations"], "intent": "a configuration search reaches the daemon, and this target cannot start one", "kind": "local"}
 {"name": "find_sling_jobs-missing-option", "arguments": ["--profile", "local", "--environment", "author", "find_sling_jobs"], "intent": "a job search names the states it reports", "kind": "local"}
@@ -94,14 +93,11 @@
 {"name": "list_sling_job_queues-missing-option", "arguments": ["--profile", "local", "--environment", "author", "list_sling_job_queues"], "intent": "a queue listing reaches the daemon, and this target cannot start one", "kind": "local"}
 {"name": "list_workflow_models-missing-option", "arguments": ["--profile", "local", "--environment", "author", "list_workflow_models"], "intent": "a workflow listing reaches the daemon, and this target cannot start one", "kind": "local"}
 {"name": "map_resource_path-missing-option", "arguments": ["--profile", "local", "--environment", "author", "map_resource_path"], "intent": "a mapping names the resource it asks about", "kind": "local"}
-{"name": "move_asset-missing-option", "arguments": ["--profile", "local", "--environment", "author", "move_asset"], "intent": "an asset move names where it goes", "kind": "local"}
 {"name": "move_page-missing-option", "arguments": ["--profile", "local", "--environment", "author", "move_page"], "intent": "a page move names where it goes", "kind": "local"}
 {"name": "read_content_fragment-missing-option", "arguments": ["--profile", "local", "--environment", "author", "read_content_fragment"], "intent": "a fragment read names the fragment", "kind": "local"}
 {"name": "remove_group_member-missing-option", "arguments": ["--profile", "local", "--environment", "author", "remove_group_member"], "intent": "a membership removal names the member", "kind": "local"}
 {"name": "reorder_component-missing-option", "arguments": ["--profile", "local", "--environment", "author", "reorder_component"], "intent": "a reordering says where the component goes", "kind": "local"}
 {"name": "resolve_resource_path-missing-option", "arguments": ["--profile", "local", "--environment", "author", "resolve_resource_path"], "intent": "a resolution names the address it asks about", "kind": "local"}
-{"name": "retry_replication_queue_entry-missing-option", "arguments": ["--profile", "local", "--environment", "author", "retry_replication_queue_entry"], "intent": "a retry names the entry", "kind": "local"}
-{"name": "set_open_service_gateway_initiative_bundle_state-missing-option", "arguments": ["--profile", "local", "--environment", "author", "set_open_service_gateway_initiative_bundle_state"], "intent": "a bundle transition says what to do", "kind": "local"}
 {"name": "set_user_disabled-missing-option", "arguments": ["--profile", "local", "--environment", "author", "set_user_disabled"], "intent": "a disablement says which way", "kind": "local"}
 {"name": "set_workflow_instance_suspension-missing-option", "arguments": ["--profile", "local", "--environment", "author", "set_workflow_instance_suspension"], "intent": "a suspension change says which way", "kind": "local"}
 {"name": "start_workflow-missing-option", "arguments": ["--profile", "local", "--environment", "author", "start_workflow"], "intent": "a workflow start names its model", "kind": "local"}
@@ -110,6 +106,5 @@
 {"name": "update_component-missing-option", "arguments": ["--profile", "local", "--environment", "author", "update_component"], "intent": "a component update names the component it changes", "kind": "local"}
 {"name": "update_content_fragment-missing-option", "arguments": ["--profile", "local", "--environment", "author", "update_content_fragment"], "intent": "a fragment update names the fragment", "kind": "local"}
 {"name": "update_experience_fragment-missing-option", "arguments": ["--profile", "local", "--environment", "author", "update_experience_fragment"], "intent": "a variation update names the variation", "kind": "local"}
-{"name": "update_open_service_gateway_initiative_configuration-missing-option", "arguments": ["--profile", "local", "--environment", "author", "update_open_service_gateway_initiative_configuration"], "intent": "a configuration update names the configuration", "kind": "local"}
 {"name": "update_page-missing-option", "arguments": ["--profile", "local", "--environment", "author", "update_page"], "intent": "a page update names the page it changes", "kind": "local"}
 {"name": "update_user_profile-missing-option", "arguments": ["--profile", "local", "--environment", "author", "update_user_profile"], "intent": "a profile update names the user", "kind": "local"}

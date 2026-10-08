@@ -419,9 +419,6 @@ impl Command {
             Self::UpdateContentFragment(asked) => {
                 asked.require_usable().map_err(|why| refused(&why))
             }
-            Self::UpdateOpenServiceGatewayInitiativeConfiguration(asked) => {
-                asked.require_usable().map_err(|why| refused(&why))
-            }
             _ => Ok(()),
         }
     }
@@ -437,7 +434,6 @@ impl Command {
                 asked.require_usable_range().map_err(|why| refused(&why))
             }
             Self::MovePage(asked) => asked.require_usable().map_err(|why| refused(&why)),
-            Self::MoveAsset(asked) => asked.require_usable().map_err(|why| refused(&why)),
             Self::ReorderComponent(asked) => asked.require_usable().map_err(|why| refused(&why)),
             Self::AddGroupMember(asked) => asked.require_usable().map_err(|why| refused(&why)),
             Self::RemoveGroupMember(asked) => asked.require_usable().map_err(|why| refused(&why)),
@@ -508,9 +504,6 @@ command_family! {
     /// Ask the author to delete experience fragment.
     /// What delete experience fragment answered.
     DeleteExperienceFragment, "delete_experience_fragment", crate::command::delete_experience_fragment::DeleteExperienceFragmentCommand, crate::command::delete_experience_fragment::DeleteExperienceFragmentResult;
-    /// Ask the author to delete open service gateway initiative configuration.
-    /// What delete open service gateway initiative configuration answered.
-    DeleteOpenServiceGatewayInitiativeConfiguration, "delete_open_service_gateway_initiative_configuration", crate::command::delete_open_service_gateway_initiative_configuration::DeleteOpenServiceGatewayInitiativeConfigurationCommand, crate::command::delete_open_service_gateway_initiative_configuration::DeleteOpenServiceGatewayInitiativeConfigurationResult;
     /// Ask the author to delete page.
     /// What delete page answered.
     DeletePage, "delete_page", crate::command::delete_page::DeletePageCommand, crate::command::delete_page::DeletePageResult;
@@ -616,9 +609,6 @@ command_family! {
     /// Ask the author to map resource path.
     /// What map resource path answered.
     MapResourcePath, "map_resource_path", crate::command::resource_resolution::MapResourcePathCommand, crate::command::resource_resolution::MapResourcePathResult;
-    /// Ask the author to move asset.
-    /// What move asset answered.
-    MoveAsset, "move_asset", crate::command::move_asset::MoveAssetCommand, crate::command::move_asset::MoveAssetResult;
     /// Ask the author to move page.
     /// What move page answered.
     MovePage, "move_page", crate::command::move_page::MovePageCommand, crate::command::move_page::MovePageResult;
@@ -640,12 +630,6 @@ command_family! {
     /// Ask the author to resolve resource path.
     /// What resolve resource path answered.
     ResolveResourcePath, "resolve_resource_path", crate::command::resource_resolution::ResolveResourcePathCommand, crate::command::resource_resolution::ResolveResourcePathResult;
-    /// Ask the author to retry replication queue entry.
-    /// What retry replication queue entry answered.
-    RetryReplicationQueueEntry, "retry_replication_queue_entry", crate::command::retry_replication_queue_entry::RetryReplicationQueueEntryCommand, crate::command::retry_replication_queue_entry::RetryReplicationQueueEntryResult;
-    /// Ask the author to set open service gateway initiative bundle state.
-    /// What set open service gateway initiative bundle state answered.
-    SetOpenServiceGatewayInitiativeBundleState, "set_open_service_gateway_initiative_bundle_state", crate::command::set_open_service_gateway_initiative_bundle_state::SetOpenServiceGatewayInitiativeBundleStateCommand, crate::command::set_open_service_gateway_initiative_bundle_state::SetOpenServiceGatewayInitiativeBundleStateResult;
     /// Ask the author to set user disabled.
     /// What set user disabled answered.
     SetUserDisabled, "set_user_disabled", crate::command::set_user_disabled::SetUserDisabledCommand, crate::command::set_user_disabled::SetUserDisabledResult;
@@ -670,9 +654,6 @@ command_family! {
     /// Ask the author to update experience fragment.
     /// What update experience fragment answered.
     UpdateExperienceFragment, "update_experience_fragment", crate::command::update_experience_fragment::UpdateExperienceFragmentCommand, crate::command::update_experience_fragment::UpdateExperienceFragmentResult;
-    /// Ask the author to update open service gateway initiative configuration.
-    /// What update open service gateway initiative configuration answered.
-    UpdateOpenServiceGatewayInitiativeConfiguration, "update_open_service_gateway_initiative_configuration", crate::command::update_open_service_gateway_initiative_configuration::UpdateOpenServiceGatewayInitiativeConfigurationCommand, crate::command::update_open_service_gateway_initiative_configuration::UpdateOpenServiceGatewayInitiativeConfigurationResult;
     /// Ask the author to update page.
     /// What update page answered.
     UpdatePage, "update_page", crate::command::update_page::UpdatePageCommand, crate::command::update_page::UpdatePageResult;

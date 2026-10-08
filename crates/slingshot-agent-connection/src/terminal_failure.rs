@@ -290,15 +290,11 @@ pub fn decode_mutation_failure(
         }};
     }
     let proves_no_effect = match command {
-        Command::UpdateOpenServiceGatewayInitiativeConfiguration(command) => decode!(command, slingshot_domain::command::update_open_service_gateway_initiative_configuration::UpdateOpenServiceGatewayInitiativeConfigurationRefusal),
-        Command::DeleteOpenServiceGatewayInitiativeConfiguration(command) => decode!(command, slingshot_domain::command::delete_open_service_gateway_initiative_configuration::DeleteOpenServiceGatewayInitiativeConfigurationRefusal),
-        Command::SetOpenServiceGatewayInitiativeBundleState(command) => decode!(command, slingshot_domain::command::set_open_service_gateway_initiative_bundle_state::SetOpenServiceGatewayInitiativeBundleStateRefusal),
         Command::CancelSlingJob(command) => decode!(command, slingshot_domain::command::cancel_sling_job::CancelSlingJobRefusal),
         Command::StartWorkflow(command) => decode!(command, slingshot_domain::command::start_workflow::StartWorkflowRefusal),
         Command::TerminateWorkflowInstance(command) => decode!(command, slingshot_domain::command::terminate_workflow_instance::TerminateWorkflowInstanceRefusal),
         Command::SetWorkflowInstanceSuspension(command) => decode!(command, slingshot_domain::command::set_workflow_instance_suspension::SetWorkflowInstanceSuspensionRefusal),
         Command::FlushReplicationQueue(command) => decode!(command, slingshot_domain::command::flush_replication_queue::FlushReplicationQueueRefusal),
-        Command::RetryReplicationQueueEntry(command) => decode!(command, slingshot_domain::command::retry_replication_queue_entry::RetryReplicationQueueEntryRefusal),
         Command::CreateUser(command) => decode!(&command.authorizable_identifier, slingshot_domain::command::create_authorizable::CreateAuthorizableRefusal),
         Command::CreateGroup(command) => decode!(&command.authorizable_identifier, slingshot_domain::command::create_authorizable::CreateAuthorizableRefusal),
         Command::DeleteAuthorizable(command) => decode!(command, slingshot_domain::command::delete_authorizable::DeleteAuthorizableRefusal),
@@ -314,7 +310,6 @@ pub fn decode_mutation_failure(
         Command::DeleteExperienceFragment(command) => decode!(command, slingshot_domain::command::delete_experience_fragment::DeleteExperienceFragmentRefusal),
         Command::CreateAsset(command) => decode!(command, slingshot_domain::command::create_asset::CreateAssetRefusal),
         Command::CreateAssetFolder(command) => decode!(command, slingshot_domain::command::create_asset_folder::CreateAssetFolderRefusal),
-        Command::MoveAsset(command) => decode!(command, slingshot_domain::command::move_asset::MoveAssetRefusal),
         Command::DeleteAsset(command) => decode!(command, slingshot_domain::command::delete_asset::DeleteAssetRefusal),
         Command::UpdateAssetMetadata(command) => decode!(command, slingshot_domain::command::update_asset_metadata::UpdateAssetMetadataRefusal),
         Command::UpdatePage(command) => decode!(command, slingshot_domain::command::update_page::UpdatePageRefusal),

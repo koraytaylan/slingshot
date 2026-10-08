@@ -22,7 +22,6 @@ use serde_json::{Value, json};
 
 use crate::command::canonical_json::{canonical_digest, write_canonical};
 use crate::command::command_identity::CommandContract;
-use crate::command::inspect_open_service_gateway_initiative_configuration::DECLARED_SCALAR_TYPES;
 
 /// Dialect every schema declares.
 pub const SCHEMA_DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
@@ -56,7 +55,6 @@ pub const COMMAND_WIRE_NAMES: &[&str] = &[
     "delete_component",
     "delete_content_fragment",
     "delete_experience_fragment",
-    "delete_open_service_gateway_initiative_configuration",
     "delete_page",
     "download_content_package",
     "find_assets_by_metadata",
@@ -92,7 +90,6 @@ pub const COMMAND_WIRE_NAMES: &[&str] = &[
     "list_workflow_models",
     "load_content_as_json",
     "map_resource_path",
-    "move_asset",
     "move_page",
     "query_paths",
     "read_content_fragment",
@@ -100,8 +97,6 @@ pub const COMMAND_WIRE_NAMES: &[&str] = &[
     "reorder_component",
     "replicate_content",
     "resolve_resource_path",
-    "retry_replication_queue_entry",
-    "set_open_service_gateway_initiative_bundle_state",
     "set_user_disabled",
     "set_workflow_instance_suspension",
     "start_workflow",
@@ -110,7 +105,6 @@ pub const COMMAND_WIRE_NAMES: &[&str] = &[
     "update_component",
     "update_content_fragment",
     "update_experience_fragment",
-    "update_open_service_gateway_initiative_configuration",
     "update_page",
     "update_user_profile",
 ];
@@ -511,47 +505,6 @@ pub(crate) fn inline_binary_payload(limits: &CommandContract) -> Value {
             },
             "media_type": nonempty_string(limits.limit("maximum_inline_binary_media_type_bytes")),
         },
-    })
-}
-
-/// Returns the schema one configuration value satisfies.
-///
-/// The class and the carrier are both stated, because writing a value back needs
-/// to know whether the framework wants a primitive array, a wrapper array, or a
-/// collection - three different things to construct from the same items.
-pub(crate) fn configuration_value(limits: &CommandContract) -> Value {
-    let item = {
-        let text = bounded_string(limits.limit("maximum_configuration_scalar_string_bytes"));
-        json!({"anyOf": [text, {"type": "boolean"}]})
-    };
-    json!({
-        "oneOf": [
-            {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["cardinality", "type", "value"],
-                "properties": {
-                    "cardinality": {"const": "scalar"},
-                    "type": {"enum": DECLARED_SCALAR_TYPES},
-                    "value": item,
-                },
-            },
-            {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["cardinality", "type", "values"],
-                "properties": {
-                    "cardinality":
-                        {"enum": ["primitive_array", "scalar_array", "collection"]},
-                    "type": {"enum": DECLARED_SCALAR_TYPES},
-                    "values": {
-                        "type": "array",
-                        "maxItems": limits.limit("maximum_configuration_sequence_items"),
-                        "items": item,
-                    },
-                },
-            },
-        ],
     })
 }
 

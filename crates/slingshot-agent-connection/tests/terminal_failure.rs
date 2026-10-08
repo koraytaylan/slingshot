@@ -357,12 +357,6 @@ fn authoring_mutation_failures_use_typed_request_policy() {
             ),
         ),
         (
-            serde_json::json!({"command":"move_asset","source_path":"/content/dam/example/logo.png","destination_path":"/content/dam/archive/logo.png","adjust_references":true}),
-            include_str!(
-                "../../slingshot-domain/tests/fixtures/commands/move_asset/failures.jsonl"
-            ),
-        ),
-        (
             serde_json::json!({"command":"delete_asset","asset_path":"/content/dam/example/logo.png","reference_policy":"refuse_when_referenced"}),
             include_str!(
                 "../../slingshot-domain/tests/fixtures/commands/delete_asset/failures.jsonl"
@@ -463,24 +457,6 @@ fn identity_mutation_failures_use_typed_request_policy() {
 fn operational_mutation_failures_use_typed_request_policy() {
     check_mutation_failure_cases(&[
         (
-            serde_json::json!({"command":"update_open_service_gateway_initiative_configuration","assignments":{"host":{"cardinality":"scalar","type":"string","value":"example.test"}},"persistent_identifier":"com.example.service.Configuration"}),
-            include_str!(
-                "../../slingshot-domain/tests/fixtures/commands/update_open_service_gateway_initiative_configuration/failures.jsonl"
-            ),
-        ),
-        (
-            serde_json::json!({"command":"delete_open_service_gateway_initiative_configuration","persistent_identifier":"com.example.service.Configuration"}),
-            include_str!(
-                "../../slingshot-domain/tests/fixtures/commands/delete_open_service_gateway_initiative_configuration/failures.jsonl"
-            ),
-        ),
-        (
-            serde_json::json!({"command":"set_open_service_gateway_initiative_bundle_state","symbolic_name":"com.example.bundle","transition":"start"}),
-            include_str!(
-                "../../slingshot-domain/tests/fixtures/commands/set_open_service_gateway_initiative_bundle_state/failures.jsonl"
-            ),
-        ),
-        (
             serde_json::json!({"command":"cancel_sling_job","job_identifier":"2024/01/01/example-job-1"}),
             include_str!(
                 "../../slingshot-domain/tests/fixtures/commands/cancel_sling_job/failures.jsonl"
@@ -508,12 +484,6 @@ fn operational_mutation_failures_use_typed_request_policy() {
             serde_json::json!({"command":"flush_replication_queue","agent_identifier":"publish","expected_entry_count":1}),
             include_str!(
                 "../../slingshot-domain/tests/fixtures/commands/flush_replication_queue/failures.jsonl"
-            ),
-        ),
-        (
-            serde_json::json!({"command":"retry_replication_queue_entry","agent_identifier":"publish","entry_identifier":"queue-entry-1"}),
-            include_str!(
-                "../../slingshot-domain/tests/fixtures/commands/retry_replication_queue_entry/failures.jsonl"
             ),
         ),
     ]);

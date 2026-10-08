@@ -73,7 +73,6 @@ states which handlers are active there.
 | `delete_component` | false | true | false | required |
 | `delete_content_fragment` | false | true | false | required |
 | `delete_experience_fragment` | false | true | false | required |
-| `delete_open_service_gateway_initiative_configuration` | false | true | false | required |
 | `delete_page` | false | true | false | required |
 | `download_content_package` | true | false | false | required |
 | `find_assets_by_metadata` | true | false | true | optional |
@@ -109,7 +108,6 @@ states which handlers are active there.
 | `list_workflow_models` | true | false | true | optional |
 | `load_content_as_json` | true | false | false | required |
 | `map_resource_path` | true | false | true | optional |
-| `move_asset` | false | true | false | required |
 | `move_page` | false | true | false | required |
 | `query_paths` | true | false | true | optional |
 | `read_content_fragment` | true | false | true | optional |
@@ -117,8 +115,6 @@ states which handlers are active there.
 | `reorder_component` | false | true | false | required |
 | `replicate_content` | false | true | false | required |
 | `resolve_resource_path` | true | false | true | optional |
-| `retry_replication_queue_entry` | false | false | false | required |
-| `set_open_service_gateway_initiative_bundle_state` | false | true | false | required |
 | `set_user_disabled` | false | true | false | required |
 | `set_workflow_instance_suspension` | false | true | false | required |
 | `start_workflow` | false | false | false | required |
@@ -127,7 +123,6 @@ states which handlers are active there.
 | `update_component` | false | true | false | required |
 | `update_content_fragment` | false | true | false | required |
 | `update_experience_fragment` | false | true | false | required |
-| `update_open_service_gateway_initiative_configuration` | false | true | false | required |
 | `update_page` | false | true | false | required |
 | `update_user_profile` | false | true | false | required |
 | `operation-list` | true | false | true | none |

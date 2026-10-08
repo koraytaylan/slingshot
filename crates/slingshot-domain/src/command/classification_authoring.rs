@@ -348,29 +348,6 @@ pub const LIST_CHILD_PAGES: ClassificationRow = ClassificationRow {
     discovery: true,
 };
 
-/// Move an asset.
-pub const MOVE_ASSET: ClassificationRow = ClassificationRow {
-    wire_name: "move_asset",
-    title: "Move an asset",
-    description: "Moves one asset, adjusting or abandoning the references to its old address \
-                  as the request states.",
-    access: AccessClassification::Write,
-    destructive: DestructiveClassification::Destructive,
-    intrinsic_idempotency: IntrinsicIdempotencyClassification::NotIntrinsicallyIdempotent,
-    result_bytes_limit: "maximum_mutation_success_result_bytes",
-    failure_categories: &[
-        "source_not_found",
-        "source_access_denied",
-        "destination_parent_not_found",
-        "destination_already_exists",
-        "destination_inside_source",
-        "reference_adjustment_budget_exceeded",
-        "repository_commit_failed",
-        "mutation_outcome_unknown",
-    ],
-    discovery: false,
-};
-
 /// Move a page.
 pub const MOVE_PAGE: ClassificationRow = ClassificationRow {
     wire_name: "move_page",

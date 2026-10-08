@@ -43,7 +43,7 @@ fn every_command_appears_once_in_ascending_order() {
     let catalog = CommandCatalog::published();
     let names: Vec<&str> =
         catalog.descriptors().iter().map(|descriptor| descriptor.wire_name.as_str()).collect();
-    assert_eq!(names.len(), 72, "seventy-two commands, and no seventy-third");
+    assert_eq!(names.len(), 67, "sixty-seven commands, and no sixty-eighth");
     let mut sorted = names.clone();
     sorted.sort_unstable();
     sorted.dedup();
@@ -159,12 +159,6 @@ fn every_classification_row_is_exactly_what_the_architecture_says() {
         ),
         (
             "delete_experience_fragment",
-            AccessClassification::Write,
-            DestructiveClassification::Destructive,
-            false,
-        ),
-        (
-            "delete_open_service_gateway_initiative_configuration",
             AccessClassification::Write,
             DestructiveClassification::Destructive,
             false,
@@ -374,7 +368,6 @@ fn every_classification_row_is_exactly_what_the_architecture_says() {
             DestructiveClassification::NonDestructive,
             true,
         ),
-        ("move_asset", AccessClassification::Write, DestructiveClassification::Destructive, false),
         ("move_page", AccessClassification::Write, DestructiveClassification::Destructive, false),
         (
             "query_paths",
@@ -411,18 +404,6 @@ fn every_classification_row_is_exactly_what_the_architecture_says() {
             AccessClassification::Read,
             DestructiveClassification::NonDestructive,
             true,
-        ),
-        (
-            "retry_replication_queue_entry",
-            AccessClassification::Write,
-            DestructiveClassification::NonDestructive,
-            false,
-        ),
-        (
-            "set_open_service_gateway_initiative_bundle_state",
-            AccessClassification::Write,
-            DestructiveClassification::Destructive,
-            false,
         ),
         (
             "set_user_disabled",
@@ -472,12 +453,6 @@ fn every_classification_row_is_exactly_what_the_architecture_says() {
             DestructiveClassification::Destructive,
             false,
         ),
-        (
-            "update_open_service_gateway_initiative_configuration",
-            AccessClassification::Write,
-            DestructiveClassification::Destructive,
-            false,
-        ),
         ("update_page", AccessClassification::Write, DestructiveClassification::Destructive, false),
         (
             "update_user_profile",
@@ -499,7 +474,7 @@ fn every_classification_row_is_exactly_what_the_architecture_says() {
         .filter(|descriptor| descriptor.destructive == DestructiveClassification::Destructive)
         .count();
     assert_eq!(
-        destructive, 25,
+        destructive, 21,
         "every row that can replace or end something already in effect, and no other"
     );
 }
@@ -515,7 +490,7 @@ fn every_hint_derives_from_its_own_column_and_no_other() {
     assert_eq!(idempotent, 34, "every read is idempotent except the two that publish an artifact");
     assert_eq!(
         catalog.descriptors().len() - idempotent,
-        38,
+        33,
         "and every write carries an operation key, with those two beside them"
     );
     for descriptor in catalog.descriptors() {
@@ -799,7 +774,7 @@ fn a_substitution_with_no_distinguishing_fact_is_deferred_rather_than_claimed() 
 fn the_committed_catalog_names_every_command_and_no_other() {
     let catalog: Value = serde_json::from_str(COMMITTED).expect("the fixture is one value");
     let rows = catalog.as_array().expect("a list of descriptors");
-    assert_eq!(rows.len(), 72);
+    assert_eq!(rows.len(), 67);
     let names: Vec<&str> = rows.iter().map(|row| text(row, "wire_name")).collect();
     assert_eq!(names, COMMAND_WIRE_NAMES);
 }

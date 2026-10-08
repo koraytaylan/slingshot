@@ -375,34 +375,6 @@ fn group_3(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
                 },
             },
         }),
-        ("retry_replication_queue_entry", SchemaRole::Arguments) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "agent_identifier",
-                "entry_identifier",
-            ],
-            "properties": {
-                "agent_identifier": nonempty_string(limits.limit("maximum_replication_agent_identifier_bytes")),
-                "entry_identifier": nonempty_string(limits.limit("maximum_replication_queue_entry_identifier_bytes")),
-            },
-        }),
-        ("retry_replication_queue_entry", SchemaRole::Result) => json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "agent_identifier",
-                "entry_identifier",
-                "resubmitted",
-            ],
-            "properties": {
-                "agent_identifier": nonempty_string(limits.limit("maximum_replication_agent_identifier_bytes")),
-                "entry_identifier": nonempty_string(limits.limit("maximum_replication_queue_entry_identifier_bytes")),
-                "resubmitted": {
-                    "type": "boolean",
-                },
-            },
-        }),
         ("set_user_disabled", SchemaRole::Arguments) => json!({
             "type": "object",
             "additionalProperties": false,

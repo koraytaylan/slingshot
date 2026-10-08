@@ -232,7 +232,6 @@ fn classify_failure(
         | Command::ReorderComponent(_)
         | Command::CreateAsset(_)
         | Command::CreateAssetFolder(_)
-        | Command::MoveAsset(_)
         | Command::DeleteAsset(_)
         | Command::UpdateAssetMetadata(_)
         | Command::CreateContentFragment(_)
@@ -252,11 +251,7 @@ fn classify_failure(
         | Command::StartWorkflow(_)
         | Command::TerminateWorkflowInstance(_)
         | Command::SetWorkflowInstanceSuspension(_)
-        | Command::FlushReplicationQueue(_)
-        | Command::RetryReplicationQueueEntry(_)
-        | Command::UpdateOpenServiceGatewayInitiativeConfiguration(_)
-        | Command::DeleteOpenServiceGatewayInitiativeConfiguration(_)
-        | Command::SetOpenServiceGatewayInitiativeBundleState(_) => {
+        | Command::FlushReplicationQueue(_) => {
             let failure = slingshot_agent_connection::terminal_failure::decode_mutation_failure(
                 body,
                 expectation,

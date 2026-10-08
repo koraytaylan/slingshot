@@ -1,6 +1,6 @@
 //! What a tool call's arguments turn into, for every tool the server offers.
 //!
-//! A catalog that names seventy-two tools is only useful if a call naming one
+//! A catalog that names sixty-seven tools is only useful if a call naming one
 //! of them can reach something. The failure this file exists to catch is the
 //! one where the catalog is advertised and every call is answered with a local
 //! failure, because the translation from a call's arguments to the thing that
@@ -9,7 +9,7 @@
 //! The claim is made per tool rather than in aggregate: every registry command's
 //! declared schema members build the command that schema describes, and every
 //! control's declared members map to the options its leaf reads. A tool that
-//! cannot be reached is named, because "sixty-eight of seventy-two" is not a
+//! cannot be reached is named, because "sixty-three of sixty-seven" is not a
 //! useful thing for a reader to be told.
 
 use serde_json::{Value, json};

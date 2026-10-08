@@ -249,23 +249,8 @@ pub const INCLUDE_INDIRECT_OPTION: &str = "--include-indirect";
 /// The option naming which replication agent a command acts on.
 pub const AGENT_OPTION: &str = "--agent";
 
-/// The option naming which replication queue entry a command acts on.
-pub const ENTRY_OPTION: &str = "--entry";
-
 /// The option stating how many entries a flush expects to find.
 pub const EXPECTED_ENTRY_COUNT_OPTION: &str = "--expected-entry-count";
-
-/// The option naming which bundle a command acts on.
-pub const SYMBOLIC_NAME_OPTION: &str = "--symbolic-name";
-
-/// The option saying what a bundle is asked to do.
-pub const TRANSITION_OPTION: &str = "--transition";
-
-/// The option carrying the values a configuration update assigns.
-pub const ASSIGNMENTS_OPTION: &str = "--assignments";
-
-/// The option naming the keys a configuration update removes.
-pub const REMOVED_KEYS_OPTION: &str = "--removed-keys";
 
 /// The option carrying the address a resolution asks about.
 pub const REQUEST_ADDRESS_OPTION: &str = "--request-address";
@@ -346,12 +331,7 @@ pub const EVERY_OPTION: &[&str] = &[
     REASON_OPTION,
     INCLUDE_INDIRECT_OPTION,
     AGENT_OPTION,
-    ENTRY_OPTION,
     EXPECTED_ENTRY_COUNT_OPTION,
-    SYMBOLIC_NAME_OPTION,
-    TRANSITION_OPTION,
-    ASSIGNMENTS_OPTION,
-    REMOVED_KEYS_OPTION,
     REQUEST_ADDRESS_OPTION,
     REQUEST_AUTHORITY_OPTION,
     INCLUDE_TRACE_OPTION,
@@ -805,12 +785,7 @@ fn command_leaves_taking(option: &str) -> Vec<String> {
         | REASON_OPTION
         | INCLUDE_INDIRECT_OPTION
         | AGENT_OPTION
-        | ENTRY_OPTION
         | EXPECTED_ENTRY_COUNT_OPTION
-        | SYMBOLIC_NAME_OPTION
-        | TRANSITION_OPTION
-        | ASSIGNMENTS_OPTION
-        | REMOVED_KEYS_OPTION
         | REQUEST_ADDRESS_OPTION
         | REQUEST_AUTHORITY_OPTION
         | INCLUDE_TRACE_OPTION => catalog_leaves(),

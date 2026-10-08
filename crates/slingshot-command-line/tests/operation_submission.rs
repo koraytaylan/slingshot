@@ -50,7 +50,7 @@ const ROOT: &str = "/content/site";
 const IDEMPOTENT_COMMANDS: usize = 34;
 
 /// How many need a caller key.
-const NON_IDEMPOTENT_COMMANDS: usize = 38;
+const NON_IDEMPOTENT_COMMANDS: usize = 33;
 
 /// Returns what this client requires of a daemon.
 fn expectation() -> DaemonExpectation {

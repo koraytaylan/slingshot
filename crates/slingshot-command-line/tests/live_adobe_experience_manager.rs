@@ -53,13 +53,13 @@ const ENVIRONMENT: &str = "author";
 const ROOT: &str = "/content/site/en";
 
 /// How many commands the registry holds.
-const REGISTRY_ROWS: usize = 72;
+const REGISTRY_ROWS: usize = 67;
 
 /// How many of them a verification may run.
 const ADMISSIBLE_ROWS: usize = 36;
 
 /// How many of them it refuses.
-const REFUSED_ROWS: usize = 36;
+const REFUSED_ROWS: usize = 31;
 
 /// How many claims a conformance trace makes.
 const CONFORMANCE_CLAIMS: usize = 9;
@@ -244,7 +244,7 @@ fn a_root_outside_the_content_tree_is_refused_however_ordinary_it_looks() {
 fn every_row_is_exactly_what_an_independent_reading_of_it_says() {
     let catalog = CommandCatalog::published();
     let declared = fixture_rows("registry-rows.jsonl");
-    assert_eq!(declared.len(), REGISTRY_ROWS, "the registry holds seventy-two rows");
+    assert_eq!(declared.len(), REGISTRY_ROWS, "the registry holds sixty-seven rows");
     assert_eq!(catalog.descriptors().len(), REGISTRY_ROWS);
     for row in declared {
         let wire_name = row["wire_name"].as_str().expect("a name");

@@ -38,7 +38,6 @@ commands this daemon runs against an author:
   delete_component - Delete a component
   delete_content_fragment - Delete a content fragment
   delete_experience_fragment - Delete an experience fragment
-  delete_open_service_gateway_initiative_configuration - Delete a configuration
   delete_page - Delete a page
   download_content_package - Download a content package
   find_assets_by_metadata - Find assets by metadata
@@ -74,7 +73,6 @@ commands this daemon runs against an author:
   list_workflow_models - List workflow models
   load_content_as_json - Load content as JSON
   map_resource_path - Map a resource path
-  move_asset - Move an asset
   move_page - Move a page
   query_paths - Query paths
   read_content_fragment - Read a content fragment
@@ -82,8 +80,6 @@ commands this daemon runs against an author:
   reorder_component - Reorder a component
   replicate_content - Replicate content
   resolve_resource_path - Resolve a resource path
-  retry_replication_queue_entry - Retry a replication queue entry
-  set_open_service_gateway_initiative_bundle_state - Set a bundle state
   set_user_disabled - Disable or enable a user
   set_workflow_instance_suspension - Suspend or resume a workflow instance
   start_workflow - Start a workflow
@@ -92,7 +88,6 @@ commands this daemon runs against an author:
   update_component - Update a component
   update_content_fragment - Update a content fragment
   update_experience_fragment - Update an experience fragment
-  update_open_service_gateway_initiative_configuration - Update a configuration
   update_page - Update a page
   update_user_profile - Update a user profile
 
@@ -165,12 +160,7 @@ options:
   --reason
   --include-indirect
   --agent
-  --entry
   --expected-entry-count
-  --symbolic-name
-  --transition
-  --assignments
-  --removed-keys
   --request-address
   --request-authority
   --include-trace
