@@ -14,6 +14,7 @@ crates/slingshot-command-line/src/configuration_check.rs|crate-root|top-level
 crates/slingshot-command-line/src/daemon_answer.rs|crate-root|top-level
 crates/slingshot-command-line/src/daemon_request.rs|crate-root|top-level
 crates/slingshot-command-line/src/exit_classification.rs|crate-root|top-level
+crates/slingshot-command-line/src/failure_remedy.rs|crate-root|top-level
 crates/slingshot-command-line/src/human_renderer.rs|crate-root|top-level
 crates/slingshot-command-line/src/interrupt.rs|crate-root|top-level
 crates/slingshot-command-line/src/invocation.rs|crate-root|top-level

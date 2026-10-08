@@ -7,6 +7,13 @@ depends_on: []
 gated: false
 touches:
   - crates/slingshot-agent-connection/src/lib.rs
+  - crates/slingshot-agent-connection/tests/submission_timing_observation.rs
+  - crates/slingshot-agent-connection/tests/capability_timing_observation.rs
+  - crates/slingshot-agent-connection/tests/finite_transport_timing.rs
+  - crates/slingshot-agent-connection/tests/artifact_transport_observation.rs
+  - docs/AGENT_PROTOCOL.md
+  - crates/slingshot-development/tests/fixtures/workspace-module-map/module-ownership.txt
+  - docs/DOCUMENTATION_REVIEW.md
   - crates/slingshot-daemon/src/author_agent_operation_executor.rs
   - crates/slingshot-daemon/tests/author_agent_operation_executor.rs
   - crates/slingshot-daemon/tests/author_agent_conformance.rs
@@ -31,6 +38,38 @@ merged_as: "980c5a0"
 - **Done when:** the concrete product adapter satisfies the complete existing agent conformance suite and the executor has no test-only or alternate path for network operations.
 
 ## Execution notes
+
+The completed finite collector was also used as a provisional artifact head
+validator. The existing real artifact endpoint test is now explicitly in the
+footprint. Its original thirty integrity, refusal, deadline and cancellation
+cases and all phase assertions are preserved. Numeric observer assertions and
+two refused status-202 cases cover the provisional observation defect. These
+assertions precede the artifact source change and make no remote repair claim.
+
+The diagnostic footprint previously covered the completed-response collector's
+unit seam without the real HTTP/1 prebody path. A dedicated finite transport
+test process is now included explicitly. It drives real loopback HTTP/1 and
+HTTP/2 endpoints through the selected profile snapshot, covering complete,
+malformed, truncated and surplus responses and both numeric observers.
+The assertions require one observation for a complete response and none for
+a refused body. This footprint correction is separate from the transport fix
+and does not claim a complete gate, deployment or latency repair.
+
+The capability timing extension adds two precisely registered adapter leaves and a
+separate production finite-gate test. Their ownership rows and test/documentation
+footprint were initially missing; they are now recorded without changing the
+ownership checker or its refusal fixtures. Status-200 capability diagnostics
+retain only fixed numeric counts after all original response checks and leave
+the status-202 submission observer unchanged. The prior failed complete gates
+remain evidence; this footprint correction makes no deployment or latency claim.
+
+The diagnostic footprint previously covered source leaves without the isolated
+finite-gate test or its ownership registration and documentation review. Those
+files are now recorded explicitly. The submission timing observer holds only
+fixed-size numeric sums and header classifications after the common finite gate.
+Its dedicated test process checks the production hook after head, framing and
+body refusals without changing the reviewed source-policy baseline. These
+diagnostics neither settle a submission nor permit a retry.
 
 The missing runtime interfaces are implementation work within this task, not
 an external blocker. The executor, author ports, and protocol boundary now

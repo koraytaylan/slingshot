@@ -22,6 +22,7 @@
 
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
 use slingshot_domain::command::catalog::{CommandCatalog, CommandDescriptor};
+use slingshot_domain::command::command_identity::CommandContract;
 use slingshot_domain::command::schema::{self, SchemaRole};
 
 /// The controls this server offers beside the registry's commands.
@@ -146,9 +147,6 @@ pub enum CatalogRefusal {
     ProvenanceDrifted(String),
 }
 
-/// The one command-contract version this build projects.
-pub const PROJECTED_VERSION: &str = "1.0.0";
-
 /// Returns every tool this server offers, in the order it offers them.
 ///
 /// The registry's commands first, in the registry's own order, then the
@@ -207,11 +205,13 @@ fn require_agreeing(held: &Provenance, recomputed: &Provenance) -> Result<(), Ca
 
 /// Requires one command to be one this build projects.
 fn require_projectable(descriptor: &CommandDescriptor) -> Result<(), CatalogRefusal> {
-    if descriptor.command_semantic_contract_version != PROJECTED_VERSION {
+    let contract = CommandContract::embedded();
+    let expected = contract.command_semantic_contract_versions.get(&descriptor.wire_name);
+    if expected != Some(&descriptor.command_semantic_contract_version) {
         return Err(CatalogRefusal::VersionUnsupported {
             named: descriptor.wire_name.clone(),
             declared: descriptor.command_semantic_contract_version.clone(),
-            expected: PROJECTED_VERSION.to_owned(),
+            expected: expected.cloned().unwrap_or_default(),
         });
     }
     Ok(())

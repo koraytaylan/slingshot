@@ -12,8 +12,7 @@
 //!
 //! Every case here drives the shipped application: the same `observe` leaf, the
 //! same staging and publication machinery, and the same refusal types a run
-//! reaches. What is faked is the daemon on the other end, which is the one
-//! boundary a suite cannot have.
+//! reaches. A framed daemon boundary supplies controlled responses.
 
 use std::path::{Path, PathBuf};
 
@@ -55,7 +54,8 @@ const NAMESPACE: &str = "local/author";
 const PRODUCT_VERSION: &str = "0.0.0";
 
 /// The operation-protocol version every side of a case speaks.
-const SPOKEN_VERSION: u32 = 1;
+const SPOKEN_VERSION: u32 =
+    slingshot_domain::daemon_runtime_contract::DAEMON_OPERATION_PROTOCOL_VERSION as u32;
 
 /// The operation a case observes.
 const OPERATION_IDENTIFIER: &str = "scenario-operation";

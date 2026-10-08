@@ -84,7 +84,7 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
             selected_environment_revision: identity.selected_environment_revision.clone(),
             canonical_command: arguments.to_owned(),
             command_wire_name: "query_paths".to_owned(),
-            command_semantic_contract_version: "0.0.0".to_owned(),
+            command_semantic_contract_version: query_contract_version(),
         })
         .unwrap(),
         command_wire_name: "query_paths".to_owned(),
@@ -101,7 +101,7 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
     let document = TerminalResultDocument {
         operation: submission.operation.clone(),
         daemon_subscription_identifier: submission.daemon_subscription_identifier.clone(),
-        canonical_result: r#"{"matches":[{"repository_path":"/content/retained/a"}]}"#.to_owned(),
+        canonical_result: r#"{"complete":true,"examined_nodes":1,"matches":[{"repository_path":"/content/retained/a"}]}"#.to_owned(),
         declared_artifacts: vec![],
         provenance: provenance.provenance(),
         submitted_command_digest: submission.submitted_command_digest.clone(),
@@ -285,7 +285,7 @@ fn result_context_comes_from_the_durable_owner_and_refuses_stale_revisions() {
             / 1000) as usize
             + 1,
     );
-    large.canonical_result = write_canonical(&serde_json::json!({"matches":(0..1000).map(|index|
+    large.canonical_result = write_canonical(&serde_json::json!({"complete":true,"examined_nodes":1000,"matches":(0..1000).map(|index|
         serde_json::json!({"repository_path":format!("/content/retained/{index:04}-{padding}")})).collect::<Vec<_>>()})).unwrap();
     assert!(
         publish_retained_inline_result(
@@ -573,4 +573,11 @@ fn artifact_identity_is_derived_from_local_context_not_trusted_from_the_result()
         }
         assert!(decode_bound_result(&body, &expected, &command, &moved).is_err());
     }
+}
+
+/// Uses the same installed identity as the retained submission fixture.
+fn query_contract_version() -> String {
+    SelectedCommandContractIdentity::installed("query_paths")
+        .unwrap()
+        .command_semantic_contract_version
 }

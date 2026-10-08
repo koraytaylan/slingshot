@@ -49,6 +49,7 @@ fn state() -> ContinuationState {
         agent_event_store_generation: GENERATION,
         query_digest: digest("40"),
         position: POSITION,
+        initial_result_limit: slingshot_domain::command::result_window::default_result_limit(),
         expires_at_unix_milliseconds: NOW + TOKEN_LIFETIME,
     }
 }

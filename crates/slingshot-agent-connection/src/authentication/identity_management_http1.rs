@@ -18,44 +18,63 @@ use tokio::{
 /// Sends only the fixed IMS POST, owns the stream through complete EOF, and
 /// drops it on failure/cancellation. The caller additionally bounds connection
 /// setup and this entire future with the manifest whole-exchange deadline.
-pub async fn exchange_http1<S: AsyncRead + AsyncWrite + Unpin>(
-    mut stream: S,
+///
+/// # Errors
+/// Preserves framing, status, bounds, transport and phase-deadline refusals.
+pub async fn exchange_http1<Stream: AsyncRead + AsyncWrite + Unpin>(
+    mut stream: Stream,
     body: &[u8],
     clock: &(dyn MonotonicClock + Sync),
 ) -> Result<IdentityManagementReceipt, ExchangeFailure> {
-    let limits = &ProfileAuthenticationContract::embedded().limits;
-    if body.len() as u64 > limits.maximum_identity_management_request_body_bytes {
-        return Err(fail(Code::IdentityManagementResponseHeadLimitExceeded));
-    }
-    let endpoint = url::Url::parse(&identity_management_endpoint()).map_err(|_| malformed())?;
-    let host = endpoint.host_str().ok_or_else(malformed)?;
-    let request = format!(
-        "POST {} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        endpoint.path(),
-        body.len()
-    );
-    let write_deadline = Instant::now()
-        + Duration::from_millis(limits.identity_management_request_write_timeout_milliseconds);
-    let anchor = clock.reading_milliseconds();
-    timeout_at(write_deadline, async {
-        stream.write_all(request.as_bytes()).await?;
-        stream.write_all(body).await?;
-        stream.flush().await
+    observe(Route::IdentityManagement, Phase::Exchange, async {
+        let limits = &ProfileAuthenticationContract::embedded().limits;
+        let request = encode_request(body)?;
+        let write_deadline = Instant::now()
+            + Duration::from_millis(limits.identity_management_request_write_timeout_milliseconds);
+        let anchor = clock.reading_milliseconds();
+        observe(Route::IdentityManagement, Phase::Request, async {
+            timeout_at(write_deadline, async {
+                stream.write_all(request.as_bytes()).await?;
+                stream.write_all(body).await?;
+                stream.flush().await
+            })
+            .await
+            .map_err(|_| fail(Code::IdentityManagementRequestWriteTimeout))?
+            .map_err(|_| malformed())?;
+            if Instant::now() >= write_deadline {
+                return Err(fail(Code::IdentityManagementRequestWriteTimeout));
+            }
+            Ok(())
+        })
+        .await?;
+        let deadline = Instant::now()
+            + Duration::from_millis(
+                limits.identity_management_response_header_timeout_milliseconds,
+            );
+        let head = observe(
+            Route::IdentityManagement,
+            Phase::ResponseHead,
+            read_head(&mut stream, deadline),
+        )
+        .await?;
+        let framing = validate_head(&head)?;
+        observe(
+            Route::IdentityManagement,
+            Phase::ResponseBody,
+            collect_body(stream, framing, head, anchor, clock),
+        )
+        .await
     })
     .await
-    .map_err(|_| fail(Code::IdentityManagementRequestWriteTimeout))?
-    .map_err(|_| malformed())?;
-    if Instant::now() >= write_deadline {
-        return Err(fail(Code::IdentityManagementRequestWriteTimeout));
-    }
-    let deadline = Instant::now()
-        + Duration::from_millis(limits.identity_management_response_header_timeout_milliseconds);
-    let head = read_head(&mut stream, deadline).await?;
+}
+
+fn validate_head(head: &DecodedHead) -> Result<Framing, ExchangeFailure> {
+    let limits = &ProfileAuthenticationContract::embedded().limits;
     let framing = framing(&head.fields)?;
-    if (100..200).contains(&head.status) {
+    if (INFORMATIONAL_STATUS..SUCCESS_STATUS_START).contains(&head.status) {
         return Err(fail(Code::IdentityManagementResponseStatusRejected));
     }
-    if (300..400).contains(&head.status) {
+    if (REDIRECT_STATUS..CLIENT_ERROR_STATUS).contains(&head.status) {
         return Err(fail(Code::IdentityManagementRedirectRefused));
     }
     if u64::from(head.status) != limits.identity_management_response_success_status {
@@ -65,6 +84,17 @@ pub async fn exchange_http1<S: AsyncRead + AsyncWrite + Unpin>(
         return Err(fail(Code::IdentityManagementResponseTrailerRejected));
     }
     accept_media(&head.fields)?;
+    Ok(framing)
+}
+
+async fn collect_body<Stream: AsyncRead + Unpin>(
+    mut stream: Stream,
+    framing: Framing,
+    head: DecodedHead,
+    anchor: u64,
+    clock: &(dyn MonotonicClock + Sync),
+) -> Result<IdentityManagementReceipt, ExchangeFailure> {
+    let limits = &ProfileAuthenticationContract::embedded().limits;
     let total = Instant::now()
         + Duration::from_millis(
             limits.identity_management_response_body_total_timeout_milliseconds,
@@ -79,35 +109,7 @@ pub async fn exchange_http1<S: AsyncRead + AsyncWrite + Unpin>(
                 push(&mut collected.0, reader.required().await?, maximum)?;
             }
         }
-        Framing::Chunked => loop {
-            let line = reader
-                .line(limits.maximum_identity_management_response_header_bytes as usize)
-                .await?;
-            let size =
-                crate::selected_author_http::decode_chunk_size(&line).map_err(|_| malformed())?;
-            if size == 0 {
-                let mut fields = Vec::new();
-                let mut charge = limits.identity_management_response_trailer_charge_bytes;
-                loop {
-                    let trailer = reader
-                        .line(limits.maximum_identity_management_response_header_bytes as usize + 2)
-                        .await?;
-                    if trailer.is_empty() {
-                        break;
-                    }
-                    accept_field(&trailer, &mut fields, &mut charge)?;
-                }
-                // IMS refuses the trailer section itself, including the empty
-                // section following the last chunk. Do not erase its presence.
-                return Err(fail(Code::IdentityManagementResponseTrailerRejected));
-            }
-            for _ in 0..size {
-                push(&mut collected.0, reader.required().await?, maximum)?;
-            }
-            if reader.required().await? != b'\r' || reader.required().await? != b'\n' {
-                return Err(malformed());
-            }
-        },
+        Framing::Chunked => read_chunks(&mut reader, &mut collected.0, maximum).await?,
         Framing::Close => {
             while let Some(byte) = reader.byte().await? {
                 push(&mut collected.0, byte, maximum)?;
@@ -149,32 +151,32 @@ fn push(body: &mut Vec<u8>, byte: u8, maximum: usize) -> Result<(), ExchangeFail
     Ok(())
 }
 
-async fn read_head<S: AsyncRead + Unpin>(
-    stream: &mut S,
+async fn read_head<Stream: AsyncRead + Unpin>(
+    stream: &mut Stream,
     deadline: Instant,
 ) -> Result<DecodedHead, ExchangeFailure> {
     let limits = &ProfileAuthenticationContract::embedded().limits;
     let maximum = usize::try_from(limits.maximum_identity_management_response_header_bytes)
         .map_err(|_| malformed())?;
     let status = head_line(stream, deadline, maximum).await?;
-    if status.len() < 13
+    if status.len() < MINIMUM_STATUS_LINE_BYTES
         || &status[..9] != b"HTTP/1.1 "
-        || status[12..].iter().any(|byte| *byte < 32 || *byte == 127)
+        || status[12..].iter().any(|byte| *byte < FIRST_VISIBLE_ASCII || *byte == DELETE_ASCII)
         || status[12] != b' '
         || !status[9..12].iter().all(u8::is_ascii_digit)
     {
         return Err(malformed());
     }
-    let status = u16::from(status[9] - b'0') * 100
-        + u16::from(status[10] - b'0') * 10
+    let status = u16::from(status[9] - b'0') * HUNDREDS_MULTIPLIER
+        + u16::from(status[10] - b'0') * TENS_MULTIPLIER
         + u16::from(status[11] - b'0');
-    if !(100..600).contains(&status) {
+    if !(INFORMATIONAL_STATUS..STATUS_CEILING).contains(&status) {
         return Err(malformed());
     }
     let mut fields = Vec::new();
     let mut charge = limits.identity_management_response_head_status_charge_bytes;
     loop {
-        let line = head_line(stream, deadline, maximum.saturating_add(2)).await?;
+        let line = head_line(stream, deadline, maximum.saturating_add(LINE_END_BYTES)).await?;
         if line.is_empty() {
             break;
         }
@@ -198,14 +200,16 @@ fn accept_field(
     while matches!(value.last(), Some(b' ' | b'\t')) {
         value = &value[..value.len() - 1];
     }
-    if value.iter().any(|byte| *byte < 32 || *byte == 127) {
+    if value.iter().any(|byte| *byte < FIRST_VISIBLE_ASCII || *byte == DELETE_ASCII) {
         return Err(malformed());
     }
     let field =
         (name.as_str().len() as u64).checked_add(value.len() as u64).ok_or_else(head_limit)?;
     *charge = charge
         .checked_add(field)
-        .and_then(|n| n.checked_add(limits.identity_management_response_field_charge_bytes))
+        .and_then(|charged| {
+            charged.checked_add(limits.identity_management_response_field_charge_bytes)
+        })
         .ok_or_else(head_limit)?;
     if field > limits.maximum_identity_management_response_header_bytes
         || *charge > limits.maximum_identity_management_response_head_bytes
@@ -217,8 +221,8 @@ fn accept_field(
     fields.push((name.as_str().to_owned(), value));
     Ok(())
 }
-async fn head_line<S: AsyncRead + Unpin>(
-    stream: &mut S,
+async fn head_line<Stream: AsyncRead + Unpin>(
+    stream: &mut Stream,
     deadline: Instant,
     maximum: usize,
 ) -> Result<Vec<u8>, ExchangeFailure> {
@@ -261,11 +265,7 @@ fn framing(fields: &[(String, String)]) -> Result<Framing, ExchangeFailure> {
     for (name, value) in fields {
         match name.as_str() {
             "content-length" => {
-                let value = value.trim();
-                if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
-                    return Err(malformed());
-                }
-                let parsed = value.parse::<u64>().map_err(|_| malformed())?;
+                let parsed = parse_length(value)?;
                 if length.is_some_and(|length| length != parsed) {
                     return Err(malformed());
                 }
@@ -280,6 +280,10 @@ fn framing(fields: &[(String, String)]) -> Result<Framing, ExchangeFailure> {
             _ => {}
         }
     }
+    finish_framing(chunked, length)
+}
+
+fn finish_framing(chunked: bool, length: Option<u64>) -> Result<Framing, ExchangeFailure> {
     if chunked && length.is_some() {
         return Err(malformed());
     }
@@ -291,11 +295,11 @@ fn framing(fields: &[(String, String)]) -> Result<Framing, ExchangeFailure> {
         Framing::Close
     })
 }
-struct BodyReader<'a, S> {
-    stream: &'a mut S,
+struct BodyReader<'held, Stream> {
+    stream: &'held mut Stream,
     total: Instant,
 }
-impl<S: AsyncRead + Unpin> BodyReader<'_, S> {
+impl<Stream: AsyncRead + Unpin> BodyReader<'_, Stream> {
     async fn byte(&mut self) -> Result<Option<u8>, ExchangeFailure> {
         let idle = Instant::now()
             + Duration::from_millis(
@@ -363,3 +367,77 @@ fn head_limit() -> ExchangeFailure {
 #[cfg(test)]
 #[path = "identity_management_http1_tests.rs"]
 mod tests;
+
+use crate::transport_observation::{Phase, Route, observe};
+const MINIMUM_STATUS_LINE_BYTES: usize = 13;
+const FIRST_VISIBLE_ASCII: u8 = 32;
+const DELETE_ASCII: u8 = 127;
+const INFORMATIONAL_STATUS: u16 = 100;
+const SUCCESS_STATUS_START: u16 = 200;
+const REDIRECT_STATUS: u16 = 300;
+const CLIENT_ERROR_STATUS: u16 = 400;
+const STATUS_CEILING: u16 = 600;
+const HUNDREDS_MULTIPLIER: u16 = 100;
+const TENS_MULTIPLIER: u16 = 10;
+const LINE_END_BYTES: usize = 2;
+
+async fn read_chunks<Stream: AsyncRead + Unpin>(
+    reader: &mut BodyReader<'_, Stream>,
+    collected: &mut Vec<u8>,
+    maximum: usize,
+) -> Result<(), ExchangeFailure> {
+    let limits = &ProfileAuthenticationContract::embedded().limits;
+    loop {
+        let line =
+            reader.line(limits.maximum_identity_management_response_header_bytes as usize).await?;
+        let size =
+            crate::selected_author_http::decode_chunk_size(&line).map_err(|_| malformed())?;
+        if size == 0 {
+            let mut fields = Vec::new();
+            let mut charge = limits.identity_management_response_trailer_charge_bytes;
+            loop {
+                let trailer = reader
+                    .line(
+                        limits.maximum_identity_management_response_header_bytes as usize
+                            + LINE_END_BYTES,
+                    )
+                    .await?;
+                if trailer.is_empty() {
+                    break;
+                }
+                accept_field(&trailer, &mut fields, &mut charge)?;
+            }
+            // IMS refuses the trailer section itself, including the empty
+            // section following the last chunk. Do not erase its presence.
+            return Err(fail(Code::IdentityManagementResponseTrailerRejected));
+        }
+        for _ in 0..size {
+            push(collected, reader.required().await?, maximum)?;
+        }
+        if reader.required().await? != b'\r' || reader.required().await? != b'\n' {
+            return Err(malformed());
+        }
+    }
+}
+
+fn parse_length(value: &str) -> Result<u64, ExchangeFailure> {
+    let value = value.trim();
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(malformed());
+    }
+    value.parse::<u64>().map_err(|_| malformed())
+}
+
+fn encode_request(body: &[u8]) -> Result<String, ExchangeFailure> {
+    let limits = &ProfileAuthenticationContract::embedded().limits;
+    if body.len() as u64 > limits.maximum_identity_management_request_body_bytes {
+        return Err(fail(Code::IdentityManagementResponseHeadLimitExceeded));
+    }
+    let endpoint = url::Url::parse(&identity_management_endpoint()).map_err(|_| malformed())?;
+    let host = endpoint.host_str().ok_or_else(malformed)?;
+    Ok(format!(
+        "POST {} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        endpoint.path(),
+        body.len()
+    ))
+}

@@ -133,7 +133,11 @@ fn module_name(path: &str) -> String {
 #[test]
 fn the_fixture_the_declarations_and_the_footprints_describe_one_set() {
     let scaffold = paths_of("scaffold_leaf");
-    assert_eq!(scaffold.len(), 36, "this plan creates thirty-six library leaves");
+    assert_eq!(
+        scaffold.len(),
+        35,
+        "thirty-five scaffold leaves remain after retiring the unused selector"
+    );
 
     let recorded = footprints();
     let owned: BTreeSet<String> = recorded

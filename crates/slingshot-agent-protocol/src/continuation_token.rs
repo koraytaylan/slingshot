@@ -17,11 +17,12 @@
 
 use sha2::{Digest as _, Sha256};
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
+use slingshot_domain::command::result_window::maximum_result_limit;
 
 use crate::continuation_key_authority::{KeyRing, ValidatingKey};
 
 /// Version marker every continuation token is derived under.
-pub const TOKEN_VERSION: &str = "slingshot.agent-continuation/1";
+pub const TOKEN_VERSION: &str = "slingshot.agent-continuation/2";
 
 /// Separator between the fields a token digest is taken over.
 pub const FIELD_SEPARATOR: u8 = 0;
@@ -37,6 +38,8 @@ pub struct ContinuationState {
     pub query_digest: String,
     /// Where in that query's results to resume.
     pub position: u64,
+    /// The maximum page size fixed when enumeration began, retained by successors.
+    pub initial_result_limit: u64,
     /// When this token stops being honoured.
     pub expires_at_unix_milliseconds: u64,
 }
@@ -101,12 +104,14 @@ impl ContinuationToken {
             + self.state.query_digest.len()
     }
 
-    /// Returns whether this token fits the bound the transport contract names.
+    /// Returns whether token state and its original page size fit the declared bounds.
     #[must_use]
     pub fn is_bounded(&self) -> bool {
         let allowed = AuthorAgentTransportContract::embedded()
             .limit("maximum_agent_continuation_key_state_bytes");
         u64::try_from(self.state_bytes()).unwrap_or(u64::MAX) <= allowed
+            && self.state.initial_result_limit > 0
+            && self.state.initial_result_limit <= maximum_result_limit()
     }
 
     /// Honours this token, or says why it is not honoured.
@@ -165,10 +170,93 @@ fn integrity_of(state: &ContinuationState, key: &str) -> String {
         state.query_digest.as_bytes(),
         &state.agent_event_store_generation.to_be_bytes(),
         &state.position.to_be_bytes(),
+        &state.initial_result_limit.to_be_bytes(),
         &state.expires_at_unix_milliseconds.to_be_bytes(),
     ] {
         hasher.update(field);
         hasher.update([FIELD_SEPARATOR]);
     }
     hasher.finalize().iter().map(|octet| format!("{octet:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ContinuationRefusal, ContinuationState, ContinuationToken};
+    use crate::continuation_key_authority::{KeyRing, ValidatingKey};
+    use slingshot_domain::command::result_window::maximum_result_limit;
+
+    const DIGEST_PAIRS: usize = 32;
+    const EXPIRY: u64 = 10;
+
+    fn token(limit: u64) -> ContinuationToken {
+        ContinuationToken::issue(
+            ContinuationState {
+                author_target_identity_digest: "1d".repeat(DIGEST_PAIRS),
+                agent_event_store_generation: 1,
+                query_digest: "40".repeat(DIGEST_PAIRS),
+                position: 1,
+                initial_result_limit: limit,
+                expires_at_unix_milliseconds: EXPIRY,
+            },
+            "synthetic signing key",
+        )
+    }
+
+    fn validate(token: &ContinuationToken) -> Result<ValidatingKey, ContinuationRefusal> {
+        token.validate(
+            &KeyRing::initial("synthetic signing key"),
+            &"1d".repeat(DIGEST_PAIRS),
+            &"40".repeat(DIGEST_PAIRS),
+            1,
+            1,
+        )
+    }
+
+    #[test]
+    fn changing_only_the_original_limit_invalidates_the_signature() {
+        let mut forged = token(1);
+        forged.state.initial_result_limit += 1;
+        assert_eq!(validate(&forged), Err(ContinuationRefusal::IntegrityInvalid));
+    }
+
+    #[test]
+    fn original_limit_accepts_the_contract_boundary_and_refuses_both_outside_values() {
+        assert_eq!(validate(&token(1)), Ok(ValidatingKey::Current));
+        assert_eq!(validate(&token(maximum_result_limit())), Ok(ValidatingKey::Current));
+        assert_eq!(validate(&token(0)), Err(ContinuationRefusal::Malformed));
+        assert_eq!(
+            validate(&token(maximum_result_limit() + 1)),
+            Err(ContinuationRefusal::Malformed)
+        );
+    }
+
+    #[test]
+    fn version_two_signature_matches_the_independent_cross_language_vector() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/continuation-key-lifecycle/token-v2.json"
+        ))
+        .expect("an independently calculated six-field token");
+        let state = &fixture["state"];
+        let issued = ContinuationToken::issue(
+            ContinuationState {
+                author_target_identity_digest: state["author_target_identity_digest"]
+                    .as_str()
+                    .expect("a target digest")
+                    .to_owned(),
+                agent_event_store_generation: state["agent_event_store_generation"]
+                    .as_u64()
+                    .expect("a generation"),
+                query_digest: state["query_digest"].as_str().expect("a query digest").to_owned(),
+                position: state["position"].as_u64().expect("a position"),
+                initial_result_limit: state["initial_result_limit"]
+                    .as_u64()
+                    .expect("an original limit"),
+                expires_at_unix_milliseconds: state["expires_at_unix_milliseconds"]
+                    .as_u64()
+                    .expect("an expiry"),
+            },
+            "a key this agent holds",
+        );
+        assert_eq!(Some(issued.integrity.as_str()), fixture["integrity"].as_str());
+    }
 }

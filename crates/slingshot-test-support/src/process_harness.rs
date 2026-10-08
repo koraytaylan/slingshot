@@ -597,6 +597,13 @@ impl RetainedChild {
         self.wait_within(deadline)
     }
 
+    /// Takes interactive input when no feeder owns it.
+    /// Dropping the returned handle delivers EOF to the retained child.
+    #[must_use]
+    pub fn take_input(&mut self) -> Option<std::process::ChildStdin> {
+        self.child.stdin.take()
+    }
+
     /// Takes this child's output stream, so nobody is reading it any more.
     ///
     /// Dropping what comes back closes the read end, which is what a client
@@ -691,7 +698,39 @@ impl ProcessHarness {
         executable: &ExecutablePath,
         request: &ProcessRequest,
     ) -> Result<RetainedChild, HarnessFailure> {
+        self.start_owned(executable, request, false)
+    }
+
+    /// Starts a retained child with an input pipe the caller may take and write.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HarnessFailure::Unusable`] for preloaded input, terminal
+    /// attachment, process startup failure, or failure to retain the child.
+    pub fn start_interactive(
+        &self,
+        executable: &ExecutablePath,
+        request: &ProcessRequest,
+    ) -> Result<RetainedChild, HarnessFailure> {
+        if !request.input.is_empty() || request.attachment != StreamAttachment::Redirected {
+            return Err(HarnessFailure::Unusable(
+                "interactive input requires empty redirected input".to_owned(),
+            ));
+        }
+        self.start_owned(executable, request, true)
+    }
+
+    /// Retains the same instance ownership for fed and interactive processes.
+    fn start_owned(
+        &self,
+        executable: &ExecutablePath,
+        request: &ProcessRequest,
+        interactive: bool,
+    ) -> Result<RetainedChild, HarnessFailure> {
         let mut command = command_for(executable, request);
+        if interactive {
+            command.stdin(Stdio::piped());
+        }
         #[cfg(unix)]
         let terminal = self.attach_terminal(&mut command, request)?;
         let child = command.spawn().map_err(unusable)?;

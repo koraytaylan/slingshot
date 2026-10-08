@@ -78,6 +78,7 @@ crates/slingshot-command-line/src/daemon_entry.rs|slingshot-command-line|entry|l
 crates/slingshot-command-line/src/daemon_process.rs|slingshot-command-line|entry|leaf|slingshot_command_line::daemon_process|daemon-runtime-module-scaffold
 crates/slingshot-command-line/src/exit_classification.rs|slingshot-command-line|entry|leaf|slingshot_command_line::exit_classification|command-line-module-scaffold
 crates/slingshot-command-line/src/explicit_daemon_start.rs|slingshot-command-line|entry|leaf|slingshot_command_line::explicit_daemon_start|workspace-module-map
+crates/slingshot-command-line/src/failure_remedy.rs|slingshot-command-line|entry|leaf|slingshot_command_line::failure_remedy|workspace-module-map
 crates/slingshot-command-line/src/human_renderer.rs|slingshot-command-line|entry|leaf|slingshot_command_line::human_renderer|command-line-module-scaffold
 crates/slingshot-command-line/src/interrupt.rs|slingshot-command-line|entry|leaf|slingshot_command_line::interrupt|command-line-module-scaffold
 crates/slingshot-command-line/src/invocation.rs|slingshot-command-line|entry|leaf|slingshot_command_line::invocation|command-line-module-scaffold
@@ -85,6 +86,9 @@ crates/slingshot-command-line/src/lib.rs|slingshot-command-line|entry|crate-root
 crates/slingshot-command-line/src/live_adobe_experience_manager.rs|slingshot-command-line|entry|leaf|slingshot_command_line::live_adobe_experience_manager|live-adobe-experience-manager-harness
 crates/slingshot-command-line/src/machine_outcome_envelope.rs|slingshot-command-line|entry|leaf|slingshot_command_line::machine_outcome_envelope|command-line-module-scaffold
 crates/slingshot-command-line/src/machine_readable_renderer.rs|slingshot-command-line|entry|leaf|slingshot_command_line::machine_readable_renderer|command-line-module-scaffold
+crates/slingshot-command-line/src/model_context_protocol/application/dispatch.rs|slingshot-command-line|entry|leaf|slingshot_command_line::model_context_protocol::application::dispatch|workspace-module-map
+crates/slingshot-command-line/src/model_context_protocol/application/process_session.rs|slingshot-command-line|entry|leaf|slingshot_command_line::model_context_protocol::application::process_session|workspace-module-map
+crates/slingshot-command-line/src/model_context_protocol/application/stream_workers.rs|slingshot-command-line|entry|leaf|slingshot_command_line::model_context_protocol::application::stream_workers|workspace-module-map
 crates/slingshot-command-line/src/model_context_protocol/mod.rs|slingshot-command-line|entry|family-root|slingshot_command_line::model_context_protocol|workspace-module-map
 crates/slingshot-command-line/src/model_context_protocol/active_request_registry.rs|slingshot-command-line|entry|leaf|slingshot_command_line::model_context_protocol::active_request_registry|model-context-protocol-module-scaffold
 crates/slingshot-command-line/src/model_context_protocol/application.rs|slingshot-command-line|entry|leaf|slingshot_command_line::model_context_protocol::application|model-context-protocol-module-scaffold
@@ -134,7 +138,6 @@ crates/slingshot-daemon/src/operation/remote_submission.rs|slingshot-daemon|serv
 crates/slingshot-daemon/src/operation_maintenance.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_maintenance|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/operation_queries.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_queries|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/operation_recovery.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_recovery|daemon-runtime-module-scaffold
-crates/slingshot-daemon/src/operation_scheduler.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_scheduler|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/operation_submission.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_submission|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/operation_wait.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_wait|daemon-runtime-module-scaffold
 crates/slingshot-daemon/src/ownership.rs|slingshot-daemon|service|leaf|slingshot_daemon::ownership|workspace-module-map
@@ -146,6 +149,8 @@ crates/slingshot-daemon/src/platform_runtime/mod.rs|slingshot-daemon|service|fam
 crates/slingshot-daemon/src/platform_runtime/readiness.rs|slingshot-daemon|service|leaf|slingshot_daemon::platform_runtime::readiness|platform-runtime-contract
 crates/slingshot-daemon/src/process_checkpoint.rs|slingshot-daemon|service|leaf|slingshot_daemon::process_checkpoint|workspace-module-map
 crates/slingshot-daemon/src/request_dispatch.rs|slingshot-daemon|service|leaf|slingshot_daemon::request_dispatch|daemon-runtime-module-scaffold
+crates/slingshot-daemon/src/runtime_builder/retry_schedule.rs|slingshot-daemon|service|leaf|slingshot_daemon::runtime_builder::retry_schedule|workspace-module-map
+crates/slingshot-daemon/src/runtime_builder/retry_schedule/tests.rs|slingshot-daemon|service|leaf|slingshot_daemon::runtime_builder::retry_schedule::tests|workspace-module-map
 crates/slingshot-daemon/src/runtime_namespace.rs|slingshot-daemon|service|leaf|slingshot_daemon::runtime_namespace|workspace-module-map
 crates/slingshot-daemon/src/service.rs|slingshot-daemon|service|leaf|slingshot_daemon::service|workspace-module-map
 crates/slingshot-daemon/src/shutdown.rs|slingshot-daemon|service|leaf|slingshot_daemon::shutdown|daemon-runtime-module-scaffold
@@ -337,3 +342,15 @@ crates/slingshot-storage/src/maintenance_results/cleanup.rs|slingshot-storage|ad
 crates/slingshot-storage/src/maintenance_results/write.rs|slingshot-storage|adapter|leaf|slingshot_storage::maintenance_results::write|the-daemon-serves-versioned-operations
 crates/slingshot-storage/src/operation/scheduler_claim.rs|slingshot-storage|adapter|leaf|slingshot_storage::operation::scheduler_claim|schedulers-claim-before-execution
 crates/slingshot-storage/src/persistent_capacity/maintenance_recovery.rs|slingshot-storage|adapter|leaf|slingshot_storage::persistent_capacity::maintenance_recovery|the-daemon-serves-versioned-operations
+crates/slingshot-storage/src/operation/producer_turns.rs|slingshot-storage|adapter|leaf|slingshot_storage::operation::producer_turns|workspace-module-map
+crates/slingshot-storage/src/sqlite_statement_inventory/definitions.rs|slingshot-storage|adapter|leaf|slingshot_storage::sqlite_statement_inventory::definitions|workspace-module-map
+crates/slingshot-domain/src/producer_identity.rs|slingshot-domain|domain|leaf|slingshot_domain::producer_identity|workspace-module-map
+crates/slingshot-command-line/src/application/request_identity.rs|slingshot-command-line|entry|leaf|slingshot_command_line::application::request_identity|workspace-module-map
+crates/slingshot-daemon/src/operation_dispatch/tests/producers.rs|slingshot-daemon|service|leaf|slingshot_daemon::operation_dispatch::tests::producers|workspace-module-map
+crates/slingshot-agent-connection/src/transport_observation.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::transport_observation|the-product-has-one-author-port
+crates/slingshot-agent-connection/src/submission_timing_observation.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::submission_timing_observation|the-product-has-one-author-port
+crates/slingshot-agent-connection/src/submission_timing_observation/tests.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::submission_timing_observation::tests|the-product-has-one-author-port
+crates/slingshot-agent-connection/src/transport_observation/tests.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::transport_observation::tests|the-product-has-one-author-port
+
+crates/slingshot-agent-connection/src/capability_timing_observation.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::capability_timing_observation|the-product-has-one-author-port
+crates/slingshot-agent-connection/src/capability_timing_observation/tests.rs|slingshot-agent-connection|adapter|leaf|slingshot_agent_connection::capability_timing_observation::tests|the-product-has-one-author-port

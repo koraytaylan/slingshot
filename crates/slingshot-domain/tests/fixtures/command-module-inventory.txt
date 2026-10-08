@@ -48,6 +48,7 @@ find_sling_jobs
 find_workflow_instances
 flush_replication_queue
 group_membership
+incremental_discovery
 inspect_open_service_gateway_initiative_configuration
 inspect_replication_queue
 inspect_sling_job

@@ -8,9 +8,7 @@ depends_on:
   - operation-executor-boundary
 gated: false
 touches:
-  - crates/slingshot-daemon/src/operation_scheduler.rs
-  - crates/slingshot-daemon/tests/operation_scheduler.rs
-  - "crates/slingshot-daemon/tests/fixtures/operation_scheduler/**"
+  - crates/slingshot-storage/tests/producer_fairness.rs
 status: done
 merged_as: "06ddf691464062838c44b7db11d31c3695b8dbc6"
 ---
@@ -35,4 +33,18 @@ Capacity limits must reject overload predictably, and a busy caller must not sta
 - A fresh scheduler given the same repository observation produces byte-identical decisions.
 - Rows in another target partition and recovery rows before eligibility never enter current directives; one committed resume becomes eligible without allocating work, while backward UTC movement cannot extend beyond original delay and forward movement cannot create duplicate work.
 
-- **Done when:** `cargo test -p slingshot-daemon --test operation_scheduler` matches every target/conditional-evidence/recovery fixture including explicit resume, proves bounded non-starving admission and clamped monotonic reconstruction under both wall-clock directions, and shows idempotency is timing-independent without a live retry loop, and all workspace gates succeed.
+
+## Production replacement
+
+The original pure selector and its model-only fixtures were retired during the
+2026-09-29 effectiveness review. Production now orders active producer turns in
+SQLite and rotates only after the atomic claim succeeds. The runtime applies
+monotonic retry eligibility to that ordered snapshot. Admission validates the
+opaque producer identity and applies per-producer and global pending limits in
+the same transaction that resolves operation replay.
+
+Current behavioral checks: storage `producer_fairness`, daemon library
+`operation_dispatch::tests::producers`, and `runtime_builder::retry_schedule::tests`.
+These cover durable ordering, reopen, contention, idle/rejoining producers,
+overflow rollback, capacity isolation, immutable replay ownership, and monotonic
+readiness. They replace the former independent caller-sorted model.

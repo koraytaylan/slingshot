@@ -154,3 +154,39 @@ fn local_ping_and_status_complete_while_the_author_withholds_its_response() {
         matches!(decoded, slingshot_local_protocol::message::OperationResponse::Status { operation_identifier, .. } if operation_identifier == OPERATION)
     );
 }
+
+#[test]
+fn service_submission_commits_without_running_the_author_on_the_request_thread() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let durable = runtime_at(root.path(), &endpoint);
+    let target = durable.context().target().clone();
+    let service = DaemonService::from_runtime(FoundationContract::embedded(), durable);
+    let request = |request| {
+        serde_json::to_vec(&serde_json::json!({
+            "author_target_identity_digest": target.author_target_identity_digest,
+            "daemon_runtime_contract_digest": target.daemon_runtime_contract_digest,
+            "operation_protocol_version": DaemonRuntimeContract::embedded().operation_protocol_version,
+            "request_identifier": "admission-before-execution",
+            "request": request,
+            "selected_environment_revision": target.selected_environment_revision,
+        })).unwrap()
+    };
+    let submitted = service.answer(&request(serde_json::json!({
+        "request": "execute", "operation_identifier": OPERATION,
+        "command": {"command": COMMAND, "root_path": "/content"},
+        "workflow_correlation_identifier": null, "caller_identity": null,
+    })));
+    let document: serde_json::Value =
+        serde_json::from_slice(&submitted.frame()[std::mem::size_of::<u32>()..]).unwrap();
+    assert_eq!(document["response"], "accepted", "{document}");
+    let status = service.answer(&request(serde_json::json!({
+        "request": "operation_status", "operation_identifier": OPERATION,
+    })));
+    let document: serde_json::Value =
+        serde_json::from_slice(&status.frame()[std::mem::size_of::<u32>()..]).unwrap();
+    assert_eq!(document["lifecycle_state"], "queued", "{document}");
+    assert_eq!(listener.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
+}

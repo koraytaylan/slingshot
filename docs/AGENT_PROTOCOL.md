@@ -99,6 +99,14 @@ bounded at `maximum_agent_continuation_key_state_bytes`, and that bound is
 universal: there is no single-node, private, or node-local exception that would
 let one deployment carry a different amount of state than another.
 
+The version-two token state includes `initial_result_limit`, authenticated with
+the target, generation, query, position and expiry. The limit must be positive
+and no greater than `maximum_result_limit`. Every successor retains that original
+limit and expiry; continuation cannot widen a page or renew its lifetime. The
+closed state and token schemas use version-two identifiers. A version-one token
+has no authenticated original limit and is malformed under this state contract;
+begin a new enumeration after the agent changes token formats.
+
 An agent whose continuation-key authority is not ready cannot issue tokens that
 will still validate later, and discovery refuses it before a paged query starts
 rather than after.
@@ -141,3 +149,47 @@ the fake author proves that the contract can be spoken; it says nothing about
 any particular installation. Evidence about an installation comes from
 `verify live-author`, which is separate, explicit, and reported as its own kind
 of evidence.
+
+## Capability timing observations
+
+Finite HTTP/1 exchanges validate the head before collecting the body without publishing
+timing observations. They invoke the completed-response collector once after the body framing
+and connection-close proof succeed. Finite HTTP/2 exchanges invoke it once after body framing
+and END_STREAM proof. A refused or incomplete finite exchange publishes neither capability
+nor submission timing observations, even when its head carried usable optional timing.
+
+Artifact streaming uses the head-only validator and its separate length, digest, staging and
+completion proof. It publishes neither finite-response timing observer, including for refused
+status-202 heads. Successful artifact transfers are not capability responses or submissions.
+
+After a finite response passes the existing common status, header, framing, body and singleton
+checks, status 200 may carry optional numeric capability timing. The accepted grammar is exactly
+`cap_shape;dur=N,cap_identity;dur=N,cap_document;dur=N`, with only space or tab after separators.
+Durations are nonnegative canonical decimal integers no larger than 9223372036854 milliseconds;
+the whole header is at most 99 bytes and must occur exactly once. Descriptions, extra metrics,
+signs, fractions, reordered metrics, leading zeroes and repeated headers are unusable observations.
+An absent header and a parsed zero duration remain different outcomes.
+
+Only fixed-size aggregate counts and saturating numeric sums are retained. Malformed optional
+timing changes no response acceptance, retry behavior, deadline, body or command outcome. Raw
+header text and request or environment identities are never stored by this observer. The common
+response boundary is route-neutral; compare quiescent snapshots around a dedicated sequential
+capability workflow to attribute its differences. Concurrent workflows or saturated/regressing
+counters cannot prove one request's durations. These diagnostics do not validate the capability
+document or establish compatibility, behavioral coverage, a latency repair or an internal cause.
+
+Server durations cover only the capability answer method's shape validation, established-identity
+check and document rendering and response preparation. Platform authentication, prior base route
+checks, request queuing, writer acquisition, response delivery, resolver cleanup and network transit
+are excluded. Submission status-202 timing observations remain separate and unchanged.
+
+
+## Retryable submission error bodies
+
+A submission response must pass the original finite transport, framing, JSON media and retry-header
+checks before its status is interpreted. For statuses already classified as retryable, the concrete
+network path applies the existing submission interpreter without requiring an acceptance body.
+Generic error JSON, invalid JSON and empty JSON bodies grant no execution certainty. The result
+still requires lookup before any possible resend; this driver never sends an automatic second POST.
+Acceptance, authoritative rejection and conflict retain their full acknowledgement binding checks.
+No body text is retained by this decision, and malformed media or retry headers remain uncertain.

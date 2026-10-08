@@ -20,6 +20,8 @@ mod physical;
 mod logical;
 #[path = "submission/http_one.rs"]
 mod http_one;
+#[path = "submission/retryable.rs"]
+mod retryable;
 #[path = "submission/http_two_peer.rs"]
 mod http_two_peer;
 
@@ -115,6 +117,7 @@ async fn selected_submission_sends_bound_bytes_once_and_validates_the_answer() {
             .await;
         if accepted && media == "application/json" {
             preflight.verify_refused_caller(&submission).await;
+            preflight.verify_retryable_error_bodies(&submission).await;
         }
         for automatic in [false, true] {
             let endpoint = if automatic {

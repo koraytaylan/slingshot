@@ -6,11 +6,10 @@ use super::{
 };
 use crate::authentication::environment_provider::RequestAuthentication;
 use crate::author_hypertext_transfer_protocol_policy::ExchangeDeadlines;
-use crate::selected_author_exchange::{
-    CollectedFiniteResponse, validate_collected_finite_response,
-};
+use crate::selected_author_exchange::validate_finite_head;
 use crate::selected_author_transport::{SelectedAuthorStream, SelectedAuthorTransport};
-use http::{HeaderMap, Method, Response, StatusCode, Version};
+use crate::transport_observation::{Phase, ResponseObservation, Route, observe, observe_response};
+use http::{HeaderMap, Method, StatusCode, Version};
 use slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::{Duration, Instant, timeout};
@@ -139,124 +138,131 @@ impl SelectedAuthorTransport {
         mut sink: impl FnMut(&[u8]) -> Result<(), FiniteHttpFailure>,
     ) -> Result<ArtifactHttpOutcome, FiniteHttpFailure> {
         use sha2::Digest as _;
-        let deadlines = ExchangeDeadlines::embedded();
-        timeout(Duration::from_millis(deadlines.request_body_milliseconds), async {
-            stream.write_all(request).await?;
-            stream.flush().await
-        })
-        .await
-        .map_err(|_| FiniteHttpFailure::Write)?
-        .map_err(|_| FiniteHttpFailure::Write)?;
-        let (status, headers, framing) = timeout(
-            Duration::from_millis(deadlines.response_header_milliseconds),
-            read_head(&mut stream),
-        )
-        .await
-        .map_err(|_| FiniteHttpFailure::Head)??;
-        let mut response = Response::builder()
-            .status(status)
-            .version(Version::HTTP_11)
-            .body(Vec::new())
-            .map_err(|_| FiniteHttpFailure::Head)?;
-        *response.headers_mut() = headers;
-        let accepted = validate_collected_finite_response(CollectedFiniteResponse {
-            response,
-            framing_ambiguous: false,
-            trailer_section_present: false,
-            trailing_bytes: false,
-        })
-        .map_err(|_| FiniteHttpFailure::Head)?;
-        if status != StatusCode::OK.as_u16() {
-            return refused_artifact_response(
-                &mut stream,
-                accepted,
-                framing,
-                submission,
-                expected,
-                artifact_identifier,
-                started,
-            )
-            .await;
-        }
-        crate::artifact_download::require_streamable(
-            expected,
-            &crate::artifact_download::ArtifactResponseHead {
-                head: accepted.head,
-                content_type: accepted.content_type.ok_or(FiniteHttpFailure::Head)?,
-            },
-        )
-        .map_err(|_| FiniteHttpFailure::Head)?;
-        if matches!(framing, BodyFraming::Fixed(length) if length != expected.byte_length) {
-            return Err(FiniteHttpFailure::Head);
-        }
-        let contract = AuthorAgentTransportContract::embedded();
-        let idle =
-            Duration::from_millis(contract.limit("artifact_transfer_idle_timeout_milliseconds"));
-        let total =
-            Duration::from_millis(contract.limit("artifact_transfer_total_timeout_milliseconds"));
-        let mut received = 0_u64;
-        let mut hasher = sha2::Sha256::new();
-        let body_started = Instant::now();
-        timeout(total, async {
-            match framing {
-                BodyFraming::Fixed(length) => {
-                    stream_artifact_part(
+        observe(Route::Author, Phase::Exchange, async {
+            observe(Route::Author, Phase::Request, async {
+                let deadlines = ExchangeDeadlines::embedded();
+                timeout(Duration::from_millis(deadlines.request_body_milliseconds), async {
+                    stream.write_all(request).await?;
+                    stream.flush().await
+                })
+                .await
+                .map_err(|_| FiniteHttpFailure::Write)?
+                .map_err(|_| FiniteHttpFailure::Write)
+            })
+            .await?;
+            let deadlines = ExchangeDeadlines::embedded();
+            observe_response(Route::Author, async |observation| {
+                let (status, headers, framing) = timeout(
+                    Duration::from_millis(deadlines.response_header_milliseconds),
+                    read_head(&mut stream),
+                )
+                .await
+                .map_err(|_| FiniteHttpFailure::Head)??;
+                // Artifact staging has its own completion proof; a head is not a finite body.
+                let (head, content_type) = validate_finite_head(
+                    StatusCode::from_u16(status).map_err(|_| FiniteHttpFailure::Head)?,
+                    Version::HTTP_11,
+                    &headers,
+                )
+                .map_err(|_| FiniteHttpFailure::Head)?;
+                let accepted = crate::artifact_download::ArtifactResponseHead {
+                    head,
+                    content_type: content_type.ok_or(FiniteHttpFailure::Head)?,
+                };
+                if status != StatusCode::OK.as_u16() {
+                    return refused_artifact_response(
                         &mut stream,
-                        length,
-                        expected.byte_length,
-                        &mut received,
-                        &mut hasher,
-                        &mut sink,
-                        idle,
+                        (status, accepted),
+                        framing,
+                        submission,
+                        expected,
+                        artifact_identifier,
+                        started,
+                        observation,
                     )
-                    .await?
+                    .await;
                 }
-                BodyFraming::Chunked => loop {
-                    let line = read_chunk_line(&mut stream, idle).await?;
-                    let length = decode_chunk_size(&line)?;
-                    if length == 0 {
-                        if !read_chunk_line(&mut stream, idle).await?.is_empty() {
-                            return Err(FiniteHttpFailure::Body);
+                crate::artifact_download::require_streamable(expected, &accepted)
+                    .map_err(|_| FiniteHttpFailure::Head)?;
+                if matches!(framing, BodyFraming::Fixed(length) if length != expected.byte_length) {
+                    return Err(FiniteHttpFailure::Head);
+                }
+                observation.head_complete();
+                let contract = AuthorAgentTransportContract::embedded();
+                let idle = Duration::from_millis(
+                    contract.limit("artifact_transfer_idle_timeout_milliseconds"),
+                );
+                let total = Duration::from_millis(
+                    contract.limit("artifact_transfer_total_timeout_milliseconds"),
+                );
+                let mut received = 0_u64;
+                let mut hasher = sha2::Sha256::new();
+                let body_started = Instant::now();
+                timeout(total, async {
+                    match framing {
+                        BodyFraming::Fixed(length) => {
+                            stream_artifact_part(
+                                &mut stream,
+                                length,
+                                expected.byte_length,
+                                &mut received,
+                                &mut hasher,
+                                &mut sink,
+                                idle,
+                            )
+                            .await?
                         }
-                        break;
+                        BodyFraming::Chunked => loop {
+                            let line = read_chunk_line(&mut stream, idle).await?;
+                            let length = decode_chunk_size(&line)?;
+                            if length == 0 {
+                                if !read_chunk_line(&mut stream, idle).await?.is_empty() {
+                                    return Err(FiniteHttpFailure::Body);
+                                }
+                                break;
+                            }
+                            stream_artifact_part(
+                                &mut stream,
+                                length,
+                                expected.byte_length,
+                                &mut received,
+                                &mut hasher,
+                                &mut sink,
+                                idle,
+                            )
+                            .await?;
+                            if !read_chunk_line(&mut stream, idle).await?.is_empty() {
+                                return Err(FiniteHttpFailure::Body);
+                            }
+                        },
                     }
-                    stream_artifact_part(
-                        &mut stream,
-                        length,
-                        expected.byte_length,
-                        &mut received,
-                        &mut hasher,
-                        &mut sink,
-                        idle,
-                    )
-                    .await?;
-                    if !read_chunk_line(&mut stream, idle).await?.is_empty() {
+                    let mut extra = [0_u8];
+                    if timeout(idle, stream.read(&mut extra))
+                        .await
+                        .map_err(|_| FiniteHttpFailure::Body)?
+                        .map_err(|_| FiniteHttpFailure::Body)?
+                        != 0
+                    {
                         return Err(FiniteHttpFailure::Body);
                     }
-                },
-            }
-            let mut extra = [0_u8];
-            if timeout(idle, stream.read(&mut extra))
+                    Ok::<(), FiniteHttpFailure>(())
+                })
                 .await
-                .map_err(|_| FiniteHttpFailure::Body)?
-                .map_err(|_| FiniteHttpFailure::Body)?
-                != 0
-            {
-                return Err(FiniteHttpFailure::Body);
-            }
-            Ok::<(), FiniteHttpFailure>(())
+                .map_err(|_| FiniteHttpFailure::Body)??;
+                let digest: String =
+                    hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
+                require_complete_artifact(received, &digest, expected, body_started, total)?;
+                Ok(ArtifactHttpOutcome::Transferred(ArtifactHttpReceipt {
+                    byte_length: received,
+                    elapsed_milliseconds: u64::try_from(
+                        started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND),
+                    )
+                    .unwrap_or(u64::MAX),
+                }))
+            })
+            .await
         })
         .await
-        .map_err(|_| FiniteHttpFailure::Body)??;
-        let digest: String = hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
-        require_complete_artifact(received, &digest, expected, body_started, total)?;
-        Ok(ArtifactHttpOutcome::Transferred(ArtifactHttpReceipt {
-            byte_length: received,
-            elapsed_milliseconds: u64::try_from(
-                started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND),
-            )
-            .unwrap_or(u64::MAX),
-        }))
     }
 }
 
@@ -280,24 +286,24 @@ fn require_complete_artifact(
 
 async fn refused_artifact_response(
     stream: &mut SelectedAuthorStream,
-    accepted: crate::selected_author_exchange::SelectedAuthorFiniteResponse,
+    accepted: (u16, crate::artifact_download::ArtifactResponseHead),
     framing: BodyFraming,
     submission: &crate::command_submission::Submission,
     expected: &crate::artifact_download::ExpectedArtifact,
     artifact_identifier: Option<&str>,
     started: Instant,
+    observation: &mut ResponseObservation,
 ) -> Result<ArtifactHttpOutcome, FiniteHttpFailure> {
-    let status = accepted.status;
+    let (status, accepted) = accepted;
     let deadlines = ExchangeDeadlines::embedded();
     let artifact_identifier = artifact_identifier.ok_or(FiniteHttpFailure::Head)?;
     if !matches!(status, 401 | 404 | 410)
         || accepted.head.location.is_some()
-        || !crate::selected_author_submission::json_media_type(
-            accepted.content_type.as_deref().unwrap_or(""),
-        )
+        || !crate::selected_author_submission::json_media_type(&accepted.content_type)
     {
         return Err(FiniteHttpFailure::Head);
     }
+    observation.head_complete();
     let contract = AuthorAgentTransportContract::embedded();
     let limit = contract
         .limit("maximum_finite_response_body_bytes")

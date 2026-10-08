@@ -85,6 +85,12 @@ fn refusal_rendering(reason: &str) -> Option<String> {
     if reason == CLOSED_OBJECT {
         return None;
     }
+    if reason == "RepeatedPath" {
+        return Some(slingshot_domain::command::incremental_discovery::IncrementalDiscoveryFailure::RepeatedPath.to_string());
+    }
+    if reason == "NonCanonicalTags" {
+        return Some(slingshot_domain::command::find_assets_by_metadata::AssetDiscoveryFailure::NonCanonicalTags.to_string());
+    }
     DECLARED_REFUSALS
         .iter()
         .find(|(name, _)| *name == reason)
@@ -293,12 +299,17 @@ fn a_result_from_another_request_is_rejected() {
         repository_path: RepositoryPath::parse(path).expect("a legal path"),
         tags: Vec::new(),
     };
-    let own = FindAssetsByMetadataResult::new(vec![asset("/content/dam/example/a.jpg")], None)
-        .expect("an ordered page");
+    let progress = slingshot_domain::command::incremental_discovery::DiscoveryProgress {
+        complete: true,
+        examined_nodes: 1,
+    };
+    let own =
+        FindAssetsByMetadataResult::new(vec![asset("/content/dam/example/a.jpg")], None, progress)
+            .expect("an ordered page");
     assert_eq!(own.require_answers(&asked), Ok(()));
 
     let elsewhere =
-        FindAssetsByMetadataResult::new(vec![asset("/content/dam/examples/a.jpg")], None)
+        FindAssetsByMetadataResult::new(vec![asset("/content/dam/examples/a.jpg")], None, progress)
             .expect("an ordered page");
     assert_eq!(elsewhere.require_answers(&asked), Err(DiscoveryResultFailure::NotThisRequest));
 }

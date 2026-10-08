@@ -17,7 +17,7 @@ use slingshot_domain::command::canonical_json::{
     DECLARED_COMPARATORS, PRESERVE_COMPARATOR, canonical_digest, require_array_order,
     require_canonical_bytes, write_canonical,
 };
-use slingshot_domain::command::command_identity::{CommandContract, INITIAL_COMMAND_VERSION};
+use slingshot_domain::command::command_identity::CommandContract;
 use slingshot_domain::command::schema::{
     CANONICAL_CONTRACT_ANNOTATION, COMMAND_WIRE_NAMES, SCHEMA_DIALECT, SCHEMA_MANIFEST_FORMAT,
     SchemaRole, canonical_contract_digest, command_schema, schema_file_name, schema_identifier,
@@ -67,7 +67,7 @@ fn regeneration_is_byte_stable_and_never_rewrites_a_committed_file() {
         }
     }
     let manifest = write_canonical(&schema_manifest()).expect("canonical");
-    assert_eq!(committed("command-schema-1.json"), manifest);
+    assert_eq!(committed("command-schema-2.json"), manifest);
     assert_eq!(
         write_canonical(&schema_manifest()).expect("canonical"),
         manifest,
@@ -84,7 +84,9 @@ fn every_root_declares_the_dialect_the_version_and_the_byte_contract() {
             let identifier = schema["$id"].as_str().expect("an identifier");
             assert_eq!(identifier, schema_identifier(wire_name, role));
             assert!(
-                identifier.ends_with(INITIAL_COMMAND_VERSION),
+                identifier.ends_with(
+                    &CommandContract::embedded().command_semantic_contract_versions[*wire_name]
+                ),
                 "the version is the final segment: {identifier}"
             );
             assert!(
@@ -121,7 +123,10 @@ fn a_version_change_would_change_both_role_digests() {
 fn the_manifest_records_every_digest_it_depends_on() {
     let manifest = schema_manifest();
     assert_eq!(manifest["format"], Value::from(SCHEMA_MANIFEST_FORMAT));
-    assert_eq!(manifest["command_semantic_contract_version"], Value::from(INITIAL_COMMAND_VERSION));
+    assert_eq!(
+        manifest["command_semantic_contract_versions"],
+        json!(CommandContract::embedded().command_semantic_contract_versions)
+    );
     assert_eq!(
         manifest["canonical_json_contract_sha256"],
         Value::from(canonical_contract_digest())

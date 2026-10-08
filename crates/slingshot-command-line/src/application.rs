@@ -378,11 +378,10 @@ pub trait DaemonBoundary {
     ) -> Result<OperationResponse, ArtifactStreamRefusal>;
 }
 
-/// Inventing a collision-resistant identity for one command-line invocation.
-pub trait RequestIdentityBoundary {
-    /// Returns one new identity. The application shares it across the invocation's phases.
-    fn invent_request_identifier(&self) -> String;
-}
+/// Invocation identifiers and cooperative producer identity enter through this boundary.
+/// Ambient environment access belongs to the product implementation.
+mod request_identity;
+pub use request_identity::RequestIdentityBoundary;
 
 /// Learning that somebody asked this run to stop.
 ///
@@ -925,11 +924,12 @@ impl CommandLineApplication<'_> {
                 .map_err(|failure| RunRefusal::Local(failure.to_string()))?,
             operation_identifier: retry_operation_identifier.clone(),
             workflow_correlation_identifier: None,
+            caller_identity: self
+                .request_identity
+                .producer_identity()
+                .map_err(RunRefusal::Usage)?,
         };
         let response = self.exchange(&namespace, &hello, request, &retry_operation_identifier)?;
-        // The daemon finishes a shipped command inside this exchange, so the
-        // answer is the result rather than an admission receipt. A receipt
-        // still means the work is outstanding and is watched below.
         if let Some(completion) = self.settled_on_submit(
             invocation,
             &namespace,

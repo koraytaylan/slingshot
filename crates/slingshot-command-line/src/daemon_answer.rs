@@ -434,10 +434,13 @@ mod result_tests {
 
     #[test]
     fn explicit_inline_results_are_bounded_and_match_the_addressed_operation() {
+        const JSON_STRING_DELIMITER_BYTES: usize = 2;
         let maximum =
             DaemonRuntimeContract::embedded().limit("maximum_inline_machine_result_bytes") as usize;
         for extra in [0, 1] {
-            let result = serde_json::Value::String("x".repeat(maximum - 2 + extra));
+            let result = serde_json::Value::String(
+                "x".repeat(maximum - JSON_STRING_DELIMITER_BYTES + extra),
+            );
             let response = OperationResponse::ResultInline {
                 operation_identifier: "operation".to_owned(),
                 result: result.clone(),

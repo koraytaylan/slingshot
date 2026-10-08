@@ -7,6 +7,11 @@ depends_on:
   - workspace-scaffold
 gated: false
 touches:
+  - crates/slingshot-agent-connection/src/transport_observation.rs
+  - crates/slingshot-agent-connection/src/transport_observation/tests.rs
+  - crates/slingshot-daemon/src/operation_dispatch/tests/producers.rs
+  - crates/slingshot-command-line/src/application/request_identity.rs
+  - crates/slingshot-domain/src/producer_identity.rs
   - crates/slingshot-domain/src/lib.rs
   - crates/slingshot-configuration/src/lib.rs
   - crates/slingshot-agent-protocol/src/lib.rs
@@ -68,6 +73,14 @@ touches:
   - crates/slingshot-storage/src/operation_repository_admission.rs
   - crates/slingshot-storage/src/operation_repository_mutations.rs
   - crates/slingshot-storage/src/operation_repository_recovery.rs
+  - crates/slingshot-command-line/src/failure_remedy.rs
+  - crates/slingshot-command-line/src/model_context_protocol/application/dispatch.rs
+  - crates/slingshot-command-line/src/model_context_protocol/application/process_session.rs
+  - crates/slingshot-command-line/src/model_context_protocol/application/stream_workers.rs
+  - crates/slingshot-daemon/src/runtime_builder/retry_schedule.rs
+  - crates/slingshot-daemon/src/runtime_builder/retry_schedule/tests.rs
+  - crates/slingshot-storage/src/operation/producer_turns.rs
+  - crates/slingshot-storage/src/sqlite_statement_inventory/definitions.rs
 status: done
 merged_as: "f6763c5c6995172e222fd59c952fc769189f3c9d"
 ---

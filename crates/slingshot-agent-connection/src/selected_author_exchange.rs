@@ -142,7 +142,7 @@ pub fn validate_collected_finite_response(
         status: parts.status.as_u16(),
         body,
         content_type,
-        retry_after: singleton(&parts.headers, "retry-after")?,
+        retry_after: observed_retry_after(&parts.headers, parts.status.as_u16())?,
         head,
     })
 }
@@ -207,4 +207,15 @@ fn singleton(
         )),
         _ => Err(SelectedAuthorExchangeRefusal::DuplicateSingletonHeader { name }),
     }
+}
+
+/// Observes only after the original final singleton check, without retaining its source text.
+fn observed_retry_after(
+    headers: &HeaderMap,
+    status: u16,
+) -> Result<Option<String>, SelectedAuthorExchangeRefusal> {
+    let retry_after = singleton(headers, "retry-after")?;
+    crate::submission_timing_observation::record(status, headers);
+    crate::capability_timing_observation::record(status, headers);
+    Ok(retry_after)
 }

@@ -47,4 +47,7 @@ pub mod selected_author_lookup;
 pub mod selected_author_submission;
 pub mod selected_author_transport;
 pub mod subscription_event_fold;
+pub mod capability_timing_observation;
+pub mod submission_timing_observation;
 pub mod transport_policy;
+pub mod transport_observation;

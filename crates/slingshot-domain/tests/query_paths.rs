@@ -1,14 +1,10 @@
-//! The general discovery command, proved ordered and proved literal.
-//!
-//! Three things carry the weight. Results are strictly ascending by repository
-//! path bytes with no path twice, because that ordering is what makes a
-//! continuation token mean anything - a page resumes after its last path, and
-//! an unordered page has no "after". An absent property answers no to every
-//! operator, `NotEquals` included, because a node with no such property has not
-//! been shown to differ from the value. And a string that spells a query
-//! language stays a value.
+//! General discovery pages with explicit bounded progress and literal predicates.
+//! Provider order is accepted, duplicate paths and inconsistent completeness are refused.
 
 use serde_json::Value;
+use slingshot_domain::command::incremental_discovery::{
+    DiscoveryProgress, IncrementalDiscoveryFailure,
+};
 use slingshot_domain::command::property_value::PropertyValue;
 use slingshot_domain::command::query_paths::{
     AnchorRefusal, DiscoveryResultFailure, PathMatch, QueryPathsCommand, QueryPathsResult,
@@ -56,6 +52,14 @@ fn rows(fixture: &str) -> Vec<Value> {
 fn refusal_rendering(reason: &str) -> Option<String> {
     if reason == CLOSED_OBJECT {
         return None;
+    }
+    match reason {
+        "RepeatedPath" => return Some(IncrementalDiscoveryFailure::RepeatedPath.to_string()),
+        "InvalidCounts" => return Some(IncrementalDiscoveryFailure::InvalidCounts.to_string()),
+        "InconsistentCompletion" => {
+            return Some(IncrementalDiscoveryFailure::InconsistentCompletion.to_string());
+        }
+        _ => (),
     }
     DECLARED_REFUSALS
         .iter()
@@ -209,6 +213,7 @@ fn a_result_or_a_refusal_from_another_request_is_rejected() {
             repository_path: RepositoryPath::parse("/content/example/en").expect("a legal path"),
         }],
         None,
+        DiscoveryProgress { complete: true, examined_nodes: 1 },
     )
     .expect("an ordered page");
     assert_eq!(own.require_answers(&asked), Ok(()));
@@ -218,6 +223,7 @@ fn a_result_or_a_refusal_from_another_request_is_rejected() {
             repository_path: RepositoryPath::parse("/content/other").expect("a legal path"),
         }],
         None,
+        DiscoveryProgress { complete: true, examined_nodes: 1 },
     )
     .expect("an ordered page");
     assert_eq!(
@@ -231,6 +237,7 @@ fn a_result_or_a_refusal_from_another_request_is_rejected() {
             repository_path: RepositoryPath::parse("/content/examples").expect("a legal path"),
         }],
         None,
+        DiscoveryProgress { complete: true, examined_nodes: 1 },
     )
     .expect("an ordered page");
     assert_eq!(
@@ -258,6 +265,7 @@ fn the_repository_root_contains_everything() {
             repository_path: RepositoryPath::parse("/content/example").expect("a legal path"),
         }],
         None,
+        DiscoveryProgress { complete: true, examined_nodes: 1 },
     )
     .expect("an ordered page");
     assert_eq!(page.require_answers(&asked), Ok(()));
@@ -314,14 +322,15 @@ fn predicates_combine_with_logical_and() {
 }
 
 #[test]
-fn a_budget_that_runs_out_leaves_no_page_behind() {
+fn page_budgets_resume_while_predicate_refusals_do_not_publish_a_page() {
     let vectors: Vec<Value> =
         rows(SCENARIOS).into_iter().filter(|row| text(row, "kind") == "budget").collect();
     assert_eq!(vectors.len(), 5, "all five common discriminators");
     for row in &vectors {
         let note = text(row, "note");
-        assert_eq!(row["publishes_matches"], Value::Bool(false), "{note}");
-        assert_eq!(row["publishes_token"], Value::Bool(false), "{note}");
+        let partial = matches!(text(row, "budget"), "candidate_nodes" | "execution_duration");
+        assert_eq!(row["publishes_matches"], Value::Bool(partial), "{note}");
+        assert_eq!(row["publishes_token"], Value::Bool(partial), "{note}");
         let quoted = format!("\"{}\"", text(row, "budget"));
         assert!(
             declared_budgets().contains(&quoted),
@@ -380,10 +389,16 @@ fn a_token_survives_a_page_unchanged() {
     let page = QueryPathsResult::new(
         Vec::new(),
         Some(ContinuationToken::new(spelling).expect("a shaped token")),
+        DiscoveryProgress { complete: false, examined_nodes: 0 },
     )
     .expect("an empty page may still carry a token");
     let written = serde_json::to_string(&page).expect("a page serializes");
-    assert_eq!(written, format!(r#"{{"matches":[],"next_continuation_token":"{spelling}"}}"#));
+    assert_eq!(
+        written,
+        format!(
+            r#"{{"matches":[],"next_continuation_token":"{spelling}","complete":false,"examined_nodes":0}}"#
+        )
+    );
     let read: QueryPathsResult = serde_json::from_str(&written).expect("its own bytes parse");
     assert_eq!(read, page);
 }

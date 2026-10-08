@@ -14,13 +14,16 @@
 //! cardinality mismatch is false rather than a coercion, so asking for the
 //! integer one never matches the string one.
 //!
-//! Results are strictly ascending by repository path, with no path twice. That
-//! ordering is what makes a continuation token meaningful: a page resumes after
-//! its last path, and an unordered page would have no "after".
+//! Version two returns bounded live traversal pages in repository provider order.
+//! Explicit completeness distinguishes exhaustion from a spent per-page budget;
+//! an authenticated runtime cursor resumes without rescanning the whole subtree.
 
 use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
 
+use crate::command::incremental_discovery::{
+    DiscoveryProgress, IncrementalDiscoveryFailure, require_page,
+};
 use crate::command::repository_path::{PrimaryNodeTypeName, RepositoryPath};
 use crate::command::result_window::{ContinuationToken, ResultWindow};
 use crate::command::search_predicate::{PropertyPredicate, PropertyPredicates};
@@ -171,11 +174,14 @@ pub struct PathMatch {
 /// One page of nodes that answered the question.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct QueryPathsResult {
-    /// Matches, strictly ascending by repository path bytes.
+    /// Matches in live repository provider order, without repeated paths.
     pub matches: Vec<PathMatch>,
     /// Where the next page resumes, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_continuation_token: Option<ContinuationToken>,
+    /// Explicit completeness and the work performed during this page.
+    #[serde(flatten)]
+    pub progress: DiscoveryProgress,
 }
 
 impl QueryPathsResult {
@@ -183,14 +189,19 @@ impl QueryPathsResult {
     ///
     /// # Errors
     ///
-    /// Returns [`DiscoveryResultFailure::NotStrictlyAscending`] when a path
-    /// repeats or sorts before its predecessor.
+    /// Returns an incremental discovery failure for inconsistent completeness,
+    /// excessive counts, or repeated paths.
     pub fn new(
         matches: Vec<PathMatch>,
         next_continuation_token: Option<ContinuationToken>,
-    ) -> Result<Self, DiscoveryResultFailure> {
-        require_strictly_ascending(matches.iter().map(|found| &found.repository_path))?;
-        Ok(Self { matches, next_continuation_token })
+        progress: DiscoveryProgress,
+    ) -> Result<Self, IncrementalDiscoveryFailure> {
+        require_page(
+            matches.iter().map(|found| &found.repository_path),
+            next_continuation_token.as_ref(),
+            progress,
+        )?;
+        Ok(Self { matches, next_continuation_token, progress })
     }
 
     /// Requires this page to answer `command`.
@@ -245,6 +256,10 @@ struct ResultDocument {
     /// Where the next page resumes.
     #[serde(default)]
     next_continuation_token: Option<ContinuationToken>,
+    /// Whether the retained traversal ended.
+    complete: bool,
+    /// Nodes examined while producing this page.
+    examined_nodes: u64,
 }
 
 impl<'de> Deserialize<'de> for QueryPathsResult {
@@ -252,6 +267,14 @@ impl<'de> Deserialize<'de> for QueryPathsResult {
         deserializer: Source,
     ) -> Result<Self, Source::Error> {
         let document = ResultDocument::deserialize(deserializer)?;
-        Self::new(document.matches, document.next_continuation_token).map_err(Source::Error::custom)
+        Self::new(
+            document.matches,
+            document.next_continuation_token,
+            DiscoveryProgress {
+                complete: document.complete,
+                examined_nodes: document.examined_nodes,
+            },
+        )
+        .map_err(Source::Error::custom)
     }
 }

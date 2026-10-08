@@ -13,7 +13,6 @@ pub mod operation_dispatch;
 pub mod operation_maintenance;
 pub mod operation_queries;
 pub mod operation_recovery;
-pub mod operation_scheduler;
 pub mod operation_submission;
 pub mod operation_wait;
 pub mod ownership;

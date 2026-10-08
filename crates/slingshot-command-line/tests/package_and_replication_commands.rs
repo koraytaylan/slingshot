@@ -189,7 +189,11 @@ fn both_commands_bind_the_exact_registry_identity_this_build_installed() {
             "{leaf}: whichever it is, the key requirement does not come from the access label"
         );
         let identity = SelectedCommandContractIdentity::installed(leaf).expect("it is installed");
-        assert_eq!(identity.command_semantic_contract_version, "1.0.0", "{leaf}");
+        assert_eq!(
+            identity.command_semantic_contract_version,
+            descriptor.command_semantic_contract_version,
+            "{leaf}"
+        );
         assert_eq!(
             identity.command_contract_limits_digest, descriptor.command_contract_limits_sha256,
             "{leaf}: a stale limits digest would build against a contract the agent has not got"

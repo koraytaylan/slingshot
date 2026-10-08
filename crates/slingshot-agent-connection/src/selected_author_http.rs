@@ -15,6 +15,7 @@ use crate::authentication::environment_provider::RequestAuthentication;
 use crate::author_hypertext_transfer_protocol_policy::{ExchangeDeadlines, HeadBounds, HeadReader};
 use crate::selected_author_exchange::{
     CollectedFiniteResponse, SelectedAuthorFiniteResponse, validate_collected_finite_response,
+    validate_finite_head,
 };
 use crate::selected_author_transport::{SelectedAuthorStream, SelectedAuthorTransport};
 
@@ -273,59 +274,67 @@ impl SelectedAuthorTransport {
         started: Instant,
         deadlines: ExchangeDeadlines,
     ) -> Result<FiniteHttpReceipt, FiniteHttpFailure> {
-        timeout(Duration::from_millis(deadlines.request_body_milliseconds), async {
-            stream.write_all(request).await?;
-            stream.flush().await
+        use crate::transport_observation::{Phase, Route, observe};
+        observe(Route::Author, Phase::Exchange, async {
+            observe(Route::Author, Phase::Request, async {
+                timeout(Duration::from_millis(deadlines.request_body_milliseconds), async {
+                    stream.write_all(request).await?;
+                    stream.flush().await
+                })
+                .await
+                .map_err(|_| FiniteHttpFailure::Write)?
+                .map_err(|_| FiniteHttpFailure::Write)
+            })
+            .await?;
+            let (status, headers, framing) = observe(Route::Author, Phase::ResponseHead, async {
+                timeout(
+                    Duration::from_millis(deadlines.response_header_milliseconds),
+                    read_head(&mut stream),
+                )
+                .await
+                .map_err(|_| FiniteHttpFailure::Head)?
+            })
+            .await?;
+            let response = Response::builder()
+                .status(status)
+                .version(Version::HTTP_11)
+                .body(Vec::<u8>::new())
+                .map_err(|_| FiniteHttpFailure::Head)?;
+            let (mut parts, _) = response.into_parts();
+            parts.headers = headers;
+            // A head preflight must not publish observations for an unproved body.
+            validate_finite_head(parts.status, parts.version, &parts.headers)
+                .map_err(|_| FiniteHttpFailure::Head)?;
+            let limit = AuthorAgentTransportContract::embedded()
+                .limit("maximum_finite_response_body_bytes");
+            let body = observe(Route::Author, Phase::ResponseBody, async {
+                timeout(
+                    Duration::from_millis(deadlines.finite_total_milliseconds),
+                    read_framed_body(
+                        &mut stream,
+                        framing,
+                        limit,
+                        Duration::from_millis(deadlines.finite_idle_milliseconds),
+                    ),
+                )
+                .await
+                .map_err(|_| FiniteHttpFailure::Body)?
+            })
+            .await?;
+            let response = validate_collected_finite_response(CollectedFiniteResponse {
+                response: Response::from_parts(parts, body),
+                framing_ambiguous: false,
+                trailer_section_present: false,
+                trailing_bytes: false,
+            })
+            .map_err(|_| FiniteHttpFailure::Body)?;
+            // Round up: rounding down would overstate remaining retention.
+            let nanos = started.elapsed().as_nanos();
+            let elapsed_milliseconds =
+                u64::try_from(nanos.div_ceil(NANOSECONDS_PER_MILLISECOND)).unwrap_or(u64::MAX);
+            Ok(FiniteHttpReceipt { response, elapsed_milliseconds })
         })
         .await
-        .map_err(|_| FiniteHttpFailure::Write)?
-        .map_err(|_| FiniteHttpFailure::Write)?;
-        let (status, headers, framing) = timeout(
-            Duration::from_millis(deadlines.response_header_milliseconds),
-            read_head(&mut stream),
-        )
-        .await
-        .map_err(|_| FiniteHttpFailure::Head)??;
-        let response = Response::builder()
-            .status(status)
-            .version(Version::HTTP_11)
-            .body(Vec::<u8>::new())
-            .map_err(|_| FiniteHttpFailure::Head)?;
-        let (mut parts, _) = response.into_parts();
-        parts.headers = headers;
-        // Validate policy before allocating or reading the body.
-        validate_collected_finite_response(CollectedFiniteResponse {
-            response: Response::from_parts(parts.clone(), Vec::new()),
-            framing_ambiguous: false,
-            trailer_section_present: false,
-            trailing_bytes: false,
-        })
-        .map_err(|_| FiniteHttpFailure::Head)?;
-        let limit =
-            AuthorAgentTransportContract::embedded().limit("maximum_finite_response_body_bytes");
-        let body = timeout(
-            Duration::from_millis(deadlines.finite_total_milliseconds),
-            read_framed_body(
-                &mut stream,
-                framing,
-                limit,
-                Duration::from_millis(deadlines.finite_idle_milliseconds),
-            ),
-        )
-        .await
-        .map_err(|_| FiniteHttpFailure::Body)??;
-        let response = validate_collected_finite_response(CollectedFiniteResponse {
-            response: Response::from_parts(parts, body),
-            framing_ambiguous: false,
-            trailer_section_present: false,
-            trailing_bytes: false,
-        })
-        .map_err(|_| FiniteHttpFailure::Body)?;
-        // Round up: rounding down would overstate remaining retention.
-        let nanos = started.elapsed().as_nanos();
-        let elapsed_milliseconds =
-            u64::try_from(nanos.div_ceil(NANOSECONDS_PER_MILLISECOND)).unwrap_or(u64::MAX);
-        Ok(FiniteHttpReceipt { response, elapsed_milliseconds })
     }
 }
 
@@ -669,12 +678,12 @@ pub(crate) async fn read_head(
 ) -> Result<(u16, HeaderMap, BodyFraming), FiniteHttpFailure> {
     let bounds = HeadBounds::embedded();
     let mut charged = 0_u64;
-    let status = read_line(stream, bounds.head_bytes, &mut charged, bounds.head_bytes).await?;
-    let status = decode_response_status(&status)?;
+    let mut line = read_line(stream, bounds.head_bytes, &mut charged, bounds.head_bytes).await?;
+    let status = decode_response_status(&line)?;
     let mut headers = HeaderMap::new();
     let mut reader = HeadReader::new(bounds);
     loop {
-        let line = read_field_line(stream, bounds, reader.fields(), &mut charged).await?;
+        read_field_line(stream, bounds, reader.fields(), &mut charged, &mut line).await?;
         if line.is_empty() {
             break;
         }
@@ -766,8 +775,9 @@ async fn read_field_line(
     bounds: HeadBounds,
     fields: usize,
     charged: &mut u64,
-) -> Result<Vec<u8>, FiniteHttpFailure> {
-    let mut line = Vec::new();
+    line: &mut Vec<u8>,
+) -> Result<(), FiniteHttpFailure> {
+    line.clear();
     let mut accounting = FieldByteAccounting::default();
     let mut carriage_return = false;
     loop {
@@ -777,7 +787,7 @@ async fn read_field_line(
         let byte = stream.read_u8().await.map_err(|_| FiniteHttpFailure::Head)?;
         *charged += 1;
         if carriage_return {
-            return if byte == b'\n' { Ok(line) } else { Err(FiniteHttpFailure::Head) };
+            return if byte == b'\n' { Ok(()) } else { Err(FiniteHttpFailure::Head) };
         }
         if byte == b'\r' {
             carriage_return = true;
@@ -825,6 +835,33 @@ impl FieldByteAccounting {
 #[cfg(test)]
 mod response_field_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn field_scratch_reuses_capacity_and_clears_previous_values() {
+        const SCRATCH_CAPACITY: usize = 128;
+        const NO_FIELDS: usize = 0;
+        const UNCHARGED_BYTES: u64 = 0;
+        let mut scratch = Vec::with_capacity(SCRATCH_CAPACITY);
+        scratch.extend_from_slice(b"synthetic-previous-private-header-value");
+        let allocation = scratch.as_ptr();
+        let mut charged = UNCHARGED_BYTES;
+        for wire in [b"synthetic: first\r\n".as_slice(), b"z: 1\r\n", b"\r\n"] {
+            let mut stream = wire;
+            read_field_line(
+                &mut stream,
+                HeadBounds::embedded(),
+                NO_FIELDS,
+                &mut charged,
+                &mut scratch,
+            )
+            .await
+            .unwrap();
+            assert_eq!(scratch, wire.strip_suffix(b"\r\n").unwrap());
+            assert_eq!(scratch.as_ptr(), allocation);
+            assert_eq!(scratch.capacity(), SCRATCH_CAPACITY);
+            assert!(stream.is_empty());
+        }
+    }
 
     #[test]
     fn finite_status_categories_and_lexical_shape_are_exact() {
@@ -884,8 +921,14 @@ mod response_field_tests {
             };
             let client = async {
                 let socket = tokio::net::TcpStream::connect(address).await.unwrap();
-                let mut stream = SelectedAuthorStream::Cleartext(socket);
+                let mut stream = SelectedAuthorStream::Cleartext(
+                    crate::transport_observation::ObservedSocket::new(
+                        socket,
+                        crate::transport_observation::Route::Author,
+                    ),
+                );
                 let mut charged = 0;
+                let mut scratch = Vec::new();
                 let result = read_field_line(
                     &mut stream,
                     HeadBounds {
@@ -895,10 +938,14 @@ mod response_field_tests {
                     },
                     fields,
                     &mut charged,
+                    &mut scratch,
                 )
                 .await;
                 match expected {
-                    Some(line) => assert_eq!(result.unwrap(), line.as_bytes(), "{wire:?}"),
+                    Some(line) => {
+                        result.unwrap();
+                        assert_eq!(scratch, line.as_bytes(), "{wire:?}");
+                    }
                     None => assert!(matches!(result, Err(FiniteHttpFailure::Head)), "{wire:?}"),
                 }
                 assert!(charged <= raw_limit);

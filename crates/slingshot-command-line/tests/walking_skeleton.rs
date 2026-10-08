@@ -62,6 +62,9 @@ fn product_executable() -> ExecutablePath {
 #[path = "support/runtime_fixture.rs"]
 mod runtime_fixture;
 
+#[path = "walking-skeleton/scheduler.rs"]
+mod scheduler;
+
 fn configured_runtime_root(name: &str) -> TemporaryRuntimeRoot {
     let root = TemporaryRuntimeRoot::create(name).unwrap();
     runtime_fixture::prepare(root.path(), PROFILE, &[ENVIRONMENT, SECOND_ENVIRONMENT]);

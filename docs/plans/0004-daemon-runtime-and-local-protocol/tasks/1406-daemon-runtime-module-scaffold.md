@@ -31,7 +31,6 @@ touches:
   - crates/slingshot-daemon/src/startup.rs
   - crates/slingshot-daemon/src/diagnostics.rs
   - crates/slingshot-daemon/src/unavailable_operation_executor.rs
-  - crates/slingshot-daemon/src/operation_scheduler.rs
   - crates/slingshot-daemon/src/operation_submission.rs
   - crates/slingshot-daemon/src/operation_queries.rs
   - crates/slingshot-daemon/src/operation_wait.rs

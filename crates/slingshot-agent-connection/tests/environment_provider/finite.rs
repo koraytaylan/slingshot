@@ -12,7 +12,7 @@ const EXCHANGE_TIMEOUT_SECONDS: u64 = 5;
 #[tokio::test]
 async fn selected_http2_finite_exchange_uses_exact_request_over_cleartext_and_tls() {
     use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
-    use slingshot_agent_connection::selected_author_transport::SelectedAuthorStream;
+
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::time::{Duration, timeout};
 
@@ -104,7 +104,7 @@ async fn selected_http2_finite_exchange_uses_exact_request_over_cleartext_and_tl
                 assert_eq!(socket.get_ref().1.alpn_protocol(), Some(b"h2".as_slice()));
                 Box::new(socket)
             } else {
-                Box::new(SelectedAuthorStream::Cleartext(socket))
+                Box::new(socket)
             };
             let mut preface = [0; HTTP2_PREPARATION_BYTES];
             socket.read_exact(&mut preface).await.unwrap();

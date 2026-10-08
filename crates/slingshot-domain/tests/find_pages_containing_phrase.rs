@@ -17,6 +17,9 @@ use slingshot_domain::command::find_pages_containing_phrase::{
     PAGE_PRIMARY_NODE_TYPE, PAGE_TITLE_PROPERTY, PageMatch, PageSearchFailure, PageTitle,
     SearchPhrase, maximum_page_title_bytes, maximum_search_phrase_bytes,
 };
+use slingshot_domain::command::incremental_discovery::{
+    DiscoveryProgress, IncrementalDiscoveryFailure,
+};
 use slingshot_domain::command::query_paths::{AnchorRefusal, DiscoveryResultFailure};
 use slingshot_domain::command::repository_path::RepositoryPath;
 
@@ -46,9 +49,14 @@ const DECLARED_REFUSALS: &[(&str, PageSearchFailure)] = &[
 ];
 
 /// Refusals the shared discovery values make, which the results fixture names.
-const DECLARED_ORDER_REFUSALS: &[(&str, DiscoveryResultFailure)] = &[
-    ("NotStrictlyAscending", DiscoveryResultFailure::NotStrictlyAscending),
-    ("NotThisRequest", DiscoveryResultFailure::NotThisRequest),
+const DECLARED_SCOPE_REFUSALS: &[(&str, DiscoveryResultFailure)] =
+    &[("NotThisRequest", DiscoveryResultFailure::NotThisRequest)];
+
+/// Refusals that version-two explicit progress makes.
+const DECLARED_PROGRESS_REFUSALS: &[(&str, IncrementalDiscoveryFailure)] = &[
+    ("RepeatedPath", IncrementalDiscoveryFailure::RepeatedPath),
+    ("InconsistentCompletion", IncrementalDiscoveryFailure::InconsistentCompletion),
+    ("InvalidCounts", IncrementalDiscoveryFailure::InvalidCounts),
 ];
 
 /// Name the fixtures give to the refusals the closed object makes on its own.
@@ -77,7 +85,13 @@ fn refusal_rendering(reason: &str) -> Option<String> {
         .find(|(name, _)| *name == reason)
         .map(|(_, failure)| failure.to_string())
         .or_else(|| {
-            DECLARED_ORDER_REFUSALS
+            DECLARED_SCOPE_REFUSALS
+                .iter()
+                .find(|(name, _)| *name == reason)
+                .map(|(_, failure)| failure.to_string())
+        })
+        .or_else(|| {
+            DECLARED_PROGRESS_REFUSALS
                 .iter()
                 .find(|(name, _)| *name == reason)
                 .map(|(_, failure)| failure.to_string())
@@ -90,7 +104,8 @@ fn every_refusal_rendering() -> Vec<String> {
     DECLARED_REFUSALS
         .iter()
         .map(|(_, failure)| failure.to_string())
-        .chain(DECLARED_ORDER_REFUSALS.iter().map(|(_, failure)| failure.to_string()))
+        .chain(DECLARED_SCOPE_REFUSALS.iter().map(|(_, failure)| failure.to_string()))
+        .chain(DECLARED_PROGRESS_REFUSALS.iter().map(|(_, failure)| failure.to_string()))
         .collect()
 }
 
@@ -279,8 +294,9 @@ fn a_result_from_another_request_is_rejected() {
             title: None,
         }],
         None,
+        DiscoveryProgress { complete: true, examined_nodes: 1 },
     )
-    .expect("an ordered page");
+    .expect("a complete unique page");
     assert_eq!(own.require_answers(&asked), Ok(()));
 
     let elsewhere = FindPagesContainingPhraseResult::new(
@@ -289,8 +305,9 @@ fn a_result_from_another_request_is_rejected() {
             title: None,
         }],
         None,
+        DiscoveryProgress { complete: true, examined_nodes: 1 },
     )
-    .expect("an ordered page");
+    .expect("a complete unique page");
     assert_eq!(
         elsewhere.require_answers(&asked),
         Err(DiscoveryResultFailure::NotThisRequest),
@@ -299,7 +316,7 @@ fn a_result_from_another_request_is_rejected() {
 }
 
 #[test]
-fn a_budget_that_runs_out_leaves_no_page_behind() {
+fn legacy_budget_vectors_record_refusal_without_progress() {
     let vectors: Vec<Value> =
         rows(SCENARIOS).into_iter().filter(|row| text(row, "kind") == "budget").collect();
     assert_eq!(vectors.len(), 5, "all five common discriminators");

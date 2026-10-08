@@ -34,6 +34,7 @@ impl BoundRequest {
     ) -> Result<Option<PreparedAdmission>, OperationResponse> {
         let OperationRequest::Execute {
             command,
+            caller_identity,
             operation_identifier,
             workflow_correlation_identifier,
         } = self.request()
@@ -43,22 +44,12 @@ impl BoundRequest {
         if !self.execution_available {
             return Err(OperationResponse::ExecutorUnavailable);
         }
-        if operation_identifier.is_empty()
-            || operation_identifier.contains('\0')
-            || !super::listing::identifier_is_representable(
-                &self.envelope.author_target_identity_digest,
-                operation_identifier,
-            )
-            || workflow_correlation_identifier.as_ref().is_some_and(|identifier| {
-                identifier.is_empty()
-                    || identifier.contains('\0')
-                    || identifier.len() as u64
-                        > DaemonRuntimeContract::embedded()
-                            .limit("maximum_workflow_correlation_identifier_bytes")
-            })
-        {
-            return Err(malformed());
-        }
+        validate_identifiers(
+            &self.envelope.author_target_identity_digest,
+            operation_identifier,
+            workflow_correlation_identifier.as_deref(),
+            caller_identity.as_deref(),
+        )?;
         let typed: Command = serde_json::from_value(command.clone()).map_err(|_| malformed())?;
         let wire_name = typed.wire_name();
         let installed = SelectedCommandContractIdentity::installed(wire_name)
@@ -91,7 +82,7 @@ impl BoundRequest {
             request: AdmissionRequest {
                 author_target_identity: self.envelope.author_target_identity_digest.clone(),
                 author_target_identity_digest: self.envelope.author_target_identity_digest.clone(),
-                caller_identity: None,
+                caller_identity: caller_identity.clone(),
                 canonical_command,
                 command_fingerprint,
                 command_wire_name: wire_name.to_owned(),
@@ -177,4 +168,29 @@ fn contract_failure() -> OperationResponse {
     OperationResponse::InternalFailure {
         detail: "the installed command binding could not be established".to_owned(),
     }
+}
+
+/// Rejects unbounded correlation labels and noncanonical opaque producer identities.
+fn validate_identifiers(
+    target: &str,
+    operation: &str,
+    workflow: Option<&str>,
+    caller: Option<&str>,
+) -> Result<(), OperationResponse> {
+    use slingshot_domain::producer_identity::ProducerIdentity;
+    if operation.is_empty()
+        || operation.contains('\0')
+        || !super::listing::identifier_is_representable(target, operation)
+        || workflow.is_some_and(|identifier| {
+            identifier.is_empty()
+                || identifier.contains('\0')
+                || identifier.len() as u64
+                    > DaemonRuntimeContract::embedded()
+                        .limit("maximum_workflow_correlation_identifier_bytes")
+        })
+        || caller.is_some_and(|identity| ProducerIdentity::parse(identity).is_err())
+    {
+        return Err(malformed());
+    }
+    Ok(())
 }

@@ -95,12 +95,6 @@ crates/slingshot-agent-connection/src/authentication/identity_management_client_
 crates/slingshot-agent-connection/src/authentication/identity_management_client_wire_tests.rs	153	numeric-value-carries-no-name	5
 crates/slingshot-agent-connection/src/authentication/identity_management_client_wire_tests.rs	189	numeric-value-carries-no-name	5
 crates/slingshot-agent-connection/src/authentication/identity_management_client_wire_tests.rs	254	numeric-value-carries-no-name	5
-crates/slingshot-agent-connection/src/authentication/identity_management_connector.rs	29	declared-name-is-not-spelled-in-full	f
-crates/slingshot-agent-connection/src/authentication/identity_management_connector.rs	29	declared-name-is-not-spelled-in-full	fmt
-crates/slingshot-agent-connection/src/authentication/identity_management_connector.rs	45	declared-name-is-not-spelled-in-full	f
-crates/slingshot-agent-connection/src/authentication/identity_management_connector.rs	45	declared-name-is-not-spelled-in-full	fmt
-crates/slingshot-agent-connection/src/authentication/identity_management_connector.rs	52	fallible-interface-omits-its-failure-section	new
-crates/slingshot-agent-connection/src/authentication/identity_management_connector.rs	76	fallible-interface-omits-its-failure-section	connect
 crates/slingshot-agent-connection/src/authentication/identity_management_connector_tests.rs	46	declared-name-is-not-spelled-in-full	config
 crates/slingshot-agent-connection/src/authentication/identity_management_connector_tests.rs	83	numeric-value-carries-no-name	3
 crates/slingshot-agent-connection/src/authentication/identity_management_connector_tests.rs	115	numeric-value-carries-no-name	5
@@ -109,31 +103,6 @@ crates/slingshot-agent-connection/src/authentication/identity_management_connect
 crates/slingshot-agent-connection/src/authentication/identity_management_exchange.rs	109	declared-name-is-not-spelled-in-full	f
 crates/slingshot-agent-connection/src/authentication/identity_management_exchange.rs	109	declared-name-is-not-spelled-in-full	fmt
 crates/slingshot-agent-connection/src/authentication/identity_management_exchange.rs	259	numeric-value-carries-no-name	3
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	21	declared-name-is-not-spelled-in-full	S
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	21	fallible-interface-omits-its-failure-section	exchange_http1
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	21	function-branches-too-many-ways	exchange_http1 reaches 17
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	55	numeric-value-carries-no-name	100
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	55	numeric-value-carries-no-name	200
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	58	numeric-value-carries-no-name	300
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	58	numeric-value-carries-no-name	400
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	93	numeric-value-carries-no-name	2
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	152	declared-name-is-not-spelled-in-full	S
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	160	numeric-value-carries-no-name	13
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	162	numeric-value-carries-no-name	127
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	162	numeric-value-carries-no-name	32
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	168	numeric-value-carries-no-name	100
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	169	numeric-value-carries-no-name	10
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	171	numeric-value-carries-no-name	100
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	171	numeric-value-carries-no-name	600
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	177	numeric-value-carries-no-name	2
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	201	numeric-value-carries-no-name	127
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	201	numeric-value-carries-no-name	32
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	208	declared-name-is-not-spelled-in-full	n
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	220	declared-name-is-not-spelled-in-full	S
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	258	function-branches-too-many-ways	framing reaches 13
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	294	declared-name-is-not-spelled-in-full	S
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	294	declared-name-is-not-spelled-in-full	a
-crates/slingshot-agent-connection/src/authentication/identity_management_http1.rs	295	declared-name-is-not-spelled-in-full	a
 crates/slingshot-agent-connection/src/authentication/identity_management_http1_tests.rs	7	numeric-value-carries-no-name	1000
 crates/slingshot-agent-connection/src/authentication/identity_management_http1_tests.rs	12	numeric-value-carries-no-name	4096
 crates/slingshot-agent-connection/src/authentication/identity_management_http1_tests.rs	27	numeric-value-carries-no-name	14
@@ -637,33 +606,6 @@ crates/slingshot-agent-connection/src/selected_author_lookup.rs	583	declared-nam
 crates/slingshot-agent-connection/src/selected_author_lookup.rs	585	declared-name-is-not-spelled-in-full	a
 crates/slingshot-agent-connection/src/selected_author_lookup.rs	643	numeric-value-carries-no-name	200
 crates/slingshot-agent-connection/src/selected_author_lookup.rs	674	numeric-value-carries-no-name	1_000_000
-crates/slingshot-agent-connection/src/selected_author_submission.rs	45	fallible-interface-omits-its-failure-section	send_submission_with_fresh_token
-crates/slingshot-agent-connection/src/selected_author_submission.rs	64	fallible-interface-omits-its-failure-section	send_submission_with_fresh_token_guarded
-crates/slingshot-agent-connection/src/selected_author_submission.rs	86	fallible-interface-omits-its-failure-section	send_submission_with_fresh_token_http2_guarded
-crates/slingshot-agent-connection/src/selected_author_submission.rs	108	fallible-interface-omits-its-failure-section	send_submission_with_fresh_token_negotiated_guarded
-crates/slingshot-agent-connection/src/selected_author_submission.rs	131	fallible-interface-omits-its-failure-section	send_submission_authenticated_guarded
-crates/slingshot-agent-connection/src/selected_author_submission.rs	156	numeric-value-carries-no-name	1_000_000
-crates/slingshot-agent-connection/src/selected_author_submission.rs	167	numeric-value-carries-no-name	1_000_000
-crates/slingshot-agent-connection/src/selected_author_submission.rs	187	fallible-interface-omits-its-failure-section	send_submission_authenticated_async_guarded
-crates/slingshot-agent-connection/src/selected_author_submission.rs	222	numeric-value-carries-no-name	1_000_000
-crates/slingshot-agent-connection/src/selected_author_submission.rs	297	numeric-value-carries-no-name	200
-crates/slingshot-agent-connection/src/selected_author_submission.rs	328	fallible-interface-omits-its-failure-section	require_submission
-crates/slingshot-agent-connection/src/selected_author_submission.rs	340	fallible-interface-omits-its-failure-section	send_submission
-crates/slingshot-agent-connection/src/selected_author_submission.rs	360	function-branches-too-many-ways	exchange_submission reaches 16
-crates/slingshot-agent-connection/src/selected_author_submission.rs	437	numeric-value-carries-no-name	401
-crates/slingshot-agent-connection/src/selected_author_submission.rs	455	declared-name-is-not-spelled-in-full	b
-crates/slingshot-agent-connection/src/selected_author_submission.rs	456	numeric-value-carries-no-name	1000
-crates/slingshot-agent-connection/src/selected_author_submission.rs	542	numeric-value-carries-no-name	64
-crates/slingshot-agent-connection/src/selected_author_submission.rs	543	numeric-value-carries-no-name	64
-crates/slingshot-agent-connection/src/selected_author_submission.rs	545	numeric-value-carries-no-name	7
-crates/slingshot-agent-connection/src/selected_author_submission.rs	589	fallible-interface-omits-its-failure-section	require_submission_derivation
-crates/slingshot-agent-connection/src/selected_author_transport.rs	138	declared-name-is-not-spelled-in-full	fmt
-crates/slingshot-agent-connection/src/selected_author_transport.rs	239	fallible-interface-omits-its-failure-section	require_execution
-crates/slingshot-agent-connection/src/selected_author_transport.rs	252	fallible-interface-omits-its-failure-section	connect
-crates/slingshot-agent-connection/src/selected_author_transport.rs	261	fallible-interface-omits-its-failure-section	connect_http2
-crates/slingshot-agent-connection/src/selected_author_transport.rs	270	fallible-interface-omits-its-failure-section	connect_negotiated
-crates/slingshot-agent-connection/src/selected_author_transport.rs	291	numeric-value-carries-no-name	443
-crates/slingshot-agent-connection/src/selected_author_transport.rs	291	numeric-value-carries-no-name	80
 crates/slingshot-agent-connection/src/structured_job_result.rs	92	fallible-interface-omits-its-failure-section	decode_terminal_result
 crates/slingshot-agent-connection/src/structured_job_result.rs	162	function-branches-too-many-ways	decode_result_for_command reaches 11
 crates/slingshot-agent-connection/src/structured_job_result.rs	401	declared-name-is-not-spelled-in-full	fmt
@@ -883,7 +825,6 @@ crates/slingshot-agent-protocol/tests/physical_job_missing_contract.rs	11	declar
 crates/slingshot-agent-protocol/tests/subscription_high_water_contract.rs	11	numeric-value-carries-no-name	7
 crates/slingshot-agent-protocol/tests/subscription_high_water_contract.rs	17	declared-name-is-not-spelled-in-full	v
 crates/slingshot-command-line/src/application.rs	1613	file-is-longer-than-the-ceiling	1613 lines
-crates/slingshot-command-line/src/daemon_answer.rs	430	numeric-value-carries-no-name	2
 crates/slingshot-command-line/src/model_context_protocol/current_stateless_revision.rs	133	numeric-value-carries-no-name	32_002
 crates/slingshot-command-line/src/model_context_protocol/standard_stream_transport.rs	77	fallible-interface-omits-its-failure-section	read_bounded_line
 crates/slingshot-command-line/src/property_document.rs	119	function-branches-too-many-ways	require_unique_members reaches 18
@@ -1030,7 +971,6 @@ crates/slingshot-daemon/src/operation_dispatch.rs	544	numeric-value-carries-no-n
 crates/slingshot-daemon/src/operation_dispatch.rs	683	numeric-value-carries-no-name	2
 crates/slingshot-daemon/src/operation_dispatch.rs	736	numeric-value-carries-no-name	3
 crates/slingshot-daemon/src/operation_dispatch.rs	830	numeric-value-carries-no-name	2
-crates/slingshot-daemon/src/operation_dispatch/admission.rs	31	function-branches-too-many-ways	prepare_admission reaches 13
 crates/slingshot-daemon/src/operation_dispatch/listing.rs	61	function-branches-too-many-ways	decode reaches 12
 crates/slingshot-daemon/src/operation_dispatch/listing.rs	235	numeric-value-carries-no-name	2
 crates/slingshot-daemon/src/operation_dispatch/listing.rs	236	numeric-value-carries-no-name	2
@@ -1056,29 +996,6 @@ crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	606	numeric-valu
 crates/slingshot-daemon/src/operation_dispatch/tests/results.rs	648	numeric-value-carries-no-name	2
 crates/slingshot-daemon/src/operation_dispatch/wait.rs	19	function-branches-too-many-ways	wait reaches 13
 crates/slingshot-daemon/src/operation_submission.rs	227	fallible-interface-omits-its-failure-section	settle_with_scheduler_fence
-crates/slingshot-daemon/src/retained_author_protocol.rs	52	declared-name-is-not-spelled-in-full	fmt
-crates/slingshot-daemon/src/retained_author_protocol.rs	70	fallible-interface-omits-its-failure-section	new
-crates/slingshot-daemon/src/retained_author_protocol.rs	95	fallible-interface-omits-its-failure-section	new_over
-crates/slingshot-daemon/src/retained_author_protocol.rs	121	fallible-interface-omits-its-failure-section	new_with_authentication
-crates/slingshot-daemon/src/retained_author_protocol.rs	178	numeric-value-carries-no-name	1_000_000
-crates/slingshot-daemon/src/retained_author_protocol.rs	245	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	246	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	247	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	248	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	249	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	250	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	286	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	287	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	288	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	289	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	290	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	322	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	322	function-branches-too-many-ways	complete_artifacts reaches 26
-crates/slingshot-daemon/src/retained_author_protocol.rs	323	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	324	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	325	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/retained_author_protocol.rs	326	declared-name-is-not-spelled-in-full	a
-crates/slingshot-daemon/src/runtime_builder.rs	173	fallible-interface-omits-its-failure-section	execute_retained_with_claim
 crates/slingshot-daemon/src/runtime_builder/publication_recovery.rs	25	declared-name-is-not-spelled-in-full	a
 crates/slingshot-daemon/src/runtime_builder/publication_recovery.rs	28	declared-name-is-not-spelled-in-full	a
 crates/slingshot-daemon/src/runtime_builder/publication_recovery.rs	91	numeric-value-carries-no-name	2
@@ -1126,7 +1043,6 @@ crates/slingshot-daemon/tests/bound_author_result.rs	559	numeric-value-carries-n
 crates/slingshot-daemon/tests/durable_idempotent_submission.rs	191	numeric-value-carries-no-name	9
 crates/slingshot-daemon/tests/durable_idempotent_submission.rs	211	numeric-value-carries-no-name	2
 crates/slingshot-daemon/tests/durable_idempotent_submission.rs	212	numeric-value-carries-no-name	2
-crates/slingshot-daemon/tests/operation_scheduler.rs	143	numeric-value-carries-no-name	2
 crates/slingshot-daemon/tests/operation_submission.rs	84	numeric-value-carries-no-name	1000
 crates/slingshot-daemon/tests/operation_submission.rs	107	numeric-value-carries-no-name	2
 crates/slingshot-daemon/tests/operation_submission.rs	108	numeric-value-carries-no-name	40000
@@ -1585,26 +1501,6 @@ crates/slingshot-storage/src/maintenance_results/write.rs	509	numeric-value-carr
 crates/slingshot-storage/src/maintenance_results/write.rs	522	numeric-value-carries-no-name	2
 crates/slingshot-storage/src/maintenance_results/write.rs	529	numeric-value-carries-no-name	2
 crates/slingshot-storage/src/maintenance_results/write.rs	532	numeric-value-carries-no-name	2
-crates/slingshot-storage/src/operation/scheduler_claim.rs	79	numeric-value-carries-no-name	2
-crates/slingshot-storage/src/operation/scheduler_claim.rs	80	numeric-value-carries-no-name	3
-crates/slingshot-storage/src/operation/scheduler_claim.rs	93	fallible-interface-omits-its-failure-section	claim_next_queued
-crates/slingshot-storage/src/operation/scheduler_claim.rs	109	numeric-value-carries-no-name	2
-crates/slingshot-storage/src/operation/scheduler_claim.rs	138	fallible-interface-omits-its-failure-section	claim
-crates/slingshot-storage/src/operation/scheduler_claim.rs	163	numeric-value-carries-no-name	2
-crates/slingshot-storage/src/operation/scheduler_claim.rs	222	fallible-interface-omits-its-failure-section	checkpoint
-crates/slingshot-storage/src/operation/scheduler_claim.rs	237	fallible-interface-omits-its-failure-section	renew
-crates/slingshot-storage/src/operation/scheduler_claim.rs	261	fallible-interface-omits-its-failure-section	release
-crates/slingshot-storage/src/operation/scheduler_claim.rs	297	fallible-interface-omits-its-failure-section	facts
-crates/slingshot-storage/src/operation/scheduler_claim.rs	311	numeric-value-carries-no-name	2
-crates/slingshot-storage/src/operation/scheduler_claim.rs	334	numeric-value-carries-no-name	4096
-crates/slingshot-storage/src/operation/scheduler_claim.rs	335	numeric-value-carries-no-name	262_144
-crates/slingshot-storage/src/operation/scheduler_claim.rs	336	numeric-value-carries-no-name	5000
-crates/slingshot-storage/src/operation/scheduler_claim.rs	339	numeric-value-carries-no-name	64
-crates/slingshot-storage/src/operation/scheduler_claim.rs	397	numeric-value-carries-no-name	4096
-crates/slingshot-storage/src/operation/scheduler_claim.rs	398	numeric-value-carries-no-name	262_144
-crates/slingshot-storage/src/operation/scheduler_claim.rs	399	numeric-value-carries-no-name	5000
-crates/slingshot-storage/src/operation/scheduler_claim.rs	403	numeric-value-carries-no-name	64
-crates/slingshot-storage/src/operation/scheduler_claim.rs	449	numeric-value-carries-no-name	64
 crates/slingshot-storage/src/operation_repository.rs	671	function-branches-too-many-ways	mutate reaches 11
 crates/slingshot-storage/src/persistent_capacity.rs	71	numeric-value-carries-no-name	4096
 crates/slingshot-storage/src/persistent_capacity.rs	72	numeric-value-carries-no-name	262144
@@ -1663,7 +1559,6 @@ crates/slingshot-storage/src/persistent_capacity/maintenance_recovery.rs	513	num
 crates/slingshot-storage/src/persistent_capacity/maintenance_recovery.rs	514	numeric-value-carries-no-name	2
 crates/slingshot-storage/src/persistent_capacity/maintenance_recovery.rs	515	numeric-value-carries-no-name	2
 crates/slingshot-storage/src/persistent_capacity/maintenance_recovery.rs	525	numeric-value-carries-no-name	2
-crates/slingshot-storage/src/sqlite_statement_inventory.rs	1054	file-is-longer-than-the-ceiling	1054 lines
 crates/slingshot-storage/tests/artifact_stage_recovery.rs	19	numeric-value-carries-no-name	4096
 crates/slingshot-storage/tests/artifact_stage_recovery.rs	20	numeric-value-carries-no-name	262144
 crates/slingshot-storage/tests/artifact_stage_recovery.rs	21	numeric-value-carries-no-name	5000
@@ -1739,6 +1634,3 @@ scripts/capture_release_gates	115	numeric-value-carries-no-name	60
 scripts/capture_release_gates	191	numeric-value-carries-no-name	2
 scripts/capture_release_gates	193	numeric-value-carries-no-name	2
 scripts/platform_quality	26	numeric-value-carries-no-name	60
-scripts/quality	131	numeric-value-carries-no-name	256
-scripts/quality	139	numeric-value-carries-no-name	256
-scripts/quality	143	declared-name-is-not-spelled-in-full	render_duplicate_config

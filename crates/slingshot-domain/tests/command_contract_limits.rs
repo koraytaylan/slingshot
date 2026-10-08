@@ -15,8 +15,10 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use slingshot_domain::command::command_identity::{
-    CONTRACT_CANONICALIZATION, CONTRACT_DURATION_UNIT, CONTRACT_FORMAT, CommandContract,
-    CommandSemanticContractVersion, INITIAL_COMMAND_VERSION, VersionFailure,
+    ASSET_DISCOVERY_VERSION, CONTRACT_CANONICALIZATION, CONTRACT_DURATION_UNIT, CONTRACT_FORMAT,
+    CommandContract, CommandSemanticContractVersion, INCREMENTAL_DISCOVERY_METADATA_VERSION,
+    INCREMENTAL_DISCOVERY_VERSION, INITIAL_COMMAND_VERSION, PAGE_SEARCH_VERSION,
+    SHARED_METADATA_COMMAND_VERSION, VersionFailure,
 };
 
 /// Path of the committed manifest, relative to this crate.
@@ -152,7 +154,7 @@ fn rendering_the_parsed_contract_reproduces_the_committed_manifest() {
 }
 
 #[test]
-fn every_command_this_plan_publishes_is_at_the_one_initial_version() {
+fn only_incremental_discovery_commands_use_the_second_version() {
     let declared: Vec<&str> = CommandContract::embedded()
         .command_semantic_contract_versions
         .keys()
@@ -161,8 +163,28 @@ fn every_command_this_plan_publishes_is_at_the_one_initial_version() {
     let mut expected: Vec<&str> = COMMANDS.to_vec();
     expected.sort_unstable();
     assert_eq!(declared, expected, "the command inventory changed");
-    for version in CommandContract::embedded().command_semantic_contract_versions.values() {
-        assert_eq!(version, INITIAL_COMMAND_VERSION, "a command chose its own version");
+    let incremental = [
+        "query_paths",
+        "list_component_definitions",
+        "list_components",
+        "list_content_fragments",
+        "list_experience_fragments",
+    ];
+    for (command, version) in &CommandContract::embedded().command_semantic_contract_versions {
+        let expected = if ["find_pages_containing_phrase", "find_pages_using_components"]
+            .contains(&command.as_str())
+        {
+            PAGE_SEARCH_VERSION
+        } else if command == "find_assets_by_metadata" {
+            ASSET_DISCOVERY_VERSION
+        } else if command == "query_paths" {
+            INCREMENTAL_DISCOVERY_VERSION
+        } else if incremental.contains(&command.as_str()) {
+            INCREMENTAL_DISCOVERY_METADATA_VERSION
+        } else {
+            SHARED_METADATA_COMMAND_VERSION
+        };
+        assert_eq!(version, expected, "{command} advertises an unsupported version");
     }
     assert!(
         CommandSemanticContractVersion::parse(INITIAL_COMMAND_VERSION).is_ok(),

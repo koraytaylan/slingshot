@@ -22,7 +22,7 @@
 
 use sha2::{Digest as _, Sha256};
 
-use crate::command::command_identity::{CommandContract, INITIAL_COMMAND_VERSION};
+use crate::command::command_identity::CommandContract;
 use crate::command::schema::{
     CANONICAL_CONTRACT_ANNOTATION, SchemaRole, canonical_contract_digest, command_schema,
     installed_schema_manifest,
@@ -108,6 +108,12 @@ impl SelectedCommandContractIdentity {
         let digests = manifest["schemas"].get(wire_name).ok_or_else(|| {
             ContractIdentityFailure::UnknownCommand { wire_name: wire_name.to_owned() }
         })?;
+        let version = CommandContract::embedded()
+            .command_semantic_contract_versions
+            .get(wire_name)
+            .ok_or_else(|| ContractIdentityFailure::UnknownCommand {
+                wire_name: wire_name.to_owned(),
+            })?;
         for role in SchemaRole::both() {
             require_annotation(wire_name, role, &installed)?;
         }
@@ -117,7 +123,7 @@ impl SelectedCommandContractIdentity {
                 .as_str()
                 .unwrap_or_default()
                 .to_owned(),
-            command_semantic_contract_version: INITIAL_COMMAND_VERSION.to_owned(),
+            command_semantic_contract_version: version.clone(),
             command_wire_name: wire_name.to_owned(),
             result_schema_digest: role_digest(digests, SchemaRole::Result),
         })

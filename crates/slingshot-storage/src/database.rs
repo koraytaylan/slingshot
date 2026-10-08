@@ -50,8 +50,7 @@ fn install_cursor_order(connection: &Connection) -> Result<(), DatabaseFailure> 
 
 /// Migrations, in the order they apply.
 ///
-/// Embedded rather than read from disk, so the schema a binary applies is the
-/// one it was built with and cannot be swapped underneath it.
+/// Embedded at build time so a binary always applies its own reviewed schema.
 pub const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("../migrations/0001-operations.sql")),
     (2, include_str!("../migrations/0002-agent-jobs.sql")),
@@ -66,6 +65,7 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
     (11, include_str!("../migrations/0011-artifact-acquisition-anchor.sql")),
     (12, include_str!("../migrations/0012-maintenance-publication.sql")),
     (13, include_str!("../migrations/0013-operation-scheduler-claim.sql")),
+    (14, include_str!("../migrations/0014-producer-turns.sql")),
 ];
 
 /// The one temporary-storage mode the reviewed SQLite build may report.

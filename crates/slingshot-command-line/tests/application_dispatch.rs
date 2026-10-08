@@ -81,7 +81,8 @@ const ENDPOINT: &str = "/scenario/endpoint";
 const PRODUCT_VERSION: &str = "0.0.0";
 
 /// The operation-protocol version every side of a scenario speaks.
-const SPOKEN_VERSION: u32 = 1;
+const SPOKEN_VERSION: u32 =
+    slingshot_domain::daemon_runtime_contract::DAEMON_OPERATION_PROTOCOL_VERSION as u32;
 
 /// The operation a scenario daemon admits.
 const OPERATION_IDENTIFIER: &str = "scenario-operation";
@@ -344,6 +345,8 @@ struct Fakes {
     operation_request_identifiers: RefCell<Vec<String>>,
     /// How many identities the fixture invented.
     invented_identifiers: Cell<u32>,
+    producer: Result<Option<String>, String>,
+    submitted_producers: RefCell<Vec<Option<String>>>,
 }
 
 impl Default for Fakes {
@@ -367,6 +370,8 @@ impl Default for Fakes {
             reached: Reached::default(),
             operation_request_identifiers: RefCell::new(Vec::new()),
             invented_identifiers: Cell::new(0),
+            producer: Ok(None),
+            submitted_producers: RefCell::new(Vec::new()),
         }
     }
 }
@@ -399,6 +404,10 @@ impl ProcessBoundary for Fakes {
     }
 }
 impl RequestIdentityBoundary for Fakes {
+    fn producer_identity(&self) -> Result<Option<String>, String> {
+        self.producer.clone()
+    }
+
     fn invent_request_identifier(&self) -> String {
         let sequence = self.invented_identifiers.get() + 1;
         self.invented_identifiers.set(sequence);
@@ -451,6 +460,13 @@ impl DaemonBoundary for Fakes {
         Reached::counted(&self.reached.daemon);
         Reached::counted(&self.reached.operations);
         self.operation_request_identifiers.borrow_mut().push(envelope.request_identifier.clone());
+        if let slingshot_local_protocol::message::OperationRequest::Execute {
+            caller_identity,
+            ..
+        } = &envelope.request
+        {
+            self.submitted_producers.borrow_mut().push(caller_identity.clone());
+        }
         Ok(self.answer.clone())
     }
 
@@ -679,4 +695,35 @@ fn the_binary_maps_classifications_onto_the_documented_exits() {
         assert_eq!(exit, *expected, "{arguments:?}");
         assert!(EVERY_EXIT.contains(expected), "{expected} is a documented exit");
     }
+}
+
+#[test]
+fn execute_carries_injected_producer_and_invalid_labels_never_reach_admission() {
+    use slingshot_domain::producer_identity::ProducerIdentity;
+    let producer = ProducerIdentity::from_label("build").unwrap().as_text().to_owned();
+    for identity in [None, Some(producer)] {
+        let fakes = Fakes {
+            producer: Ok(identity.clone()),
+            answer: OperationResponse::ResultInline {
+                operation_identifier: "command-line-fixture-1".to_owned(),
+                result: serde_json::json!({"components":[]}),
+            },
+            ..Fakes::default()
+        };
+        let completion = against(
+            &fakes,
+            Provenance::embedded(),
+            &invoking("list_components", &[("--path", "/apps/acme")]),
+        );
+        assert_eq!(completion.exit, 0, "{:?}", completion.answer);
+        assert_eq!(fakes.submitted_producers.borrow().as_slice(), &[identity]);
+    }
+    let fakes = Fakes { producer: Err("invalid producer label".to_owned()), ..Fakes::default() };
+    let completion = against(
+        &fakes,
+        Provenance::embedded(),
+        &invoking("list_components", &[("--path", "/apps/acme")]),
+    );
+    assert_ne!(completion.exit, 0);
+    assert!(fakes.submitted_producers.borrow().is_empty());
 }

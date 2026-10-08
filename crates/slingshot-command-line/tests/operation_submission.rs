@@ -158,7 +158,10 @@ fn the_installed_binding_is_the_registry_the_build_came_from() {
         let identity = require_installed_binding(&descriptor.wire_name)
             .unwrap_or_else(|refusal| panic!("{}: {refusal}", descriptor.wire_name));
         assert_eq!(identity.command_wire_name, descriptor.wire_name);
-        assert_eq!(identity.command_semantic_contract_version, "1.0.0");
+        assert_eq!(
+            identity.command_semantic_contract_version,
+            descriptor.command_semantic_contract_version
+        );
         assert_eq!(
             identity.command_contract_limits_digest,
             descriptor.command_contract_limits_sha256

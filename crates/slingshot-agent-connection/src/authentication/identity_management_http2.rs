@@ -61,39 +61,52 @@ pub async fn exchange_http2<Stream: AsyncRead + AsyncWrite + Unpin>(
     body: &[u8],
     clock: &(dyn MonotonicClock + Sync),
 ) -> Result<IdentityManagementReceipt, ExchangeFailure> {
-    let limits = &ProfileAuthenticationContract::embedded().limits;
-    if body.len() as u64 > limits.maximum_identity_management_request_body_bytes {
-        return Err(fail(Code::IdentityManagementResponseHeadLimitExceeded));
-    }
-    let head = request_head(body.len())?;
-    let deadline = Instant::now()
-        + Duration::from_millis(limits.identity_management_response_header_timeout_milliseconds);
-    let negotiated = timeout_at(
-        deadline,
-        negotiate_frames(
-            &mut stream,
-            ResponseFrameReader::with_header_policy(
-                limits.maximum_identity_management_response_head_bytes,
-                true,
+    observe(Route::IdentityManagement, Phase::Exchange, async {
+        let limits = &ProfileAuthenticationContract::embedded().limits;
+        if body.len() as u64 > limits.maximum_identity_management_request_body_bytes {
+            return Err(fail(Code::IdentityManagementResponseHeadLimitExceeded));
+        }
+        let head = request_head(body.len())?;
+        let deadline = Instant::now()
+            + Duration::from_millis(
+                limits.identity_management_response_header_timeout_milliseconds,
+            );
+        let negotiated = timeout_at(
+            deadline,
+            negotiate_frames(
+                &mut stream,
+                ResponseFrameReader::with_header_policy(
+                    limits.maximum_identity_management_response_head_bytes,
+                    true,
+                ),
             ),
-        ),
-    )
+        )
+        .await
+        .map_err(|_| fail(Code::IdentityManagementResponseHeaderTimeout))?
+        .map_err(|_| malformed())?;
+        if Instant::now() >= deadline {
+            return Err(fail(Code::IdentityManagementResponseHeaderTimeout));
+        }
+        let (input, output) = tokio::io::split(stream);
+        let (commands, pending) = mpsc::channel(1);
+        let (completed, completion) = watch::channel(None);
+        let request_end = Instant::now()
+            + Duration::from_millis(limits.identity_management_request_write_timeout_milliseconds);
+        let writer = write(
+            output,
+            negotiated.send_windows,
+            &head,
+            body,
+            pending,
+            completed,
+            request_end,
+            clock,
+        );
+        let reader = read(input, negotiated.frames, commands, completion, request_end, clock);
+        let (anchor, (response, receipt)) = tokio::try_join!(writer, reader)?;
+        Ok(IdentityManagementReceipt::new(response, anchor, receipt))
+    })
     .await
-    .map_err(|_| fail(Code::IdentityManagementResponseHeaderTimeout))?
-    .map_err(|_| malformed())?;
-    if Instant::now() >= deadline {
-        return Err(fail(Code::IdentityManagementResponseHeaderTimeout));
-    }
-    let (input, output) = tokio::io::split(stream);
-    let (commands, pending) = mpsc::channel(1);
-    let (completed, completion) = watch::channel(None);
-    let request_end = Instant::now()
-        + Duration::from_millis(limits.identity_management_request_write_timeout_milliseconds);
-    let writer =
-        write(output, negotiated.send_windows, &head, body, pending, completed, request_end, clock);
-    let reader = read(input, negotiated.frames, commands, completion, request_end, clock);
-    let (anchor, (response, receipt)) = tokio::try_join!(writer, reader)?;
-    Ok(IdentityManagementReceipt::new(response, anchor, receipt))
 }
 
 fn request_head(length: usize) -> Result<Vec<u8>, ExchangeFailure> {
@@ -136,49 +149,53 @@ async fn write<Writer: AsyncWrite + Unpin>(
 ) -> Result<u64, ExchangeFailure> {
     let mut position = 0;
     let anchor = clock.reading_milliseconds();
-    let early = timeout_at(end, async {
-        send(&mut output, head).await?;
-        while position < body.len() {
-            match commands.try_recv() {
-                Ok(Command::Finish) => return Ok(true),
-                Ok(command) => {
-                    control(&mut output, &mut windows, command, false).await?;
+    let early = observe(Route::IdentityManagement, Phase::Request, async {
+        let early = timeout_at(end, async {
+            send(&mut output, head).await?;
+            while position < body.len() {
+                match commands.try_recv() {
+                    Ok(Command::Finish) => return Ok(true),
+                    Ok(command) => {
+                        control(&mut output, &mut windows, command, false).await?;
+                        continue;
+                    }
+                    Err(mpsc::error::TryRecvError::Disconnected) => return Err(malformed()),
+                    Err(mpsc::error::TryRecvError::Empty) => {}
+                }
+                let count = windows.reserve(body.len() - position);
+                if count == 0 {
+                    match commands.recv().await.ok_or_else(malformed)? {
+                        Command::Finish => return Ok(true),
+                        command => control(&mut output, &mut windows, command, false).await?,
+                    }
                     continue;
                 }
-                Err(mpsc::error::TryRecvError::Disconnected) => return Err(malformed()),
-                Err(mpsc::error::TryRecvError::Empty) => {}
+                let size = (count as u32).to_be_bytes();
+                let header = [
+                    size[1],
+                    size[2],
+                    size[3],
+                    0,
+                    u8::from(position + count == body.len()),
+                    0,
+                    0,
+                    0,
+                    1,
+                ];
+                output.write_all(&header).await.map_err(|_| malformed())?;
+                send(&mut output, &body[position..position + count]).await?;
+                position += count;
             }
-            let count = windows.reserve(body.len() - position);
-            if count == 0 {
-                match commands.recv().await.ok_or_else(malformed)? {
-                    Command::Finish => return Ok(true),
-                    command => control(&mut output, &mut windows, command, false).await?,
-                }
-                continue;
-            }
-            let size = (count as u32).to_be_bytes();
-            let header = [
-                size[1],
-                size[2],
-                size[3],
-                0,
-                u8::from(position + count == body.len()),
-                0,
-                0,
-                0,
-                1,
-            ];
-            output.write_all(&header).await.map_err(|_| malformed())?;
-            send(&mut output, &body[position..position + count]).await?;
-            position += count;
+            Ok(false)
+        })
+        .await
+        .map_err(|_| fail(Code::IdentityManagementRequestWriteTimeout))??;
+        if Instant::now() >= end {
+            return Err(fail(Code::IdentityManagementRequestWriteTimeout));
         }
-        Ok(false)
+        Ok(early)
     })
-    .await
-    .map_err(|_| fail(Code::IdentityManagementRequestWriteTimeout))??;
-    if Instant::now() >= end {
-        return Err(fail(Code::IdentityManagementRequestWriteTimeout));
-    }
+    .await?;
     if !early {
         completed.send_replace(Some(Instant::now()));
         finish_controls(&mut output, &mut windows, &mut commands).await?;
@@ -248,61 +265,76 @@ async fn read<Reader: AsyncRead + Unpin>(
     request_end: Instant,
     clock: &(dyn MonotonicClock + Sync),
 ) -> Result<(DecodedResponse, u64), ExchangeFailure> {
-    let limits = &ProfileAuthenticationContract::embedded().limits;
-    let mut input = IdleRead::new(input);
-    let mut response = IdentityManagementHttp2Response::new();
-    let mut body_end = None;
-    loop {
-        let frame =
-            read_next_frame(&mut input, &mut frames, &mut completion, request_end, body_end)
-                .await?;
-        match frame {
-            FrameRead::End(end) => {
-                let receipt = clock.reading_milliseconds();
-                return Ok((response.finish_at_transport_end(end)?, receipt));
-            }
-            FrameRead::Frame(frame) => {
-                let pending = frame_command(frame, &mut response)?;
-                if response.head_complete() && body_end.is_none() {
-                    body_end = Some(
+    observe_response(Route::IdentityManagement, async |observation| {
+        let limits = &ProfileAuthenticationContract::embedded().limits;
+        let mut input = IdleRead::new(input);
+        let mut response = IdentityManagementHttp2Response::new();
+        let mut body_end = None;
+        loop {
+            let frame =
+                read_next_frame(&mut input, &mut frames, &mut completion, request_end, body_end)
+                    .await?;
+            match frame {
+                FrameRead::End(end) => {
+                    let receipt = clock.reading_milliseconds();
+                    return Ok((response.finish_at_transport_end(end)?, receipt));
+                }
+                FrameRead::Frame(frame) => {
+                    let pending = frame_command(frame, &mut response)?;
+                    if response.head_complete() {
+                        observation.head_complete();
+                    }
+                    if response.head_complete() && body_end.is_none() {
+                        body_end = Some(
                         Instant::now()
                             + Duration::from_millis(
                                 limits.identity_management_response_body_total_timeout_milliseconds,
                             ),
                     );
-                    input.enable(Duration::from_millis(
-                        limits.identity_management_response_body_idle_timeout_milliseconds,
-                    ));
-                }
-                let end = body_end.unwrap_or_else(|| {
-                    (*completion.borrow()).unwrap_or(request_end)
-                        + Duration::from_millis(
-                            limits.identity_management_response_header_timeout_milliseconds,
-                        )
-                });
-                let end = input.idle_end().map_or(end, |idle| end.min(idle));
-                let expired = if body_end.is_none() {
-                    Code::IdentityManagementResponseHeaderTimeout
-                } else if body_end.is_some_and(|total| total <= end) {
-                    Code::IdentityManagementResponseBodyTotalTimeout
-                } else {
-                    Code::IdentityManagementResponseBodyIdleTimeout
-                };
-                if Instant::now() >= end {
-                    return Err(fail(expired));
-                }
-                dispatch_frame_command(&commands, pending, response.stream_ended(), end, expired)
+                        input.enable(Duration::from_millis(
+                            limits.identity_management_response_body_idle_timeout_milliseconds,
+                        ));
+                    }
+                    let end = body_end.unwrap_or_else(|| {
+                        (*completion.borrow()).unwrap_or(request_end)
+                            + Duration::from_millis(
+                                limits.identity_management_response_header_timeout_milliseconds,
+                            )
+                    });
+                    let end = input.idle_end().map_or(end, |idle| end.min(idle));
+                    let expired = if body_end.is_none() {
+                        Code::IdentityManagementResponseHeaderTimeout
+                    } else if body_end.is_some_and(|total| total <= end) {
+                        Code::IdentityManagementResponseBodyTotalTimeout
+                    } else {
+                        Code::IdentityManagementResponseBodyIdleTimeout
+                    };
+                    if Instant::now() >= end {
+                        return Err(fail(expired));
+                    }
+                    dispatch_frame_command(
+                        &commands,
+                        pending,
+                        response.stream_ended(),
+                        end,
+                        expired,
+                    )
                     .await?;
-                if response.stream_ended() {
-                    timeout_at(end, commands.send(Command::Finish))
-                        .await
-                        .map_err(|_| fail(expired))?
-                        .map_err(|_| malformed())?;
-                    return Ok((response.finish_at_stream_end()?, clock.reading_milliseconds()));
+                    if response.stream_ended() {
+                        timeout_at(end, commands.send(Command::Finish))
+                            .await
+                            .map_err(|_| fail(expired))?
+                            .map_err(|_| malformed())?;
+                        return Ok((
+                            response.finish_at_stream_end()?,
+                            clock.reading_milliseconds(),
+                        ));
+                    }
                 }
             }
         }
-    }
+    })
+    .await
 }
 
 async fn dispatch_frame_command(
@@ -466,3 +498,5 @@ fn malformed() -> ExchangeFailure {
 #[cfg(test)]
 #[path = "identity_management_http2_tests.rs"]
 mod tests;
+
+use crate::transport_observation::{Phase, Route, observe, observe_response};

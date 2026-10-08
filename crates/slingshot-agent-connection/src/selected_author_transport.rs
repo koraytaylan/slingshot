@@ -10,6 +10,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+use crate::transport_observation::{ObservedSocket, Phase, Route, observe};
 use rustls::{ClientConfig, RootCertStore};
 use rustls_pki_types::{CertificateDer, ServerName};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -25,9 +26,9 @@ use slingshot_domain::operation_executor::ExecutionIdentity;
 /// A stream connected directly to the one selected author.
 pub enum SelectedAuthorStream {
     /// A startup-warned cleartext author connection.
-    Cleartext(TcpStream),
+    Cleartext(ObservedSocket),
     /// A connection authenticated with the selected author's frozen roots.
-    Protected(TlsStream<TcpStream>),
+    Protected(TlsStream<ObservedSocket>),
 }
 
 impl ::core::fmt::Debug for SelectedAuthorStream {
@@ -134,8 +135,8 @@ impl NegotiatedAuthorStream {
     }
 }
 
-impl core::fmt::Debug for NegotiatedAuthorStream {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl ::core::fmt::Debug for NegotiatedAuthorStream {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         formatter.write_str("NegotiatedAuthorStream([redacted])")
     }
 }
@@ -236,6 +237,9 @@ impl SelectedAuthorTransport {
 
     /// Requires an operation to be bound to this connector's selected target
     /// and selected-environment revision.
+    ///
+    /// # Errors
+    /// Refuses mismatched authority or a failed, expired or invalid connection phase.
     pub fn require_execution(
         &self,
         identity: &ExecutionIdentity,
@@ -249,6 +253,9 @@ impl SelectedAuthorTransport {
     /// DNS resolution is deliberately part of the connect phase: `TcpStream`
     /// resolves the selected host itself, without a proxy resolver or an
     /// alternate endpoint supplied by a caller.
+    ///
+    /// # Errors
+    /// Refuses mismatched authority or a failed, expired or invalid connection phase.
     pub async fn connect(&self) -> Result<SelectedAuthorStream, SelectedAuthorTransportFailure> {
         self.connect_selected(Some(false)).await
     }
@@ -258,6 +265,12 @@ impl SelectedAuthorTransport {
     /// is attempted. A selected permitted cleartext author uses HTTP/2 prior
     /// knowledge, whose preface/settings exchange the driver must validate
     /// before sending a request. This method sends no HTTP application bytes.
+    ///
+    /// # Errors
+    /// Refuses mismatched authority or a failed, expired or invalid connection phase.
+    ///
+    /// # Errors
+    /// Refuses mismatched authority or a failed, expired or invalid connection phase.
     pub async fn connect_http2(
         &self,
     ) -> Result<SelectedAuthorStream, SelectedAuthorTransportFailure> {
@@ -267,6 +280,12 @@ impl SelectedAuthorTransport {
     /// Negotiates only h2 or HTTP/1.1 on one selected TLS connection. A peer
     /// without ALPN, or permitted cleartext, uses HTTP/1.1 without an upgrade
     /// probe. No retry, alternate endpoint or protocol fallback is performed.
+    ///
+    /// # Errors
+    /// Refuses mismatched authority or a failed, expired or invalid connection phase.
+    ///
+    /// # Errors
+    /// Refuses mismatched authority or a failed, expired or invalid connection phase.
     pub async fn connect_negotiated(
         &self,
     ) -> Result<NegotiatedAuthorStream, SelectedAuthorTransportFailure> {
@@ -288,7 +307,13 @@ impl SelectedAuthorTransport {
     ) -> Result<SelectedAuthorStream, SelectedAuthorTransportFailure> {
         let deadlines = ExchangeDeadlines::embedded();
         let author = self.connection.author();
-        let port = author.port().unwrap_or(if author.is_protected() { 443 } else { 80 });
+        const PROTECTED_PORT: u16 = 443;
+        const CLEARTEXT_PORT: u16 = 80;
+        let port = author.port().unwrap_or(if author.is_protected() {
+            PROTECTED_PORT
+        } else {
+            CLEARTEXT_PORT
+        });
         // URI serialization brackets IPv6 literals; socket resolution and TLS
         // IP-address verification require the literal without those brackets.
         let host = author
@@ -296,16 +321,17 @@ impl SelectedAuthorTransport {
             .strip_prefix('[')
             .and_then(|host| host.strip_suffix(']'))
             .unwrap_or(author.host());
-        let stream = crate::connection_phase::within(
-            Duration::from_millis(deadlines.connect_milliseconds),
-            async {
-                TcpStream::connect((host, port))
-                    .await
-                    .map_err(|_| SelectedAuthorTransportFailure::ConnectFailed)
-            },
-            SelectedAuthorTransportFailure::ConnectDeadlineExceeded,
+        let stream = observe(
+            Route::Author,
+            Phase::Connect,
+            crate::connection_phase::within(
+                Duration::from_millis(deadlines.connect_milliseconds),
+                connect_socket(host, port),
+                SelectedAuthorTransportFailure::ConnectDeadlineExceeded,
+            ),
         )
         .await?;
+        let stream = ObservedSocket::new(stream, Route::Author);
         let configuration = match http2 {
             Some(true) => &self.transport_layer_security_http2,
             Some(false) => &self.transport_layer_security,
@@ -318,15 +344,19 @@ impl SelectedAuthorTransport {
             .map_err(|_| SelectedAuthorTransportFailure::ServerNameInvalid)?;
         // Only application-protocol selection differs. Root bytes, hostname
         // validation, provider, TLS versions and deadlines remain identical.
-        let stream = crate::connection_phase::within(
-            Duration::from_millis(deadlines.transport_layer_security_milliseconds),
-            async {
-                TlsConnector::from(configuration.clone())
-                    .connect(server_name, stream)
-                    .await
-                    .map_err(|_| SelectedAuthorTransportFailure::TransportLayerSecurityFailed)
-            },
-            SelectedAuthorTransportFailure::TransportLayerSecurityDeadlineExceeded,
+        let stream = observe(
+            Route::Author,
+            Phase::Handshake,
+            crate::connection_phase::within(
+                Duration::from_millis(deadlines.transport_layer_security_milliseconds),
+                async {
+                    TlsConnector::from(configuration.clone())
+                        .connect(server_name, stream)
+                        .await
+                        .map_err(|_| SelectedAuthorTransportFailure::TransportLayerSecurityFailed)
+                },
+                SelectedAuthorTransportFailure::TransportLayerSecurityDeadlineExceeded,
+            ),
         )
         .await?;
         let negotiated = stream.get_ref().1.alpn_protocol();
@@ -369,4 +399,30 @@ fn client_configuration(
             .with_root_certificates(roots)
             .with_no_client_auth();
     Ok(configuration)
+}
+
+async fn connect_socket(
+    host: &str,
+    port: u16,
+) -> Result<TcpStream, SelectedAuthorTransportFailure> {
+    let stream = TcpStream::connect((host, port))
+        .await
+        .map_err(|_| SelectedAuthorTransportFailure::ConnectFailed)?;
+    // TLS records and HTTP/2 flow credits can be small dependent writes.
+    // Do not wait for an acknowledgement before sending the next frame.
+    stream.set_nodelay(true).map_err(|_| SelectedAuthorTransportFailure::ConnectFailed)?;
+    Ok(stream)
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn connected_socket_sends_small_frames_without_delay() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let host = address.ip().to_string();
+    let (connected, accepted) =
+        tokio::join!(connect_socket(&host, address.port()), listener.accept());
+    let socket = connected.unwrap();
+    let (_peer, _) = accepted.unwrap();
+    assert!(socket.nodelay().unwrap());
 }

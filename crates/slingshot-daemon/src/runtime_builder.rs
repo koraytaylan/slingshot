@@ -30,6 +30,7 @@ use slingshot_storage::{
 use tokio_util::sync::CancellationToken;
 
 mod publication_recovery;
+pub(crate) mod retry_schedule;
 pub(crate) mod execution;
 pub use publication_recovery::RecoveredPublication;
 
@@ -130,6 +131,8 @@ pub enum RuntimeBuildRefusal {
 /// recovery evidence. This stage is not advertised until a service retains it,
 /// binds its listener and publishes exactly that service's installed versions.
 pub struct DurableRuntime {
+    /// Local retry deadlines seeded once from each durable observation.
+    retry_schedule: std::sync::Mutex<retry_schedule::RetrySchedule>,
     operations: OperationRepository,
     remote: AgentJobRepository,
     subscriptions: AgentSubscriptionLedger,
@@ -170,6 +173,11 @@ pub struct RecoveredOperation {
 
 impl DurableRuntime {
     /// Executes under the live scheduler fence using independent live connections.
+    ///
+    /// # Errors
+    ///
+    /// Returns a refusal when connections, invocation binding, cancellation or
+    /// the scheduler fence prevent execution.
     pub async fn execute_retained_with_claim(
         &self,
         identity: &slingshot_domain::operation_executor::ExecutionIdentity,
@@ -345,12 +353,18 @@ impl DurableRuntime {
         Option<slingshot_storage::operation::scheduler_claim::SelectedClaim>,
         slingshot_storage::operation_repository::RepositoryFailure,
     > {
-        slingshot_storage::operation::scheduler_claim::claim_next_queued(
+        slingshot_storage::operation::scheduler_claim::claim_next_queued_with(
             self.database(),
             &self.context().target().author_target_identity_digest,
             fence,
             lease_expires_at_unix_milliseconds,
             now_unix_milliseconds,
+            |candidates| {
+                self.retry_schedule
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .select(candidates, now_unix_milliseconds, tokio::time::Instant::now())
+            },
         )
     }
 
@@ -574,6 +588,7 @@ impl RuntimeBuilder {
             })
             .transpose()?;
         Ok(DurableRuntime {
+            retry_schedule: std::sync::Mutex::new(retry_schedule::RetrySchedule::default()),
             operations,
             remote,
             subscriptions: AgentSubscriptionLedger::new(subscription_database),

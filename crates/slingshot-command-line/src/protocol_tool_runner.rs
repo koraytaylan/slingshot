@@ -12,6 +12,8 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use serde_json::Value;
 use slingshot_domain::command::catalog::{Command, CommandCatalog};
@@ -57,6 +59,8 @@ struct ProductToolRunner {
     selection: Selection,
     /// The executable a daemon would be started from, when one is.
     executable: PathBuf,
+    /// Cancels this local request without cancelling retained remote work.
+    cancellation: Arc<AtomicBool>,
 }
 
 impl ProductToolRunner {
@@ -75,7 +79,7 @@ impl ProductToolRunner {
         let configuration = ProductConfiguration;
         let filesystem = ProductFilesystem;
         let network = ProductNetwork;
-        let signals = ProductSignals::watching();
+        let signals = ProductSignals::from_flag(Arc::clone(&self.cancellation));
         let daemon = ProductDaemon::new(contract, &self.runtime_root, signals.flag());
         let process = ProductProcess {
             contract,
@@ -302,13 +306,18 @@ fn operation_result_invocation(
 /// A run whose selection or runtime root cannot be resolved still serves the
 /// protocol, and every call it cannot run is told why rather than failing
 /// without a reason.
-pub(crate) fn tool_runner(invocation: &Invocation, executable: &Path) -> Box<dyn ToolRunner> {
+pub(crate) fn tool_runner(
+    invocation: &Invocation,
+    executable: &Path,
+    cancellation: Arc<AtomicBool>,
+) -> Box<dyn ToolRunner> {
     match (runtime_root(invocation), namespace_of(&invocation.selection)) {
         (Ok(root), Ok(_)) => Box::new(ProductToolRunner {
             contract: FoundationContract::embedded(),
             runtime_root: root,
             selection: invocation.selection.clone(),
             executable: executable.to_path_buf(),
+            cancellation,
         }),
         (Err(reason), _) => Box::new(UnavailableToolRunner { reason }),
         (_, Err(refusal)) => Box::new(UnavailableToolRunner {

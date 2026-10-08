@@ -188,7 +188,11 @@ fn the_installed_identity_is_five_fields_and_all_of_them_count() {
     let identity =
         SelectedCommandContractIdentity::installed(COMMAND).expect("an installed command");
     assert_eq!(identity.command_wire_name, COMMAND);
-    assert_eq!(identity.command_semantic_contract_version, "1.0.0");
+    assert_eq!(
+        identity.command_semantic_contract_version,
+        slingshot_domain::command::command_identity::CommandContract::embedded()
+            .command_semantic_contract_versions[COMMAND]
+    );
     assert_eq!(identity.command_contract_limits_digest, installed_limits_digest());
     assert!(!identity.argument_schema_digest.is_empty(), "both role digests are present");
     assert!(!identity.result_schema_digest.is_empty());
@@ -209,7 +213,8 @@ fn the_installed_identity_is_five_fields_and_all_of_them_count() {
             ..identity.clone()
         },
         SelectedCommandContractIdentity {
-            command_semantic_contract_version: "0.0.0".to_owned(),
+            command_semantic_contract_version:
+                slingshot_domain::command::command_identity::INITIAL_COMMAND_VERSION.to_owned(),
             ..identity.clone()
         },
         SelectedCommandContractIdentity {

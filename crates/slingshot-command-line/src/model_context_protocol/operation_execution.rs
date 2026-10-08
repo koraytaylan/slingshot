@@ -165,7 +165,7 @@ pub fn require_runnable(
 /// mean; it does not know how to reach an author, and it must not learn. A
 /// caller supplies transport access, keeping the command and daemon shared by
 /// tool calls and command-line invocations in one implementation.
-pub trait ToolRunner {
+pub trait ToolRunner: Send {
     /// Runs one tool call and returns the outcome it reached.
     ///
     /// The name and the accepted arguments travel together, because the

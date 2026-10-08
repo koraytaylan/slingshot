@@ -598,7 +598,10 @@ fn every_descriptor_carries_one_version_one_limits_digest_and_two_distinct_roles
             "{}: the description says what the command does, not what it will do",
             descriptor.wire_name
         );
-        assert_eq!(descriptor.command_semantic_contract_version, INITIAL_COMMAND_VERSION);
+        assert_eq!(
+            descriptor.command_semantic_contract_version,
+            CommandContract::embedded().command_semantic_contract_versions[&descriptor.wire_name]
+        );
         assert_eq!(descriptor.command_contract_limits_sha256, limits, "one limits authority");
         assert_eq!(descriptor.canonical_json_contract_sha256, contract, "one byte contract");
         assert_ne!(
@@ -633,7 +636,7 @@ fn compatibility_needs_all_five_and_not_four() {
         },
         {
             let mut other = descriptor.clone();
-            other.command_semantic_contract_version = "0.0.0".to_owned();
+            other.command_semantic_contract_version = INITIAL_COMMAND_VERSION.to_owned();
             other
         },
         {
@@ -736,7 +739,15 @@ fn a_result_of_another_command_or_another_request_is_refused() {
             .expect("a legal command"),
     );
     let own = CommandResult::QueryPaths(
-        QueryPathsResult::new(Vec::new(), None).expect("an ordered page"),
+        QueryPathsResult::new(
+            Vec::new(),
+            None,
+            slingshot_domain::command::incremental_discovery::DiscoveryProgress {
+                complete: true,
+                examined_nodes: 0,
+            },
+        )
+        .expect("an ordered page"),
     );
     assert_eq!(validate_result_for_command(&asked, &own), Ok(()));
 
@@ -753,6 +764,10 @@ fn a_result_of_another_command_or_another_request_is_refused() {
                 repository_path: RepositoryPath::parse("/content/other").expect("a legal path"),
             }],
             None,
+            slingshot_domain::command::incremental_discovery::DiscoveryProgress {
+                complete: true,
+                examined_nodes: 1,
+            },
         )
         .expect("an ordered page"),
     );

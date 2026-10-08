@@ -155,7 +155,8 @@ impl RuntimeExecution {
                 submission,
                 now,
             )
-            .map_err(|_| RuntimeExecutionRefusal::Binding)?;
+            .map_err(|_| RuntimeExecutionRefusal::Binding)?
+            .after_scheduled_delay(&local);
         let ports = crate::author_agent_operation_executor::ProductAuthorPorts::over_transport(
             &self.transport,
             &protocol,

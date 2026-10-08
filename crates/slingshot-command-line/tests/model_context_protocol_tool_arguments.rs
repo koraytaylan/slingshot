@@ -271,7 +271,9 @@ fn an_expected_revision_option_does_not_become_the_environment_revision() {
         readiness_nonce: "nonce".to_owned(),
         runtime_namespace: "slingshot-namespace".to_owned(),
         selected_environment_revision: "environment-revision".to_owned(),
-        supported_operation_protocol_versions: vec![1],
+        supported_operation_protocol_versions: vec![
+            slingshot_command_line::daemon_request::spoken_operation_version(),
+        ],
     };
     let resume = parse(&[
         "operation-restart".to_owned(),

@@ -1,7 +1,7 @@
 //! The one authority for every value this plan's runtime spends.
 //!
 //! Every wire bound, storage bound, scheduling bound, diagnostic bound, and
-//! maintenance bound the daemon uses comes from `policy/daemon-runtime-contract-1.json`
+//! maintenance bound the daemon uses comes from `policy/daemon-runtime-contract-2.json`
 //! and from nowhere else. A consumer may name a typed accessor; it may not
 //! define a second constant with the same meaning, because the moment two exist
 //! the one that is wrong is whichever was edited second.
@@ -33,10 +33,10 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 
 /// Format the manifest declares.
-pub const DAEMON_RUNTIME_CONTRACT_FORMAT: &str = "slingshot.daemon-runtime-contract/1";
+pub const DAEMON_RUNTIME_CONTRACT_FORMAT: &str = "slingshot.daemon-runtime-contract/2";
 
 /// Operation protocol version this manifest belongs to.
-pub const DAEMON_OPERATION_PROTOCOL_VERSION: u64 = 1;
+pub const DAEMON_OPERATION_PROTOCOL_VERSION: u64 = 2;
 
 /// Domain separator every maintenance-result preimage begins with.
 pub const MAINTENANCE_RESULT_DOMAIN: &str = "slingshot.maintenance-result/1";
@@ -63,10 +63,10 @@ pub const MAINTENANCE_RESULT_PREIMAGE_OCTETS: usize = DIGEST_OCTETS * 3 + 1;
 pub const DIGEST_CHARACTERS: usize = DIGEST_OCTETS * 2;
 
 /// Bytes of the committed manifest, embedded at compile time.
-const EMBEDDED_MANIFEST: &str = include_str!("../../../policy/daemon-runtime-contract-1.json");
+const EMBEDDED_MANIFEST: &str = include_str!("../../../policy/daemon-runtime-contract-2.json");
 
 /// Bytes of the committed sidecar, embedded at compile time.
-const EMBEDDED_SIDECAR: &str = include_str!("../../../policy/daemon-runtime-contract-1.sha256");
+const EMBEDDED_SIDECAR: &str = include_str!("../../../policy/daemon-runtime-contract-2.sha256");
 
 /// Reason the runtime contract could not be read.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

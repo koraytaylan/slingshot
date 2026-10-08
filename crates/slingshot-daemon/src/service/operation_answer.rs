@@ -177,21 +177,10 @@ impl DaemonService {
                 },
             )
         };
-        let operation_identifier = match &admitted {
-            OperationResponse::Accepted { operation_identifier }
-            | OperationResponse::Replayed { operation_identifier } => operation_identifier.clone(),
-            other => return self.render_operation(other.clone()),
-        };
-        crate::service::scheduler::complete_submitted(runtime, &operation_identifier);
-        let guard = runtime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let target = guard.context().target().author_target_identity_digest.clone();
-        let response = crate::operation_dispatch::settled_answer(
-            guard.operations(),
-            guard.installation(),
-            &target,
-            &operation_identifier,
-        );
-        self.render_operation(response)
+        // Admission commits before acknowledgement. The bounded scheduler owns
+        // execution, producer rotation, and recovery; the request thread must
+        // not claim this operation independently or settle network uncertainty.
+        self.render_operation(admitted)
     }
 
     fn answer_maintenance_preview(

@@ -18,6 +18,7 @@ pub mod logical_agent_operation;
 pub mod operation;
 pub mod operation_executor;
 pub mod persistent_capacity;
+pub mod producer_identity;
 pub mod profile;
 pub mod profile_authentication_contract;
 pub mod remote_job;

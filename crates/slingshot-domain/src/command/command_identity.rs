@@ -31,8 +31,23 @@ pub const CONTRACT_CANONICALIZATION: &str = "slingshot.schema-canonical/1";
 /// Unit every duration in the manifest is stated in.
 pub const CONTRACT_DURATION_UNIT: &str = "milliseconds";
 
-/// Version every command this plan introduces declares.
+/// The first published command version.
 pub const INITIAL_COMMAND_VERSION: &str = "0.0.0";
+
+/// Patch version recording the shared contract metadata migration without changed behavior.
+pub const SHARED_METADATA_COMMAND_VERSION: &str = "0.0.0";
+
+/// Version implementing bounded live discovery with explicit page completeness.
+pub const INCREMENTAL_DISCOVERY_VERSION: &str = "0.0.0";
+
+/// Patch version binding existing bounded discovery to the revised shared byte contract.
+pub const INCREMENTAL_DISCOVERY_METADATA_VERSION: &str = "0.0.0";
+
+/// Version implementing bounded phrase and nearest-page component searches.
+pub const PAGE_SEARCH_VERSION: &str = "0.0.0";
+
+/// Version implementing bounded asset traversal and explicit page completeness.
+pub const ASSET_DISCOVERY_VERSION: &str = "0.0.0";
 
 /// Core identifiers every version carries.
 const CORE_IDENTIFIERS: usize = 3;
@@ -162,7 +177,7 @@ impl CommandContract {
             return Err(CommandContractFailure::NotCanonical);
         }
         for (command, version) in &contract.command_semantic_contract_versions {
-            if version != INITIAL_COMMAND_VERSION {
+            if version != implemented_version(command) {
                 return Err(CommandContractFailure::UnexpectedCommandVersion {
                     command: command.clone(),
                     version: version.clone(),
@@ -338,4 +353,18 @@ fn accept_build(identifier: &str) -> Result<(), VersionFailure> {
         return Ok(());
     }
     Err(VersionFailure::MalformedIdentifier)
+}
+
+/// Returns the semantic version this implementation supports for one command.
+fn implemented_version(command: &str) -> &'static str {
+    match command {
+        "find_assets_by_metadata" => ASSET_DISCOVERY_VERSION,
+        "find_pages_containing_phrase" | "find_pages_using_components" => PAGE_SEARCH_VERSION,
+        "query_paths" => INCREMENTAL_DISCOVERY_VERSION,
+        "list_component_definitions"
+        | "list_components"
+        | "list_content_fragments"
+        | "list_experience_fragments" => INCREMENTAL_DISCOVERY_METADATA_VERSION,
+        _ => SHARED_METADATA_COMMAND_VERSION,
+    }
 }

@@ -46,6 +46,14 @@ annotations are the registry's own classifications rather than a second
 judgement, so a tool that says it may be called twice says so because the
 command does.
 
+`tools/list` also publishes this executable's compiled command-schema manifest
+under `_meta["rs.slingshot/command-schema-manifest"]` and its transport digest
+under `_meta["rs.slingshot/transport-contract-sha256"]`. Both protocol revisions
+carry the same metadata. A verifier can compare every command's semantic
+version, limits digest, and argument/result schema digests with a built agent.
+These describe shipped contracts; a deployment's capability document separately
+states which handlers are active there.
+
 <!-- generated: tools -->
 
 | Tool | Read-only | Destructive | Same call twice | Operation key |
@@ -217,8 +225,26 @@ operation keeps running, because a client walking away is not a decision about
 work that may already have changed an author, and because the same client
 reconnected can ask how it went. Nothing remote is ever asked to stop.
 
-Progress reports never go backwards: a durable sequence repeats after a
-reconnect, and a repeat is dropped rather than forwarded.
+Tool calls and resource reads use bounded workers. The coordinator continues
+to handle ping, discovery and cancellation while those workers wait on the
+daemon. A cancellation signals the request's local exchanges, suppresses its
+answer, and keeps its identifier reserved until the worker detaches. A response
+already queued for delivery has completed and cannot be cancelled.
+
+Both protocol revisions use the same coordinator. The worker bound is derived
+from the output byte budget, leaving capacity for controls and the sole writer.
+Excess calls receive `-32003`. Pending worker responses, queued responses and
+the response being written share that budget; completed response bodies are
+released after delivery. An identifier held by executing work or a queued
+response cannot be admitted again. Reuse of the identifier currently being
+written waits for that delivery to settle under the write deadline: a client
+can read the line before the writer's acknowledgement reaches the coordinator.
+
+Output congestion applies backpressure to intake. The coordinator enforces
+the transport's monotonic pressure and write deadlines independently of the
+stream writer. A failed output or process interrupt detaches local waiters;
+EOF drains admitted work within the transport's shutdown deadline, then
+detaches remaining waiters. Diagnostic congestion cannot delay protocol output.
 
 ## What is not here
 

@@ -9,50 +9,18 @@
 //! Each entry carries its own bounded shape, so reviewing the list is reviewing
 //! the database's whole behaviour rather than reading the code that calls it.
 
-/// One statement this crate may run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InventoriedStatement {
-    /// What it is for.
-    pub purpose: &'static str,
-    /// The exact text, with bind markers and no interpolation.
-    pub text: &'static str,
-    /// How many parameters it binds.
-    pub parameters: usize,
-    /// How many rows it can return.
-    pub maximum_rows: u64,
-}
+mod definitions;
 
-/// Constructs this crate may never use.
-///
-/// Each of them either reaches a file outside the whitelist, writes one the
-/// accounting does not know about, or takes its text from somewhere other than
-/// this inventory.
-pub const FORBIDDEN_CONSTRUCTS: &[&str] = &[
-    "ATTACH",
-    "DETACH",
-    "VACUUM",
-    "CREATE TEMP",
-    "CREATE TEMPORARY",
-    "PRAGMA TEMP_STORE_DIRECTORY",
-];
-
-/// One row the listing statement can return.
-const LISTING_ROWS: u64 = 256;
-
-/// One row a keyed lookup can return.
-const SINGLE_ROW: u64 = 1;
-
-/// Physical Sling jobs one logical submission may be carried by.
-const PHYSICAL_JOB_ROWS: u64 = 32;
+pub use definitions::{FORBIDDEN_CONSTRUCTS, InventoriedStatement, is_inventoried, statement_text};
+use definitions::{LISTING_ROWS, PHYSICAL_JOB_ROWS, SINGLE_ROW, mutation};
 
 /// Every statement, in the order a reader would want to read them.
 pub const STATEMENTS: &[InventoriedStatement] = &[
-    InventoriedStatement {
-        purpose: "install a reconciled subscription boundary without inventing an event digest",
-        text: "UPDATE subscription_ledger SET agent_event_store_generation = ?, canonical_digest = NULL, cursor = NULL, high_water_cursor = ?, compacted_below_cursor = ?, unresolved_incident = NULL, unresolved_incident_count = 0, event_bytes = 0, event_rows = 0 WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? AND agent_event_store_generation = ? AND COALESCE(cursor, high_water_cursor) IS ? AND unresolved_incident IS ?",
-        parameters: 8,
-        maximum_rows: 0,
-    },
+    mutation(
+        "install a reconciled subscription boundary without inventing an event digest",
+        "UPDATE subscription_ledger SET agent_event_store_generation = ?, canonical_digest = NULL, cursor = NULL, high_water_cursor = ?, compacted_below_cursor = ?, unresolved_incident = NULL, unresolved_incident_count = 0, event_bytes = 0, event_rows = 0 WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? AND agent_event_store_generation = ? AND COALESCE(cursor, high_water_cursor) IS ? AND unresolved_incident IS ?",
+        8,
+    ),
     InventoriedStatement {
         purpose: "page unsettled subscription members across retained generations",
         text: "SELECT agent_operation_identifier FROM agent_operation AS a WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? AND (terminal_disposition IS NULL OR EXISTS(SELECT 1 FROM operation AS o WHERE o.author_target_identity_digest = a.author_target_identity_digest AND o.operation_identifier = a.operation_identifier AND o.lifecycle_state NOT IN ('succeeded', 'failed'))) AND NOT EXISTS(SELECT 1 FROM operation AS o WHERE o.author_target_identity_digest = a.author_target_identity_digest AND o.operation_identifier = a.operation_identifier AND o.lifecycle_state IN ('succeeded', 'failed')) AND (? IS NULL OR agent_operation_identifier > ?) ORDER BY agent_operation_identifier LIMIT 256",
@@ -65,12 +33,11 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "record the first artifact acquisition for one retained child",
-        text: "UPDATE agent_operation SET acquisition_artifact_identifier = ?, acquisition_artifact_slot = ?, acquisition_content_digest = ?, acquisition_started_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? AND acquisition_started_at_unix_milliseconds IS NULL",
-        parameters: 6,
-        maximum_rows: 0,
-    },
+    mutation(
+        "record the first artifact acquisition for one retained child",
+        "UPDATE agent_operation SET acquisition_artifact_identifier = ?, acquisition_artifact_slot = ?, acquisition_content_digest = ?, acquisition_started_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? AND acquisition_started_at_unix_milliseconds IS NULL",
+        6,
+    ),
     InventoriedStatement {
         purpose: "read one retained artifact acquisition anchor",
         text: "SELECT acquisition_artifact_identifier, acquisition_artifact_slot, acquisition_content_digest, acquisition_started_at_unix_milliseconds FROM agent_operation WHERE author_target_identity_digest = ? AND agent_operation_identifier = ?",
@@ -84,23 +51,22 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "record this installation's identifier once",
-        text: "INSERT INTO installation \
+    mutation(
+        "record this installation's identifier once",
+        "INSERT INTO installation \
                (singleton, installation_identifier, recorded_at_unix_milliseconds) \
                VALUES (0, ?, ?)",
-        parameters: 2,
-        maximum_rows: 0,
-    },
+        2,
+    ),
     InventoriedStatement {
         purpose: "read this installation's identifier",
         text: "SELECT installation_identifier FROM installation WHERE singleton = 0",
         parameters: 0,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "admit one operation",
-        text: "INSERT INTO operation \
+    mutation(
+        "admit one operation",
+        "INSERT INTO operation \
                (author_target_identity, author_target_identity_digest, caller_identity, \
                 canonical_command, command_fingerprint, command_wire_name, \
                 daemon_runtime_contract_digest, enqueue_sequence, installation_identifier, \
@@ -108,9 +74,8 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                 recorded_at_unix_milliseconds, selected_environment_revision, \
                 workflow_correlation_identifier) \
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        parameters: 15,
-        maximum_rows: 0,
-    },
+        15,
+    ),
     InventoriedStatement {
         purpose: "read one operation inside its target partition",
         // A summary is not a payload: the canonical command, the opaque author
@@ -201,9 +166,9 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 17,
         maximum_rows: LISTING_ROWS,
     },
-    InventoriedStatement {
-        purpose: "record one folded operation under compare-and-set",
-        text: "UPDATE operation \
+    mutation(
+        "record one folded operation under compare-and-set",
+        "UPDATE operation \
                SET latest_progress = ?, lifecycle_state = ?, operation_revision = ?, \
                    result_disposition = ?, result_inline_bytes = ?, \
                    settled_at_unix_milliseconds = ?, \
@@ -211,12 +176,11 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                    terminal_failure_metadata = ? \
                WHERE author_target_identity_digest = ? AND operation_identifier = ? \
                  AND operation_revision = ?",
-        parameters: 12,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "record one folded operation under compare-and-set, releasing its scheduler claim",
-        text: "UPDATE operation \
+        12,
+    ),
+    mutation(
+        "record one folded operation under compare-and-set, releasing its scheduler claim",
+        "UPDATE operation \
                SET latest_progress = ?, lifecycle_state = ?, operation_revision = ?, \
                    result_disposition = ?, result_inline_bytes = ?, \
                    settled_at_unix_milliseconds = ?, \
@@ -226,30 +190,27 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                    scheduler_lease_expires_at_unix_milliseconds = NULL \
                WHERE author_target_identity_digest = ? AND operation_identifier = ? \
                  AND operation_revision = ?",
-        parameters: 12,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "release a scheduler claim this attempt proved but left the operation unchanged",
-        text: "UPDATE operation \
+        12,
+    ),
+    mutation(
+        "release a scheduler claim this attempt proved but left the operation unchanged",
+        "UPDATE operation \
                SET scheduler_checkpoint = NULL, scheduler_fence = NULL, \
                    scheduler_lease_expires_at_unix_milliseconds = NULL \
                WHERE author_target_identity_digest = ? AND operation_identifier = ? \
                  AND scheduler_fence = ?",
-        parameters: 3,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "record the one recovery fact an operation is waiting on",
-        text: "INSERT OR REPLACE INTO recovery_fact \
+        3,
+    ),
+    mutation(
+        "record the one recovery fact an operation is waiting on",
+        "INSERT OR REPLACE INTO recovery_fact \
                (attempt_count, author_target_identity_digest, category, detail, \
                 evidence_certainty, evidence_kind, manual_resume_eligible, \
                 operation_identifier, retry_delay_milliseconds, \
                 retry_observed_at_unix_milliseconds) \
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        parameters: 10,
-        maximum_rows: 0,
-    },
+        10,
+    ),
     InventoriedStatement {
         purpose: "read the one recovery fact an operation is waiting on",
         text: "SELECT attempt_count, category, detail, evidence_certainty, evidence_kind, \
@@ -260,23 +221,21 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "clear the recovery fact an operation is no longer waiting on",
-        text: "DELETE FROM recovery_fact \
+    mutation(
+        "clear the recovery fact an operation is no longer waiting on",
+        "DELETE FROM recovery_fact \
                WHERE author_target_identity_digest = ? AND operation_identifier = ?",
-        parameters: 2,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "record one recovery-resume receipt",
-        text: "INSERT INTO recovery_resume_receipt \
+        2,
+    ),
+    mutation(
+        "record one recovery-resume receipt",
+        "INSERT INTO recovery_resume_receipt \
                (applied_operation_revision, author_target_identity_digest, \
                 operation_identifier, recorded_at_unix_milliseconds, \
                 selected_environment_revision, source_fingerprint) \
                VALUES (?, ?, ?, ?, ?, ?)",
-        parameters: 6,
-        maximum_rows: 0,
-    },
+        6,
+    ),
     InventoriedStatement {
         purpose: "count one operation's recovery-resume receipts",
         text: "SELECT COUNT(*) FROM recovery_resume_receipt \
@@ -316,38 +275,34 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 0,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "hold one artifact reservation durably",
-        text: "INSERT INTO artifact_reservation (byte_length) VALUES (?)",
-        parameters: 1,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "release one durable artifact reservation",
-        text: "DELETE FROM artifact_reservation WHERE ticket = ?",
-        parameters: 1,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "reconcile abandoned artifact reservations at startup",
-        text: "DELETE FROM artifact_reservation",
-        parameters: 0,
-        maximum_rows: 0,
-    },
+    mutation(
+        "hold one artifact reservation durably",
+        "INSERT INTO artifact_reservation (byte_length) VALUES (?)",
+        1,
+    ),
+    mutation(
+        "release one durable artifact reservation",
+        "DELETE FROM artifact_reservation WHERE ticket = ?",
+        1,
+    ),
+    mutation(
+        "reconcile abandoned artifact reservations at startup",
+        "DELETE FROM artifact_reservation",
+        0,
+    ),
     InventoriedStatement {
         purpose: "read one artifact blob's recorded length",
         text: "SELECT byte_length FROM artifact_blob WHERE content_digest = ?",
         parameters: 1,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "record one artifact's content, once per digest",
-        text: "INSERT OR IGNORE INTO artifact_blob \
+    mutation(
+        "record one artifact's content, once per digest",
+        "INSERT OR IGNORE INTO artifact_blob \
                (byte_length, content_digest, recorded_at_unix_milliseconds) \
                VALUES (?, ?, ?)",
-        parameters: 3,
-        maximum_rows: 0,
-    },
+        3,
+    ),
     InventoriedStatement {
         purpose: "read one durable artifact reservation",
         text: "SELECT byte_length FROM artifact_reservation WHERE ticket = ?",
@@ -370,45 +325,41 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 0,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "retain one artifact publication across restart",
-        text: "INSERT INTO artifact_publication (publication_identifier, artifact_identifier, content_digest, recorded_at_unix_milliseconds) VALUES (?, ?, ?, ?)",
-        parameters: 4,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "bind a maintenance publication to its operation-free owner",
-        text: "INSERT INTO maintenance_publication (publication_identifier, author_target_identity_digest, kind, reviewed_source_digest) VALUES (?, ?, ?, ?)",
-        parameters: 4,
-        maximum_rows: 0,
-    },
+    mutation(
+        "retain one artifact publication across restart",
+        "INSERT INTO artifact_publication (publication_identifier, artifact_identifier, content_digest, recorded_at_unix_milliseconds) VALUES (?, ?, ?, ?)",
+        4,
+    ),
+    mutation(
+        "bind a maintenance publication to its operation-free owner",
+        "INSERT INTO maintenance_publication (publication_identifier, author_target_identity_digest, kind, reviewed_source_digest) VALUES (?, ?, ?, ?)",
+        4,
+    ),
     InventoriedStatement {
         purpose: "read one target's pending maintenance publication",
         text: "SELECT p.publication_identifier, p.artifact_identifier, p.content_digest, b.byte_length, p.recorded_at_unix_milliseconds, m.kind, m.reviewed_source_digest FROM maintenance_publication m JOIN artifact_publication p ON p.publication_identifier = m.publication_identifier LEFT JOIN artifact_blob b ON b.content_digest = p.content_digest WHERE m.author_target_identity_digest = ?",
         parameters: 1,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "consume one completed artifact publication",
-        text: "DELETE FROM artifact_publication WHERE publication_identifier = ? AND artifact_identifier = ? AND content_digest = ?",
-        parameters: 3,
-        maximum_rows: 0,
-    },
+    mutation(
+        "consume one completed artifact publication",
+        "DELETE FROM artifact_publication WHERE publication_identifier = ? AND artifact_identifier = ? AND content_digest = ?",
+        3,
+    ),
     InventoriedStatement {
         purpose: "find an artifact's pending publication without hiding ambiguity",
         text: "SELECT p.publication_identifier, p.content_digest, b.byte_length FROM artifact_publication p JOIN artifact_blob b ON b.content_digest = p.content_digest WHERE p.artifact_identifier = ? ORDER BY p.publication_identifier LIMIT 2",
         parameters: 1,
         maximum_rows: 2,
     },
-    InventoriedStatement {
-        purpose: "associate one artifact with the operation slot it fills",
-        text: "INSERT INTO artifact_association \
+    mutation(
+        "associate one artifact with the operation slot it fills",
+        "INSERT INTO artifact_association \
                (artifact_identifier, artifact_slot, author_target_identity_digest, \
                 byte_length, content_digest, media_type, operation_identifier) \
                VALUES (?, ?, ?, ?, ?, ?, ?)",
-        parameters: 7,
-        maximum_rows: 0,
-    },
+        7,
+    ),
     InventoriedStatement {
         purpose: "read the artifact one operation slot holds",
         text: "SELECT artifact_identifier, byte_length, content_digest, media_type \
@@ -424,15 +375,14 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 3,
         maximum_rows: 2,
     },
-    InventoriedStatement {
-        purpose: "record one maintenance-application receipt",
-        text: "INSERT INTO maintenance_application_receipt \
+    mutation(
+        "record one maintenance-application receipt",
+        "INSERT INTO maintenance_application_receipt \
                (application_receipt_identifier, author_target_identity_digest, \
                 recorded_at_unix_milliseconds, released_operation_rows, reviewed_manifest_digest) \
                VALUES (?, ?, ?, ?, ?)",
-        parameters: 5,
-        maximum_rows: 0,
-    },
+        5,
+    ),
     InventoriedStatement {
         purpose: "select one target's operations that ended before a cutoff",
         // Terminal only, and never a nonterminal row under any criteria. Work
@@ -476,14 +426,13 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: LISTING_ROWS,
     },
-    InventoriedStatement {
-        purpose: "remove one completed maintenance artifact cleanup item",
-        text: "DELETE FROM maintenance_artifact_cleanup_work \
+    mutation(
+        "remove one completed maintenance artifact cleanup item",
+        "DELETE FROM maintenance_artifact_cleanup_work \
                WHERE author_target_identity_digest = ? AND application_receipt_identifier = ? \
                  AND content_digest = ?",
-        parameters: 3,
-        maximum_rows: 0,
-    },
+        3,
+    ),
     InventoriedStatement {
         purpose: "count one receipt's pending artifact cleanup work",
         text: "SELECT COUNT(*) FROM maintenance_artifact_cleanup_work \
@@ -491,14 +440,13 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "mark one maintenance receipt completed",
-        text: "UPDATE maintenance_application_receipt SET stage = 'completed' \
+    mutation(
+        "mark one maintenance receipt completed",
+        "UPDATE maintenance_application_receipt SET stage = 'completed' \
                WHERE author_target_identity_digest = ? AND application_receipt_identifier = ? \
                  AND stage = 'database_applied'",
-        parameters: 2,
-        maximum_rows: 0,
-    },
+        2,
+    ),
     InventoriedStatement {
         purpose: "list an operation's artifact cleanup candidates",
         text: "SELECT content_digest FROM artifact_association \
@@ -506,14 +454,13 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: LISTING_ROWS,
     },
-    InventoriedStatement {
-        purpose: "record one maintenance artifact cleanup item",
-        text: "INSERT OR IGNORE INTO maintenance_artifact_cleanup_work \
+    mutation(
+        "record one maintenance artifact cleanup item",
+        "INSERT OR IGNORE INTO maintenance_artifact_cleanup_work \
                (application_receipt_identifier, author_target_identity_digest, content_digest) \
                VALUES (?, ?, ?)",
-        parameters: 3,
-        maximum_rows: 0,
-    },
+        3,
+    ),
     InventoriedStatement {
         purpose: "count what still references one artifact's content",
         text: "SELECT (SELECT COUNT(*) FROM artifact_association WHERE content_digest = ?) \
@@ -529,12 +476,11 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "remove one artifact's content, once nothing references it",
-        text: "DELETE FROM artifact_blob WHERE content_digest = ?",
-        parameters: 1,
-        maximum_rows: 0,
-    },
+    mutation(
+        "remove one artifact's content, once nothing references it",
+        "DELETE FROM artifact_blob WHERE content_digest = ?",
+        1,
+    ),
     InventoriedStatement {
         purpose: "read one target's maintenance-application receipt",
         text: "SELECT recorded_at_unix_milliseconds, released_operation_rows, stage, \
@@ -571,24 +517,21 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 1,
         maximum_rows: 2,
     },
-    InventoriedStatement {
-        purpose: "retain an applied preview under its application receipt",
-        text: "UPDATE maintenance_result_association SET is_current_preview = 0, owning_application_receipt_identifier = ?, association_revision = association_revision + 1 WHERE author_target_identity_digest = ? AND maintenance_result_identifier = ? AND reviewed_source_digest = ? AND association_revision = ? AND is_current_preview = 1 AND owning_application_receipt_identifier IS NULL",
-        parameters: 5,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "retire the current maintenance preview association",
-        text: "DELETE FROM maintenance_result_association WHERE author_target_identity_digest = ? AND is_current_preview = 1 AND owning_application_receipt_identifier IS NULL",
-        parameters: 1,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "record the current maintenance preview association",
-        text: "INSERT INTO maintenance_result_association (association_revision, author_target_identity_digest, byte_length, content_digest, is_current_preview, kind, maintenance_result_identifier, media_type, owning_application_receipt_identifier, reviewed_source_digest) VALUES (1, ?, ?, ?, 1, 'preview', ?, 'application/json', NULL, ?)",
-        parameters: 5,
-        maximum_rows: 0,
-    },
+    mutation(
+        "retain an applied preview under its application receipt",
+        "UPDATE maintenance_result_association SET is_current_preview = 0, owning_application_receipt_identifier = ?, association_revision = association_revision + 1 WHERE author_target_identity_digest = ? AND maintenance_result_identifier = ? AND reviewed_source_digest = ? AND association_revision = ? AND is_current_preview = 1 AND owning_application_receipt_identifier IS NULL",
+        5,
+    ),
+    mutation(
+        "retire the current maintenance preview association",
+        "DELETE FROM maintenance_result_association WHERE author_target_identity_digest = ? AND is_current_preview = 1 AND owning_application_receipt_identifier IS NULL",
+        1,
+    ),
+    mutation(
+        "record the current maintenance preview association",
+        "INSERT INTO maintenance_result_association (association_revision, author_target_identity_digest, byte_length, content_digest, is_current_preview, kind, maintenance_result_identifier, media_type, owning_application_receipt_identifier, reviewed_source_digest) VALUES (1, ?, ?, ?, 1, 'preview', ?, 'application/json', NULL, ?)",
+        5,
+    ),
     InventoriedStatement {
         purpose: "read application result identifiers owned by one receipt",
         text: "SELECT maintenance_result_identifier FROM maintenance_result_association WHERE author_target_identity_digest = ? AND owning_application_receipt_identifier = ? AND kind = 'application' LIMIT 2",
@@ -601,12 +544,11 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: 2,
     },
-    InventoriedStatement {
-        purpose: "record a receipt-owned maintenance application result",
-        text: "INSERT INTO maintenance_result_association (association_revision, author_target_identity_digest, byte_length, content_digest, is_current_preview, kind, maintenance_result_identifier, media_type, owning_application_receipt_identifier, reviewed_source_digest) VALUES (1, ?, ?, ?, 0, 'application', ?, 'application/json', ?, ?)",
-        parameters: 6,
-        maximum_rows: 0,
-    },
+    mutation(
+        "record a receipt-owned maintenance application result",
+        "INSERT INTO maintenance_result_association (association_revision, author_target_identity_digest, byte_length, content_digest, is_current_preview, kind, maintenance_result_identifier, media_type, owning_application_receipt_identifier, reviewed_source_digest) VALUES (1, ?, ?, ?, 0, 'application', ?, 'application/json', ?, ?)",
+        6,
+    ),
     InventoriedStatement {
         purpose: "read one recovery-resume receipt by operation and source fingerprint",
         text: "SELECT applied_operation_revision, operation_identifier, \
@@ -617,9 +559,9 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 3,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "admit one agent submission",
-        text: "INSERT INTO agent_operation \
+    mutation(
+        "admit one agent submission",
+        "INSERT INTO agent_operation \
                (agent_event_store_generation, agent_operation_identifier, applied_sequence, \
                 argument_schema_digest, attempt, author_agent_transport_contract_digest, \
                 author_target_identity_digest, canonical_submission, \
@@ -630,9 +572,8 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                 request_start_unix_milliseconds, result_schema_digest, \
                 selected_environment_revision, snapshot_watermark, submitted_command_digest) \
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        parameters: 23,
-        maximum_rows: 0,
-    },
+        23,
+    ),
     InventoriedStatement {
         purpose: "count unfinished author submissions without the selected local owner",
         text: "SELECT COUNT(*) FROM agent_operation a LEFT JOIN operation o \
@@ -705,14 +646,13 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: PHYSICAL_JOB_ROWS,
     },
-    InventoriedStatement {
-        purpose: "retain one acknowledged submission lifetime",
-        text: "UPDATE agent_operation SET remaining_retention_milliseconds = ? \
+    mutation(
+        "retain one acknowledged submission lifetime",
+        "UPDATE agent_operation SET remaining_retention_milliseconds = ? \
                WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
                  AND submitted_command_digest = ? AND terminal_disposition IS NULL",
-        parameters: 4,
-        maximum_rows: 0,
-    },
+        4,
+    ),
     InventoriedStatement {
         purpose: "fold one believed event into one agent submission",
         // The applied sequence is in the predicate as well as the assignment,
@@ -745,26 +685,24 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 4,
         maximum_rows: 0,
     },
-    InventoriedStatement {
-        purpose: "settle one agent submission",
-        text: "UPDATE agent_operation \
+    mutation(
+        "settle one agent submission",
+        "UPDATE agent_operation \
                SET applied_sequence = ?, attempt = ?, job_state = ?, progress = ?, \
                    remaining_retention_milliseconds = ?, terminal_disposition = ? \
                WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
                  AND terminal_disposition IS NULL",
-        parameters: 8,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "open one subscription ledger",
-        text: "INSERT INTO subscription_ledger \
+        8,
+    ),
+    mutation(
+        "open one subscription ledger",
+        "INSERT INTO subscription_ledger \
                (agent_event_store_generation, author_target_identity_digest, \
                 daemon_subscription_identifier, event_bytes, event_rows, \
                 recorded_at_unix_milliseconds, unresolved_incident_count) \
                VALUES (?, ?, ?, 0, 0, ?, 0)",
-        parameters: 4,
-        maximum_rows: 0,
-    },
+        4,
+    ),
     InventoriedStatement {
         purpose: "read one subscription ledger",
         text: "SELECT agent_event_store_generation, canonical_digest, compacted_below_cursor, \
@@ -811,9 +749,9 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 3,
         maximum_rows: 0,
     },
-    InventoriedStatement {
-        purpose: "install a captured high-water position on a subscription",
-        text: "UPDATE subscription_ledger \
+    mutation(
+        "install a captured high-water position on a subscription",
+        "UPDATE subscription_ledger \
                SET agent_event_store_generation = ?, canonical_digest = ?, cursor = ?, \
                    high_water_cursor = ?, unresolved_incident = NULL, \
                    unresolved_incident_count = 0, event_bytes = 0, event_rows = 0, \
@@ -821,28 +759,25 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
                  AND agent_event_store_generation = ? AND COALESCE(cursor, high_water_cursor) IS ? \
                  AND unresolved_incident IS ? AND ? > agent_event_store_generation",
-        parameters: 10,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "remove a subscription generation's retained events",
-        text: "DELETE FROM subscription_event \
+        10,
+    ),
+    mutation(
+        "remove a subscription generation's retained events",
+        "DELETE FROM subscription_event \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
                  AND agent_event_store_generation = ?",
-        parameters: 3,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "record one subscription event",
-        text: "INSERT INTO subscription_event \
+        3,
+    ),
+    mutation(
+        "record one subscription event",
+        "INSERT INTO subscription_event \
                (agent_event_store_generation, agent_operation_identifier, \
                 author_target_identity_digest, canonical_digest, \
                 cursor, daemon_subscription_identifier, disposition, event_bytes, job_sequence, \
                 recorded_at_unix_milliseconds) \
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        parameters: 10,
-        maximum_rows: 0,
-    },
+        10,
+    ),
     InventoriedStatement {
         purpose: "read one subscription event by its position",
         text: "SELECT agent_operation_identifier, canonical_digest, disposition, event_bytes, \
@@ -861,23 +796,21 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 3,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "compact one subscription's events below a position",
-        text: "DELETE FROM subscription_event \
+    mutation(
+        "compact one subscription's events below a position",
+        "DELETE FROM subscription_event \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
                  AND agent_event_store_generation = ? AND cursor COLLATE slingshot_cursor < ?",
-        parameters: 4,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "record one subscription's compaction floor",
-        text: "UPDATE subscription_ledger \
+        4,
+    ),
+    mutation(
+        "record one subscription's compaction floor",
+        "UPDATE subscription_ledger \
                SET compacted_below_cursor = ?, event_bytes = ?, event_rows = ? \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
                  AND agent_event_store_generation = ?",
-        parameters: 6,
-        maximum_rows: 0,
-    },
+        6,
+    ),
     InventoriedStatement {
         purpose: "select the agent submissions one maintenance run would remove",
         // Ended work only, and named in one fixed order so two previews of the
@@ -898,9 +831,9 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 4,
         maximum_rows: LISTING_ROWS,
     },
-    InventoriedStatement {
-        purpose: "remove one ended agent submission",
-        text: "DELETE FROM agent_operation \
+    mutation(
+        "remove one ended agent submission",
+        "DELETE FROM agent_operation \
                WHERE author_target_identity_digest = ? AND agent_operation_identifier = ? \
                  AND submitted_command_digest = ? AND (terminal_disposition = ? \
                    OR (terminal_disposition IS NULL AND EXISTS (SELECT 1 FROM operation \
@@ -909,9 +842,8 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
                        AND operation.selected_environment_revision = agent_operation.selected_environment_revision \
                        AND operation.settled_at_unix_milliseconds IS NOT NULL \
                        AND operation.terminal_failure_kind IN ('recovery_window_expired', 'result_unavailable', 'remote_state_lost'))))",
-        parameters: 4,
-        maximum_rows: 0,
-    },
+        4,
+    ),
     InventoriedStatement {
         purpose: "select the subscriptions no retained agent submission needs",
         text: "SELECT daemon_subscription_identifier FROM subscription_ledger \
@@ -923,16 +855,15 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 3,
         maximum_rows: LISTING_ROWS,
     },
-    InventoriedStatement {
-        purpose: "retire one subscription no retained agent submission needs",
-        text: "DELETE FROM subscription_ledger \
+    mutation(
+        "retire one subscription no retained agent submission needs",
+        "DELETE FROM subscription_ledger \
                WHERE author_target_identity_digest = ? AND daemon_subscription_identifier = ? \
                  AND daemon_subscription_identifier NOT IN ( \
                      SELECT daemon_subscription_identifier FROM agent_operation \
                      WHERE author_target_identity_digest = ?)",
-        parameters: 3,
-        maximum_rows: 0,
-    },
+        3,
+    ),
     InventoriedStatement {
         purpose: "claim the right to start one agent submission",
         // A higher fence takes the claim from a lower one, and nothing takes it
@@ -972,30 +903,26 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 2,
         maximum_rows: SINGLE_ROW,
     },
-    InventoriedStatement {
-        purpose: "clear one resumed operation's stale scheduler claim",
-        text: "UPDATE operation SET scheduler_fence = NULL, scheduler_lease_expires_at_unix_milliseconds = NULL, scheduler_checkpoint = NULL WHERE author_target_identity_digest = ? AND operation_identifier = ? AND lifecycle_state = ? AND operation_revision = ?",
-        parameters: 4,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "claim one retained operation for execution",
-        text: "UPDATE operation SET scheduler_fence = ?, scheduler_lease_expires_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND lifecycle_state = ? AND operation_revision = ? AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds <= ?) AND (scheduler_fence IS NULL OR scheduler_fence < ?)",
-        parameters: 8,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "checkpoint one retained operation execution",
-        text: "UPDATE operation SET scheduler_checkpoint = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND scheduler_fence = ? AND scheduler_checkpoint IS NULL",
-        parameters: 4,
-        maximum_rows: 0,
-    },
-    InventoriedStatement {
-        purpose: "renew one retained operation execution lease",
-        text: "UPDATE operation SET scheduler_lease_expires_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND scheduler_fence = ? AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds >= ?)",
-        parameters: 5,
-        maximum_rows: 0,
-    },
+    mutation(
+        "clear one resumed operation's stale scheduler claim",
+        "UPDATE operation SET scheduler_fence = NULL, scheduler_lease_expires_at_unix_milliseconds = NULL, scheduler_checkpoint = NULL WHERE author_target_identity_digest = ? AND operation_identifier = ? AND lifecycle_state = ? AND operation_revision = ?",
+        4,
+    ),
+    mutation(
+        "claim one retained operation for execution",
+        "UPDATE operation SET scheduler_fence = ?, scheduler_lease_expires_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND lifecycle_state = ? AND operation_revision = ? AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds <= ?) AND (scheduler_fence IS NULL OR scheduler_fence < ?)",
+        8,
+    ),
+    mutation(
+        "checkpoint one retained operation execution",
+        "UPDATE operation SET scheduler_checkpoint = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND scheduler_fence = ? AND scheduler_checkpoint IS NULL",
+        4,
+    ),
+    mutation(
+        "renew one retained operation execution lease",
+        "UPDATE operation SET scheduler_lease_expires_at_unix_milliseconds = ? WHERE author_target_identity_digest = ? AND operation_identifier = ? AND scheduler_fence = ? AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds >= ?)",
+        5,
+    ),
     InventoriedStatement {
         purpose: "read one retained operation scheduler claim",
         text: "SELECT scheduler_fence, scheduler_lease_expires_at_unix_milliseconds, scheduler_checkpoint FROM operation WHERE author_target_identity_digest = ? AND operation_identifier = ?",
@@ -1009,10 +936,10 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         maximum_rows: SINGLE_ROW,
     },
     InventoriedStatement {
-        purpose: "select one queued operation for scheduler claim",
-        text: "SELECT operation_identifier, lifecycle_state, operation_revision FROM operation WHERE author_target_identity_digest = ? AND lifecycle_state = 'queued' AND scheduler_checkpoint IS NULL AND (scheduler_lease_expires_at_unix_milliseconds IS NULL OR scheduler_lease_expires_at_unix_milliseconds <= ?) AND NOT EXISTS (SELECT 1 FROM recovery_fact WHERE recovery_fact.author_target_identity_digest = operation.author_target_identity_digest AND recovery_fact.operation_identifier = operation.operation_identifier AND recovery_fact.retry_delay_milliseconds > 0 AND recovery_fact.retry_observed_at_unix_milliseconds + recovery_fact.retry_delay_milliseconds > ?) ORDER BY enqueue_sequence ASC, operation_identifier ASC LIMIT 1",
-        parameters: 3,
-        maximum_rows: SINGLE_ROW,
+        purpose: "select queued candidates for scheduler claim",
+        text: "SELECT operation.operation_identifier, operation.lifecycle_state, operation.operation_revision, operation.caller_identity, COALESCE(recovery_fact.retry_observed_at_unix_milliseconds, 0) AS retry_observed_at_unix_milliseconds, COALESCE(recovery_fact.retry_delay_milliseconds, 0) AS retry_delay_milliseconds, COALESCE(recovery_fact.attempt_count, 0) AS attempt_count FROM operation LEFT JOIN recovery_fact ON recovery_fact.author_target_identity_digest = operation.author_target_identity_digest AND recovery_fact.operation_identifier = operation.operation_identifier WHERE operation.author_target_identity_digest = ? AND operation.lifecycle_state = 'queued' AND operation.scheduler_checkpoint IS NULL AND (operation.scheduler_lease_expires_at_unix_milliseconds IS NULL OR operation.scheduler_lease_expires_at_unix_milliseconds <= ?) AND COALESCE(recovery_fact.manual_resume_eligible, 0) = 0 ORDER BY operation.enqueue_sequence ASC, operation.operation_identifier ASC",
+        parameters: 2,
+        maximum_rows: LISTING_ROWS,
     },
     InventoriedStatement {
         purpose: "select queued operations paused for manual recovery",
@@ -1020,35 +947,25 @@ pub const STATEMENTS: &[InventoriedStatement] = &[
         parameters: 1,
         maximum_rows: LISTING_ROWS,
     },
+    mutation(
+        "clear every scheduler claim a dead instance left behind",
+        "UPDATE operation SET scheduler_checkpoint = NULL, scheduler_fence = NULL, scheduler_lease_expires_at_unix_milliseconds = NULL WHERE author_target_identity_digest = ? AND lifecycle_state NOT IN ('succeeded', 'failed') AND (scheduler_checkpoint IS NOT NULL OR scheduler_fence IS NOT NULL OR scheduler_lease_expires_at_unix_milliseconds IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM recovery_fact WHERE recovery_fact.author_target_identity_digest = operation.author_target_identity_digest AND recovery_fact.operation_identifier = operation.operation_identifier AND recovery_fact.manual_resume_eligible = 1)",
+        1,
+    ),
     InventoriedStatement {
-        purpose: "clear every scheduler claim a dead instance left behind",
-        text: "UPDATE operation SET scheduler_checkpoint = NULL, scheduler_fence = NULL, scheduler_lease_expires_at_unix_milliseconds = NULL WHERE author_target_identity_digest = ? AND lifecycle_state NOT IN ('succeeded', 'failed') AND (scheduler_checkpoint IS NOT NULL OR scheduler_fence IS NOT NULL OR scheduler_lease_expires_at_unix_milliseconds IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM recovery_fact WHERE recovery_fact.author_target_identity_digest = operation.author_target_identity_digest AND recovery_fact.operation_identifier = operation.operation_identifier AND recovery_fact.manual_resume_eligible = 1)",
+        purpose: "read producer turns for one target",
+        text: "SELECT producer_key, turn_sequence FROM producer_turn WHERE author_target_identity_digest = ?",
         parameters: 1,
-        maximum_rows: 0,
+        maximum_rows: LISTING_ROWS,
     },
+    mutation(
+        "remove an inactive producer turn",
+        "DELETE FROM producer_turn WHERE author_target_identity_digest = ? AND producer_key = ?",
+        2,
+    ),
+    mutation(
+        "append or rotate one producer turn",
+        "INSERT INTO producer_turn (author_target_identity_digest, producer_key, turn_sequence) VALUES (?, ?, ?) ON CONFLICT (author_target_identity_digest, producer_key) DO UPDATE SET turn_sequence = excluded.turn_sequence",
+        3,
+    ),
 ];
-
-/// Returns the text of the statement with `purpose`.
-///
-/// The inventory is the single place a statement exists, so every runner looks
-/// its text up here rather than holding a copy. A statement that is not in the
-/// list is therefore not reachable at all.
-///
-/// # Panics
-///
-/// Panics when no statement carries `purpose`, which is a programming mistake
-/// rather than a runtime condition: the purposes are constants in this file.
-#[must_use]
-pub fn statement_text(purpose: &str) -> &'static str {
-    STATEMENTS
-        .iter()
-        .find(|inventoried| inventoried.purpose == purpose)
-        .map(|inventoried| inventoried.text)
-        .unwrap_or_else(|| panic!("the inventory holds a statement for {purpose}"))
-}
-
-/// Returns whether `text` is a statement this crate may run.
-#[must_use]
-pub fn is_inventoried(text: &str) -> bool {
-    STATEMENTS.iter().any(|statement| statement.text == text)
-}

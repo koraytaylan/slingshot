@@ -77,25 +77,25 @@ fn command_result_gate_checks_schema_order_types_and_retained_request() {
     let expected = expectation("query_paths");
     let mut source = document("query_paths", 0, &[]);
     source.canonical_result =
-        r#"{"matches":[{"repository_path":"/content/retained/a"}]}"#.to_owned();
+        r#"{"complete":true,"examined_nodes":1,"matches":[{"repository_path":"/content/retained/a"}]}"#.to_owned();
     let checked =
         decode_result_for_command(&serde_json::to_vec(&source).unwrap(), &expected, &command)
             .unwrap();
     assert_eq!(checked.canonical_result, source.canonical_result);
     for payload in [
-        // Missing and surplus members, including an injected catalog tag.
+        // Missing and surplus members, including the historical result without progress.
+        r#"{"matches":[]}"#,
         r#"{}"#,
-        r#"{"matches":[],"private-canary":true}"#,
-        r#"{"command":"query_paths","matches":[]}"#,
+        r#"{"complete":true,"examined_nodes":0,"matches":[],"private-canary":true}"#,
+        r#"{"command":"query_paths","complete":true,"examined_nodes":0,"matches":[]}"#,
         // Serde accepts null for Option; the installed schema does not.
-        r#"{"matches":[],"next_continuation_token":null}"#,
-        // Canonical object bytes, but unordered or repeated set members.
-        r#"{"matches":[{"repository_path":"/content/retained/b"},{"repository_path":"/content/retained/a"}]}"#,
-        r#"{"matches":[{"repository_path":"/content/retained/a"},{"repository_path":"/content/retained/a"}]}"#,
+        r#"{"complete":true,"examined_nodes":0,"matches":[],"next_continuation_token":null}"#,
+        // A provider-order page may be unsorted, but repeated paths are refused.
+        r#"{"complete":true,"examined_nodes":2,"matches":[{"repository_path":"/content/retained/a"},{"repository_path":"/content/retained/a"}]}"#,
         // Schema permits this prefix; the typed repository path refuses it.
-        r#"{"matches":[{"repository_path":"/content/retained/../a"}]}"#,
+        r#"{"complete":true,"examined_nodes":1,"matches":[{"repository_path":"/content/retained/../a"}]}"#,
         // A valid typed result, but not for the retained root.
-        r#"{"matches":[{"repository_path":"/content/another-request/a"}]}"#,
+        r#"{"complete":true,"examined_nodes":1,"matches":[{"repository_path":"/content/another-request/a"}]}"#,
     ] {
         source.canonical_result = payload.to_owned();
         let refusal =
@@ -103,7 +103,7 @@ fn command_result_gate_checks_schema_order_types_and_retained_request() {
                 .unwrap_err();
         assert!(!format!("{refusal:?} {refusal}").contains("private-canary"));
     }
-    source.canonical_result = r#"{"matches":[]}"#.to_owned();
+    source.canonical_result = r#"{"complete":true,"examined_nodes":0,"matches":[]}"#.to_owned();
     let mut fabricated = expected.clone();
     fabricated.expected_provenance.command_contract.result_schema_digest =
         SUBSTITUTED_DIGEST.to_owned();
@@ -676,5 +676,126 @@ fn no_refusal_or_fixture_carries_a_classified_value() {
         let path = format!("{FIXTURES}/{fixture}");
         let text = std::fs::read_to_string(&path).expect("it reads");
         assert!(!text.contains(CANARY), "{fixture} carries no classified value either");
+    }
+}
+
+/// Commands whose second version carries incremental traversal progress.
+const INCREMENTAL_COMMANDS: &[&str] = &[
+    "query_paths",
+    "list_component_definitions",
+    "list_components",
+    "list_content_fragments",
+    "list_experience_fragments",
+    "find_assets_by_metadata",
+];
+
+/// Runs the actual remote result boundary, including schema and retained-root checks.
+fn accepts_discovery(wire_name: &str, result: &serde_json::Value) -> bool {
+    use slingshot_agent_connection::structured_job_result::decode_result_for_command;
+    use slingshot_domain::command::{canonical_json::write_canonical, catalog::Command};
+    let command: Command = serde_json::from_value(serde_json::json!({
+        "command": wire_name, "root_path": "/content/retained"
+    }))
+    .expect("valid retained arguments");
+    let mut source = document(wire_name, 0, &[]);
+    source.canonical_result = write_canonical(result).expect("canonical page");
+    decode_result_for_command(
+        &serde_json::to_vec(&source).expect("wire envelope"),
+        &expectation(wire_name),
+        &command,
+    )
+    .is_ok()
+}
+
+/// Materializes the row shape each discovery command actually returns.
+fn discovery_row(wire_name: &str, path: &str) -> serde_json::Value {
+    let mut row = serde_json::json!({"repository_path": path});
+    if wire_name == "list_component_definitions" {
+        row["resource_type"] = path.into();
+    } else if wire_name == "list_components" {
+        row["resource_type"] = "site/component".into();
+    }
+    row
+}
+
+#[test]
+fn discovery_result_boundary_requires_explicit_consistent_progress() {
+    use serde_json::json;
+    for wire_name in INCREMENTAL_COMMANDS {
+        assert!(accepts_discovery(
+            wire_name,
+            &json!({
+                "complete": true, "examined_nodes": 0, "matches": []
+            })
+        ));
+        assert!(accepts_discovery(
+            wire_name,
+            &json!({
+                "complete": false, "examined_nodes": 0, "matches": [],
+                "next_continuation_token": "cursor"
+            })
+        ));
+        for invalid in [
+            json!({"matches": []}),
+            json!({"complete": true, "matches": []}),
+            json!({"complete": false, "examined_nodes": 0, "matches": []}),
+            json!({"complete": true, "examined_nodes": 0, "matches": [],
+                "next_continuation_token": "cursor"}),
+            json!({"complete": true, "examined_nodes": 0, "matches": [],
+                "next_continuation_token": null}),
+        ] {
+            assert!(!accepts_discovery(wire_name, &invalid), "{wire_name}: {invalid}");
+        }
+    }
+}
+
+#[test]
+fn discovery_result_boundary_preserves_order_and_refuses_duplicate_or_unrelated_rows() {
+    use serde_json::json;
+    for wire_name in INCREMENTAL_COMMANDS {
+        let later = discovery_row(wire_name, "/content/retained/z");
+        let earlier = discovery_row(wire_name, "/content/retained/a");
+        let rows = vec![later.clone(), earlier];
+        let mut result = json!({"complete": true, "examined_nodes": rows.len(), "matches": rows});
+        assert!(accepts_discovery(wire_name, &result), "{wire_name}");
+        result["matches"] = json!([later.clone(), later]);
+        assert!(!accepts_discovery(wire_name, &result), "a repeated path");
+        result["matches"] = json!([discovery_row(wire_name, "/content/another-request/a")]);
+        assert!(!accepts_discovery(wire_name, &result), "another root");
+        result["matches"] = json!([discovery_row(wire_name, "/content/retained")]);
+        assert_eq!(
+            accepts_discovery(wire_name, &result),
+            matches!(*wire_name, "query_paths" | "find_assets_by_metadata"),
+            "general and asset discovery include a matching root"
+        );
+    }
+}
+
+#[test]
+fn discovery_result_boundary_checks_exact_and_excessive_counts() {
+    use serde_json::json;
+    use slingshot_domain::command::command_identity::CommandContract;
+    let contract = CommandContract::embedded();
+    let maximum_work = contract.limit("maximum_discovery_candidate_nodes");
+    let maximum_matches = contract.limit("maximum_result_limit");
+    for wire_name in INCREMENTAL_COMMANDS {
+        let mut result = json!({"complete": true, "examined_nodes": maximum_work, "matches": []});
+        assert!(accepts_discovery(wire_name, &result), "work at its bound");
+        result["examined_nodes"] = json!(maximum_work + 1);
+        assert!(!accepts_discovery(wire_name, &result), "work past its bound");
+        let rows: Vec<_> = (0..maximum_matches)
+            .map(|ordinal| discovery_row(wire_name, &format!("/content/retained/{ordinal}")))
+            .collect();
+        result["examined_nodes"] = json!(maximum_matches);
+        result["matches"] = json!(rows);
+        assert!(accepts_discovery(wire_name, &result), "matches at their bound");
+        result["examined_nodes"] = json!(maximum_matches - 1);
+        assert!(!accepts_discovery(wire_name, &result), "more matches than examined nodes");
+        result["examined_nodes"] = json!(maximum_matches + 1);
+        result["matches"]
+            .as_array_mut()
+            .expect("rows")
+            .push(discovery_row(wire_name, "/content/retained/past-limit"));
+        assert!(!accepts_discovery(wire_name, &result), "matches past their bound");
     }
 }

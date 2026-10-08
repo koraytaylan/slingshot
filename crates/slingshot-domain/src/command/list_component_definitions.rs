@@ -13,10 +13,11 @@ use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
 
 use crate::command::component_resource_type::ComponentResourceType;
-use crate::command::list_components::ComponentMatch;
-use crate::command::query_paths::{
-    DiscoveryResultFailure, anchor_contains, require_strictly_ascending,
+use crate::command::incremental_discovery::{
+    DiscoveryProgress, IncrementalDiscoveryFailure, require_page,
 };
+use crate::command::list_components::ComponentMatch;
+use crate::command::query_paths::{DiscoveryResultFailure, anchor_contains};
 use crate::command::repository_path::RepositoryPath;
 use crate::command::result_window::{ContinuationToken, ResultWindow};
 
@@ -77,11 +78,14 @@ impl ListComponentDefinitionsCommand {
 /// One page of component definitions under the anchor.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ListComponentDefinitionsResult {
-    /// Matches, strictly ascending by repository path bytes.
+    /// Matches in live repository provider order, without repeated paths.
     pub matches: Vec<ComponentMatch>,
     /// Where the next page resumes, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_continuation_token: Option<ContinuationToken>,
+    /// Explicit completeness and the work performed during this page.
+    #[serde(flatten)]
+    pub progress: DiscoveryProgress,
 }
 
 impl ListComponentDefinitionsResult {
@@ -89,14 +93,19 @@ impl ListComponentDefinitionsResult {
     ///
     /// # Errors
     ///
-    /// Returns [`DiscoveryResultFailure::NotStrictlyAscending`] when a path
-    /// repeats or sorts before its predecessor.
+    /// Returns an incremental discovery failure when completeness is inconsistent,
+    /// counts exceed their bounds, or one page repeats a path.
     pub fn new(
         matches: Vec<ComponentMatch>,
         next_continuation_token: Option<ContinuationToken>,
-    ) -> Result<Self, DiscoveryResultFailure> {
-        require_strictly_ascending(matches.iter().map(|found| &found.repository_path))?;
-        Ok(Self { matches, next_continuation_token })
+        progress: DiscoveryProgress,
+    ) -> Result<Self, IncrementalDiscoveryFailure> {
+        require_page(
+            matches.iter().map(|found| &found.repository_path),
+            next_continuation_token.as_ref(),
+            progress,
+        )?;
+        Ok(Self { matches, next_continuation_token, progress })
     }
 
     /// Requires this page to answer `command`.
@@ -127,6 +136,10 @@ struct ResultDocument {
     /// Where the next page resumes.
     #[serde(default)]
     next_continuation_token: Option<ContinuationToken>,
+    /// Whether the retained traversal ended.
+    complete: bool,
+    /// Nodes examined while producing this page.
+    examined_nodes: u64,
 }
 
 impl<'de> Deserialize<'de> for ListComponentDefinitionsResult {
@@ -134,6 +147,14 @@ impl<'de> Deserialize<'de> for ListComponentDefinitionsResult {
         deserializer: Source,
     ) -> Result<Self, Source::Error> {
         let document = ResultDocument::deserialize(deserializer)?;
-        Self::new(document.matches, document.next_continuation_token).map_err(Source::Error::custom)
+        Self::new(
+            document.matches,
+            document.next_continuation_token,
+            DiscoveryProgress {
+                complete: document.complete,
+                examined_nodes: document.examined_nodes,
+            },
+        )
+        .map_err(Source::Error::custom)
     }
 }

@@ -10,6 +10,7 @@
 {"note": "operation-free ownership of pending maintenance document publication", "table": "maintenance_publication"}
 {"note": "keyed by target and identifier, referencing no operation", "table": "maintenance_result_association"}
 {"note": "keyed by target and caller-chosen identifier", "table": "operation"}
+{"table":"producer_turn","note":"Persistent round-robin turn for each queued producer in a target."}
 {"note": "one outstanding recovery per operation", "table": "recovery_fact"}
 {"note": "keyed by its source fingerprint", "table": "recovery_resume_receipt"}
 {"note": "one position per stream, associated to a job or to nothing", "table": "subscription_event"}

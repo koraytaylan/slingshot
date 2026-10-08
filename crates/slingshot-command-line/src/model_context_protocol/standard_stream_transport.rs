@@ -480,22 +480,25 @@ pub struct OutputQueue {
     waiting_bytes: usize,
     /// Why writing stopped, once it has.
     failure: Option<OutputFailure>,
-    /// Identifiers whose lines have been written in full.
-    acknowledged: Vec<String>,
-    /// Request identities whose responses reached the sink in full.
-    acknowledged_requests: Vec<String>,
 }
 
 /// One complete line and the request it settles, when it is a response.
 #[derive(Debug)]
-struct QueuedLine {
+pub(crate) struct QueuedLine {
     /// The serialized protocol line.
-    line: String,
+    pub(crate) line: String,
     /// The active request released only on full delivery.
-    acknowledged_request: Option<String>,
+    pub(crate) acknowledged_request: Option<String>,
 }
 
 impl OutputQueue {
+    /// Transfers ownership to the sole writer without acknowledging delivery.
+    pub(crate) fn take_next(&mut self) -> Option<QueuedLine> {
+        let queued = self.waiting.pop_front()?;
+        self.waiting_bytes -= queued.line.len();
+        Some(queued)
+    }
+
     /// Returns an empty queue that has not failed.
     #[must_use]
     pub fn new() -> Self {
@@ -518,18 +521,6 @@ impl OutputQueue {
     #[must_use]
     pub fn waiting_bytes(&self) -> usize {
         self.waiting_bytes
-    }
-
-    /// Returns the identifiers whose lines were written in full, in order.
-    #[must_use]
-    pub fn acknowledged(&self) -> &[String] {
-        &self.acknowledged
-    }
-
-    /// Returns request identities whose responses reached the sink in full.
-    #[must_use]
-    pub fn acknowledged_requests(&self) -> &[String] {
-        &self.acknowledged_requests
     }
 
     /// Takes one complete line from a producer.
@@ -592,6 +583,21 @@ impl OutputQueue {
     /// part is left unterminated and nothing is written after it, so a reader
     /// gets every completed line and one invalid suffix at the end.
     pub fn write_waiting(&mut self, sink: &mut dyn LineSink, each_took: Duration) -> usize {
+        self.write_waiting_acknowledged(sink, each_took, |_| {})
+    }
+
+    /// Delivers queued lines and immediately releases each completed request.
+    ///
+    /// The callback runs only after the complete line reaches the sink. Neither
+    /// response bodies nor request identities are retained after delivery, so
+    /// memory depends on pending work rather than session length. A failed or
+    /// partial write never acknowledges its request.
+    pub fn write_waiting_acknowledged(
+        &mut self,
+        sink: &mut dyn LineSink,
+        each_took: Duration,
+        mut acknowledge: impl FnMut(&str),
+    ) -> usize {
         let mut written = 0;
         while let Some(queued) = self.waiting.pop_front() {
             self.waiting_bytes -= queued.line.len();
@@ -602,9 +608,8 @@ impl OutputQueue {
             match sink.write_line(&queued.line) {
                 Written::Complete => {
                     written += 1;
-                    self.acknowledged.push(queued.line);
                     if let Some(identifier) = queued.acknowledged_request {
-                        self.acknowledged_requests.push(identifier);
+                        acknowledge(&identifier);
                     }
                 }
                 Written::Expired => {

@@ -13,10 +13,10 @@
 use std::collections::BTreeSet;
 
 use slingshot_command_line::model_context_protocol::tool_catalog::{
-    CatalogRefusal, EVERY_CONTROL, KeyPresence, PROJECTED_VERSION, Provenance, ToolDescriptor,
-    derive,
+    CatalogRefusal, EVERY_CONTROL, KeyPresence, Provenance, ToolDescriptor, derive,
 };
 use slingshot_domain::command::catalog::CommandCatalog;
+use slingshot_domain::command::command_identity::CommandContract;
 
 /// How many commands the registry publishes.
 const PUBLISHED_COMMANDS: usize = 72;
@@ -195,10 +195,12 @@ fn provenance_drift_offers_no_tools_at_all() {
 const DRIFTED: &str = "1111111111111111111111111111111111111111111111111111111111111111";
 
 #[test]
-fn every_published_command_declares_the_one_version_this_build_projects() {
+fn every_published_command_declares_the_version_this_build_projects_for_it() {
+    let contract = CommandContract::embedded();
     for descriptor in CommandCatalog::published().descriptors() {
         assert_eq!(
-            descriptor.command_semantic_contract_version, PROJECTED_VERSION,
+            descriptor.command_semantic_contract_version,
+            contract.command_semantic_contract_versions[&descriptor.wire_name],
             "{} declares another version",
             descriptor.wire_name
         );

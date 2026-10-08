@@ -48,8 +48,8 @@ fn main() -> std::process::ExitCode {
         let code = command_line::run(
             &arguments,
             &executable,
-            &mut std::io::stdout().lock(),
-            &mut std::io::stderr().lock(),
+            &mut std::io::stdout(),
+            &mut std::io::stderr(),
         );
         u8::try_from(code).unwrap_or(command_line::EXIT_RUNTIME_UNUSABLE)
     };

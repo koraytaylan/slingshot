@@ -9,8 +9,8 @@
 {"answers":[true,false],"kind":"combination","matches":false,"note":"one false answer is enough to exclude"}
 {"answers":[false,true],"kind":"combination","matches":false,"note":"and so is the first"}
 {"answers":[],"kind":"combination","matches":true,"note":"a search with no predicates includes every candidate under its anchor"}
-{"budget":"candidate_nodes","kind":"budget","note":"exhausting candidate_nodes discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"candidate_nodes","kind":"budget","note":"a per-page traversal budget returns explicit partial progress","publishes_matches":true,"publishes_token":true}
 {"budget":"property_values","kind":"budget","note":"exhausting property_values discards the page","publishes_matches":false,"publishes_token":false}
 {"budget":"property_bytes","kind":"budget","note":"exhausting property_bytes discards the page","publishes_matches":false,"publishes_token":false}
 {"budget":"criterion_evaluations","kind":"budget","note":"exhausting criterion_evaluations discards the page","publishes_matches":false,"publishes_token":false}
-{"budget":"execution_duration","kind":"budget","note":"exhausting execution_duration discards the page","publishes_matches":false,"publishes_token":false}
+{"budget":"execution_duration","kind":"budget","note":"a per-page traversal budget returns explicit partial progress","publishes_matches":true,"publishes_token":true}

@@ -21,6 +21,11 @@
 
 use serde_json::{Value, json};
 
+mod dispatch;
+/// Concurrent process ownership for protocol input, execution and output.
+pub mod process_session;
+mod stream_workers;
+
 use crate::machine_outcome_envelope::{ArtifactAccess, Interruption, MachineOutcomeEnvelope};
 use crate::model_context_protocol::active_request_registry::{
     ActiveRequestRegistry, AdmissionRefusal,
@@ -71,6 +76,8 @@ pub struct ServerApplication {
     tools: Vec<ToolDescriptor>,
     /// Where a tool call reaches the daemon, when this server has one.
     runner: Option<Box<dyn ToolRunner>>,
+    /// Local waits still owned by workers, including waits being cancelled.
+    pending: std::collections::BTreeMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
 impl ::core::fmt::Debug for ServerApplication {
@@ -118,6 +125,7 @@ impl ServerApplication {
             progress: ProgressRegistry::new(),
             tools: tool_catalog::derive(&Provenance::recomputed()).unwrap_or_default(),
             runner,
+            pending: std::collections::BTreeMap::new(),
         }
     }
 
@@ -156,12 +164,10 @@ impl ServerApplication {
     /// sink in full. A failed writer leaves the same one failure transition for
     /// the caller to finish and never makes a queued answer look delivered.
     pub fn write_output(&mut self, sink: &mut dyn LineSink) -> bool {
-        let acknowledged = self.output.acknowledged_requests().len();
-        self.output.write_waiting(sink, std::time::Duration::ZERO);
-        let delivered: Vec<String> = self.output.acknowledged_requests()[acknowledged..].to_vec();
-        for identifier in delivered {
-            self.active.acknowledged(&identifier);
-        }
+        let active = &mut self.active;
+        self.output.write_waiting_acknowledged(sink, std::time::Duration::ZERO, |identifier| {
+            active.acknowledged(identifier);
+        });
         self.output.accepts_more()
     }
 
@@ -206,8 +212,10 @@ impl ServerApplication {
                 if let Some(identifier) = parameters.get("requestId") {
                     let identifier = identifier_key(identifier);
                     self.progress.cancel(&identifier);
-                    self.active.cancelling(&identifier);
-                    self.active.cancelled(&identifier);
+                    if let Some(cancellation) = self.pending.get(&identifier) {
+                        cancellation.store(true, std::sync::atomic::Ordering::SeqCst);
+                        self.active.cancelling(&identifier);
+                    }
                 }
             }
             other => {
@@ -224,7 +232,9 @@ impl ServerApplication {
                 AdmissionRefusal::Duplicate(_) => INVALID_REQUEST_ERROR,
                 AdmissionRefusal::Saturated => RESOURCE_EXHAUSTED_ERROR,
             };
-            return rendered_error(Some(identifier), code, &refusal.to_string());
+            let line = rendered_error(Some(identifier), code, &refusal.to_string());
+            self.enqueue(&line);
+            return line;
         }
         let answered = self.answer(identifier, method, parameters);
         self.active.answered(&key);
@@ -272,13 +282,7 @@ impl ServerApplication {
         if method == "initialize" {
             return Ok(self.legacy.initialize(requested_revision(parameters)));
         }
-        let legacy = self.legacy.lifecycle() != Lifecycle::Fresh;
-        if legacy {
-            self.legacy.require_actionable(method).map_err(legacy_refusal)?;
-        } else {
-            let revision = requested_revision(parameters);
-            current_stateless_revision::require_answerable(method, revision)?;
-        }
+        let legacy = self.require_actionable(method, parameters)?;
         if method == "tools/call" {
             let result = self.tools_call(identifier, parameters)?;
             return Ok(if legacy {
@@ -648,6 +652,10 @@ impl ServerApplication {
     /// failing, and both can happen at once.
     pub fn finish(&mut self, reason: OutputFailure) -> Vec<String> {
         self.output.fail(reason);
+        for cancellation in self.pending.values() {
+            cancellation.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        self.pending.clear();
         let detached = self.progress.detach_all();
         self.active.release_all();
         detached
@@ -661,6 +669,10 @@ impl ServerApplication {
             "server/discover" => Ok(current_stateless_revision::discovery()),
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({
+                "_meta": {
+                    "rs.slingshot/command-schema-manifest": slingshot_domain::command::schema::schema_manifest(),
+                    "rs.slingshot/transport-contract-sha256": slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded_digest(),
+                },
                 "tools": self.tools.iter().filter_map(|tool| {
                     Some(json!({
                         "name": &tool.name,

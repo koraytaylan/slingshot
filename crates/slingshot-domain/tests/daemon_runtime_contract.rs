@@ -76,7 +76,7 @@ fn octets(row: &Value, member: &str) -> [u8; DIGEST_OCTETS] {
 fn the_committed_bytes_the_embedded_bytes_and_the_sidecar_agree() {
     let repository = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../policy/daemon-runtime-contract-1.json"
+        "/../../policy/daemon-runtime-contract-2.json"
     ))
     .expect("the committed manifest reads");
     assert_eq!(repository, DaemonRuntimeContract::embedded_manifest());
@@ -165,13 +165,13 @@ fn a_noncanonical_or_wrongly_declared_manifest_is_refused() {
         ),
         (
             "another format",
-            manifest.replace(DAEMON_RUNTIME_CONTRACT_FORMAT, "slingshot.daemon-runtime-contract/2"),
+            manifest.replace(DAEMON_RUNTIME_CONTRACT_FORMAT, "slingshot.daemon-runtime-contract/3"),
             DaemonRuntimeContractFailure::UnsupportedFormat(String::new()),
         ),
         (
             "another operation protocol version",
             manifest
-                .replace("\"operation_protocol_version\":1", "\"operation_protocol_version\":2"),
+                .replace("\"operation_protocol_version\":2", "\"operation_protocol_version\":3"),
             DaemonRuntimeContractFailure::UnsupportedVersion(0),
         ),
         (

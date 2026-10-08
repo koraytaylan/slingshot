@@ -26,6 +26,70 @@ An option is given once. An option that belongs to another leaf is refused by
 name rather than ignored, because an ignored option is a caller believing
 something that is not happening.
 
+## Incremental repository discovery
+
+`query_paths`, `list_component_definitions`, `list_components`,
+`list_content_fragments`, `list_experience_fragments`, `find_pages_containing_phrase`,
+`find_pages_using_components` and `find_assets_by_metadata` use command contract version 2. Each result includes
+`matches`, `examined_nodes` and `complete`. When `complete` is false, pass the
+returned `next_continuation_token` with the same command, root and filters to continue.
+A partial page can contain no matches; keep following its token. Only
+`complete: true` means traversal has exhausted its retained iterators.
+
+`query_paths` uses version `2.0.2`. The four existing bounded discovery commands
+use patch version `2.0.3`; other commands use patch version `1.0.4`. These patch
+increments bind the revised shared byte contract and limits identity. Their
+argument and result shapes are unchanged. The two page searches use patch version
+`2.0.1`: their results require explicit progress and preserve provider order.
+Asset search uses version `2.0.0` with the same bounded progress fields and provider order.
+
+The agent walks descendants of the exact readable root in the repository
+provider's depth-first order. `query_paths` also evaluates the root itself.
+The agent retains iterator position across pages instead
+of rescanning earlier nodes. The initial result limit and offset apply throughout
+the cursor; offset work is also spread over bounded pages. A missing root is
+refused. Results are not globally sorted.
+
+Phrase search compares the complete phrase exactly, with case preserved and no
+Unicode normalization, against a page's `jcr:title` and `jcr:description`. It
+includes the root when that root is a matching page. Results contain page paths
+and optional titles, never matched excerpts or descriptions.
+
+Component search groups exact `sling:resourceType` values by their nearest page.
+`any` requires one requested type; `all` requires every requested type, possibly
+on different resources and across continuation pages. A nested page owns its
+components, so those do not qualify its parent. An anchor inside page content
+can return its containing ancestor page. Pages are emitted after their scoped
+content is consumed, in provider traversal order. Component witnesses, their
+readable ancestry and the owning page are rechecked using the current request's
+permissions before delivery and replay. `examined_nodes` counts traversal visits
+and these bounded ancestry and witness checks; it is not a distinct-node count.
+A witness proof that cannot fit even one page's node budget refuses the cursor.
+
+Asset search reads original binary length without downloading binary content. Its
+media format uses one usable metadata `dc:format` string, then the original MIME
+type as fallback. Requested size excludes unknown lengths; omitted tag mode
+requires all requested tags. Returned tags are unique in UTF-8 byte order. A
+root-only search includes assets with absent optional metadata, and an asset
+prunes its rendition and metadata descendants from traversal.
+
+Stable trees with stable permissions consume each traversal iterator once. Concurrent edits are
+live observations, not a snapshot: removed or newly unreadable subtrees are
+skipped, and inserted or moved content may be omitted or encountered again.
+Every row is read with the current request's permissions. Repeating the most
+recent continuation replays its answer only while the root and returned rows
+remain readable and unchanged. Once another page advances the cursor, older
+tokens expire. Replay preserves the original `examined_nodes` value; it does not
+report additional traversal work.
+
+Cursors have a fixed lifetime and bounded agent capacity and depth. Tokens are
+bound to the caller, command, root, target and runtime; expiry, restart or runtime
+replacement requires a new enumeration. Pages do not renew their lifetime.
+Node and duration budgets stop a page with explicit partial progress. Cancellation,
+excessive depth or result bytes can instead refuse the cursor; start again with
+a narrower root or smaller result limit as appropriate. Repository calls are
+cooperatively bounded, so a blocked provider call cannot be preempted.
+
 ## Commands this build offers
 
 These reach configuration, a daemon, or nothing at all.
@@ -373,7 +437,6 @@ evidence are reported separately rather than added together.
 
 ## What is not here
 
-This reference describes the executable. It does not describe the author it
-eventually reaches, the shape of any command's result document, or the
-protocol two Slingshot processes speak to each other - those are the registry's
-schemas and [DAEMON.md](DAEMON.md) respectively.
+This reference describes the executable and how to consume incremental discovery.
+The registry schemas define the complete command result shapes;
+[DAEMON.md](DAEMON.md) describes the protocol between local Slingshot processes.

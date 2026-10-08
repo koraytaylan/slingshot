@@ -175,6 +175,9 @@ pub struct ChunkBody {
 pub enum OperationRequest {
     /// Run one command.
     Execute {
+        /// Cooperative producer digest; omission uses the shared default queue.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caller_identity: Option<String>,
         /// The command, as its typed payload.
         command: serde_json::Value,
         /// Identifier the caller created for this operation.

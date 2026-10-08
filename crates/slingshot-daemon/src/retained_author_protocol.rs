@@ -32,10 +32,15 @@ use slingshot_storage::{
     persistent_capacity::PersistentCapacityAccount,
 };
 
+/// Nanoseconds in one elapsed millisecond.
+const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
+
 /// The invocation owns no alternate client and cannot change endpoint, identity,
 /// command or authentication policy between submission and recovery. Provider
 /// credentials may refresh without changing the selected principal or revision.
 pub struct RetainedAuthorProtocol<'runtime> {
+    /// Timing for recovery facts first observed during this invocation.
+    retry_schedule: std::cell::RefCell<crate::runtime_builder::retry_schedule::RetrySchedule>,
     operations: &'runtime OperationRepository,
     remote: &'runtime AgentJobRepository,
     store: &'runtime ArtifactStore,
@@ -48,7 +53,7 @@ pub struct RetainedAuthorProtocol<'runtime> {
     now: u64,
 }
 
-impl core::fmt::Debug for RetainedAuthorProtocol<'_> {
+impl ::core::fmt::Debug for RetainedAuthorProtocol<'_> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("RetainedAuthorProtocol([redacted])")
     }
@@ -67,6 +72,11 @@ impl<'runtime> RetainedAuthorProtocol<'runtime> {
 
     /// Binds a validated submission to the independently admitted command.
     /// Uses negotiated transport, with preflight before every network phase.
+    ///
+    /// # Errors
+    ///
+    /// Returns a refusal when authentication, durable ownership, retained
+    /// command identity or submission derivation cannot bind this invocation.
     pub fn new(
         operations: &'runtime OperationRepository,
         remote: &'runtime AgentJobRepository,
@@ -92,6 +102,11 @@ impl<'runtime> RetainedAuthorProtocol<'runtime> {
 
     /// Binds one immutable protocol mode across initial submission, lookup and
     /// artifact acquisition. No phase can fall back or change that choice.
+    ///
+    /// # Errors
+    ///
+    /// Returns a refusal when authentication, durable ownership, retained
+    /// command identity or submission derivation cannot bind this invocation.
     pub fn new_over(
         operations: &'runtime OperationRepository,
         remote: &'runtime AgentJobRepository,
@@ -118,6 +133,11 @@ impl<'runtime> RetainedAuthorProtocol<'runtime> {
     /// Binds one runtime authentication policy through admission, lookup and
     /// artifact completion. The provider branch holds no invocation-long token
     /// and reuses the same durable ownership checks as fixed-credential callers.
+    ///
+    /// # Errors
+    ///
+    /// Returns a refusal when authentication, durable ownership, retained
+    /// command identity or submission derivation cannot bind this invocation.
     pub fn new_with_authentication(
         operations: &'runtime OperationRepository,
         remote: &'runtime AgentJobRepository,
@@ -160,6 +180,9 @@ impl<'runtime> RetainedAuthorProtocol<'runtime> {
         let command =
             serde_json::from_value(arguments).map_err(|_| RetainedAuthorProtocolRefusal)?;
         Ok(Self {
+            retry_schedule: std::cell::RefCell::new(
+                crate::runtime_builder::retry_schedule::RetrySchedule::default(),
+            ),
             operations,
             remote,
             store,
@@ -175,7 +198,7 @@ impl<'runtime> RetainedAuthorProtocol<'runtime> {
 
     fn now(&self) -> u64 {
         self.now.saturating_add(
-            u64::try_from(self.started.elapsed().as_nanos().div_ceil(1_000_000))
+            u64::try_from(self.started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND))
                 .unwrap_or(u64::MAX),
         )
     }
@@ -223,11 +246,26 @@ impl<'runtime> RetainedAuthorProtocol<'runtime> {
     fn deferred(&self, local: &OperationSummary) -> bool {
         local.record.outstanding_recovery.as_ref().is_some_and(|fact| {
             automatic_recovery_paused(fact)
-                || self.now()
-                    < fact
-                        .retry_observed_at_unix_milliseconds
-                        .saturating_add(fact.retry_delay_milliseconds)
+                || !self.retry_schedule.borrow_mut().ready(
+                    &local.operation_identifier,
+                    crate::runtime_builder::retry_schedule::Observation::of(fact),
+                    self.now(),
+                    tokio::time::Instant::now(),
+                )
         })
+    }
+
+    /// Carries scheduling authority for the existing retry into this execution.
+    /// A later recovery observation receives its own local monotonic deadline.
+    pub(crate) fn after_scheduled_delay(self, local: &OperationSummary) -> Self {
+        if let Some(recovery) = &local.record.outstanding_recovery {
+            self.retry_schedule.borrow_mut().admitted(
+                &local.operation_identifier,
+                crate::runtime_builder::retry_schedule::Observation::of(recovery),
+                tokio::time::Instant::now(),
+            );
+        }
+        self
     }
 
     fn settlement(&self, local: &OperationSummary) -> AgentSettlement {
@@ -242,12 +280,12 @@ impl<'runtime> RetainedAuthorProtocol<'runtime> {
 }
 
 impl AuthorAgentProtocol for RetainedAuthorProtocol<'_> {
-    fn submit<'a>(
-        &'a self,
-        transport: &'a SelectedAuthorTransport,
-        identity: &'a ExecutionIdentity,
-        command: &'a Command,
-    ) -> ExecutionFuture<'a, HandoffDisposition> {
+    fn submit<'execution>(
+        &'execution self,
+        transport: &'execution SelectedAuthorTransport,
+        identity: &'execution ExecutionIdentity,
+        command: &'execution Command,
+    ) -> ExecutionFuture<'execution, HandoffDisposition> {
         Box::pin(async move {
             if command != &self.command
                 || transport.require_submission(identity, &self.submission).is_err()
@@ -283,11 +321,11 @@ impl AuthorAgentProtocol for RetainedAuthorProtocol<'_> {
         })
     }
 
-    fn settle<'a>(
-        &'a self,
-        transport: &'a SelectedAuthorTransport,
-        identity: &'a ExecutionIdentity,
-    ) -> ExecutionFuture<'a, AgentSettlement> {
+    fn settle<'execution>(
+        &'execution self,
+        transport: &'execution SelectedAuthorTransport,
+        identity: &'execution ExecutionIdentity,
+    ) -> ExecutionFuture<'execution, AgentSettlement> {
         Box::pin(async move {
             let Ok(local) = self.local(identity) else {
                 return AgentSettlement::Outstanding { recovery: self.waiting(None) };
@@ -319,11 +357,11 @@ impl AuthorAgentProtocol for RetainedAuthorProtocol<'_> {
         })
     }
 
-    fn complete_artifacts<'a>(
-        &'a self,
-        transport: &'a SelectedAuthorTransport,
-        identity: &'a ExecutionIdentity,
-    ) -> ExecutionFuture<'a, ArtifactCompletion> {
+    fn complete_artifacts<'execution>(
+        &'execution self,
+        transport: &'execution SelectedAuthorTransport,
+        identity: &'execution ExecutionIdentity,
+    ) -> ExecutionFuture<'execution, ArtifactCompletion> {
         Box::pin(async move {
             let local = self.local(identity).ok();
             let recovery =
@@ -334,126 +372,155 @@ impl AuthorAgentProtocol for RetainedAuthorProtocol<'_> {
             let Some(local) = &local else {
                 return recovery();
             };
-            if local.record.terminal_failure.as_ref().is_some_and(|failure|
-                failure.kind == slingshot_domain::operation::TerminalFailureKind::ResultUnavailable
-                && failure.disposition == slingshot_domain::operation::TerminalFailureDisposition::AuthoritativeRemoteSuccess) {
+            if result_unavailable(local) {
                 return ArtifactCompletion::Unavailable;
             }
             if local.record.lifecycle_state != OperationLifecycleState::Succeeded {
                 return recovery();
             }
-            let associations = ArtifactAssociations::new(self.operations.database());
-            let mut artifacts = Vec::new();
-            for slot in ["content_package", "loaded_content_json", "structured_result"] {
-                let metadata = match associations.read(
-                    &identity.author_target_identity_digest,
-                    &identity.operation_identifier,
-                    slot,
-                ) {
-                    Ok(Some(metadata)) => metadata,
-                    Ok(None) => continue,
-                    Err(_) => return recovery(),
-                };
-                if metadata.artifact_identifier
-                    != ArtifactIdentifier::derive(
-                        &local.installation_identifier,
-                        &identity.author_target_identity_digest,
-                        &identity.operation_identifier,
-                        slot,
-                    )
-                {
-                    return recovery();
-                }
-                // Reopening a completed invocation must not expose a corrupt
-                // or replaced content object merely because its row survives.
-                if self.store.open_verified(&metadata).is_err() {
-                    return recovery();
-                }
-                artifacts.push(ProducedArtifact {
-                    artifact_identifier: metadata.artifact_identifier.as_text().to_owned(),
-                    artifact_slot: metadata.artifact_slot,
-                    byte_length: metadata.byte_length,
-                    content_digest: metadata.content_digest,
-                    media_type: metadata.media_type,
-                });
-            }
-            // A surviving operation row is insufficient if maintenance or
-            // corruption removed one of the associations the result requires.
-            let canonical = if let Some(inline) = &local.result_inline_bytes {
-                if artifacts.iter().any(|artifact| artifact.artifact_slot == "structured_result") {
-                    return recovery();
-                }
-                inline.clone()
-            } else {
-                use std::io::Read;
-                let Ok(Some(metadata)) = associations.read(
-                    &identity.author_target_identity_digest,
-                    &identity.operation_identifier,
-                    "structured_result",
-                ) else {
-                    return recovery();
-                };
-                let Ok(mut reader) = self.store.open_verified(&metadata) else {
-                    return recovery();
-                };
-                let mut bytes = Vec::new();
-                let limit = slingshot_agent_connection::structured_job_result::maximum_agent_inline_result_bytes();
-                if reader.by_ref().take(limit.saturating_add(1)).read_to_end(&mut bytes).is_err()
-                    || bytes.len() as u64 > limit
-                    || reader.finish().is_err()
-                {
-                    return recovery();
-                }
-                let Ok(text) = String::from_utf8(bytes) else {
-                    return recovery();
-                };
-                text
-            };
-            let Ok(mut value) = slingshot_domain::command::canonical_json::require_canonical_bytes(
-                canonical.as_bytes(),
-            ) else {
+            let Some(artifacts) = self.verified_artifacts(local, identity) else {
                 return recovery();
             };
-            let Some(object) = value.as_object_mut() else {
+            let Some(canonical) = self.canonical_result(local, identity, &artifacts) else {
                 return recovery();
             };
-            if object.insert("command".to_owned(), self.command.wire_name().into()).is_some() {
+            if self.required_artifacts_match(&canonical, &artifacts).is_none() {
                 return recovery();
-            }
-            use slingshot_domain::command::catalog::{CommandResult, validate_result_for_command};
-            let Ok(result) = serde_json::from_value::<CommandResult>(value) else {
-                return recovery();
-            };
-            if validate_result_for_command(&self.command, &result).is_err() {
-                return recovery();
-            }
-            use slingshot_domain::command::load_content_as_javascript_object_notation::LoadContentAsJavaScriptObjectNotationResult;
-            let descriptor = match &result {
-                CommandResult::DownloadContentPackage(result) => Some(&result.artifact),
-                CommandResult::LoadContentAsJson(
-                    LoadContentAsJavaScriptObjectNotationResult::Artifact { artifact, .. },
-                ) => Some(artifact),
-                _ => None,
-            };
-            let remote: Vec<_> = artifacts
-                .iter()
-                .filter(|artifact| artifact.artifact_slot != "structured_result")
-                .collect();
-            if remote.len() != usize::from(descriptor.is_some()) {
-                return recovery();
-            }
-            if let Some(descriptor) = descriptor {
-                let metadata = remote[0];
-                if metadata.artifact_identifier != descriptor.identifier.as_text()
-                    || metadata.artifact_slot != descriptor.slot.as_text()
-                    || metadata.content_digest != descriptor.digest.as_text()
-                    || metadata.media_type != descriptor.media_type.as_text()
-                    || metadata.byte_length != descriptor.byte_length
-                {
-                    return recovery();
-                }
             }
             ArtifactCompletion::Published { artifacts }
         })
     }
+}
+
+/// Recognizes authoritative success whose result is durably unavailable.
+fn result_unavailable(local: &OperationSummary) -> bool {
+    use slingshot_domain::operation::{TerminalFailureDisposition, TerminalFailureKind};
+    local.record.terminal_failure.as_ref().is_some_and(|failure| {
+        failure.kind == TerminalFailureKind::ResultUnavailable
+            && failure.disposition == TerminalFailureDisposition::AuthoritativeRemoteSuccess
+    })
+}
+
+impl RetainedAuthorProtocol<'_> {
+    /// Reopens every surviving association and verifies its content and identity.
+    fn verified_artifacts(
+        &self,
+        local: &OperationSummary,
+        identity: &ExecutionIdentity,
+    ) -> Option<Vec<ProducedArtifact>> {
+        let associations = ArtifactAssociations::new(self.operations.database());
+        let mut artifacts = Vec::new();
+        for slot in ["content_package", "loaded_content_json", "structured_result"] {
+            let Some(metadata) = associations
+                .read(&identity.author_target_identity_digest, &identity.operation_identifier, slot)
+                .ok()?
+            else {
+                continue;
+            };
+            if metadata.artifact_identifier
+                != ArtifactIdentifier::derive(
+                    &local.installation_identifier,
+                    &identity.author_target_identity_digest,
+                    &identity.operation_identifier,
+                    slot,
+                )
+            {
+                return None;
+            }
+            // A surviving row cannot vouch for a removed or replaced content object.
+            self.store.open_verified(&metadata).ok()?;
+            artifacts.push(ProducedArtifact {
+                artifact_identifier: metadata.artifact_identifier.as_text().to_owned(),
+                artifact_slot: metadata.artifact_slot,
+                byte_length: metadata.byte_length,
+                content_digest: metadata.content_digest,
+                media_type: metadata.media_type,
+            });
+        }
+        Some(artifacts)
+    }
+
+    /// Resolves the result's single canonical source, with bounded artifact reads.
+    fn canonical_result(
+        &self,
+        local: &OperationSummary,
+        identity: &ExecutionIdentity,
+        artifacts: &[ProducedArtifact],
+    ) -> Option<String> {
+        if let Some(inline) = &local.result_inline_bytes {
+            return (!artifacts
+                .iter()
+                .any(|artifact| artifact.artifact_slot == "structured_result"))
+            .then(|| inline.clone());
+        }
+        use std::io::Read;
+        let associations = ArtifactAssociations::new(self.operations.database());
+        let metadata = associations
+            .read(
+                &identity.author_target_identity_digest,
+                &identity.operation_identifier,
+                "structured_result",
+            )
+            .ok()??;
+        let mut reader = self.store.open_verified(&metadata).ok()?;
+        let mut bytes = Vec::new();
+        let limit =
+            slingshot_agent_connection::structured_job_result::maximum_agent_inline_result_bytes();
+        reader.by_ref().take(limit.saturating_add(1)).read_to_end(&mut bytes).ok()?;
+        if bytes.len() as u64 > limit {
+            return None;
+        }
+        reader.finish().ok()?;
+        String::from_utf8(bytes).ok()
+    }
+
+    /// Requires exactly the external artifacts described by the validated result.
+    fn required_artifacts_match(
+        &self,
+        canonical: &str,
+        artifacts: &[ProducedArtifact],
+    ) -> Option<()> {
+        use slingshot_domain::command::catalog::{CommandResult, validate_result_for_command};
+        use slingshot_domain::command::load_content_as_javascript_object_notation::LoadContentAsJavaScriptObjectNotationResult;
+        let mut value = slingshot_domain::command::canonical_json::require_canonical_bytes(
+            canonical.as_bytes(),
+        )
+        .ok()?;
+        let object = value.as_object_mut()?;
+        if object.insert("command".to_owned(), self.command.wire_name().into()).is_some() {
+            return None;
+        }
+        let result = serde_json::from_value::<CommandResult>(value).ok()?;
+        validate_result_for_command(&self.command, &result).ok()?;
+        let descriptor = match &result {
+            CommandResult::DownloadContentPackage(result) => Some(&result.artifact),
+            CommandResult::LoadContentAsJson(
+                LoadContentAsJavaScriptObjectNotationResult::Artifact { artifact, .. },
+            ) => Some(artifact),
+            _ => None,
+        };
+        let remote: Vec<_> = artifacts
+            .iter()
+            .filter(|artifact| artifact.artifact_slot != "structured_result")
+            .collect();
+        if remote.len() != usize::from(descriptor.is_some()) {
+            return None;
+        }
+        if let Some(descriptor) = descriptor {
+            return artifact_matches(remote[0], descriptor).then_some(());
+        }
+        Some(())
+    }
+}
+
+/// Compares each independently verified property with the result descriptor.
+fn artifact_matches(
+    metadata: &ProducedArtifact,
+    descriptor: &slingshot_domain::command::artifact::ArtifactDescriptor,
+) -> bool {
+    metadata.artifact_identifier == descriptor.identifier.as_text()
+        && metadata.artifact_slot == descriptor.slot.as_text()
+        && metadata.content_digest == descriptor.digest.as_text()
+        && metadata.media_type == descriptor.media_type.as_text()
+        && metadata.byte_length == descriptor.byte_length
 }

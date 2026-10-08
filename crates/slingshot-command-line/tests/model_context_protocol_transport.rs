@@ -303,6 +303,29 @@ fn a_line_longer_than_the_transport_writes_is_refused_rather_than_split() {
 }
 
 #[test]
+fn delivery_acknowledges_only_complete_responses_and_never_repeats_a_batch() {
+    let mut queue = OutputQueue::new();
+    queue.enqueue_response("complete", "{}").expect("first response");
+    queue.enqueue_response("partial", "{}").expect("second response");
+    queue.enqueue_response("unwritten", "{}").expect("third response");
+    let mut sink = FailingSink { takes: 1, taken: Vec::new(), prefix: 1 };
+    let mut delivered = Vec::new();
+    assert_eq!(
+        queue.write_waiting_acknowledged(&mut sink, NO_WAIT, |identifier| {
+            delivered.push(identifier.to_owned());
+        }),
+        1
+    );
+    assert_eq!(delivered, ["complete"]);
+    queue.write_waiting_acknowledged(&mut sink, NO_WAIT, |identifier| {
+        delivered.push(identifier.to_owned());
+    });
+    assert_eq!(delivered, ["complete"], "a later drain cannot acknowledge old deliveries");
+    assert_eq!(queue.waiting_bytes(), 0);
+    assert_eq!(queue.failure(), Some(OutputFailure::SinkFailed));
+}
+
+#[test]
 fn one_failure_wins_and_nothing_is_written_after_it() {
     let mut queue = OutputQueue::new();
     for index in 0..EXPECTED_LINES {

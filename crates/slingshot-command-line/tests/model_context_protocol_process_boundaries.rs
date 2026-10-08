@@ -121,6 +121,70 @@ fn every_answer_is_one_whole_line_and_the_capture_ends_on_one() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn delivered_catalogues_do_not_accumulate_in_a_long_lived_server() {
+    use slingshot_command_line::model_context_protocol::standard_stream_transport::maximum_queued_bytes;
+    use std::io::BufRead;
+
+    const WARMUP_RESPONSES: usize = 64;
+    const MEASURED_RESPONSES: usize = 400;
+    const RESIDENT_HEADROOM_MULTIPLIER: usize = 2;
+    const BYTES_PER_KIBIBYTE: usize = 1_024;
+
+    let input = (0..FLOODED_REQUESTS)
+        .map(|identifier| format!(
+            r#"{{"id":"{identifier}","method":"tools/list","params":{{"protocolVersion":"{REVISION}"}}}}"#
+        ))
+        .collect::<Vec<_>>()
+        .join("\n") + "\n";
+    let harness = ProcessHarness::new();
+    let mut child = harness
+        .start_retained(&product_executable(), &serving().reading(input))
+        .expect("the server starts");
+    let output = child.take_output().expect("the server has output");
+    // A rendezvous keeps the reader at most one response ahead of the observer,
+    // so the child is still alive at both samples and the test stores no history.
+    let (sender, receiver) = std::sync::mpsc::sync_channel(0);
+    let reader = std::thread::spawn(move || {
+        for line in std::io::BufReader::new(output).lines() {
+            if sender.send(line.expect("a complete response")).is_err() {
+                break;
+            }
+        }
+    });
+    let resident = || {
+        let status = std::fs::read_to_string(format!("/proc/{}/status", child.identifier()))
+            .expect("the responding child is alive");
+        let kibibytes = status
+            .lines()
+            .find_map(|line| line.strip_prefix("VmRSS:"))
+            .and_then(|value| value.split_whitespace().next())
+            .expect("Linux reports resident memory")
+            .parse::<usize>()
+            .expect("resident memory is numeric");
+        kibibytes * BYTES_PER_KIBIBYTE
+    };
+    let mut warmed = 0;
+    for received in 1..=FLOODED_REQUESTS {
+        let line = receiver.recv_timeout(PROMPT_DEADLINE).expect("a response arrives promptly");
+        let response: Value = serde_json::from_str(&line).expect("one protocol response");
+        assert!(response["result"]["tools"].is_array(), "the catalogue was served");
+        if received == WARMUP_RESPONSES {
+            warmed = resident();
+        }
+        if received == MEASURED_RESPONSES {
+            let growth = resident().saturating_sub(warmed);
+            assert!(
+                growth < maximum_queued_bytes() * RESIDENT_HEADROOM_MULTIPLIER,
+                "delivered response history grew resident memory by {growth} bytes"
+            );
+        }
+    }
+    reader.join().expect("the reader ends with the server");
+    assert!(child.wait_within(PROMPT_DEADLINE).expect("the server ends").success());
+}
+
+#[test]
 fn a_reader_that_goes_away_stops_the_server_inside_its_deadline() {
     let input = (0..FLOODED_REQUESTS).map(request).collect::<Vec<String>>().join("\n") + "\n";
     let harness = ProcessHarness::new();

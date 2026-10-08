@@ -17,10 +17,13 @@ use slingshot_domain::selected_command_contract_identity::SelectedCommandContrac
 use crate::authentication::environment_provider::RequestAuthentication;
 use crate::author_cross_site_request_forgery_protection::CrossSiteRequestForgeryToken;
 use crate::command_submission::{
-    Checkpoint, Exchange, Submission, SubmissionOutcome, UnknownCause, parse_acknowledgement,
+    Checkpoint, Exchange, StatusClass, Submission, SubmissionOutcome, UnknownCause,
+    classify_status, parse_acknowledgement,
 };
 use crate::selected_author_http::FiniteHttpFailure;
 use crate::selected_author_transport::SelectedAuthorTransport;
+
+const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
 
 /// A refusal established before this driver writes any job POST bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -42,6 +45,11 @@ pub enum SubmissionSendRefusal {
 impl SelectedAuthorTransport {
     /// Fetches a fresh, nonpersistent token and consumes it for this one POST.
     /// A token GET refusal never causes a POST or an automatic retry.
+    ///
+    /// # Errors
+    /// Returns a refusal before the POST for a mismatched identity or derivation,
+    /// invalid arguments, failed token acquisition or authentication, invalid
+    /// request construction, or a rejected final caller guard.
     pub async fn send_submission_with_fresh_token(
         &self,
         identity: &ExecutionIdentity,
@@ -61,6 +69,11 @@ impl SelectedAuthorTransport {
 
     /// Runs a durable caller's final local preflight after token acquisition,
     /// before opening the POST connection. This is not an execution lease.
+    ///
+    /// # Errors
+    /// Returns a refusal before the POST for a mismatched identity or derivation,
+    /// invalid arguments, failed token acquisition or authentication, invalid
+    /// request construction, or a rejected final caller guard.
     pub async fn send_submission_with_fresh_token_guarded(
         &self,
         identity: &ExecutionIdentity,
@@ -83,6 +96,11 @@ impl SelectedAuthorTransport {
     /// Acquires a fresh token and sends once over HTTP/2, without fallback.
     /// The durable owner's final guard runs after token acquisition and before
     /// opening the POST connection, exactly as on the HTTP/1.1 path.
+    ///
+    /// # Errors
+    /// Returns a refusal before the POST for a mismatched identity or derivation,
+    /// invalid arguments, failed token acquisition or authentication, invalid
+    /// request construction, or a rejected final caller guard.
     pub async fn send_submission_with_fresh_token_http2_guarded(
         &self,
         identity: &ExecutionIdentity,
@@ -105,6 +123,11 @@ impl SelectedAuthorTransport {
     /// Acquires a token and sends at most once using each connection's ALPN
     /// selection. Both exchanges remain on the immutable selected origin;
     /// negotiation never grants a retry or bypasses the durable final guard.
+    ///
+    /// # Errors
+    /// Returns a refusal before the POST for a mismatched identity or derivation,
+    /// invalid arguments, failed token acquisition or authentication, invalid
+    /// request construction, or a rejected final caller guard.
     pub async fn send_submission_with_fresh_token_negotiated_guarded(
         &self,
         identity: &ExecutionIdentity,
@@ -128,6 +151,11 @@ impl SelectedAuthorTransport {
     /// A validated POST 401 may refresh the provider for subsequent lookup,
     /// but its outcome remains unknown even if refresh fails. The final durable
     /// guard runs after all pre-POST authentication work.
+    ///
+    /// # Errors
+    /// Returns a refusal before the POST for a mismatched identity or derivation,
+    /// invalid arguments, failed token acquisition or authentication, invalid
+    /// request construction, or a rejected final caller guard.
     pub async fn send_submission_authenticated_guarded(
         &self,
         identity: &ExecutionIdentity,
@@ -153,7 +181,8 @@ impl SelectedAuthorTransport {
             .map_err(|_| SubmissionSendRefusal::Request)?;
         let token = self.decode_fresh_token(&receipt)?;
         let elapsed =
-            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+            u64::try_from(started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND))
+                .unwrap_or(u64::MAX);
         let (authentication, lease) = provider
             .authenticate(
                 &self.endpoint(&["bin", "slingshot", "agent", "submit"]),
@@ -164,7 +193,8 @@ impl SelectedAuthorTransport {
         before_post()?;
         self.require_submission(identity, submission)?;
         let elapsed =
-            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+            u64::try_from(started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND))
+                .unwrap_or(u64::MAX);
         self.exchange_submission(
             submission,
             &authentication,
@@ -184,6 +214,11 @@ impl SelectedAuthorTransport {
     /// Awaits selected runtime authentication and sends the retained POST once.
     /// Refresh after a complete 401 only prepares subsequent lookup; it cannot
     /// change an uncertain submission into a pre-send refusal or repeat it.
+    ///
+    /// # Errors
+    /// Returns a refusal before the POST for a mismatched identity or derivation,
+    /// invalid arguments, failed token acquisition or authentication, invalid
+    /// request construction, or a rejected final caller guard.
     pub async fn send_submission_authenticated_async_guarded<Clock, Utc>(
         &self,
         identity: &ExecutionIdentity,
@@ -219,7 +254,8 @@ impl SelectedAuthorTransport {
         before_post()?;
         self.require_submission(identity, submission)?;
         let elapsed =
-            u64::try_from(started.elapsed().as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX);
+            u64::try_from(started.elapsed().as_nanos().div_ceil(NANOSECONDS_PER_MILLISECOND))
+                .unwrap_or(u64::MAX);
         self.exchange_submission(
             submission,
             &authentication,
@@ -294,7 +330,7 @@ impl SelectedAuthorTransport {
         &self,
         receipt: &crate::selected_author_http::FiniteHttpReceipt,
     ) -> Result<CrossSiteRequestForgeryToken, SubmissionSendRefusal> {
-        if receipt.response.status != 200
+        if receipt.response.status != StatusCode::OK.as_u16()
             || !json_media_type(receipt.response.content_type.as_deref().unwrap_or(""))
         {
             return Err(SubmissionSendRefusal::Request);
@@ -325,6 +361,9 @@ impl SelectedAuthorTransport {
 
     /// Checks the selected identity and installed derivation without opening a
     /// socket. Durable coordinators call this before admitting a pending send.
+    ///
+    /// # Errors
+    /// Returns a refusal for a mismatched selected identity or derivation, or unusable arguments.
     pub fn require_submission(
         &self,
         identity: &ExecutionIdentity,
@@ -337,6 +376,9 @@ impl SelectedAuthorTransport {
 
     /// Sends the already persisted submission once. No authentication refresh,
     /// redirect, or automatic retry can issue a second POST here.
+    ///
+    /// # Errors
+    /// Returns a refusal before sending for invalid identity, derivation, arguments, token, or request construction.
     pub async fn send_submission(
         &self,
         identity: &ExecutionIdentity,
@@ -420,58 +462,80 @@ impl SelectedAuthorTransport {
             Ok(receipt) => receipt,
             Err(FiniteHttpFailure::Request) => return Err(SubmissionSendRefusal::Request),
             Err(failure) => {
-                return Ok(Submission::transport_failure(match failure {
-                    FiniteHttpFailure::Connect => Checkpoint::TransportConnect,
-                    FiniteHttpFailure::Write => Checkpoint::RequestHead,
-                    FiniteHttpFailure::Head => Checkpoint::ResponseHead,
-                    FiniteHttpFailure::Body | FiniteHttpFailure::EventHeartbeat => {
-                        Checkpoint::ResponseBody
-                    }
-                    FiniteHttpFailure::Request => {
-                        unreachable!("handled before phase classification")
-                    }
-                }));
+                return Ok(Submission::transport_failure(submission_failure_checkpoint(failure)));
             }
         };
         let response = receipt.response;
-        if response.status == 401 {
+        if response.status == StatusCode::UNAUTHORIZED.as_u16() {
             after_unauthorized().await;
             return Ok(SubmissionOutcome::SubmissionUnknown {
                 cause: UnknownCause::LookupRequired,
             });
         }
-        let acknowledgement = if json_media_type(response.content_type.as_deref().unwrap_or("")) {
-            match parse_acknowledgement(&response.body) {
-                Ok(acknowledgement) => acknowledgement,
-                Err(_) => {
-                    return Ok(SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Body });
-                }
-            }
-        } else {
-            return Ok(outcome_without_an_answer(&response));
-        };
-        let retry_after_milliseconds = match response.retry_after.as_deref() {
-            None => None,
-            Some(value) if !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()) => {
-                Some(value.parse::<u64>().unwrap_or(u64::MAX).saturating_mul(1000))
-            }
-            Some(_) => {
-                return Ok(SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Body });
-            }
-        };
-        Ok(submission.interpret(&Exchange {
-            acknowledgement: Some(acknowledgement),
-            body_bytes: response.body.len() as u64,
-            elapsed_milliseconds: receipt.elapsed_milliseconds,
-            framing_ambiguous: false,
-            head: response.head,
-            media_type: "application/json".to_owned(),
-            retry_after_milliseconds,
-            status: response.status,
-            trailer_section_present: false,
-            trailing_bytes: false,
-            unknown_fields: false,
-        }))
+        Ok(submission_response_outcome(submission, response, receipt.elapsed_milliseconds))
+    }
+}
+
+/// Retains the original phase classification after pre-send request failures are separated.
+fn submission_failure_checkpoint(failure: FiniteHttpFailure) -> Checkpoint {
+    match failure {
+        FiniteHttpFailure::Connect => Checkpoint::TransportConnect,
+        FiniteHttpFailure::Write => Checkpoint::RequestHead,
+        FiniteHttpFailure::Head => Checkpoint::ResponseHead,
+        FiniteHttpFailure::Body | FiniteHttpFailure::EventHeartbeat => Checkpoint::ResponseBody,
+        FiniteHttpFailure::Request => unreachable!("handled before phase classification"),
+    }
+}
+
+/// Seconds on the wire are converted before the existing policy clamps a retry delay.
+const MILLISECONDS_PER_SECOND: u64 = 1000;
+
+/// Applies the existing submission interpreter only after the common finite transport gate.
+fn submission_response_outcome(
+    submission: &Submission,
+    response: crate::selected_author_exchange::SelectedAuthorFiniteResponse,
+    elapsed_milliseconds: u64,
+) -> SubmissionOutcome {
+    if !json_media_type(response.content_type.as_deref().unwrap_or("")) {
+        return outcome_without_an_answer(&response);
+    }
+    let retry_after_milliseconds = match response_retry_delay(response.retry_after.as_deref()) {
+        Ok(delay) => delay,
+        Err(cause) => return SubmissionOutcome::SubmissionUnknown { cause },
+    };
+    let acknowledgement = if matches!(classify_status(response.status), StatusClass::Retryable) {
+        // A retryable error need not contain an acceptance. The existing interpreter
+        // requires lookup before any resend and grants neither acceptance nor nonexecution.
+        None
+    } else {
+        match parse_acknowledgement(&response.body) {
+            Ok(answer) => Some(answer),
+            Err(_) => return SubmissionOutcome::SubmissionUnknown { cause: UnknownCause::Body },
+        }
+    };
+    submission.interpret(&Exchange {
+        acknowledgement,
+        body_bytes: response.body.len() as u64,
+        elapsed_milliseconds,
+        framing_ambiguous: false,
+        head: response.head,
+        media_type: "application/json".to_owned(),
+        retry_after_milliseconds,
+        status: response.status,
+        trailer_section_present: false,
+        trailing_bytes: false,
+        unknown_fields: false,
+    })
+}
+
+/// Preserves the route's decimal-only retry grammar and saturating unit conversion.
+fn response_retry_delay(value: Option<&str>) -> Result<Option<u64>, UnknownCause> {
+    match value {
+        None => Ok(None),
+        Some(value) if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) => Ok(
+            Some(value.parse::<u64>().unwrap_or(u64::MAX).saturating_mul(MILLISECONDS_PER_SECOND)),
+        ),
+        Some(_) => Err(UnknownCause::Body),
     }
 }
 
@@ -531,6 +595,9 @@ mod argument_tests {
     use super::*;
     use crate::command_submission::ExpectedArtifactManifest;
 
+    const DIGEST_HEXADECIMAL_CHARACTERS: usize = 64;
+    const EXAMPLE_STORE_GENERATION: u64 = 7;
+
     fn submission(wire: &str, arguments: &str) -> Submission {
         Submission::build(
             &ExpectedProvenance {
@@ -539,10 +606,10 @@ mod argument_tests {
                 transport_contract_digest: AuthorAgentTransportContract::embedded_digest(),
             },
             WireOperationIdentity::of(
-                &"1".repeat(64),
-                &"2".repeat(64),
+                &"1".repeat(DIGEST_HEXADECIMAL_CHARACTERS),
+                &"2".repeat(DIGEST_HEXADECIMAL_CHARACTERS),
                 "operation-one",
-                AgentEventStoreGeneration::of(7),
+                AgentEventStoreGeneration::of(EXAMPLE_STORE_GENERATION),
             ),
             "subscription-one",
             arguments,
@@ -586,6 +653,10 @@ mod argument_tests {
 }
 
 /// Requires exact installed contracts and the same derived remote identity.
+///
+/// # Errors
+/// Returns a refusal if the operation identity, installed provenance, argument
+/// derivation, or retained submission digest differs from the selected execution.
 pub fn require_submission_derivation(
     identity: &ExecutionIdentity,
     submission: &Submission,

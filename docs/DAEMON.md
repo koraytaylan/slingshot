@@ -133,6 +133,39 @@ remotely, and the command fingerprint is untouched. Every resume is answered
 from a durable receipt, because whether a resume took effect cannot be
 reconstructed from current state.
 
+The service runs a scheduler loop that claims eligible queued operations and
+executes them concurrently up to the contract's in-flight limit. Automatic
+recovery observes persisted retry delays and attempt budgets; a manual
+recovery hold requires an explicit resume. A detached execution preserves its
+durable evidence for reconciliation on a subsequent attempt.
+
+Set `SLINGSHOT_PRODUCER` to a stable label to identify a cooperative producer.
+Omitting it uses the shared default queue, including pre-existing unlabeled
+operations. Labels must be nonempty UTF-8, at most 256 bytes, and contain no
+Unicode control characters. The client sends and stores only a domain-separated
+SHA-256 digest. Labels distinguish queues within the selected account and target;
+they do not authenticate callers or prevent a caller from choosing another label.
+
+Admission permits 64 pending operations per producer and 256 globally. Existing
+operation replays retain their original producer and do not consume new capacity.
+The claim transaction keeps a durable turn per queued producer, preserves enqueue
+order among that producer's ready operations, and moves a successful claimant
+to the tail. New and returning idle producers join the tail. Deferred retries do
+not consume a turn. Rotation and claiming commit together, including when only
+one execution slot becomes free or the daemon restarts.
+
+This uses operation protocol version 2 and runtime contract format
+`slingshot.daemon-runtime-contract/2`. Version-1 daemon owners refuse the new
+operation protocol; retained control remains available to stop an old owner.
+Old operation rows retain their original contract digest and producer identity.
+
+Each retry observation seeds a process-local monotonic deadline once. Startup
+reconstructs the remaining wait from wall-clock evidence, clamped to the original
+delay. Subsequent wall-clock corrections cannot move an established deadline.
+The executor carries the scheduler's elapsed delay into the admitted attempt;
+new recovery observations establish new deadlines. Durable lease timestamps
+remain separate cross-process evidence.
+
 Maintenance is the only path by which durable state shrinks, and nothing
 triggers it but a person. There is no age policy and no automatic pruning. A
 preview says exactly what would go and changes nothing; an apply quotes the
@@ -157,6 +190,4 @@ separately from operations and artifacts, so neither can exhaust the other.
 
 - No maintenance-result associations; the manifest, preview, apply, and receipt
   are here, and the association ownership transfer is not.
-- No automatic retry timer. Retry eligibility is computed, and a scheduler is
-  asked; nothing here advances remote work on its own.
 - No claim about any platform beyond the one a check actually ran on.

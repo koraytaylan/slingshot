@@ -1,6 +1,7 @@
 //! Fixed-endpoint, platform-trust-only identity-management TLS establishment.
 
 use super::identity_management_exchange::{ExchangeFailure, identity_management_endpoint};
+use crate::transport_observation::{ObservedSocket, Phase, Route, observe};
 use crate::transport_policy::IdentityManagementTrustInput;
 use rustls::{ClientConfig, RootCertStore};
 use rustls_pki_types::{CertificateDer, ServerName};
@@ -23,16 +24,16 @@ pub enum IdentityManagementHttpProtocol {
 /// One TLS-authenticated connection; no HTTP request has been written yet.
 pub struct IdentityManagementConnection {
     protocol: IdentityManagementHttpProtocol,
-    stream: TlsStream<TcpStream>,
+    stream: TlsStream<ObservedSocket>,
 }
-impl core::fmt::Debug for IdentityManagementConnection {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("IdentityManagementConnection([redacted])")
+impl ::core::fmt::Debug for IdentityManagementConnection {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        formatter.write_str("IdentityManagementConnection([redacted])")
     }
 }
 impl IdentityManagementConnection {
     /// Dispatches the chosen codec on this socket without probing/reconnecting.
-    pub fn into_parts(self) -> (IdentityManagementHttpProtocol, TlsStream<TcpStream>) {
+    pub fn into_parts(self) -> (IdentityManagementHttpProtocol, TlsStream<ObservedSocket>) {
         (self.protocol, self.stream)
     }
 }
@@ -41,14 +42,17 @@ impl IdentityManagementConnection {
 pub struct IdentityManagementConnector {
     configuration: Arc<ClientConfig>,
 }
-impl core::fmt::Debug for IdentityManagementConnector {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("IdentityManagementConnector([redacted])")
+impl ::core::fmt::Debug for IdentityManagementConnector {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        formatter.write_str("IdentityManagementConnector([redacted])")
     }
 }
 impl IdentityManagementConnector {
     /// Freezes the route-specific platform trust. Author extensions cannot be
     /// supplied through this type; ambient trust and proxies are never loaded.
+    ///
+    /// # Errors
+    /// Returns the unchanged trust, connection, handshake or protocol refusal.
     pub fn new(trust: &IdentityManagementTrustInput) -> Result<Self, ExchangeFailure> {
         let mut roots = RootCertStore::empty();
         for der in trust.roots() {
@@ -73,6 +77,9 @@ impl IdentityManagementConnector {
     /// with independent connect and handshake deadlines. Dropping this future
     /// drops any connected socket; it never spawns a background connection task.
     /// The caller must additionally own the whole-exchange deadline.
+    ///
+    /// # Errors
+    /// Returns the unchanged trust, connection, handshake or protocol refusal.
     pub async fn connect(&self) -> Result<IdentityManagementConnection, ExchangeFailure> {
         let endpoint = url::Url::parse(&identity_management_endpoint())
             .map_err(|_| failure(Code::IdentityManagementTransportFailed))?;
@@ -81,14 +88,18 @@ impl IdentityManagementConnector {
         let limits = &ProfileAuthenticationContract::embedded().limits;
         let port = u16::try_from(limits.identity_management_port)
             .map_err(|_| failure(Code::IdentityManagementTransportFailed))?;
-        let socket = crate::connection_phase::within(
-            Duration::from_millis(limits.identity_management_connect_timeout_milliseconds),
-            async {
-                TcpStream::connect((host, port))
-                    .await
-                    .map_err(|_| failure(Code::IdentityManagementTransportFailed))
-            },
-            failure(Code::IdentityManagementConnectTimeout),
+        let socket = observe(
+            Route::IdentityManagement,
+            Phase::Connect,
+            crate::connection_phase::within(
+                Duration::from_millis(limits.identity_management_connect_timeout_milliseconds),
+                async {
+                    TcpStream::connect((host, port))
+                        .await
+                        .map_err(|_| failure(Code::IdentityManagementTransportFailed))
+                },
+                failure(Code::IdentityManagementConnectTimeout),
+            ),
         )
         .await?;
         self.handshake(
@@ -125,15 +136,20 @@ impl IdentityManagementConnector {
     ) -> Result<IdentityManagementConnection, ExchangeFailure> {
         let name =
             ServerName::try_from(host).map_err(|_| failure(Code::IdentityManagementTlsFailed))?;
-        let stream = crate::connection_phase::within(
-            duration,
-            async {
-                TlsConnector::from(self.configuration.clone())
-                    .connect(name, socket)
-                    .await
-                    .map_err(|_| failure(Code::IdentityManagementTlsFailed))
-            },
-            failure(Code::IdentityManagementTlsHandshakeTimeout),
+        let socket = ObservedSocket::new(socket, Route::IdentityManagement);
+        let stream = observe(
+            Route::IdentityManagement,
+            Phase::Handshake,
+            crate::connection_phase::within(
+                duration,
+                async {
+                    TlsConnector::from(self.configuration.clone())
+                        .connect(name, socket)
+                        .await
+                        .map_err(|_| failure(Code::IdentityManagementTlsFailed))
+                },
+                failure(Code::IdentityManagementTlsHandshakeTimeout),
+            ),
         )
         .await?;
         let protocol = match stream.get_ref().1.alpn_protocol() {

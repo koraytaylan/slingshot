@@ -350,7 +350,7 @@ fn every_command_in_these_families_is_read_only_and_needs_no_caller_key() {
                 ::installed(leaf)
                 .expect("it is installed")
                 .command_semantic_contract_version,
-            "1.0.0",
+            descriptor.command_semantic_contract_version,
             "{leaf}"
         );
     }

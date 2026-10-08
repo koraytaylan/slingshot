@@ -479,7 +479,7 @@ fn runtime_builder_establishes_and_reopens_only_ledger_bound_state() {
                     1000,
                 )
                 .unwrap();
-            let bytes = b"{\"matches\":[]}";
+            let bytes = b"{\"complete\":true,\"examined_nodes\":0,\"matches\":[]}";
             let digest = hex::encode(Sha256::digest(bytes));
             let request = slingshot_storage::artifact_store::InstallationRequest {
                 artifact_slot: slingshot_storage::artifact_store::STRUCTURED_RESULT_SLOT.into(),
@@ -1400,7 +1400,7 @@ async fn selected_live_events_commit_only_the_believed_prefix() {
                     if defect == "terminal-complete" {
                         snapshot["terminal_result"] = serde_json::json!({"operation":submission.operation,
                         "daemon_subscription_identifier":"subscription-one","provenance":submission.provenance,
-                        "submitted_command_digest":submission.submitted_command_digest,"canonical_result":r#"{"matches":[]}"#,"declared_artifacts":[]});
+                        "submitted_command_digest":submission.submitted_command_digest,"canonical_result":r#"{"complete":true,"examined_nodes":0,"matches":[]}"#,"declared_artifacts":[]});
                     }
                     if defect == "terminal-complete-failed" {
                         snapshot["terminal_failure"] = serde_json::json!({"operation":submission.operation,
@@ -1765,7 +1765,7 @@ async fn selected_live_events_commit_only_the_believed_prefix() {
                             );
                             assert_eq!(
                                 local_after.result_inline_bytes.as_deref(),
-                                Some(r#"{"matches":[]}"#)
+                                Some(r#"{"complete":true,"examined_nodes":0,"matches":[]}"#)
                             );
                         } else {
                             assert_eq!(
@@ -4031,7 +4031,7 @@ async fn retained_artifact_completion_case(
     operations.admit(&AdmissionRequest {
         author_target_identity: "opaque-target".to_owned(), author_target_identity_digest: identity.author_target_identity_digest.clone(), caller_identity: None,
         canonical_command: arguments.to_owned(), command_fingerprint: CommandFingerprint::derive(&FingerprintInput {
-            author_target_identity_digest: identity.author_target_identity_digest.clone(), selected_environment_revision: identity.selected_environment_revision.clone(), canonical_command: arguments.to_owned(), command_wire_name: wire.to_owned(), command_semantic_contract_version: "0.0.0".to_owned(),
+            author_target_identity_digest: identity.author_target_identity_digest.clone(), selected_environment_revision: identity.selected_environment_revision.clone(), canonical_command: arguments.to_owned(), command_wire_name: wire.to_owned(), command_semantic_contract_version: provenance.command_contract.command_semantic_contract_version.clone(),
         }).unwrap(), command_wire_name: wire.to_owned(), daemon_runtime_contract_digest: slingshot_domain::daemon_runtime_contract::DaemonRuntimeContract::embedded_digest().as_text().to_owned(), installation_identifier: installation.clone(), operation_identifier: identity.operation_identifier.clone(), selected_environment_revision: identity.selected_environment_revision.clone(), workflow_correlation_identifier: None,
     }, 1000).unwrap();
     let mut remote =
@@ -6623,14 +6623,14 @@ async fn selected_admission_orders_preflight_persistence_post_and_restart_recove
             )
             .unwrap();
             let successful_payload = if scenario >= 4 {
-                slingshot_domain::command::canonical_json::write_canonical(&serde_json::json!({"matches":
+                slingshot_domain::command::canonical_json::write_canonical(&serde_json::json!({"complete":true,"examined_nodes":1000,"matches":
                     (0..1000).map(|index| serde_json::json!({"repository_path": format!("/content/example/{index:04}")})).collect::<Vec<_>>()
                 })).unwrap()
             } else {
-                r#"{"matches":[]}"#.to_owned()
+                r#"{"complete":true,"examined_nodes":0,"matches":[]}"#.to_owned()
             };
             for (payload, expected_revision, valid) in [
-                (r#"{"matches":[{"repository_path":"/another-request"}]}"#, 2, false),
+                (include_str!("fixtures/query-results/outside-root.json"), 2, false),
                 (successful_payload.as_str(), 3, true),
             ] {
                 let mut succeeded: serde_json::Value = serde_json::from_str(&snapshot).unwrap();

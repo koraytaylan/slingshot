@@ -12,7 +12,6 @@ touches:
   - crates/slingshot-daemon/src/startup.rs
   - crates/slingshot-daemon/src/local_server.rs
   - crates/slingshot-daemon/src/operation_submission.rs
-  - crates/slingshot-daemon/src/operation_scheduler.rs
   - crates/slingshot-daemon/src/author_agent_operation_executor.rs
   - crates/slingshot-daemon/src/operation/remote_submission.rs
   - crates/slingshot-daemon/src/operation/recovery_and_event_supervisor.rs

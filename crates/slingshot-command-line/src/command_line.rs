@@ -54,10 +54,7 @@ use crate::invocation::{
     SERVE_LEAF, Selection,
 };
 use crate::machine_readable_renderer;
-use crate::model_context_protocol::application::{Served, ServerApplication};
-use crate::model_context_protocol::standard_stream_transport::{
-    BoundedLine, LineSink, OutputFailure, Written, read_bounded_line,
-};
+use crate::model_context_protocol::application::process_session;
 use crate::protocol_tool_runner::tool_runner;
 
 /// Returns the invocation one tool call describes.
@@ -107,39 +104,6 @@ const STOP_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis
 
 /// What an exchange reports when a signal ended it rather than an answer.
 const STOP_REQUESTED: &str = "the run was asked to stop while it was waiting";
-
-/// The process's only protocol-output writer.
-struct StandardOutputSink<'writer> {
-    /// The stream the protocol owns while it is served.
-    output: &'writer mut dyn Write,
-}
-
-impl LineSink for StandardOutputSink<'_> {
-    fn write_line(&mut self, line: &str) -> Written {
-        let mut rendered = String::with_capacity(line.len().saturating_add(1));
-        rendered.push_str(line);
-        rendered.push('\n');
-        let mut remaining = rendered.as_bytes();
-        let started = std::time::Instant::now();
-        while !remaining.is_empty() {
-            match self.output.write(remaining) {
-                Ok(0) => return Written::Refused,
-                Ok(written) => remaining = &remaining[written..],
-                Err(failure) if failure.kind() == std::io::ErrorKind::WouldBlock => {
-                    if started.elapsed()
-                        >= crate::model_context_protocol::standard_stream_transport::write_deadline(
-                        )
-                    {
-                        return Written::Expired;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(1));
-                }
-                Err(_) => return Written::Refused,
-            }
-        }
-        Written::Complete
-    }
-}
 
 /// Identifier this executable puts on its retained control requests.
 const CONTROL_REQUEST_IDENTIFIER: &str = "command-line";
@@ -239,13 +203,7 @@ pub fn run(
         }
     };
     if invocation.verb == SERVE_LEAF {
-        return serve_protocol(
-            &invocation,
-            executable,
-            &mut std::io::stdin().lock(),
-            output,
-            diagnostics,
-        );
+        return serve_protocol(&invocation, executable);
     }
     let completion = complete(&invocation, executable);
     write_completion(&completion, invocation.output, output, diagnostics)
@@ -359,58 +317,17 @@ pub(crate) fn write_diagnostic(diagnostics: &mut dyn Write, message: &str) {
     writeln!(diagnostics, "{DIAGNOSTIC_PREFIX}{message}").unwrap_or_default();
 }
 
-/// Hands the standard streams to the protocol server until input ends.
-///
-/// One reader, one writer, and nothing else written to standard output for as
-/// long as this runs. A line that produces an answer is written whole; a line
-/// that produces nothing is a notification, and silence is the correct answer
-/// to one.
-fn serve_protocol(
-    invocation: &Invocation,
-    executable: &Path,
-    input: &mut dyn std::io::BufRead,
-    output: &mut dyn Write,
-    diagnostics: &mut dyn Write,
-) -> i32 {
-    // The server is given the runner the rest of this binary uses, so a tool
-    // call reaches the same daemon a command line reaches. A run whose
-    // selection or runtime root cannot be resolved still serves the protocol:
-    // the catalog and everything that describes this build answer, and a call
-    // that needs a daemon is told there is not one rather than being invented.
-    let mut server = ServerApplication::over(Some(tool_runner(invocation, executable)));
-    loop {
-        let (line, terminal) = match read_bounded_line(input) {
-            Ok(BoundedLine::Line(line)) => (line, false),
-            Ok(BoundedLine::TooLong(line)) => (line, true),
-            Ok(BoundedLine::End) | Err(_) => break,
-        };
-        match server.serve_line(&line) {
-            Served::Answered(_) => {
-                let mut sink = StandardOutputSink { output };
-                if !server.write_output(&mut sink) {
-                    break;
-                }
-            }
-            Served::Silent => {}
-            Served::Finished => break,
-        }
-        // Whatever this server has to say about why an answer is what it is
-        // goes to the diagnostic stream, which is the only stream a reason may
-        // travel on: standard output carries protocol messages and nothing
-        // else, and a reason written there would corrupt every client parsing
-        // them.
-        for diagnostic in server.take_diagnostics() {
-            write_diagnostic(diagnostics, &diagnostic);
-        }
-        if terminal {
-            break;
-        }
-    }
-    let detached = server.finish(OutputFailure::SinkFailed);
-    if !detached.is_empty() {
-        write_diagnostic(diagnostics, &format!("{} waiters detached", detached.len()));
-    }
-    exit_classification::SUCCESS
+/// Hands owned standard streams to the concurrent protocol coordinator.
+fn serve_protocol(invocation: &Invocation, executable: &Path) -> i32 {
+    let signals = ProductSignals::watching();
+    let result = process_session::serve(
+        std::io::BufReader::new(std::io::stdin()),
+        std::io::stdout(),
+        std::io::stderr(),
+        |cancellation| tool_runner(invocation, executable, cancellation),
+        signals.flag(),
+    );
+    if result.is_ok() { i32::from(EXIT_SUCCESS) } else { i32::from(EXIT_RUNTIME_UNUSABLE) }
 }
 
 /// Serves one namespace as the child a start created.
@@ -468,6 +385,19 @@ pub(crate) struct ProductRequestIdentity;
 impl RequestIdentityBoundary for ProductRequestIdentity {
     fn invent_request_identifier(&self) -> String {
         format!("command-line-{}", uuid::Uuid::new_v4())
+    }
+
+    fn producer_identity(&self) -> Result<Option<String>, String> {
+        use slingshot_domain::producer_identity::ProducerIdentity;
+        match std::env::var("SLINGSHOT_PRODUCER") {
+            Ok(label) => ProducerIdentity::from_label(&label)
+                .map(|identity| Some(identity.as_text().to_owned()))
+                .map_err(|failure| failure.to_string()),
+            Err(std::env::VarError::NotPresent) => Ok(None),
+            Err(std::env::VarError::NotUnicode(_)) => {
+                Err("SLINGSHOT_PRODUCER must be valid UTF-8".to_owned())
+            }
+        }
     }
 }
 
@@ -573,6 +503,11 @@ pub(crate) struct ProductSignals {
 }
 
 impl ProductSignals {
+    /// Uses an existing request cancellation flag without creating a signal watcher.
+    pub(crate) fn from_flag(requested: Arc<AtomicBool>) -> Self {
+        Self { requested }
+    }
+
     /// Returns the flag this boundary answers from.
     ///
     /// Shared with the exchanges, so a signal that arrives while one is waiting
@@ -667,7 +602,7 @@ impl<'contract> ProductDaemon<'contract> {
         Self {
             contract,
             runtime_root: runtime_root.to_path_buf(),
-            runtime: tokio::runtime::Builder::new_multi_thread().enable_all().build().ok(),
+            runtime: tokio::runtime::Builder::new_current_thread().enable_all().build().ok(),
             stop_requested,
         }
     }

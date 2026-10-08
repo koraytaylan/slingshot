@@ -191,17 +191,20 @@ pub(crate) async fn drive_response<Consumer: ResponseConsumer>(
     deadlines: ExchangeDeadlines,
     response: Consumer,
 ) -> Result<Consumer::Output, FiniteHttpFailure> {
-    let (input, output) = tokio::io::split(stream);
-    let (commands, pending) = mpsc::channel(1);
-    let (completed, completion) = watch::channel(None);
-    let started = Instant::now();
-    let request_end = started + Duration::from_millis(deadlines.request_body_milliseconds);
-    let writer =
-        write(output, negotiated.send_windows, head, body, pending, completed, request_end);
-    let reader =
-        read(input, negotiated.frames, commands, completion, request_end, deadlines, response);
-    let ((), response) = tokio::try_join!(writer, reader)?;
-    Ok(response)
+    observe(Route::Author, Phase::Exchange, async {
+        let (input, output) = tokio::io::split(stream);
+        let (commands, pending) = mpsc::channel(1);
+        let (completed, completion) = watch::channel(None);
+        let started = Instant::now();
+        let request_end = started + Duration::from_millis(deadlines.request_body_milliseconds);
+        let writer =
+            write(output, negotiated.send_windows, head, body, pending, completed, request_end);
+        let reader =
+            read(input, negotiated.frames, commands, completion, request_end, deadlines, response);
+        let ((), response) = tokio::try_join!(writer, reader)?;
+        Ok(response)
+    })
+    .await
 }
 
 async fn write(
@@ -214,42 +217,45 @@ async fn write(
     request_end: Instant,
 ) -> Result<(), FiniteHttpFailure> {
     let mut position = 0;
-    let early_end = timeout_at(request_end, async {
-        // HEADERS/CONTINUATION are one uninterrupted block.
-        for frame in head {
-            send(&mut output, &frame).await?;
-        }
-        while position < body.len() {
-            match commands.try_recv() {
-                Ok(Outgoing::Finish) => return Ok(true),
-                Ok(command) => {
-                    control(&mut output, &mut windows, command, false).await?;
+    let early_end = observe(Route::Author, Phase::Request, async {
+        timeout_at(request_end, async {
+            // HEADERS/CONTINUATION are one uninterrupted block.
+            for frame in head {
+                send(&mut output, &frame).await?;
+            }
+            while position < body.len() {
+                match commands.try_recv() {
+                    Ok(Outgoing::Finish) => return Ok(true),
+                    Ok(command) => {
+                        control(&mut output, &mut windows, command, false).await?;
+                        continue;
+                    }
+                    Err(mpsc::error::TryRecvError::Disconnected) => {
+                        return Err(FiniteHttpFailure::Write);
+                    }
+                    Err(mpsc::error::TryRecvError::Empty) => {}
+                }
+                let count = windows.reserve(body.len() - position);
+                if count == 0 {
+                    match commands.recv().await.ok_or(FiniteHttpFailure::Write)? {
+                        Outgoing::Finish => return Ok(true),
+                        command => control(&mut output, &mut windows, command, false).await?,
+                    }
                     continue;
                 }
-                Err(mpsc::error::TryRecvError::Disconnected) => {
-                    return Err(FiniteHttpFailure::Write);
-                }
-                Err(mpsc::error::TryRecvError::Empty) => {}
+                let last = position + count == body.len();
+                let length = (count as u32).to_be_bytes();
+                let header = [length[1], length[2], length[3], 0, u8::from(last), 0, 0, 0, 1];
+                output.write_all(&header).await.map_err(|_| FiniteHttpFailure::Write)?;
+                send(&mut output, &body[position..position + count]).await?;
+                position += count;
             }
-            let count = windows.reserve(body.len() - position);
-            if count == 0 {
-                match commands.recv().await.ok_or(FiniteHttpFailure::Write)? {
-                    Outgoing::Finish => return Ok(true),
-                    command => control(&mut output, &mut windows, command, false).await?,
-                }
-                continue;
-            }
-            let last = position + count == body.len();
-            let length = (count as u32).to_be_bytes();
-            let header = [length[1], length[2], length[3], 0, u8::from(last), 0, 0, 0, 1];
-            output.write_all(&header).await.map_err(|_| FiniteHttpFailure::Write)?;
-            send(&mut output, &body[position..position + count]).await?;
-            position += count;
-        }
-        Ok(false)
+            Ok(false)
+        })
+        .await
+        .map_err(|_| FiniteHttpFailure::Write)?
     })
-    .await
-    .map_err(|_| FiniteHttpFailure::Write)??;
+    .await?;
     if !early_end {
         let _ = completed.send(Some(Instant::now()));
         finish_controls(&mut output, &mut windows, &mut commands).await?;
@@ -333,58 +339,69 @@ async fn read<Consumer: ResponseConsumer>(
     deadlines: ExchangeDeadlines,
     mut response: Consumer,
 ) -> Result<Consumer::Output, FiniteHttpFailure> {
-    let mut input = IdleRead::new(input);
-    let mut timing =
-        ReadTiming { request_end, deadlines, body_end: None, live: false, body_started: false };
-    let mut finish_sent = false;
-    loop {
-        let failure = if response.head_complete() {
-            FiniteHttpFailure::Body
-        } else {
-            FiniteHttpFailure::Head
-        };
-        let frame = timing
-            .next_frame(&mut input, &mut frames, &mut completion, &mut response, failure)
-            .await?;
-        match frame {
-            FrameRead::End(end) => {
-                return response.finish_at_transport_end(end).map_err(|_| failure);
-            }
-            FrameRead::Frame(frame) => {
-                let PendingFrame { command, credit_written } =
-                    classify_response_frame(frame, &mut response, timing.live, failure)?;
-                timing.begin_body(&mut input, &response);
-                let end = timing.end(&response, *completion.borrow())?;
-                // Credit must reach the writer before more DATA is admitted.
-                let timeout_failure = timing.timeout_failure(failure);
-                if let Some(command) = command {
-                    if !response.stream_ended() {
-                        timeout_at(end, commands.send(command))
+    observe_response(Route::Author, async |observation| {
+        let mut input = IdleRead::new(input);
+        let mut timing =
+            ReadTiming { request_end, deadlines, body_end: None, live: false, body_started: false };
+        let mut finish_sent = false;
+        loop {
+            let failure = if response.head_complete() {
+                FiniteHttpFailure::Body
+            } else {
+                FiniteHttpFailure::Head
+            };
+            let frame = timing
+                .next_frame(&mut input, &mut frames, &mut completion, &mut response, failure)
+                .await?;
+            match frame {
+                FrameRead::End(end) => {
+                    return response.finish_at_transport_end(end).map_err(|_| failure);
+                }
+                FrameRead::Frame(frame) => {
+                    let PendingFrame { command, credit_written } =
+                        classify_response_frame(frame, &mut response, timing.live, failure)?;
+                    if response.head_complete() {
+                        observation.head_complete();
+                    }
+                    timing.begin_body(&mut input, &response);
+                    let end = timing.end(&response, *completion.borrow())?;
+                    // Credit must reach the writer before more DATA is admitted.
+                    let timeout_failure = timing.timeout_failure(failure);
+                    if let Some(command) = command {
+                        if !response.stream_ended() {
+                            timeout_at(end, commands.send(command))
+                                .await
+                                .map_err(|_| timeout_failure)?
+                                .map_err(|_| failure)?;
+                        }
+                    }
+                    if let Some(written) = credit_written {
+                        timeout_at(end, written)
                             .await
                             .map_err(|_| timeout_failure)?
                             .map_err(|_| failure)?;
                     }
-                }
-                if let Some(written) = credit_written {
-                    timeout_at(end, written)
-                        .await
-                        .map_err(|_| timeout_failure)?
-                        .map_err(|_| failure)?;
-                }
-                if response.stream_ended() && !finish_sent {
-                    timeout_at(end, commands.send(Outgoing::Finish))
-                        .await
-                        .map_err(|_| timeout_failure)?
-                        .map_err(|_| failure)?;
-                    finish_sent = true;
-                    if response.stream_end_is_terminal() {
-                        return finish_response_stream(response, &mut frames, &mut input, failure)
+                    if response.stream_ended() && !finish_sent {
+                        timeout_at(end, commands.send(Outgoing::Finish))
+                            .await
+                            .map_err(|_| timeout_failure)?
+                            .map_err(|_| failure)?;
+                        finish_sent = true;
+                        if response.stream_end_is_terminal() {
+                            return finish_response_stream(
+                                response,
+                                &mut frames,
+                                &mut input,
+                                failure,
+                            )
                             .await;
+                        }
                     }
                 }
             }
         }
-    }
+    })
+    .await
 }
 
 struct ReadTiming {
@@ -597,3 +614,5 @@ impl<Reader: AsyncRead + Unpin> AsyncRead for IdleRead<Reader> {
 #[cfg(test)]
 #[path = "selected_author_http2_tests.rs"]
 pub(crate) mod tests;
+
+use crate::transport_observation::{Phase, Route, observe, observe_response};

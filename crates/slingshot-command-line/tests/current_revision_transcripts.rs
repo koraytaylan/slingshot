@@ -10,7 +10,9 @@
 //! does. A diagnostic that reached it would corrupt every client parsing lines,
 //! and that failure is invisible to anything that only looks at the answers.
 
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use std::sync::mpsc;
 use std::time::Duration;
 
 use serde_json::Value;
@@ -67,13 +69,6 @@ fn conversations() -> Vec<Conversation> {
 
 /// Runs one conversation against the compiled server.
 fn held(conversation: &Conversation) -> CapturedProcess {
-    let input = conversation
-        .sends
-        .iter()
-        .map(|line| serde_json::to_string(line).expect("a line writes"))
-        .collect::<Vec<String>>()
-        .join("\n")
-        + "\n";
     let harness = ProcessHarness::new();
     let request = ProcessRequest::new(&[
         "--profile",
@@ -82,9 +77,35 @@ fn held(conversation: &Conversation) -> CapturedProcess {
         "author",
         "protocol",
         "serve",
-    ])
-    .reading(input);
-    harness.run_within(&product_executable(), &request, PROMPT_DEADLINE).expect("the server runs")
+    ]);
+    let mut child = harness.start_interactive(&product_executable(), &request).unwrap();
+    let mut input = child.take_input().unwrap();
+    let output = child.take_output().unwrap();
+    let (sender, answers) = mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        for line in BufReader::new(output).lines() {
+            if sender.send(line.unwrap()).is_err() {
+                break;
+            }
+        }
+    });
+    let mut transcript = String::new();
+    for line in &conversation.sends {
+        writeln!(input, "{line}").unwrap();
+        if line.get("id").is_some() {
+            transcript.push_str(&answers.recv_timeout(PROMPT_DEADLINE).unwrap());
+            transcript.push('\n');
+        }
+    }
+    drop(input);
+    let mut captured = child.capture_within(PROMPT_DEADLINE).expect("the server finishes");
+    reader.join().unwrap();
+    for line in answers.try_iter() {
+        transcript.push_str(&line);
+        transcript.push('\n');
+    }
+    captured.standard_output = transcript;
+    captured
 }
 
 /// Compares one conversation's transcript with the bytes committed for it.

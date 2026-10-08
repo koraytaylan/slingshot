@@ -21,14 +21,14 @@
 use serde_json::{Value, json};
 
 use crate::command::canonical_json::{canonical_digest, write_canonical};
-use crate::command::command_identity::{CommandContract, INITIAL_COMMAND_VERSION};
+use crate::command::command_identity::CommandContract;
 use crate::command::inspect_open_service_gateway_initiative_configuration::DECLARED_SCALAR_TYPES;
 
 /// Dialect every schema declares.
 pub const SCHEMA_DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// Format the schema manifest declares.
-pub const SCHEMA_MANIFEST_FORMAT: &str = "slingshot.command-schema/1";
+pub const SCHEMA_MANIFEST_FORMAT: &str = "slingshot.command-schema/2";
 
 /// Annotation binding the byte contract into both role digests.
 pub const CANONICAL_CONTRACT_ANNOTATION: &str = "x-slingshot-canonical-json-contract-sha256";
@@ -145,9 +145,14 @@ impl SchemaRole {
 ///
 /// The version goes in literally. Its alphabet is safe in a URN segment, so
 /// there is no second escaping convention to disagree about.
+///
+/// # Panics
+///
+/// Panics when `wire_name` is absent from the installed command contract.
 #[must_use]
 pub fn schema_identifier(wire_name: &str, role: SchemaRole) -> String {
-    format!("{SCHEMA_IDENTIFIER_PREFIX}:{wire_name}:{}:{INITIAL_COMMAND_VERSION}", role.as_text())
+    let version = &CommandContract::embedded().command_semantic_contract_versions[wire_name];
+    format!("{SCHEMA_IDENTIFIER_PREFIX}:{wire_name}:{}:{version}", role.as_text())
 }
 
 /// Returns the file one command role's schema is committed as.
@@ -606,7 +611,7 @@ fn page_search_body(wire_name: &str, role: SchemaRole, limits: &CommandContract)
             }),
             json!(["root_path"]),
         ),
-        ("query_paths", SchemaRole::Result) => discovery_page(
+        ("query_paths", SchemaRole::Result) => crate::command::incremental_discovery::page_schema(
             limits,
             json!({
                 "type": "object",
@@ -639,12 +644,12 @@ fn page_search_body(wire_name: &str, role: SchemaRole, limits: &CommandContract)
             }),
             json!(["match_mode", "resource_types", "root_path"]),
         ),
-        (
-            "find_pages_containing_phrase"
-            | "find_pages_by_template"
-            | "find_pages_using_components",
-            SchemaRole::Result,
-        ) => discovery_page(limits, page_match(limits)),
+        ("find_pages_containing_phrase" | "find_pages_using_components", SchemaRole::Result) => {
+            crate::command::incremental_discovery::page_schema(limits, page_match(limits))
+        }
+        ("find_pages_by_template", SchemaRole::Result) => {
+            discovery_page(limits, page_match(limits))
+        }
         _ => return None,
     };
     Some(body)
@@ -924,7 +929,7 @@ fn derive_schema_manifest() -> Value {
     json!({
         "canonical_json_contract_sha256": canonical_contract_digest(),
         "command_contract_limits_sha256": limits_digest,
-        "command_semantic_contract_version": INITIAL_COMMAND_VERSION,
+        "command_semantic_contract_versions": CommandContract::embedded().command_semantic_contract_versions,
         "format": SCHEMA_MANIFEST_FORMAT,
         "schemas": Value::Object(roles),
     })

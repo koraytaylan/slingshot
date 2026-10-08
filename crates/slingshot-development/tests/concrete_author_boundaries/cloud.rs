@@ -195,7 +195,7 @@ async fn reply(
 ) {
     peer.write_all(format!("HTTP/1.1 {status} Reply\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{extra}\r\n", body.len()).as_bytes()).await.unwrap();
     peer.write_all(&body.as_bytes()[..body.len() - usize::from(truncated)]).await.unwrap();
-    peer.shutdown().await.unwrap();
+    finish_response(peer).await;
 }
 
 #[tokio::test]
@@ -848,6 +848,19 @@ async fn pending_cloud_exchange_does_not_block_or_contaminate_basic_and_caches_s
         assert!(
             timeout(Duration::from_millis(10), listener.accept()).await.is_err(),
             "unexpected additional {name} connection"
+        );
+    }
+}
+
+async fn finish_response(peer: &mut (impl tokio::io::AsyncWrite + Unpin)) {
+    // A client may close after consuming Content-Length, before close-notify.
+    if let Err(failure) = peer.shutdown().await {
+        assert!(
+            matches!(
+                failure.kind(),
+                std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+            ),
+            "{failure}"
         );
     }
 }

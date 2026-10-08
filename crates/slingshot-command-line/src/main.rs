@@ -47,8 +47,8 @@ fn main() -> ExitCode {
     #[cfg(unix)]
     let _nonblocking =
         command_line::serves_protocol(&arguments).then(standard_output_nonblocking).flatten();
-    let mut standard_output = io::stdout().lock();
-    let mut standard_error = io::stderr().lock();
+    let mut standard_output = io::stdout();
+    let mut standard_error = io::stderr();
     let exit =
         command_line::run(&arguments, &executable, &mut standard_output, &mut standard_error);
     ExitCode::from(u8::try_from(exit).unwrap_or(command_line::EXIT_RUNTIME_UNUSABLE))

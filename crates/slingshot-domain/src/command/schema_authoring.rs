@@ -512,11 +512,14 @@ fn group_7(wire_name: &str, role: SchemaRole, limits: &CommandContract) -> Optio
         }),
         ("list_component_definitions", SchemaRole::Result)
         | ("list_components", SchemaRole::Result) => {
-            discovery_page(limits, component_listing_match(limits))
+            crate::command::incremental_discovery::page_schema(
+                limits,
+                component_listing_match(limits),
+            )
         }
         ("list_content_fragments", SchemaRole::Result)
         | ("list_experience_fragments", SchemaRole::Result) => {
-            discovery_page(limits, page_match(limits))
+            crate::command::incremental_discovery::page_schema(limits, page_match(limits))
         }
         _ => return None,
     };
@@ -549,7 +552,7 @@ pub(crate) fn asset_search_body(
             find_assets_by_metadata_arguments(limits)
         }
         ("find_assets_by_metadata", SchemaRole::Result) => {
-            discovery_page(limits, asset_match(limits))
+            crate::command::incremental_discovery::page_schema(limits, asset_match(limits))
         }
         ("find_assets_referenced_by_page", SchemaRole::Arguments) => json!({
             "type": "object",

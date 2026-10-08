@@ -873,3 +873,29 @@ fn a_tool_call_that_could_not_run_carries_the_reason_to_whoever_called_it() {
     assert_eq!(content[1]["text"].as_str(), Some(UNREACHABLE_REASON), "{answer}");
     assert_eq!(server.take_diagnostics(), vec![UNREACHABLE_REASON.to_owned()]);
 }
+
+#[test]
+fn tool_catalogue_metadata_is_the_compiled_contract_in_both_revisions() {
+    for legacy in [false, true] {
+        let mut server = ServerApplication::new();
+        let request = if legacy {
+            answered(
+                &mut server,
+                r#"{"id":"init","method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+            );
+            server.serve_line(br#"{"method":"notifications/initialized"}"#);
+            r#"{"id":"catalogue","method":"tools/list","params":{}}"#.to_owned()
+        } else {
+            format!(
+                r#"{{"id":"catalogue","method":"tools/list","params":{{"protocolVersion":"{CURRENT}"}}}}"#
+            )
+        };
+        let response = answered(&mut server, &request);
+        let metadata = &response["result"]["_meta"];
+        assert_eq!(
+            metadata["rs.slingshot/command-schema-manifest"],
+            slingshot_domain::command::schema::schema_manifest()
+        );
+        assert_eq!(metadata["rs.slingshot/transport-contract-sha256"], slingshot_domain::author_agent_transport_contract::AuthorAgentTransportContract::embedded_digest());
+    }
+}

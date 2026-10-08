@@ -223,8 +223,11 @@ async fn run_with_sources(
         .expect("the service is not shared before readiness")
         .ownership_mut()
         .publish_readiness(contract, &address.display())?;
+    service.start_scheduler(shutdown.clone());
     let served =
-        local_server::serve(std::sync::Arc::clone(&service), &mut listener, shutdown).await;
+        local_server::serve(std::sync::Arc::clone(&service), &mut listener, shutdown.clone()).await;
+    shutdown.cancel();
+    service.join_scheduler().await;
     let withdrawn = std::sync::Arc::get_mut(&mut service)
         .expect("the server drains every connection before returning")
         .ownership_mut()

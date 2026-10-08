@@ -1,7 +1,15 @@
 # Contributing to Slingshot
 
-Every rule below is enforced by `scripts/quality`, which takes no argument and
-must hold before a change lands.
+`scripts/quality` takes no argument and must hold before a change lands. Its
+checks apply the policies below, subject to the recorded baseline.
+
+The source-policy checker reports new findings against the reviewed inventory
+in `policy/source-policy-baseline.tsv`. Existing entries are debt, not claims
+that those source locations satisfy the rules below. The repository test also
+rejects stale entries: fixing a finding requires removing its baseline entry.
+New exceptions require an explicit policy review; ordinary changes must not
+refresh the inventory to conceal new findings. Retire findings affecting
+runtime correctness and maintainability before mechanical naming debt.
 
 ## Claims come with the assertions that prove them
 
@@ -132,9 +140,24 @@ SLINGSHOT_RUSTSEC_ADVISORY_DATABASE_DIRECTORY=<checkout> scripts/quality
 ```
 
 It verifies the pinned external executables, authenticates the advisory
-snapshot, and then runs `cargo fmt --all --check`, `cargo check`, `cargo
-clippy` with warnings denied, `cargo test`, and `cargo doc` with warnings
-denied, each over the whole workspace with every target and feature and with
-the resolved graph locked, followed by script linting, the dependency
+snapshot, and then runs the minimum-version default-feature build,
+`cargo fmt --all --check`, `cargo clippy` with warnings denied, `cargo test`,
+and `cargo doc` with warnings denied. Clippy and tests cover every workspace
+target and feature; documentation covers all workspace features. The resolved
+graph stays locked. These are followed by script linting, the dependency
 direction, the source policy, and the dependency policy. It fetches nothing and
-writes nothing into the repository.
+sets `CARGO_NET_OFFLINE=true` for all Cargo stages. Missing dependencies must be
+prepared before the gate runs. Compilation and tests write build artifacts to
+the configured Cargo target directory.
+
+Clippy includes the all-feature compilation check. The separate minimum-version
+build is retained because it covers default features. Each measured command writes
+its monotonic elapsed seconds and exit status to
+`${CARGO_TARGET_DIR:-target}/quality-timings.tsv` (or `SLINGSHOT_QUALITY_TIMINGS`).
+The timing file is reset for each gate invocation. Tool verification and compiling
+the small timer precede the measured stages. Archive the timing file with the full
+log when comparing cold and warm runs.
+
+For focused feedback, `scripts/check_crate slingshot-command-line` (or another
+workspace package) runs formatting, all-target/all-feature Clippy and tests offline.
+It does not establish workspace, dependency-policy, documentation or release evidence.

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Focused developer feedback; scripts/quality is the complete release gate.
+set -eu
+export CARGO_NET_OFFLINE=true
+EXPECTED_ARGUMENTS=1
+USAGE_STATUS=2
+if [ "$#" -ne "$EXPECTED_ARGUMENTS" ]; then
+    printf 'usage: scripts/check_crate WORKSPACE_PACKAGE\n' >&2
+    exit "$USAGE_STATUS"
+fi
+case "$1" in
+    slingshot-*) ;;
+    *) printf 'name a slingshot workspace package\n' >&2; exit "$USAGE_STATUS" ;;
+esac
+printf 'Focused crate check: %s. Full release evidence requires scripts/quality.\n' "$1"
+cargo fmt --all --check
+cargo clippy --locked --package "$1" --all-targets --all-features -- -D warnings
+cargo test --locked --package "$1" --all-targets --all-features

@@ -13,6 +13,13 @@ fn statement(purpose: &str) -> &'static str {
         .unwrap_or_else(|| panic!("scheduler statement is inventoried: {purpose}"))
 }
 
+/// Reads a nonnegative durable count without inventing a value on corruption.
+fn count(row: &rusqlite::Row<'_>, column: &str) -> rusqlite::Result<u64> {
+    let index = row.as_ref().column_index(column)?;
+    let value: i64 = row.get(index)?;
+    u64::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(index, value))
+}
+
 /// What one claim attempt observed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClaimOutcome {
@@ -46,6 +53,25 @@ pub struct SelectedClaim {
     pub expected_revision: u64,
 }
 
+/// One queued operation considered inside the atomic claim transaction.
+#[derive(Debug, Clone)]
+pub struct QueuedCandidate {
+    /// Persisted producer identity; absence denotes the shared default queue.
+    pub caller_identity: Option<String>,
+    /// Durable operation identity.
+    pub operation_identifier: String,
+    /// Compare-and-set lifecycle value.
+    pub lifecycle: String,
+    /// Compare-and-set revision value.
+    pub revision: u64,
+    /// Persisted retry observation, used only to reconstruct a local deadline.
+    pub retry_observed_at_unix_milliseconds: u64,
+    /// Original maximum delay for the observed retry.
+    pub retry_delay_milliseconds: u64,
+    /// Distinguishes successive retries with identical clock readings.
+    pub attempt_count: u64,
+}
+
 /// One queued operation a person was left to resume.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PausedQueueRow {
@@ -76,8 +102,10 @@ pub fn paused_queued(
             Ok(PausedQueueRow {
                 operation_identifier: row.get(0)?,
                 revision: u64::try_from(row.get::<_, i64>(1)?).unwrap_or(0),
-                fence: row.get::<_, Option<i64>>(2)?.and_then(|fence| u64::try_from(fence).ok()),
-                evidence_kind: row.get(3)?,
+                fence: row
+                    .get::<_, Option<i64>>("scheduler_fence")?
+                    .and_then(|fence| u64::try_from(fence).ok()),
+                evidence_kind: row.get("evidence_kind")?,
             })
         })
         .map_err(|_| RepositoryFailure::NoSuchOperation { identifier: target.to_owned() })?;
@@ -85,40 +113,95 @@ pub fn paused_queued(
         .map_err(|_| RepositoryFailure::NoSuchOperation { identifier: target.to_owned() })
 }
 
-/// Selects and claims the oldest queued operation atomically.
+/// Selects and claims a queued operation at a fixed fixture clock reading.
 ///
 /// This is the scheduler's process-safe handoff: two ticks may select at the
 /// same time, but only one transaction can update the eligible row and receive
 /// a `SelectedClaim`.
-pub fn claim_next_queued(
+///
+/// # Errors
+///
+/// Returns a repository failure if candidate selection or persistence fails.
+#[cfg(test)]
+fn claim_next_queued(
     database: &OperationDatabase,
     target: &str,
     fence: u64,
     lease_expires_at_unix_milliseconds: u64,
     now_unix_milliseconds: u64,
 ) -> Result<Option<SelectedClaim>, RepositoryFailure> {
+    claim_next_queued_with(
+        database,
+        target,
+        fence,
+        lease_expires_at_unix_milliseconds,
+        now_unix_milliseconds,
+        |candidates| {
+            candidates.iter().position(|candidate| {
+                now_unix_milliseconds.saturating_sub(candidate.retry_observed_at_unix_milliseconds)
+                    >= candidate.retry_delay_milliseconds
+            })
+        },
+    )
+}
+
+/// Selects ready work from durable round-robin producer order.
+///
+/// Selection and claim run in one immediate transaction. The callback receives
+/// unclaimed queued candidates in producer-turn order and enqueue order within
+/// each producer. The callback returns the first ready candidate using its
+/// scheduling clock. Only a successful claim rotates the producer, atomically.
+/// Local retry durations belong to the daemon's monotonic clock, while the
+/// persisted lease timestamps continue to use cross-process wall-clock evidence.
+///
+/// # Errors
+///
+/// Returns [`RepositoryFailure`] if reading or claiming a candidate fails.
+pub fn claim_next_queued_with(
+    database: &OperationDatabase,
+    target: &str,
+    fence: u64,
+    lease_expires_at_unix_milliseconds: u64,
+    now_unix_milliseconds: u64,
+    choose: impl FnOnce(&[QueuedCandidate]) -> Option<usize>,
+) -> Result<Option<SelectedClaim>, RepositoryFailure> {
     let now = i64::try_from(now_unix_milliseconds).unwrap_or(i64::MAX);
     let transaction = rusqlite::Transaction::new_unchecked(
         database.connection(),
         rusqlite::TransactionBehavior::Immediate,
     )?;
-    let candidate: Option<(String, String, i64)> = transaction
-        .query_row(
-            statement("select one queued operation for scheduler claim"),
-            rusqlite::params![target, now, now],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .optional()?;
-    let Some((operation_identifier, lifecycle, revision)) = candidate else {
+    let mut candidates = {
+        let mut query =
+            transaction.prepare(statement("select queued candidates for scheduler claim"))?;
+        query
+            .query_map(rusqlite::params![target, now], |row| {
+                Ok(QueuedCandidate {
+                    caller_identity: row.get("caller_identity")?,
+                    operation_identifier: row.get(0)?,
+                    lifecycle: row.get(1)?,
+                    revision: count(row, "operation_revision")?,
+                    retry_observed_at_unix_milliseconds: count(
+                        row,
+                        "retry_observed_at_unix_milliseconds",
+                    )?,
+                    retry_delay_milliseconds: count(row, "retry_delay_milliseconds")?,
+                    attempt_count: count(row, "attempt_count")?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    let mut turns =
+        super::producer_turns::ProducerTurns::order(&transaction, target, &mut candidates)?;
+    let Some(candidate) = choose(&candidates).and_then(|index| candidates.get(index)) else {
         transaction.commit()?;
         return Ok(None);
     };
     let outcome = claim_in_transaction(
         &transaction,
         target,
-        &operation_identifier,
-        &lifecycle,
-        revision,
+        &candidate.operation_identifier,
+        &candidate.lifecycle,
+        i64::try_from(candidate.revision).unwrap_or(i64::MAX),
         fence,
         lease_expires_at_unix_milliseconds,
         now_unix_milliseconds,
@@ -127,14 +210,19 @@ pub fn claim_next_queued(
         transaction.commit()?;
         return Ok(None);
     }
+    turns.claimed(&transaction, target, candidate, &candidates)?;
     transaction.commit()?;
     Ok(Some(SelectedClaim {
-        operation_identifier,
-        expected_revision: u64::try_from(revision).unwrap_or_default(),
+        operation_identifier: candidate.operation_identifier.clone(),
+        expected_revision: candidate.revision,
     }))
 }
 
 /// Claims one operation only if lifecycle and revision are unchanged.
+///
+/// # Errors
+///
+/// Returns a repository failure if the row is missing, its counts are invalid, or persistence fails.
 pub fn claim(
     database: &OperationDatabase,
     target: &str,
@@ -160,7 +248,7 @@ pub fn claim(
         .query_row(
             statement("read one scheduler claim candidate"),
             rusqlite::params![target, operation],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get("scheduler_checkpoint")?)),
         )
         .optional()?;
     let Some((lifecycle, revision, checkpoint)) = current else {
@@ -219,6 +307,10 @@ fn claim_in_transaction(
 }
 
 /// Records the no-return point only for the current fence.
+///
+/// # Errors
+///
+/// Returns a repository failure if the checkpoint write fails.
 pub fn checkpoint(
     database: &OperationDatabase,
     target: &str,
@@ -234,6 +326,10 @@ pub fn checkpoint(
 }
 
 /// Renews a lease without allowing a stale worker to revive itself.
+///
+/// # Errors
+///
+/// Returns a repository failure if the lease write fails.
 pub fn renew(
     database: &OperationDatabase,
     target: &str,
@@ -258,6 +354,10 @@ pub fn renew(
 /// Releases a fence and lease this side proved but never checkpointed,
 /// abandoning a claim immediately rather than leaving it to lapse only once
 /// the lease it never used against a real attempt expires.
+///
+/// # Errors
+///
+/// Returns a repository failure if the claim release fails.
 pub fn release(
     database: &OperationDatabase,
     target: &str,
@@ -294,6 +394,10 @@ pub fn recover_abandoned_claims(
 }
 
 /// Reads lease/checkpoint facts without granting execution authority.
+///
+/// # Errors
+///
+/// Returns a repository failure if the stored claim cannot be read.
 pub fn facts(
     database: &OperationDatabase,
     target: &str,
@@ -308,7 +412,7 @@ pub fn facts(
                 Ok((
                     row.get::<_, Option<i64>>(0)?,
                     row.get::<_, Option<i64>>(1)?,
-                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>("scheduler_checkpoint")?,
                 ))
             },
         )
@@ -326,17 +430,22 @@ mod tests {
     use super::*;
     use crate::database::RequiredSettings;
 
+    const FIXTURE_PAGE_BYTES: u64 = 4096;
+    const FIXTURE_DATABASE_PAGES: u64 = 262_144;
+    const FIXTURE_BUSY_MILLISECONDS: u64 = 5000;
+    const FIXTURE_DIGEST_CHARACTERS: usize = 64;
+
     #[test]
     fn release_abandons_a_claim_that_never_reached_its_checkpoint() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("release.sqlite");
         let settings = RequiredSettings {
-            page_bytes: 4096,
-            database_pages: 262_144,
-            busy_timeout_milliseconds: 5000,
+            page_bytes: FIXTURE_PAGE_BYTES,
+            database_pages: FIXTURE_DATABASE_PAGES,
+            busy_timeout_milliseconds: FIXTURE_BUSY_MILLISECONDS,
         };
         let database = OperationDatabase::open(&path, settings).unwrap();
-        let value = "a".repeat(64);
+        let value = "a".repeat(FIXTURE_DIGEST_CHARACTERS);
         database
             .connection()
             .execute(
@@ -394,13 +503,13 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("claims.sqlite");
         let settings = RequiredSettings {
-            page_bytes: 4096,
-            database_pages: 262_144,
-            busy_timeout_milliseconds: 5000,
+            page_bytes: FIXTURE_PAGE_BYTES,
+            database_pages: FIXTURE_DATABASE_PAGES,
+            busy_timeout_milliseconds: FIXTURE_BUSY_MILLISECONDS,
         };
         let database = OperationDatabase::open(&path, settings).unwrap();
         let contender = OperationDatabase::open(&path, settings).unwrap();
-        let value = "a".repeat(64);
+        let value = "a".repeat(FIXTURE_DIGEST_CHARACTERS);
         database
             .connection()
             .execute(
@@ -446,7 +555,7 @@ mod tests {
             ClaimOutcome::RevisionMoved
         );
 
-        let second = "b".repeat(64);
+        let second = "b".repeat(FIXTURE_DIGEST_CHARACTERS);
         database
             .connection()
             .execute(

@@ -49,7 +49,7 @@ use serde::{Deserialize, Serialize};
 use crate::command::artifact::ArtifactSlotDeclaration;
 use crate::command::canonical_json::{canonical_digest, write_canonical};
 use crate::command::classification::{CLASSIFICATIONS, ClassificationRow, DISCOVERY_FAILURES};
-use crate::command::command_identity::{CommandContract, INITIAL_COMMAND_VERSION};
+use crate::command::command_identity::CommandContract;
 use crate::command::result_context::AnswersCommand;
 use crate::command::schema::{COMMAND_WIRE_NAMES, SchemaRole, command_schema};
 
@@ -257,7 +257,8 @@ fn describe(
         arguments_schema_sha256: digest(SchemaRole::Arguments),
         canonical_json_contract_sha256: contract_digest.to_owned(),
         command_contract_limits_sha256: limits_digest.to_owned(),
-        command_semantic_contract_version: INITIAL_COMMAND_VERSION.to_owned(),
+        command_semantic_contract_version: limits.command_semantic_contract_versions[row.wire_name]
+            .clone(),
         description: row.description.to_owned(),
         destructive: row.destructive,
         failure_categories,

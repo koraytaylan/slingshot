@@ -19,9 +19,10 @@ use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
 
 use crate::command::command_identity::CommandContract;
-use crate::command::query_paths::{
-    DiscoveryResultFailure, anchor_contains, require_strictly_ascending,
+use crate::command::incremental_discovery::{
+    DiscoveryProgress, IncrementalDiscoveryFailure, require_page,
 };
+use crate::command::query_paths::{DiscoveryResultFailure, anchor_contains};
 use crate::command::repository_path::RepositoryPath;
 use crate::command::result_window::{ContinuationToken, ResultWindow};
 use crate::command::search_predicate::{PropertyPredicate, PropertyPredicates};
@@ -460,11 +461,25 @@ pub struct AssetMatch {
 /// One page of assets that answered the question.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FindAssetsByMetadataResult {
-    /// Matches, strictly ascending by asset path bytes.
+    /// Unique matches in repository provider traversal order.
     pub matches: Vec<AssetMatch>,
     /// Where the next page resumes, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_continuation_token: Option<ContinuationToken>,
+    /// Explicit bounded work and traversal completion for this page.
+    #[serde(flatten)]
+    pub progress: DiscoveryProgress,
+}
+
+/// A malformed asset page or a tag list that lacks its canonical ordering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum AssetDiscoveryFailure {
+    /// Traversal progress, counts, or repository path uniqueness are inconsistent.
+    #[error(transparent)]
+    InvalidProgress(#[from] IncrementalDiscoveryFailure),
+    /// Each returned tag list must be unique and ascending by UTF-8 bytes.
+    #[error("an asset tag list must be unique and ascending by UTF-8 bytes")]
+    NonCanonicalTags,
 }
 
 impl FindAssetsByMetadataResult {
@@ -472,24 +487,29 @@ impl FindAssetsByMetadataResult {
     ///
     /// # Errors
     ///
-    /// Returns [`DiscoveryResultFailure::NotStrictlyAscending`] when a path
-    /// repeats, when a path sorts before its predecessor, or when one match's
-    /// tags are not themselves ascending and unique.
+    /// Returns [`AssetDiscoveryFailure::InvalidProgress`] for contradictory completion,
+    /// excessive counts or repeated paths, and [`AssetDiscoveryFailure::NonCanonicalTags`]
+    /// when one match's tags are not themselves ascending and unique.
     pub fn new(
         matches: Vec<AssetMatch>,
         next_continuation_token: Option<ContinuationToken>,
-    ) -> Result<Self, DiscoveryResultFailure> {
-        require_strictly_ascending(matches.iter().map(|found| &found.repository_path))?;
+        progress: DiscoveryProgress,
+    ) -> Result<Self, AssetDiscoveryFailure> {
+        require_page(
+            matches.iter().map(|found| &found.repository_path),
+            next_continuation_token.as_ref(),
+            progress,
+        )?;
         for found in &matches {
             let ascending = found
                 .tags
                 .windows(ADJACENT_PAIR)
                 .all(|pair| pair[0].as_text().as_bytes() < pair[1].as_text().as_bytes());
             if !ascending {
-                return Err(DiscoveryResultFailure::NotStrictlyAscending);
+                return Err(AssetDiscoveryFailure::NonCanonicalTags);
             }
         }
-        Ok(Self { matches, next_continuation_token })
+        Ok(Self { matches, next_continuation_token, progress })
     }
 
     /// Requires this page to answer `command`.
@@ -519,6 +539,10 @@ struct ResultDocument {
     /// Where the next page resumes.
     #[serde(default)]
     next_continuation_token: Option<ContinuationToken>,
+    /// Whether every retained iterator was exhausted.
+    complete: bool,
+    /// Nodes examined during this bounded page.
+    examined_nodes: u64,
 }
 
 impl<'de> Deserialize<'de> for FindAssetsByMetadataResult {
@@ -526,6 +550,14 @@ impl<'de> Deserialize<'de> for FindAssetsByMetadataResult {
         deserializer: Source,
     ) -> Result<Self, Source::Error> {
         let document = ResultDocument::deserialize(deserializer)?;
-        Self::new(document.matches, document.next_continuation_token).map_err(Source::Error::custom)
+        Self::new(
+            document.matches,
+            document.next_continuation_token,
+            DiscoveryProgress {
+                complete: document.complete,
+                examined_nodes: document.examined_nodes,
+            },
+        )
+        .map_err(Source::Error::custom)
     }
 }

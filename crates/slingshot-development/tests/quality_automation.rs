@@ -28,13 +28,20 @@ const EXECUTABLE_MODE: u32 = 0o755;
 /// Scope every Rust graph gate is run over.
 const GATE_SCOPE: &str = "--locked --workspace --all-targets --all-features";
 
+/// A deliberate subprocess refusal distinct from the helper's own failure code.
+#[cfg(unix)]
+const STAGE_REFUSAL: i32 = 7;
+
+/// The helper reports a failed spawn instead of a successful empty stage.
+#[cfg(unix)]
+const HELPER_REFUSAL: i32 = 1;
+
 /// Commands the gate must run, in the order it runs them.
 const REQUIRED_COMMANDS: &[&str] = &[
     "cargo fmt --all --check",
-    "cargo check $CARGO_GATE_SCOPE",
     "cargo clippy $CARGO_GATE_SCOPE -- -D warnings",
     "cargo test $CARGO_GATE_SCOPE",
-    "RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --all-features --no-deps",
+    "RUSTDOCFLAGS='-D warnings' timed documentation cargo doc --locked --workspace --all-features --no-deps",
     "shellcheck scripts/*",
     "dependency-direction",
     "source-policy",
@@ -123,8 +130,10 @@ fn run_gate_with_path(
     advisory: Option<&str>,
     path_prefix: Option<&OsString>,
 ) -> std::process::Output {
+    let evidence = tempfile::tempdir().expect("the fixture owns its timing output");
     let mut command = Command::new(workspace_root().join(GATE_PATH));
     command.current_dir(workspace_root()).args(arguments);
+    command.env("SLINGSHOT_QUALITY_TIMINGS", evidence.path().join("timings.tsv"));
     if let Some(path) = path_prefix {
         command.env("PATH", path);
     }
@@ -210,6 +219,10 @@ fn the_gate_runs_every_required_command_over_the_whole_graph() {
     for refusal in REQUIRED_REFUSALS {
         assert!(gate.contains(refusal), "the gate does not refuse to fetch through {refusal}");
     }
+    assert!(gate.contains("export CARGO_NET_OFFLINE=true"));
+    assert!(!gate.lines().any(|line| line.trim_start().starts_with("cargo check ")));
+    assert!(gate.contains("timed lints cargo clippy"));
+    assert!(gate.contains("timed tests cargo test"));
     assert!(!gate.contains("cargo update"), "the gate never changes the resolved graph");
     assert!(!gate.contains("git fetch"), "the gate never fetches");
     // A stage that names one script reports on the file a reader has just read
@@ -309,4 +322,148 @@ fn the_dependency_policy_names_its_accepted_licenses_and_refuses_unknown_sources
         policy["licenses"]["private"]["ignore"].as_bool().unwrap_or_default(),
         "the unpublished Slingshot packages are not given a license by this policy"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn stage_timing_preserves_failures_and_inherited_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("quality-stage");
+    let compiled = Command::new("rustc")
+        .args(["--edition=2024", "-D", "warnings"])
+        .arg(workspace_root().join("support/quality_stage.rs"))
+        .arg("-o")
+        .arg(&executable)
+        .status()
+        .unwrap();
+    assert!(compiled.success());
+    let evidence = directory.path().join("timings.tsv");
+    let result = Command::new(&executable)
+        .arg("refusal")
+        .arg(&evidence)
+        .args(["sh", "-c"])
+        .arg(format!("printf 'child output'; exit {STAGE_REFUSAL}"))
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(STAGE_REFUSAL));
+    assert!(String::from_utf8(result.stdout).unwrap().contains("child output"));
+    let missing = Command::new(&executable)
+        .arg("missing")
+        .arg(&evidence)
+        .arg(directory.path().join("absent-command"))
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(HELPER_REFUSAL));
+    let measured = std::fs::read_to_string(evidence).unwrap();
+    let rows: Vec<_> = measured.lines().collect();
+    assert!(rows[0].starts_with("refusal\t"));
+    assert!(rows[0].ends_with(&format!("\t{STAGE_REFUSAL}")));
+    assert!(rows[1].starts_with("missing\t"));
+    assert!(rows[1].ends_with(&format!("\t{HELPER_REFUSAL}")));
+    for row in rows {
+        let columns: Vec<_> = row.split('\t').collect();
+        assert!(columns[1].parse::<f64>().unwrap().is_sign_positive());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn the_gate_executes_each_compilation_scope_once_and_stops_on_runner_failure() {
+    let (directory, path) = fake_repository_tools();
+    let cargo = directory.path().join("cargo");
+    std::fs::write(
+        &cargo,
+        r#"#!/bin/sh
+if [ "$1" = deny ] && [ "$2" = --version ]; then
+    printf '%s\n' 'cargo-deny 0.18.6'
+    exit 0
+fi
+[ "$CARGO_NET_OFFLINE" = true ] || exit 99
+printf '%s\n' "$*" >> "$SLINGSHOT_GATE_PROBE_LOG"
+if [ "$1" = test ]; then exit "$SLINGSHOT_GATE_PROBE_STATUS"; fi
+exit 0
+"#,
+    )
+    .unwrap();
+    for expected in [0, STAGE_REFUSAL] {
+        let calls = directory.path().join(format!("calls-{expected}"));
+        let timings = directory.path().join(format!("timings-{expected}"));
+        let output = Command::new(workspace_root().join(GATE_PATH))
+            .current_dir(workspace_root())
+            .env("PATH", &path)
+            .env(ADVISORY_VARIABLE, directory.path())
+            .env("SLINGSHOT_QUALITY_TIMINGS", &timings)
+            .env("SLINGSHOT_GATE_PROBE_LOG", &calls)
+            .env("SLINGSHOT_GATE_PROBE_STATUS", expected.to_string())
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(expected),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let invocations = std::fs::read_to_string(calls).unwrap();
+        let once = |name: &str| invocations.lines().filter(|line| line.starts_with(name)).count();
+        assert_eq!(once("build "), 1);
+        assert_eq!(once("clippy "), 1);
+        assert_eq!(once("test "), 1);
+        assert_eq!(once("check "), 0);
+        let measured = std::fs::read_to_string(timings).unwrap();
+        assert!(measured.contains("lints\t"));
+        if expected == STAGE_REFUSAL {
+            assert_eq!(once("doc "), 0);
+            assert!(measured.ends_with(&format!("\t{STAGE_REFUSAL}\n")));
+        } else {
+            assert_eq!(once("doc "), 1);
+            assert!(measured.contains("fuzz dependency policy\t"));
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unprepared_dependency_refuses_without_contacting_its_registry() {
+    let directory = tempfile::tempdir().unwrap();
+    let registry = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    registry.set_nonblocking(true).unwrap();
+    let cargo_home = directory.path().join("cargo-home");
+    std::fs::create_dir(&cargo_home).unwrap();
+    std::fs::create_dir(directory.path().join("src")).unwrap();
+    std::fs::write(directory.path().join("src/main.rs"), "fn main() {}\n").unwrap();
+    std::fs::write(
+        directory.path().join("Cargo.toml"),
+        r#"[package]
+name = "slingshot-offline-probe"
+version = "0.0.0"
+edition = "2024"
+[dependencies]
+slingshot-intentionally-unprepared = "=0.0.0"
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        cargo_home.join("config.toml"),
+        format!(
+            r#"[source.crates-io]
+replace-with = "probe"
+[source.probe]
+registry = "sparse+http://{}/"
+"#,
+            registry.local_addr().unwrap()
+        ),
+    )
+    .unwrap();
+    let result = Command::new(workspace_root().join("scripts/check_crate"))
+        .arg("slingshot-offline-probe")
+        .current_dir(directory.path())
+        .env("CARGO_HOME", cargo_home)
+        .env("CARGO_TARGET_DIR", directory.path().join("target"))
+        .env("CARGO_NET_OFFLINE", "false")
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    let diagnostic = String::from_utf8_lossy(&result.stderr);
+    assert!(diagnostic.contains("offline"), "{diagnostic}");
+    assert_eq!(registry.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
 }
